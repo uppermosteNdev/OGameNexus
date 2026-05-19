@@ -5,7 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Firefox%20%7C%20Edge-purple.svg)]()
 [![Built With](https://img.shields.io/badge/built%20with-React%20%7C%20Vite%20%7C%20TypeScript%20%7C%20Three.js-gradient.svg)]()
 
-> **OGame Nexus** is a premium, feature-packed browser extension that transforms your OGame experience into a high-tech tactical simulation. Featuring a beautiful glassmorphic dark interface, real-time scraping, complex database architectures, interactive charts, and advanced optimization algorithms.
+> **OGame Nexus** is a feature-rich tool packed into a browser extension that transforms your OGame experience into a high-tech tactical simulation. Featuring a beautiful glassmorphic dark interface, real-time scraping, complex database architectures, interactive charts, and advanced optimization algorithms.
 
 ---
 
