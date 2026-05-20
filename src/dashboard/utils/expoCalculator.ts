@@ -52,6 +52,7 @@ export interface ExpoCalcConfig {
     resBonusPercent: number;
     shipBonusPercent: number;
     lifeformDiscovererBonusPercent: number; // Lifeform Bonus for Discoverer Class (Id 32)
+    lifeformCargoBonuses?: Record<number, number>; // Ship ID -> lifeform cargo bonus percentage
 }
 
 export function calculateExpeditionFinds(config: ExpoCalcConfig) {
@@ -77,8 +78,9 @@ export function calculateExpeditionFinds(config: ExpoCalcConfig) {
         const baseCargo = SHIP_CARGO_VALUES[ship.id] || 0;
         const si = SHIP_SI_VALUES[ship.id] || 0;
 
-        // Cargo with Hyperspace Tech
-        const cargoFactor = 1 + (config.hyperspaceTechLevel * config.cargoHyperspaceTechMultiplier / 100);
+        // Cargo with Hyperspace Tech and Lifeform Cargo Tech bonuses
+        const lfCargoBonus = config.lifeformCargoBonuses?.[ship.id] || 0;
+        const cargoFactor = 1 + (config.hyperspaceTechLevel * config.cargoHyperspaceTechMultiplier / 100) + (lfCargoBonus / 100);
 
         // Collector class also gets +25% cargo for transporters (Small/Large Cargo)
         let classCargoBonus = 1;

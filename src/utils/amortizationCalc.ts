@@ -303,8 +303,8 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
     const resultItems: AmortizationItem[] = [];
 
     const REDUCTION_IDS = {
-        mineralResearchCenter: 12113,
-        megalith: 12102,
+        mineralResearchCenter: 12111,
+        megalith: 12108,
         researchCentre: 11103,
         runeTechnologium: 12103,
         roboticsResearchCentre: 13103,

@@ -116,11 +116,12 @@ const ExpeditionCalculator: React.FC = () => {
         fleetShips: SHIP_DATA.map(s => ({ id: s.id, count: 0 })),
         resBonusPercent: 0,
         shipBonusPercent: 0,
-        lifeformDiscovererBonusPercent: 0
+        lifeformDiscovererBonusPercent: 0,
+        lifeformCargoBonuses: {}
     });
 
     const lifeformExpeditionBonuses = useMemo(() => {
-        if (!planets || !activeAccount) return { resBonus: 0, shipBonus: 0, classBonus: 0 };
+        if (!planets || !activeAccount) return { resBonus: 0, shipBonus: 0, classBonus: 0, cargoBonuses: {} };
 
         const getBonus = (breakdownId: number) => {
             let total = 0;
@@ -154,10 +155,86 @@ const ExpeditionCalculator: React.FC = () => {
             return total;
         };
 
+        const getCargoBonuses = () => {
+            const shipCargoObj: Record<number, number> = {};
+
+            planets.filter(p => p.type === 'planet').forEach(p => {
+                const setup = p.lifeformSetup || [];
+                const expData = activeAccount.lifeformExperience?.find((e: any) => e.lifeformId === p.lifeformId);
+                let buildingBonus = 0;
+                if (p.lifeformBuildings) {
+                    p.lifeformBuildings.forEach((b: any) => {
+                        if (b.id === 11111) buildingBonus += b.level * 0.005;
+                        else if (b.id === 13107) buildingBonus += b.level * 0.003;
+                        else if (b.id === 13111) buildingBonus += b.level * 0.004;
+                    });
+                }
+                const totalMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
+
+                setup.forEach((slot: any) => {
+                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                    if (!tech || !tech.target) return;
+
+                    const uniqueBonusIds: number[] = [];
+                    const bonusToTargets: Record<number, any[]> = {};
+
+                    tech.target.forEach((t: any) => {
+                        if (!uniqueBonusIds.includes(t.bonusBreakdownId)) {
+                            uniqueBonusIds.push(t.bonusBreakdownId);
+                            bonusToTargets[t.bonusBreakdownId] = [];
+                        }
+                        bonusToTargets[t.bonusBreakdownId].push(t);
+                    });
+
+                    const hasOnlyBonus1 = tech.bonus1BaseValue !== null && tech.bonus1BaseValue !== undefined &&
+                        (tech.bonus2BaseValue === null || tech.bonus2BaseValue === undefined) &&
+                        (tech.bonus3BaseValue === null || tech.bonus3BaseValue === undefined);
+
+                    uniqueBonusIds.forEach((id, index) => {
+                        if (id !== 10) return; // Only cargo capacity bonuses
+
+                        let baseValue = null;
+                        if (index === 0) baseValue = tech.bonus1BaseValue;
+                        else if (index === 1) baseValue = tech.bonus2BaseValue;
+                        else if (index === 2) baseValue = tech.bonus3BaseValue;
+
+                        if (baseValue === null && hasOnlyBonus1) {
+                            baseValue = tech.bonus1BaseValue;
+                        }
+
+                        if (baseValue === null || baseValue === undefined) return;
+
+                        const finalValue = baseValue * slot.level * totalMultiplier;
+                        const targets = bonusToTargets[id];
+                        const shipTargets = targets.filter((t: any) => t.gameKnowledgeId).map((t: any) => t.gameKnowledgeId);
+
+                        const applyToShip = (tid: number) => {
+                            if (tid === 212) return;
+                            shipCargoObj[tid] = (shipCargoObj[tid] || 0) + finalValue;
+                        };
+
+                        if (shipTargets.length > 0) {
+                            shipTargets.forEach(applyToShip);
+                        } else {
+                            [202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 213, 214, 215, 218, 219].forEach(applyToShip);
+                        }
+                    });
+                });
+            });
+
+            const formatted: Record<number, number> = {};
+            Object.keys(shipCargoObj).forEach(k => {
+                const shipId = Number(k);
+                formatted[shipId] = Number(shipCargoObj[shipId].toFixed(4));
+            });
+            return formatted;
+        };
+
         return {
             resBonus: getBonus(19),
             shipBonus: getBonus(12),
-            classBonus: getBonus(32)
+            classBonus: getBonus(32),
+            cargoBonuses: getCargoBonuses()
         };
     }, [planets, activeAccount]);
 
@@ -186,6 +263,7 @@ const ExpeditionCalculator: React.FC = () => {
         const lifeformDiscovererBonusPercent = Number(lifeformExpeditionBonuses.classBonus.toFixed(4));
         const universeSpeed = activeAccount.universeSpeed || 1;
         const cargoHyperspaceTechMultiplier = activeAccount.cargoHyperspaceTechMultiplier || 5;
+        const lifeformCargoBonuses = lifeformExpeditionBonuses.cargoBonuses;
 
         setCalcConfig(prev => {
             const next = {
@@ -197,7 +275,8 @@ const ExpeditionCalculator: React.FC = () => {
                 cargoHyperspaceTechMultiplier,
                 resBonusPercent,
                 shipBonusPercent,
-                lifeformDiscovererBonusPercent
+                lifeformDiscovererBonusPercent,
+                lifeformCargoBonuses
             };
 
             // Determine if we should update/initialize the fleet
@@ -259,7 +338,8 @@ const ExpeditionCalculator: React.FC = () => {
 
         let baseCap = cargoId === 202 ? 5000 : 25000;
         let classCargoBonus = (isCollector && (cargoId === 202 || cargoId === 203)) ? 1.25 : 1;
-        let capacityPerShip = baseCap * (1 + (hypLevel * multiplier) / 100) * classCargoBonus;
+        const lfCargoBonus = config.lifeformCargoBonuses?.[cargoId] || 0;
+        let capacityPerShip = baseCap * (1 + (hypLevel * multiplier) / 100 + (lfCargoBonus / 100)) * classCargoBonus;
 
         const neededCargoes = Math.ceil(goalMetal / capacityPerShip);
 

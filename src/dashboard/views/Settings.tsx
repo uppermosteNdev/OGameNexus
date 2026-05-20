@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getLinkedAccount, linkGoogleAccount, unlinkGoogleAccount, GoogleAccount } from '../../utils/googleAuth';
-import { LogIn, LogOut, CheckCircle, Smartphone, ShieldCheck, Database, TrendingUp, Cpu, Trash2, ArrowRight } from 'lucide-react';
+import { LogIn, LogOut, CheckCircle, Smartphone, ShieldCheck, Database, TrendingUp, Cpu, Trash2, ArrowRight, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -134,6 +134,24 @@ const Settings: React.FC = () => {
                 console.error(`Failed to clear ${tableName}`, e);
                 alert(`Failed to clear ${alertName}. Check console.`);
             }
+        }
+    };
+
+    const resetWelcomeModal = () => {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.remove('welcomeDismissed', () => {
+                    if (chrome.runtime.lastError) {
+                        console.error(chrome.runtime.lastError);
+                    }
+                });
+            }
+            localStorage.removeItem('og-nexus-welcome-dismissed');
+            alert("Welcome modal state has been reset! Refresh the dashboard to see it.");
+        } catch (e) {
+            console.error(e);
+            localStorage.removeItem('og-nexus-welcome-dismissed');
+            alert("Welcome modal state has been reset! Refresh the dashboard to see it.");
         }
     };
 
@@ -279,6 +297,13 @@ const Settings: React.FC = () => {
                         >
                             <span>Clear Debris Harvests</span>
                             <Trash2 size={16} />
+                        </button>
+                        <button 
+                            onClick={resetWelcomeModal}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)', color: 'var(--primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                            <span>Reset Welcome Modal State</span>
+                            <Sparkles size={16} />
                         </button>
                     </div>
                 </div>

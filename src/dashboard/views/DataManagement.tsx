@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLiveQuery } from 'dexie-react-hooks';
 import {
     Upload,
     FileJson,
@@ -17,7 +18,8 @@ import {
     ChevronRight,
     ArrowLeft,
     Loader2,
-    ShieldAlert
+    ShieldAlert,
+    Download
 } from 'lucide-react';
 import { db } from '../../db';
 
@@ -44,6 +46,37 @@ interface ImportStats {
 }
 
 const DataManagement: React.FC = () => {
+    // ----------------------------------------------------
+    // Global & Active Account Queries
+    // ----------------------------------------------------
+    const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+
+    const nexusStatsSummary = useLiveQuery(async () => {
+        if (!activeAccount) return null;
+        try {
+            const p = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
+            const pIds = p.map(x => x.id);
+            const tCount = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).count();
+            return {
+                planets: p.length,
+                expeditions: await db.expeditions.where('playerId').equals(activeAccount.playerId).count(),
+                lifeforms: await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).count(),
+                debris: await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).count(),
+                combats: await db.combatReports.where('playerId').equals(activeAccount.playerId).count(),
+                todos: tCount
+            };
+        } catch (e) {
+            console.error("Failed to query metrics", e);
+            return null;
+        }
+    }, [activeAccount]);
+
+    // ----------------------------------------------------
+    // Tab and Step Navigation States
+    // ----------------------------------------------------
+    const [activeTab, setActiveTab] = useState<'nexus' | 'tracker'>('nexus');
+    
+    // Tracker Import States
     const [step, setStep] = useState<Step>('upload');
     const [isDragging, setIsDragging] = useState(false);
     const [file, setFile] = useState<File | null>(null);
@@ -57,6 +90,758 @@ const DataManagement: React.FC = () => {
     const [isImporting, setIsImporting] = useState(false);
     const [importLog, setImportLog] = useState<string[]>([]);
     const [stats, setStats] = useState<ImportStats>({ total: 0, processed: 0, skipped: 0, imported: 0, errors: 0 });
+
+    // Nexus Backup & Restore States
+    const [nexusTabStep, setNexusTabStep] = useState<'upload' | 'mismatch' | 'confirm' | 'progress'>('upload');
+    const [nexusBackupFile, setNexusBackupFile] = useState<File | null>(null);
+    const [nexusBackupData, setNexusBackupData] = useState<any>(null);
+    const [nexusIsImporting, setNexusIsImporting] = useState(false);
+    const [nexusImportLog, setNexusImportLog] = useState<string[]>([]);
+    const [nexusStats, setNexusStats] = useState({ total: 0, processed: 0, skipped: 0, imported: 0, errors: 0 });
+    const [isExporting, setIsExporting] = useState(false);
+
+    // ----------------------------------------------------
+    // Nexus Export Engine
+    // ----------------------------------------------------
+    const handleExport = async () => {
+        if (!activeAccount) return;
+        try {
+            setIsExporting(true);
+            setError(null);
+
+            // Query player-specific tables
+            const account = activeAccount;
+            const planets = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
+            const expeditions = await db.expeditions.where('playerId').equals(activeAccount.playerId).toArray();
+            const lifeformDiscoveries = await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).toArray();
+            const debrisHarvests = await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).toArray();
+            const combatReports = await db.combatReports.where('playerId').equals(activeAccount.playerId).toArray();
+
+            const pIds = planets.map(p => p.id);
+            const todoProjects = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).toArray();
+
+            // Construct secure backup JSON payload
+            const backupPayload = {
+                type: 'ogame-nexus-backup',
+                version: 1,
+                exportedAt: Date.now(),
+                playerId: activeAccount.playerId,
+                universe: activeAccount.universe,
+                universeName: activeAccount.universeName,
+                playerName: activeAccount.playerName,
+                data: {
+                    account,
+                    planets,
+                    expeditions,
+                    lifeformDiscoveries,
+                    debrisHarvests,
+                    combatReports,
+                    todoProjects
+                }
+            };
+
+            // Trigger secure local download
+            const jsonStr = JSON.stringify(backupPayload, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ogame-nexus-backup_${activeAccount.universe}_${activeAccount.playerName.replace(/\s+/g, '_')}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err: any) {
+            console.error("Local backup export failed", err);
+            setError("Failed to compile database backup payload.");
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    // ----------------------------------------------------
+    // Nexus Import Security & Validation Engine
+    // ----------------------------------------------------
+    const handleNexusFile = async (selectedFile: File) => {
+        if (!selectedFile.name.endsWith('.json')) {
+            setError('Please upload a valid .json database backup file');
+            return;
+        }
+
+        try {
+            setError(null);
+            setNexusBackupFile(selectedFile);
+            const text = await selectedFile.text();
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error('Backup file format is not a valid JSON.');
+            }
+
+            if (data.type !== 'ogame-nexus-backup') {
+                throw new Error('Uploaded file is not a valid OGame Nexus Backup.');
+            }
+
+            if (!data.data || !data.data.account) {
+                throw new Error('Backup file is missing required profile records.');
+            }
+
+            // Enforce Strict Cross-Profile Mismatch Safeguard
+            if (activeAccount) {
+                const filePlayerId = String(data.playerId || data.data.account.playerId);
+                const fileUniverse = String(data.universe || data.data.account.universe);
+
+                if (filePlayerId !== String(activeAccount.playerId) || fileUniverse !== String(activeAccount.universe)) {
+                    // Profile/Universe Mismatch detected
+                    setNexusBackupData(data);
+                    setNexusTabStep('mismatch');
+                    return;
+                }
+            }
+
+            // Enforce active profile validation passed or fresh installation
+            setNexusBackupData(data);
+            setNexusTabStep('confirm');
+        } catch (err: any) {
+            setError(err.message || 'Failed to analyze backup.');
+            console.error(err);
+        }
+    };
+
+    // ----------------------------------------------------
+    // Nexus Restore Execution Engine
+    // ----------------------------------------------------
+    const startNexusRestore = async () => {
+        if (!nexusBackupData) return;
+        setNexusTabStep('progress');
+        setNexusIsImporting(true);
+        setNexusImportLog(['Initiating safety protocols...', 'Extracting database backup payload...']);
+
+        const backup = nexusBackupData.data;
+
+        // Calculate total count
+        const totalToProcess = 
+            (backup.planets?.length || 0) +
+            (backup.expeditions?.length || 0) +
+            (backup.lifeformDiscoveries?.length || 0) +
+            (backup.debrisHarvests?.length || 0) +
+            (backup.combatReports?.length || 0) +
+            (backup.todoProjects?.length || 0) +
+            1; // +1 for the account record itself
+
+        setNexusStats({
+            total: totalToProcess,
+            processed: 0,
+            skipped: 0,
+            imported: 0,
+            errors: 0
+        });
+
+        setNexusImportLog(prev => [...prev, `Detected ${totalToProcess} database items to restore.`]);
+
+        try {
+            // 1. Restore Account Profile
+            setNexusImportLog(prev => [...prev, `Restoring commander profile [${nexusBackupData.playerName}]...`]);
+            const importedAccount = backup.account;
+            // Set lastSeen to current epoch to mark active
+            importedAccount.lastSeen = Date.now();
+            await db.accounts.put(importedAccount);
+            setNexusStats(s => ({ ...s, processed: s.processed + 1, imported: s.imported + 1 }));
+
+            // 2. Planets
+            if (backup.planets && backup.planets.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.planets.length} planet data structures...`]);
+                await db.planets.bulkPut(backup.planets);
+                setNexusStats(s => ({ ...s, processed: s.processed + backup.planets.length, imported: s.imported + backup.planets.length }));
+            }
+
+            // 3. Expeditions
+            if (backup.expeditions && backup.expeditions.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.expeditions.length} expeditions history...`]);
+                await db.expeditions.bulkPut(backup.expeditions);
+                setNexusStats(s => ({ ...s, processed: s.processed + backup.expeditions.length, imported: s.imported + backup.expeditions.length }));
+            }
+
+            // 4. Lifeform Discoveries
+            if (backup.lifeformDiscoveries && backup.lifeformDiscoveries.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.lifeformDiscoveries.length} lifeform discoveries...`]);
+                await db.lifeformDiscoveries.bulkPut(backup.lifeformDiscoveries);
+                setNexusStats(s => ({ ...s, processed: s.processed + backup.lifeformDiscoveries.length, imported: s.imported + backup.lifeformDiscoveries.length }));
+            }
+
+            // 5. Debris Harvests
+            if (backup.debrisHarvests && backup.debrisHarvests.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.debrisHarvests.length} debris harvesting logs...`]);
+                await db.debrisHarvests.bulkPut(backup.debrisHarvests);
+                setNexusStats(s => ({ ...s, processed: s.processed + backup.debrisHarvests.length, imported: s.imported + backup.debrisHarvests.length }));
+            }
+
+            // 6. Combat Reports
+            if (backup.combatReports && backup.combatReports.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.combatReports.length} battle history reports...`]);
+                await db.combatReports.bulkPut(backup.combatReports);
+                setNexusStats(s => ({ ...s, processed: s.processed + backup.combatReports.length, imported: s.imported + backup.combatReports.length }));
+            }
+
+            // 7. Todo Projects (clear overlapping entries, then bulkPut)
+            if (backup.todoProjects && backup.todoProjects.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.todoProjects.length} bento construction schedules...`]);
+                const pIds = (backup.planets || []).map((p: any) => p.id);
+                // Purge duplicate plans to keep list indices unified
+                const existingTodos = await db.todoProjects.toArray();
+                const keysToDelete = existingTodos.filter(t => pIds.includes(t.planetId || '') && t.id).map(t => t.id!);
+                if (keysToDelete.length > 0) {
+                    await db.todoProjects.bulkDelete(keysToDelete);
+                }
+                await db.todoProjects.bulkPut(backup.todoProjects);
+                setNexusStats(s => ({ ...s, processed: s.processed + backup.todoProjects.length, imported: s.imported + backup.todoProjects.length }));
+            }
+
+            setNexusImportLog(prev => [...prev, '✓ Restore sequence completed successfully.', 'All data components verified.']);
+            setNexusIsImporting(false);
+        } catch (err: any) {
+            setNexusImportLog(prev => [...prev, `✖ CRITICAL RESTORE FAULT: ${err.message || 'Unknown database exception'}`]);
+            setNexusStats(s => ({ ...s, errors: s.errors + 1 }));
+            setNexusIsImporting(false);
+        }
+    };
+
+    // ----------------------------------------------------
+    // Nexus Backup & Restore Sub-Views
+    // ----------------------------------------------------
+    const renderNexusUpload = () => (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+            {/* Export Left Column */}
+            <div style={{
+                padding: '40px',
+                borderRadius: '32px',
+                background: 'rgba(13, 22, 38, 0.45)',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
+                <div style={{
+                    position: 'absolute',
+                    top: '-50px',
+                    left: '-50px',
+                    width: '150px',
+                    height: '150px',
+                    borderRadius: '50%',
+                    background: 'rgba(0, 242, 255, 0.03)',
+                    filter: 'blur(50px)',
+                    pointerEvents: 'none'
+                }} />
+
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+                        <div style={{
+                            width: '48px', height: '48px', borderRadius: '14px',
+                            background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)'
+                        }}>
+                            <Database size={22} />
+                        </div>
+                        <div>
+                            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>Command Deck Backup</h2>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0' }}>Export your active tracking metrics locally</p>
+                        </div>
+                    </div>
+
+                    {activeAccount ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            {/* Active profile card */}
+                            <div style={{
+                                padding: '20px', borderRadius: '20px',
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid rgba(255, 255, 255, 0.05)'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                                    <div style={{
+                                        width: '40px', height: '40px', borderRadius: '10px',
+                                        background: 'var(--primary)', color: '#000',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        <User size={20} />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff' }}>{activeAccount.playerName}</div>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <Server size={10} /> {activeAccount.universeName} ({activeAccount.universe})
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                    Player ID: <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{activeAccount.playerId}</span>
+                                </div>
+                            </div>
+
+                            {/* Database numbers summary */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                {[
+                                    { label: 'Planets Structure', count: nexusStatsSummary?.planets || 0, icon: <Server size={14} /> },
+                                    { label: 'Expedition Database', count: nexusStatsSummary?.expeditions || 0, icon: <Compass size={14} /> },
+                                    { label: 'Combat Reports Log', count: nexusStatsSummary?.combats || 0, icon: <Swords size={14} /> },
+                                    { label: 'Debris field harvests', count: nexusStatsSummary?.debris || 0, icon: <Rocket size={14} /> },
+                                    { label: 'Lifeform Discoveries', count: nexusStatsSummary?.lifeforms || 0, icon: <Activity size={14} /> },
+                                    { label: 'Saved Build Orders', count: nexusStatsSummary?.todos || 0, icon: <Clock size={14} /> },
+                                ].map((item, index) => (
+                                    <div key={index} style={{
+                                        padding: '12px 16px', borderRadius: '14px',
+                                        background: 'rgba(255,255,255,0.01)',
+                                        border: '1px solid rgba(255,255,255,0.03)',
+                                        display: 'flex', alignItems: 'center', gap: '12px'
+                                    }}>
+                                        <span style={{ color: 'var(--primary)', opacity: 0.8 }}>{item.icon}</span>
+                                        <div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fff' }}>{item.count.toLocaleString()}</div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{item.label}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{
+                            padding: '30px', borderRadius: '20px',
+                            background: 'rgba(255, 68, 68, 0.05)',
+                            border: '1px solid rgba(255, 68, 68, 0.1)',
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            textAlign: 'center'
+                        }}>
+                            No active commander profile detected. Link an account to export data.
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ marginTop: '40px' }}>
+                    <button
+                        onClick={handleExport}
+                        disabled={!activeAccount || isExporting}
+                        style={{
+                            width: '100%',
+                            padding: '18px 24px',
+                            borderRadius: '16px',
+                            background: activeAccount && !isExporting ? 'linear-gradient(135deg, var(--primary) 0%, #00aaff 100%)' : 'rgba(255,255,255,0.05)',
+                            color: activeAccount && !isExporting ? '#000' : 'var(--text-muted)',
+                            border: 'none',
+                            fontSize: '1rem',
+                            fontWeight: 900,
+                            cursor: activeAccount && !isExporting ? 'pointer' : 'not-allowed',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '12px',
+                            boxShadow: activeAccount && !isExporting ? '0 0 25px rgba(0, 242, 255, 0.25)' : 'none',
+                            transition: 'all 0.3s ease'
+                        }}
+                    >
+                        {isExporting ? (
+                            <>
+                                <Loader2 size={20} className="animate-spin" />
+                                COMPILING BACKUP PAYLOAD...
+                            </>
+                        ) : (
+                            <>
+                                <Download size={20} />
+                                GENERATE NEXUS BACKUP (.JSON)
+                            </>
+                        )}
+                    </button>
+                    <div style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '12px' }}>
+                        Backup file contains your coordinates, planet details, construction schedules, and logs.
+                    </div>
+                </div>
+            </div>
+
+            {/* Import Right Column */}
+            <div style={{
+                padding: '40px',
+                borderRadius: '32px',
+                background: 'rgba(13, 22, 38, 0.45)',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                position: 'relative'
+            }}>
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+                        <div style={{
+                            width: '48px', height: '48px', borderRadius: '14px',
+                            background: 'rgba(189, 0, 255, 0.1)', border: '1px solid rgba(189, 0, 255, 0.2)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--secondary)'
+                        }}>
+                            <Upload size={22} />
+                        </div>
+                        <div>
+                            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>System Restore</h2>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0' }}>Sync and restore history on this device</p>
+                        </div>
+                    </div>
+
+                    <div
+                        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                        onDragLeave={() => setIsDragging(false)}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDragging(false);
+                            const droppedFile = e.dataTransfer.files[0];
+                            if (droppedFile) handleNexusFile(droppedFile);
+                        }}
+                        style={{
+                            padding: '50px 24px',
+                            borderRadius: '24px',
+                            textAlign: 'center',
+                            border: isDragging ? '2px dashed var(--primary)' : '2px dashed rgba(255, 255, 255, 0.1)',
+                            background: isDragging ? 'rgba(0, 242, 255, 0.05)' : 'rgba(255, 255, 255, 0.01)',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        <input type="file" id="nexus-file-upload" style={{ display: 'none' }} accept=".json" onChange={(e) => {
+                            const selectedFile = e.target.files?.[0];
+                            if (selectedFile) handleNexusFile(selectedFile);
+                        }} />
+                        <label htmlFor="nexus-file-upload" style={{ cursor: 'pointer', display: 'block', width: '100%' }}>
+                            <div style={{
+                                width: '64px', height: '64px', borderRadius: '20px',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                border: '1px solid rgba(255, 255, 255, 0.05)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                margin: '0 auto 16px', color: 'var(--primary)'
+                            }}>
+                                <FileJson size={28} />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>Deploy Nexus Backup</h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>Drag and drop your backup .json file or click to browse</p>
+                        </label>
+                    </div>
+                </div>
+
+                {error && (
+                    <div style={{ marginTop: '24px', display: 'flex', alignItems: 'center', gap: '8px', color: '#ff4444', background: 'rgba(255, 68, 68, 0.08)', padding: '12px 20px', borderRadius: '12px', border: '1px solid rgba(255, 68, 68, 0.15)', fontSize: '0.85rem' }}>
+                        <AlertCircle size={16} />
+                        {error}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
+    const renderNexusMismatch = () => {
+        if (!nexusBackupData) return null;
+        const fileAcc = nexusBackupData;
+
+        return (
+            <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{
+                    maxWidth: '850px',
+                    margin: '0 auto',
+                    padding: '40px',
+                    borderRadius: '32px',
+                    background: 'rgba(255, 68, 68, 0.02)',
+                    border: '1px solid rgba(255, 68, 68, 0.15)',
+                    boxShadow: '0 0 40px rgba(255, 68, 68, 0.05)'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px', color: '#ff4444' }}>
+                    <div style={{
+                        width: '56px', height: '56px', borderRadius: '18px',
+                        background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.2)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <ShieldAlert size={28} />
+                    </div>
+                    <div>
+                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#ff4444', margin: 0 }}>Import Blocked: Profile Mismatch</h2>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>Security checks prevent profile crossovers or database corruption</p>
+                    </div>
+                </div>
+
+                <p style={{ color: 'var(--text-main)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '32px' }}>
+                    Your current active command deck belongs to another commander profile or universe. Importing a backup from a different account is blocked to prevent mixing or corrupting coordinates, planet structures, and battle logs.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '40px' }}>
+                    {/* File details card */}
+                    <div style={{
+                        padding: '24px', borderRadius: '24px',
+                        background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                        <div style={{ fontSize: '0.7rem', color: '#ff4444', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>BACKUP FILE PROFILE</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                            <div style={{
+                                width: '36px', height: '36px', borderRadius: '10px',
+                                background: 'rgba(255,255,255,0.05)', color: '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <FileJson size={16} />
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>{fileAcc.playerName}</div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{fileAcc.universeName} ({fileAcc.universe})</div>
+                            </div>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Player ID: <span style={{ fontFamily: 'monospace', color: '#fff' }}>{fileAcc.playerId}</span>
+                        </div>
+                    </div>
+
+                    {/* Active account details card */}
+                    {activeAccount && (
+                        <div style={{
+                            padding: '24px', borderRadius: '24px',
+                            background: 'rgba(0, 242, 255, 0.02)', border: '1px solid rgba(0, 242, 255, 0.15)',
+                            boxShadow: '0 0 20px rgba(0, 242, 255, 0.02)'
+                        }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>ACTIVE COMMAND DECK</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                                <div style={{
+                                    width: '36px', height: '36px', borderRadius: '10px',
+                                    background: 'var(--primary)', color: '#000',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}>
+                                    <User size={16} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>{activeAccount.playerName}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{activeAccount.universeName} ({activeAccount.universe})</div>
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                Player ID: <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{activeAccount.playerId}</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <button
+                        onClick={() => {
+                            setNexusBackupFile(null);
+                            setNexusBackupData(null);
+                            setNexusTabStep('upload');
+                            setError(null);
+                        }}
+                        style={{
+                            padding: '16px 36px', borderRadius: '16px',
+                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                            color: '#fff', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '10px', borderStyle: 'solid'
+                        }}
+                    >
+                        <ArrowLeft size={16} /> Choose Another Backup File
+                    </button>
+                </div>
+            </motion.div>
+        );
+    };
+
+    const renderNexusConfirm = () => {
+        if (!nexusBackupData) return null;
+        const backup = nexusBackupData;
+        const stats = backup.data;
+
+        return (
+            <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{
+                    maxWidth: '750px',
+                    margin: '0 auto',
+                    padding: '40px',
+                    borderRadius: '32px',
+                    background: 'rgba(13, 22, 38, 0.45)',
+                    backdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
+                    <div style={{
+                        width: '56px', height: '56px', borderRadius: '18px',
+                        background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)'
+                    }}>
+                        <ShieldCheck size={28} />
+                    </div>
+                    <div>
+                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', margin: 0 }}>Step 2: Confirm Restore</h2>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>Review backup metrics before initializing overwrite</p>
+                    </div>
+                </div>
+
+                <div style={{
+                    padding: '20px', borderRadius: '20px',
+                    background: 'rgba(0, 242, 255, 0.03)', border: '1px solid rgba(0, 242, 255, 0.1)',
+                    display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px'
+                }}>
+                    <div style={{
+                        width: '44px', height: '44px', borderRadius: '12px',
+                        background: 'var(--primary)', color: '#000',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <User size={22} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff' }}>Commander {backup.playerName}</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            Universe: <span style={{ color: '#fff', fontWeight: 600 }}>{backup.universeName}</span> ({backup.universe})
+                        </div>
+                    </div>
+                </div>
+
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' }}>
+                    BACKUP COMPONENT SUMMARY
+                </h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '32px' }}>
+                    {[
+                        { label: 'Planets Structure', count: stats.planets?.length || 0, icon: <Server size={16} /> },
+                        { label: 'Expedition Database', count: stats.expeditions?.length || 0, icon: <Compass size={16} /> },
+                        { label: 'Combat Reports Log', count: stats.combatReports?.length || 0, icon: <Swords size={16} /> },
+                        { label: 'Debris Harvest History', count: stats.debrisHarvests?.length || 0, icon: <Rocket size={16} /> },
+                        { label: 'Lifeform Discoveries', count: stats.lifeformDiscoveries?.length || 0, icon: <Activity size={16} /> },
+                        { label: 'Saved Build Orders', count: stats.todoProjects?.length || 0, icon: <Clock size={16} /> },
+                    ].map((item, index) => (
+                        <div key={index} style={{
+                            padding: '16px 20px', borderRadius: '16px',
+                            background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)',
+                            display: 'flex', alignItems: 'center', gap: '16px'
+                        }}>
+                            <div style={{ color: 'var(--primary)' }}>{item.icon}</div>
+                            <div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#fff' }}>{(item.count).toLocaleString()}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.label}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div style={{
+                    display: 'flex', gap: '12px', padding: '16px 20px', borderRadius: '16px',
+                    background: 'rgba(255, 170, 0, 0.05)', border: '1px solid rgba(255, 170, 0, 0.15)',
+                    color: 'rgba(255, 255, 255, 0.95)', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '40px'
+                }}>
+                    <AlertCircle size={24} style={{ color: '#ffaa00', flexShrink: 0 }} />
+                    <div>
+                        <span style={{ fontWeight: 800, color: '#ffaa00' }}>Warning:</span> Overwriting active databases will replace existing planets, todo lists, and log metrics with the record states inside this backup. High-priority primary keys protect logs from duplicates.
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                    <button
+                        onClick={() => {
+                            setNexusBackupFile(null);
+                            setNexusBackupData(null);
+                            setNexusTabStep('upload');
+                        }}
+                        style={{
+                            padding: '16px 32px', borderRadius: '16px',
+                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                            color: '#fff', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', borderStyle: 'solid'
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={startNexusRestore}
+                        style={{
+                            padding: '16px 48px', borderRadius: '16px',
+                            background: 'linear-gradient(135deg, var(--primary) 0%, #00aaff 100%)',
+                            color: '#000', fontSize: '0.9rem', fontWeight: 900, cursor: 'pointer',
+                            boxShadow: '0 4px 20px rgba(0, 242, 255, 0.25)', border: 'none',
+                            display: 'flex', alignItems: 'center', gap: '10px'
+                        }}
+                    >
+                        Initiate System Restore <Database size={18} />
+                    </button>
+                </div>
+            </motion.div>
+        );
+    };
+
+    const renderNexusProgress = () => {
+        const progress = nexusStats.total > 0 ? (nexusStats.processed / nexusStats.total) * 100 : 0;
+
+        return (
+            <div style={{ maxWidth: '700px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '40px' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(0, 242, 255, 0.1)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px',
+                        color: 'var(--primary)', position: 'relative'
+                    }}>
+                        {nexusIsImporting ? <Loader2 size={40} className="animate-spin" /> : <ShieldCheck size={40} />}
+                    </div>
+                    <h2 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '8px' }}>
+                        {nexusIsImporting ? 'Restoring Nexus Database' : 'Restore Finished'}
+                    </h2>
+                    <p style={{ color: 'var(--text-muted)' }}>
+                        {nexusIsImporting ? 'Processing backup record arrays...' : 'Database restore finished successfully.'}
+                    </p>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '32px', borderRadius: '32px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '0.9rem', fontWeight: 600 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>SYNCHRONIZATION PROGRESS</span>
+                        <span style={{ color: 'var(--primary)' }}>{Math.round(progress)}%</span>
+                    </div>
+                    <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', marginBottom: '32px' }}>
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} style={{ height: '100%', background: 'var(--primary)', boxShadow: '0 0 10px var(--primary)' }} />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                        {[
+                            { label: 'Imported', val: nexusStats.imported, color: 'var(--primary)' },
+                            { label: 'Errors', val: nexusStats.errors, color: '#ff4444' },
+                            { label: 'Total', val: nexusStats.total, color: '#fff' },
+                        ].map((s) => (
+                            <div key={s.label} style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: s.color }}>{s.val}</div>
+                                <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: '4px' }}>{s.label}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div style={{
+                    background: '#000', padding: '24px', borderRadius: '24px',
+                    fontFamily: 'monospace', fontSize: '0.85rem', maxHeight: '200px',
+                    overflowY: 'auto', border: '1px solid rgba(255,255,255,0.05)',
+                    display: 'flex', flexDirection: 'column', gap: '8px'
+                }}>
+                    {nexusImportLog.map((log, i) => (
+                        <div key={i} style={{ color: log.startsWith('✓') ? 'var(--primary)' : log.startsWith('✖') ? '#ff4444' : '#888' }}>
+                            {log}
+                        </div>
+                    ))}
+                    <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
+                </div>
+
+                {!nexusIsImporting && (
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <button onClick={() => window.location.reload()} style={{ padding: '16px 40px', borderRadius: '16px', background: 'var(--primary)', color: '#000', fontWeight: 800, border: 'none', cursor: 'pointer' }}>
+                            Complete & Refresh Deck
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     const handleFile = async (selectedFile: File) => {
         if (!selectedFile.name.endsWith('.json')) {
@@ -220,7 +1005,7 @@ const DataManagement: React.FC = () => {
         speciesData.forEach(s => {
             const name = s.lifeformName.toLowerCase();
             lifeformLookup[name] = s.lifeformId;
-            lifeformLookup[name.replace("'", "").replace(" ", "")] = s.lifeformId;
+            lifeformLookup[name.replace(/['’‘`\s]/g, "")] = s.lifeformId;
         });
 
         try {
@@ -319,7 +1104,7 @@ const DataManagement: React.FC = () => {
                                     artifactSize = disc.size || 'normal';
                                 } else if (disc.type === 'knownLifeformFound' || disc.type === 'newLifeformFound') {
                                     discoveryType = 'lifeform-xp';
-                                    const lfKey = (disc.lifeform || '').toLowerCase().replace("'", "").replace(" ", "");
+                                    const lfKey = (disc.lifeform || '').toLowerCase().replace(/['’‘`\s]/g, "");
                                     lifeformId = lifeformLookup[lfKey] || 0;
                                     experience = disc.experience || 0;
                                 } else if (disc.type === 'nothing') {
@@ -490,7 +1275,7 @@ const DataManagement: React.FC = () => {
             onDragLeave={() => setIsDragging(false)}
             onDrop={onDrop}
         >
-            <input type="file" id="file-upload" className="hidden" accept=".json" onChange={onFileChange} />
+            <input type="file" id="file-upload" style={{ display: 'none' }} accept=".json" onChange={onFileChange} />
             <label htmlFor="file-upload" style={{ cursor: 'pointer', display: 'block' }}>
                 <div style={{
                     width: '100px',
@@ -795,21 +1580,92 @@ const DataManagement: React.FC = () => {
                         Data Management
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', maxWidth: '600px' }}>
-                        Synchronize your historical records from OGame Tracker exports with the OGNexus Command Deck.
+                        Manage locally recorded commander profiles, export database backups, or synchronize from OGame Tracker exports.
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <div style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', fontWeight: 600 }}>
-                        <span style={{ color: 'var(--primary)' }}>DB STATUS:</span> {isImporting ? 'BUSY' : 'READY'}
+                        <span style={{ color: 'var(--primary)' }}>DB STATUS:</span> {isImporting || nexusIsImporting ? 'BUSY' : 'READY'}
                     </div>
                 </div>
             </header>
 
+            {/* Premium Navigation Tabs */}
+            <div style={{
+                display: 'flex',
+                gap: '8px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                padding: '6px',
+                borderRadius: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                alignSelf: 'flex-start',
+                marginBottom: '32px',
+                width: 'max-content'
+            }}>
+                <button
+                    onClick={() => {
+                        setActiveTab('nexus');
+                        setError(null);
+                    }}
+                    style={{
+                        padding: '10px 24px',
+                        borderRadius: '12px',
+                        background: activeTab === 'nexus' ? 'linear-gradient(90deg, rgba(0, 242, 255, 0.15) 0%, rgba(189, 0, 255, 0.05) 100%)' : 'transparent',
+                        color: activeTab === 'nexus' ? 'var(--primary)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.3s ease',
+                        boxShadow: activeTab === 'nexus' ? '0 0 15px rgba(0, 242, 255, 0.1)' : 'none',
+                        border: activeTab === 'nexus' ? '1px solid rgba(0, 242, 255, 0.2)' : '1px solid transparent'
+                    }}
+                >
+                    <img src="icons/nexus.png" alt="OGame Nexus Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> OGame Nexus Data
+                </button>
+                <button
+                    onClick={() => {
+                        setActiveTab('tracker');
+                        setError(null);
+                    }}
+                    style={{
+                        padding: '10px 24px',
+                        borderRadius: '12px',
+                        background: activeTab === 'tracker' ? 'linear-gradient(90deg, rgba(0, 242, 255, 0.15) 0%, rgba(189, 0, 255, 0.05) 100%)' : 'transparent',
+                        color: activeTab === 'tracker' ? 'var(--primary)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.3s ease',
+                        boxShadow: activeTab === 'tracker' ? '0 0 15px rgba(0, 242, 255, 0.1)' : 'none',
+                        border: activeTab === 'tracker' ? '1px solid rgba(0, 242, 255, 0.2)' : '1px solid transparent'
+                    }}
+                >
+                    <img src="icons/misc/ogame-tracker.png" alt="OGame Tracker Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> OGame Tracker Sync
+                </button>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '48px' }}>
-                {step === 'upload' && renderUpload()}
-                {step === 'account-select' && renderAccountSelect()}
-                {step === 'data-select' && renderDataSelect()}
-                {step === 'import-progress' && renderImportProgress()}
+                {activeTab === 'tracker' ? (
+                    <>
+                        {step === 'upload' && renderUpload()}
+                        {step === 'account-select' && renderAccountSelect()}
+                        {step === 'data-select' && renderDataSelect()}
+                        {step === 'import-progress' && renderImportProgress()}
+                    </>
+                ) : (
+                    <>
+                        {nexusTabStep === 'upload' && renderNexusUpload()}
+                        {nexusTabStep === 'mismatch' && renderNexusMismatch()}
+                        {nexusTabStep === 'confirm' && renderNexusConfirm()}
+                        {nexusTabStep === 'progress' && renderNexusProgress()}
+                    </>
+                )}
             </div>
         </div>
     );

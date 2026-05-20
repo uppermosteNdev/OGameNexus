@@ -62,7 +62,8 @@ const Tools: React.FC = () => {
             name: 'Combat Analysis',
             description: 'Advanced battle simulation and fleet compositions',
             icon: <Shield size={20} />,
-            component: <div className="text-center py-20 text-[var(--text-muted)] italic">Module synchronization in progress...</div>
+            component: <div className="text-center py-20 text-[var(--text-muted)] italic">Module synchronization in progress...</div>,
+            inTesting: true
         },
         {
             id: 'exp-calc',

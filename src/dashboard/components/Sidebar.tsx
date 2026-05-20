@@ -12,7 +12,8 @@ import {
     Database,
     Activity,
     Globe,
-    Sparkles
+    Sparkles,
+    BookOpen
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -33,6 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
         { id: 'signature', label: 'Signature Forge', icon: <Sparkles size={22} /> },
         { id: 'dataManagement', label: 'Data Management', icon: <Database size={22} /> },
         { id: 'settings', label: 'Settings', icon: <SettingsIcon size={22} /> },
+        { id: 'tutorials', label: 'Tutorials', icon: <BookOpen size={22} /> },
     ];
 
     return (

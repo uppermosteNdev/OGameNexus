@@ -451,14 +451,31 @@ function scrapeLifeformExperience() {
     const xpBar = item.querySelector(".xpbar");
     if (icon && xpBar) {
       const lfMatch = icon.className.match(/lifeform(\d+)/);
-      const xpMatch = xpBar.getAttribute("data-tooltip-title")?.match(/Level (\d+): (\d+)\/(\d+) XP/);
-      if (lfMatch && xpMatch) {
-        experience.push({
-          lifeformId: parseInt(lfMatch[1]),
-          level: parseInt(xpMatch[1]),
-          currentExp: parseInt(xpMatch[2]),
-          nextLevelExp: parseInt(xpMatch[3])
-        });
+      if (lfMatch) {
+        const tooltipTitle = xpBar.getAttribute("data-tooltip-title");
+        if (tooltipTitle) {
+          const xpMatch = tooltipTitle.match(/Level (\d+): (\d+)\/(\d+) XP/);
+          if (xpMatch) {
+            experience.push({
+              lifeformId: parseInt(lfMatch[1]),
+              level: parseInt(xpMatch[1]),
+              currentExp: parseInt(xpMatch[2]),
+              nextLevelExp: parseInt(xpMatch[3])
+            });
+          } else {
+            // Fallback for max level or tooltips showing only level (e.g. Level 100)
+            const lvlMatch = tooltipTitle.match(/Level (\d+)/);
+            if (lvlMatch) {
+              const level = parseInt(lvlMatch[1]);
+              experience.push({
+                lifeformId: parseInt(lfMatch[1]),
+                level: level,
+                currentExp: level >= 100 ? 100 : 0,
+                nextLevelExp: level >= 100 ? 100 : 100
+              });
+            }
+          }
+        }
       }
     }
   });

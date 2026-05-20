@@ -882,7 +882,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                     <div style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: 'linear-gradient(135deg, #43D159, #00F2FF, #BD00FF)', opacity: 0.2, filter: 'blur(10px)' }} />
                                     <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)', position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <img 
-                                            src={`icons/lifeforms/${lfStats.domSpecies.toLowerCase().replace("'", "").replace(" ", "")}-icon-large.jpg`} 
+                                            src={`icons/lifeforms/${lfStats.domSpecies.toLowerCase().replace(/['’‘`\s]/g, "")}-icon-large.jpg`} 
                                             alt="" 
                                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                             onError={(e) => { (e.target as any).src = 'icons/lifeforms/humans-icon-large.jpg'; }}
@@ -912,7 +912,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         const name = species?.lifeformName || (id === 1 ? 'Humans' : id === 2 ? "Rock'tal" : id === 3 ? 'Mechas' : 'Kaelesh');
                                         
                                         const level = experience?.level || 0;
-                                        const progress = experience ? (experience.currentExp / experience.nextLevelExp) * 100 : 0;
+                                        const progress = level >= 100 ? 100 : (experience && experience.nextLevelExp > 0 ? (experience.currentExp / experience.nextLevelExp) * 100 : 0);
                                         
                                         const colors: Record<number, string> = {
                                             1: '#43D159', // Human - Green
@@ -956,7 +956,9 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                 </div>
                                                 {level > 0 && (
                                                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                                        <span style={{ fontSize: '0.45rem', fontWeight: 600, color: 'rgba(255,255,255,0.3)' }}>{progress.toFixed(1)}% TO LVL {level + 1}</span>
+                                                        <span style={{ fontSize: '0.45rem', fontWeight: 600, color: 'rgba(255,255,255,0.3)' }}>
+                                                            {level >= 100 ? 'MAX LEVEL' : `${progress.toFixed(1)}% TO LVL ${level + 1}`}
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
