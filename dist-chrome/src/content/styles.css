@@ -1,0 +1,491 @@
+#og-nexus-button-container {
+  margin-top: 10px;
+  cursor: pointer;
+  position: relative;
+}
+
+#og-nexus-dashboard-btn {
+  display: block;
+}
+
+#og-nexus-dashboard-btn .menuImage:hover {
+  filter: brightness(1.2);
+}
+
+#og-nexus-button-container .textlabel {
+  color: #ecf0f1;
+  font-weight: bold;
+}
+
+.og-nexus-icon {
+  width: 18px;
+  height: 18px;
+  filter: drop-shadow(0 0 2px rgba(52, 152, 219, 0.8));
+}
+
+/* Custom Premium Tooltips */
+.nexus-tooltip {
+  position: relative;
+  cursor: help;
+}
+
+.nexus-tooltip::after {
+  content: attr(data-nexus-tooltip);
+  position: absolute;
+  bottom: 135%;
+  left: 50%;
+  transform: translateX(-50%) translateY(5px);
+  background: rgba(15, 20, 25, 0.96);
+  color: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  z-index: 999999;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.nexus-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 118%;
+  left: 50%;
+  transform: translateX(-50%) translateY(5px);
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.2) transparent transparent transparent;
+  z-index: 999999;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.nexus-tooltip:hover::after,
+.nexus-tooltip:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Specific adjustment for fleet footer buttons to ensure tooltips aren't cut off */
+message-footer-actions .nexus-tooltip::after {
+  bottom: 155%;
+}
+
+message-footer-actions .nexus-tooltip::before {
+  bottom: 138%;
+}
+
+/* Discovery Rarity Card Styles */
+.og-nexus-common-card {
+  background: rgba(10, 15, 20, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-left: 3px solid #6b7280 !important;
+}
+
+.og-nexus-common-card {
+  color: #D1D1D1 !important;
+}
+
+.og-nexus-rare-card {
+  background: rgba(10, 15, 20, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid transparent !important;
+  border-left: 3px solid #06b6d4 !important;
+  position: relative;
+}
+
+/* Linear Gradient Border Replacement for Rare */
+.og-nexus-rare-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(to right, #0891b2, #06b6d4);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.og-nexus-epic-card {
+  background: rgba(10, 15, 20, 0.3) !important;
+  position: relative !important;
+  border: none !important;
+  box-shadow: 0 0 25px rgba(236, 72, 153, 0.2) !important;
+  overflow: visible !important;
+  color: #ffffff !important;
+}
+
+.og-nexus-epic-card .amount-glow {
+  text-shadow: none !important;
+}
+
+.og-nexus-black-hole-main {
+  background: rgba(10, 15, 20, 0.3) !important;
+  position: relative !important;
+  border: none !important;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.15) !important;
+  overflow: visible !important;
+  color: #ffffff !important;
+}
+
+.og-nexus-black-hole-main::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(to right, #b91c1c, #ef4444);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Animations & Utility */
+@keyframes og-nexus-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+  }
+
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 40px rgba(236, 72, 153, 0.7);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+  }
+}
+
+.og-nexus-epic-pulse {
+  animation: og-nexus-pulse 4s ease-in-out infinite;
+}
+
+/* Sparkle Animation for Rarity Icons */
+@keyframes rarity-sparkle {
+  0% {
+    transform: scale(1);
+    filter: var(--rarity-glow, drop-shadow(0 0 0 transparent)) brightness(1.2) contrast(1.1);
+  }
+
+  50% {
+    transform: scale(1.05);
+    filter: var(--rarity-glow, drop-shadow(0 0 0 transparent)) brightness(1.8) contrast(1.2);
+  }
+
+  100% {
+    transform: scale(1);
+    filter: var(--rarity-glow, drop-shadow(0 0 0 transparent)) brightness(1.2) contrast(1.1);
+  }
+}
+
+.og-nexus-rarity-icon {
+  filter: brightness(1.2) contrast(1.1);
+  image-rendering: auto;
+}
+
+.rarity-sparkle-rare {
+  --rarity-glow: drop-shadow(0 0 10px rgba(6, 182, 212, 0.6));
+  animation: rarity-sparkle 3s ease-in-out infinite;
+  opacity: 1;
+}
+
+.rarity-sparkle-epic {
+  --rarity-glow: drop-shadow(0 0 18px rgba(236, 72, 153, 0.8));
+  animation: rarity-sparkle 1.5s ease-in-out infinite;
+}
+
+.og-nexus-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glassmorphism support */
+.og-nexus-glass {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@keyframes og-nexus-lightning-flash {
+  0% {
+    left: -100%;
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    left: 150%;
+    opacity: 0;
+  }
+}
+
+.og-nexus-flash-rare::after,
+.og-nexus-flash-epic::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 120px;
+  transform: skewX(-25deg);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.og-nexus-flash-rare::after {
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), rgba(147, 197, 253, 0.9), rgba(59, 130, 246, 0.3), transparent);
+  animation: og-nexus-lightning-flash 0.8s ease-out forwards;
+}
+
+.og-nexus-flash-epic::after {
+  background: linear-gradient(90deg, transparent, rgba(236, 72, 153, 0.3), rgba(249, 168, 212, 0.9), rgba(236, 72, 153, 0.3), transparent);
+  animation: og-nexus-lightning-flash 0.8s ease-out forwards;
+}
+
+/* Black Hole Animations */
+@keyframes black-hole-pulse {
+  0% {
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.1);
+  }
+
+  50% {
+    box-shadow: 0 0 25px rgba(255, 68, 68, 0.3);
+  }
+
+  100% {
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.1);
+  }
+}
+
+@keyframes og-nexus-particles {
+  0% {
+    background-position: 0 0, 0 0, 0 0;
+  }
+
+  100% {
+    background-position: 100px 300px, -150px 400px, 200px 200px;
+  }
+}
+
+.og-nexus-black-hole-card {
+  animation: black-hole-pulse 4s ease-in-out infinite;
+  border-left: none !important;
+  box-shadow: none !important;
+  margin: 4px 0 !important;
+}
+
+.og-nexus-black-hole-pill {
+  position: relative !important;
+  background-color: rgba(10, 5, 5, 0.96) !important;
+  background-image:
+    radial-gradient(1px 1px at 25px 35px, rgba(255, 255, 255, 0.12), transparent 0),
+    radial-gradient(1.5px 1.5px at 120px 180px, rgba(255, 68, 68, 0.08), transparent 0),
+    radial-gradient(1.2px 1.2px at 280px 60px, rgba(255, 255, 255, 0.1), transparent 0) !important;
+  background-size: 150px 150px, 250px 250px, 320px 320px !important;
+  animation: og-nexus-particles 45s linear infinite !important;
+  border: 1px solid rgba(255, 68, 68, 0.35) !important;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 0, 0, 0.15) !important;
+  overflow: hidden !important;
+}
+
+/* Modal System Styles */
+@keyframes nexus-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+body.og-nexus-modal-open {
+  overflow: hidden !important;
+}
+
+.og-nexus-modal-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: transparent;
+  background-image:
+    radial-gradient(1px 1px at 100px 150px, rgba(255, 255, 255, 0.08) 50%, transparent 0),
+    radial-gradient(1px 1px at 300px 400px, rgba(255, 255, 255, 0.05) 50%, transparent 0),
+    radial-gradient(1.5px 1.5px at 600px 200px, rgba(52, 152, 219, 0.05) 50%, transparent 0);
+  background-size: 400px 400px;
+  animation: og-nexus-particles 60s linear infinite;
+  opacity: 0.5;
+}
+
+.nexus-todo-card:hover {
+  background: rgba(51, 65, 85, 0.6) !important;
+  border-color: rgba(52, 152, 219, 0.3) !important;
+  transform: translateX(4px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.nexus-modal-tab:hover {
+  color: #f1f5f9 !important;
+}
+
+/* Slim Result Message Styles */
+.og-nexus-result-container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 4px 0 !important;
+  gap: 6px !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.og-nexus-result-pill {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  background-color: rgba(10, 15, 20, 0.85) !important;
+  border-radius: 4px !important;
+  padding: 4px 12px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  justify-content: center !important;
+  cursor: default !important;
+}
+
+.og-nexus-result-icon {
+  width: 24px !important;
+  height: 24px !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+}
+
+.og-nexus-result-rarity-icon {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 4px !important;
+  flex-shrink: 0 !important;
+}
+
+.og-nexus-result-amount {
+  font-size: 13px !important;
+  font-weight: bold !important;
+  font-family: 'Verdana', sans-serif !important;
+}
+
+.og-nexus-result-depletion {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 2px 10px !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  cursor: default !important;
+}
+
+/* Moving Border Glow Animations */
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotateGlowAngle {
+  0% {
+    --glow-angle: 0deg;
+  }
+
+  100% {
+    --glow-angle: 360deg;
+  }
+}
+
+.rarity-pill-common,
+.rarity-pill-rare-animate,
+.rarity-pill-epic-animate {
+  border-color: transparent !important;
+}
+
+.rarity-pill-rare-animate,
+.rarity-pill-epic-animate {
+  animation: rotateGlowAngle 2.5s linear infinite !important;
+}
+
+.rarity-pill-common {
+  background-image:
+    linear-gradient(rgba(10, 15, 20, 0.85), rgba(10, 15, 20, 0.85)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.02) 50%, rgba(255, 255, 255, 0.15) 100%) !important;
+  background-origin: padding-box, border-box !important;
+  background-clip: padding-box, border-box !important;
+}
+
+.rarity-pill-rare-animate {
+  background-image:
+    linear-gradient(rgba(10, 15, 20, 0.85), rgba(10, 15, 20, 0.85)),
+    conic-gradient(from var(--glow-angle), transparent 60%, #06b6d4 100%) !important;
+  background-origin: padding-box, border-box !important;
+  background-clip: padding-box, border-box !important;
+}
+
+.rarity-pill-epic-animate {
+  background-image:
+    linear-gradient(rgba(10, 15, 20, 0.85), rgba(10, 15, 20, 0.85)),
+    conic-gradient(from var(--glow-angle), transparent 60%, #ec4899 100%) !important;
+  background-origin: padding-box, border-box !important;
+  background-clip: padding-box, border-box !important;
+}
+
+@keyframes og-nexus-button-eat-glow {
+  0% {
+    box-shadow: 0 0 0px 0px rgba(56, 189, 248, 0);
+    transform: scale(1);
+  }
+
+  30% {
+    box-shadow: 0 0 20px 6px rgba(56, 189, 248, 0.6);
+    transform: scale(1.1);
+  }
+
+  100% {
+    box-shadow: 0 0 0px 0px rgba(56, 189, 248, 0);
+    transform: scale(1);
+  }
+}
+
+.og-nexus-button-eating {
+  animation: og-nexus-button-eat-glow 0.4s ease-out !important;
+}
