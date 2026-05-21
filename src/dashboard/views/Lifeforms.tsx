@@ -1061,7 +1061,7 @@ const Lifeforms: React.FC = () => {
                                                         </div>
                                                         <div className="lf-pod-meta">
                                                             <span>Lvl {level}</span>
-                                                            <span>{Number(progress).toFixed(1)}% to Lvl {level + 1}</span>
+                                                            <span>{level >= 100 ? 'MAX LEVEL' : `${Number(progress).toFixed(1)}% to Lvl ${level + 1}`}</span>
                                                         </div>
                                                     </div>
                                                 </div>

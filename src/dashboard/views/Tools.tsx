@@ -17,38 +17,6 @@ interface Tool {
 }
 
 const Tools: React.FC = () => {
-    const [activeToolId, setActiveToolId] = useState('scrap-optimizer');
-
-    // Support deep-linking from Hotbar
-    useEffect(() => {
-        const checkPending = () => {
-            const pending = sessionStorage.getItem('ognexus_target_subview');
-            if (pending) {
-                try {
-                    const { view, tab } = JSON.parse(pending);
-                    if (view === 'tools' && tab) {
-                        setActiveToolId(tab);
-                        sessionStorage.removeItem('ognexus_target_subview');
-                    }
-                } catch (e) {
-                    console.error('Failed to parse target subview:', e);
-                }
-            }
-        };
-        checkPending();
-
-        const handleNav = (e: Event) => {
-            const detail = (e as CustomEvent).detail;
-            if (detail && detail.view === 'tools' && detail.tab) {
-                setActiveToolId(detail.tab);
-            }
-        };
-        window.addEventListener('ognexus_navigated', handleNav);
-        return () => {
-            window.removeEventListener('ognexus_navigated', handleNav);
-        };
-    }, []);
-
     const tools: Tool[] = [
         {
             id: 'scrap-optimizer',
@@ -77,7 +45,8 @@ const Tools: React.FC = () => {
             name: 'ACS Splitter',
             description: 'Split combat results across multiple alliance members',
             icon: <Target size={20} />,
-            component: <AcsSplitter />
+            component: <AcsSplitter />,
+            inTesting: true
         },
         {
             id: 'plasma-optimizer',
@@ -94,6 +63,44 @@ const Tools: React.FC = () => {
             component: <DiscovererOptimizer />
         }
     ];
+
+    const [activeToolId, setActiveToolId] = useState('scrap-optimizer');
+
+    // Support deep-linking from Hotbar
+    useEffect(() => {
+        const checkPending = () => {
+            const pending = sessionStorage.getItem('ognexus_target_subview');
+            if (pending) {
+                try {
+                    const { view, tab } = JSON.parse(pending);
+                    if (view === 'tools' && tab) {
+                        const targetTool = tools.find(t => t.id === tab);
+                        if (targetTool && !targetTool.inTesting) {
+                            setActiveToolId(tab);
+                        }
+                        sessionStorage.removeItem('ognexus_target_subview');
+                    }
+                } catch (e) {
+                    console.error('Failed to parse target subview:', e);
+                }
+            }
+        };
+        checkPending();
+
+        const handleNav = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (detail && detail.view === 'tools' && detail.tab) {
+                const targetTool = tools.find(t => t.id === detail.tab);
+                if (targetTool && !targetTool.inTesting) {
+                    setActiveToolId(detail.tab);
+                }
+            }
+        };
+        window.addEventListener('ognexus_navigated', handleNav);
+        return () => {
+            window.removeEventListener('ognexus_navigated', handleNav);
+        };
+    }, [tools]);
 
     const activeTool = tools.find(t => t.id === activeToolId);
 

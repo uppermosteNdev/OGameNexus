@@ -53346,11 +53346,7 @@ Continue?`;
                             "Lvl ",
                             level
                           ] }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-                            Number(progress2).toFixed(1),
-                            "% to Lvl ",
-                            level + 1
-                          ] })
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: level >= 100 ? "MAX LEVEL" : `${Number(progress2).toFixed(1)}% to Lvl ${level + 1}` })
                         ] })
                       ] })
                     ] }, id2);
@@ -62965,34 +62961,6 @@ const DiscovererOptimizer = () => {
   ] });
 };
 const Tools = () => {
-  const [activeToolId, setActiveToolId] = reactExports.useState("scrap-optimizer");
-  reactExports.useEffect(() => {
-    const checkPending = () => {
-      const pending = sessionStorage.getItem("ognexus_target_subview");
-      if (pending) {
-        try {
-          const { view, tab } = JSON.parse(pending);
-          if (view === "tools" && tab) {
-            setActiveToolId(tab);
-            sessionStorage.removeItem("ognexus_target_subview");
-          }
-        } catch (e) {
-          console.error("Failed to parse target subview:", e);
-        }
-      }
-    };
-    checkPending();
-    const handleNav = (e) => {
-      const detail = e.detail;
-      if (detail && detail.view === "tools" && detail.tab) {
-        setActiveToolId(detail.tab);
-      }
-    };
-    window.addEventListener("ognexus_navigated", handleNav);
-    return () => {
-      window.removeEventListener("ognexus_navigated", handleNav);
-    };
-  }, []);
   const tools = [
     {
       id: "scrap-optimizer",
@@ -63021,7 +62989,8 @@ const Tools = () => {
       name: "ACS Splitter",
       description: "Split combat results across multiple alliance members",
       icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 20 }),
-      component: /* @__PURE__ */ jsxRuntimeExports.jsx(AcsSplitter, {})
+      component: /* @__PURE__ */ jsxRuntimeExports.jsx(AcsSplitter, {}),
+      inTesting: true
     },
     {
       id: "plasma-optimizer",
@@ -63038,6 +63007,40 @@ const Tools = () => {
       component: /* @__PURE__ */ jsxRuntimeExports.jsx(DiscovererOptimizer, {})
     }
   ];
+  const [activeToolId, setActiveToolId] = reactExports.useState("scrap-optimizer");
+  reactExports.useEffect(() => {
+    const checkPending = () => {
+      const pending = sessionStorage.getItem("ognexus_target_subview");
+      if (pending) {
+        try {
+          const { view, tab } = JSON.parse(pending);
+          if (view === "tools" && tab) {
+            const targetTool = tools.find((t2) => t2.id === tab);
+            if (targetTool && !targetTool.inTesting) {
+              setActiveToolId(tab);
+            }
+            sessionStorage.removeItem("ognexus_target_subview");
+          }
+        } catch (e) {
+          console.error("Failed to parse target subview:", e);
+        }
+      }
+    };
+    checkPending();
+    const handleNav = (e) => {
+      const detail = e.detail;
+      if (detail && detail.view === "tools" && detail.tab) {
+        const targetTool = tools.find((t2) => t2.id === detail.tab);
+        if (targetTool && !targetTool.inTesting) {
+          setActiveToolId(detail.tab);
+        }
+      }
+    };
+    window.addEventListener("ognexus_navigated", handleNav);
+    return () => {
+      window.removeEventListener("ognexus_navigated", handleNav);
+    };
+  }, [tools]);
   const activeTool = tools.find((t2) => t2.id === activeToolId);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view-container", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "view-header", children: [
@@ -64327,7 +64330,7 @@ const SHORTCUT_CATEGORIES = [
       { id: "tools-scrap-optimizer", label: "Scrap Merchant", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Package, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "scrap-optimizer" },
       { id: "tools-combat-sim", label: "Combat Analysis", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "combat-sim", inTesting: true },
       { id: "tools-exp-calc", label: "Expedition Calculator", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Calculator, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "exp-calc" },
-      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter" },
+      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter", inTesting: true },
       { id: "tools-plasma-optimizer", label: "Plasma Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "plasma-optimizer" },
       { id: "tools-discoverer-optimizer", label: "Discoverer Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "discoverer-optimizer" }
     ]
