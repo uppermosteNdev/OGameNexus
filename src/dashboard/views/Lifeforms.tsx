@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Planet, LifeformSavedSetup } from '../../db';
 import { LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';

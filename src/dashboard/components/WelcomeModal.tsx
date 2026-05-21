@@ -34,7 +34,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onLetsGo, onNeverShow, onOp
 
     return (
         <div style={{
-            position: 'fixed',
+            position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
@@ -44,10 +44,11 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onLetsGo, onNeverShow, onOp
             WebkitBackdropFilter: 'blur(16px)',
             zIndex: 9999,
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
-            padding: '24px',
-            overflowY: 'auto'
+            padding: '40px 24px',
+            overflow: 'auto',
+            WebkitOverflowScrolling: 'touch'
         }}>
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 30 }}
@@ -62,7 +63,8 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onLetsGo, onNeverShow, onOp
                     padding: '30px 40px',
                     boxShadow: '0 0 50px rgba(0, 242, 255, 0.18), inset 0 0 20px rgba(0, 242, 255, 0.05)',
                     position: 'relative',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    margin: '20px auto'
                 }}
             >
                 {/* Ambient glow accent line */}

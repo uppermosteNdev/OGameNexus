@@ -43,9 +43,11 @@ try {
 
   // 3. Compress based on platform
   if (process.platform === 'win32') {
-    // Windows: Use native tar.exe to produce a standard ZIP archive with forward slashes (/)
-    // to avoid backslash directory separator errors in Firefox/AMO validation.
-    const cmd = `tar.exe -a -c -f "${zipPath}" -C "${outDir}" .`;
+    // Windows: Use native tar.exe to produce a standard ZIP archive.
+    // Instead of using ".", read the files in the directory and pass them individually
+    // to prevent tar from creating a "." root entry/prefix.
+    const files = fs.readdirSync(outDir).map(file => `"${file}"`).join(' ');
+    const cmd = `tar.exe -a -c -f "${zipPath}" -C "${outDir}" ${files}`;
     execSync(cmd, { stdio: 'inherit' });
   } else {
     // Unix zip

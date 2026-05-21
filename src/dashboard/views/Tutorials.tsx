@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    BookOpen, 
-    LayoutDashboard, 
-    Compass, 
-    Dna, 
-    Wrench, 
-    ArrowRight, 
-    PlayCircle, 
-    X, 
-    ChevronLeft, 
-    ChevronRight, 
-    CheckCircle2, 
-    Sparkles, 
-    Database, 
-    RefreshCw, 
-    FileText, 
-    Code, 
-    DownloadCloud, 
-    Terminal, 
+import {
+    BookOpen,
+    LayoutDashboard,
+    Compass,
+    Dna,
+    Wrench,
+    ArrowRight,
+    PlayCircle,
+    X,
+    ChevronLeft,
+    ChevronRight,
+    CheckCircle2,
+    Sparkles,
+    Database,
+    RefreshCw,
+    FileText,
+    Code,
+    DownloadCloud,
+    Terminal,
     Target,
     Activity,
     Layers,
@@ -26,6 +26,7 @@ import {
     Monitor
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
 
 interface TutorialsProps {
     onNavigate: (view: string) => void;
@@ -97,7 +98,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                 },
                 {
                     title: "Import Mine Production",
-                    text: "Visit your in-game Resource Settings tab and then the Lifeform Player Bonuses. This allows the extension to map information about your empire production and lifeform levels.",
+                    text: "Visit your in-game Resource Settings tab on every planet and then the Lifeform Player Bonuses. This allows the extension to map information about your empire production and lifeform levels.",
                     images: ["icons/tutorials/T1/ResourceSettings1.jpg", "icons/tutorials/T1/ResourceSettings2.jpg"]
                 }
             ]
@@ -320,18 +321,18 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                 </div>
 
                 {/* Main Mock Content */}
-                <div style={{ 
-                    flex: 1, 
-                    height: 'calc(100% - 32px)', 
-                    maxHeight: 'calc(100% - 32px)', 
-                    padding: '20px', 
-                    position: 'relative', 
-                    display: 'flex', 
-                    justifyContent: 'center', 
+                <div style={{
+                    flex: 1,
+                    height: 'calc(100% - 32px)',
+                    maxHeight: 'calc(100% - 32px)',
+                    padding: '20px',
+                    position: 'relative',
+                    display: 'flex',
+                    justifyContent: 'center',
                     alignItems: 'center',
                     boxSizing: 'border-box'
                 }}>
-                    
+
                     {/* Pulsing Scanning Effect */}
                     <div style={{
                         position: 'absolute',
@@ -356,20 +357,20 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
 
                     {/* RENDER DYNAMIC IMAGES IF PRESENT */}
                     {currentStepData && currentStepData.images && currentStepData.images.length > 0 ? (
-                        <div style={{ 
-                            display: 'flex', 
-                            justifyContent: 'center', 
-                            alignItems: 'center', 
-                            gap: '20px', 
-                            width: '100%', 
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            gap: '20px',
+                            width: '100%',
                             height: '100%',
                             position: 'relative'
                         }}>
                             {currentStepData.images.map((imgSrc, idx) => (
-                                <img 
+                                <img
                                     key={idx}
-                                    src={imgSrc} 
-                                    alt={`${currentStepData.title} Screenshot ${idx + 1}`} 
+                                    src={imgSrc}
+                                    alt={`${currentStepData.title} Screenshot ${idx + 1}`}
                                     style={{
                                         height: 'auto',
                                         maxHeight: '100%',
@@ -387,7 +388,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                     ) : (
                         /* FALLBACK TO CUSTOM CSS MOCKUPS FOR SPECIFIC STEPS */
                         <div style={{ width: '100%', height: '100%' }}>
-                             {/* Fallback mockups if no images are specified */}
+                            {/* Fallback mockups if no images are specified */}
 
                             {guideId === 'interface-mastery' && (
                                 <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -561,16 +562,16 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
             {/* Custom Bento Grid Layout */}
             <div className="tutorials-bento-grid">
                 {guides.map((guide) => (
-                    <motion.div 
-                        key={guide.id} 
+                    <motion.div
+                        key={guide.id}
                         className={`glass bento-card ${guide.gridClass}`}
                         whileHover={{ scale: 1.01, translateY: -4 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                         onClick={() => openGuide(guide)}
-                        style={{ 
-                            padding: '24px', 
-                            display: 'flex', 
-                            flexDirection: 'column', 
+                        style={{
+                            padding: '24px',
+                            display: 'flex',
+                            flexDirection: 'column',
                             position: 'relative',
                             overflow: 'hidden',
                             cursor: 'pointer',
@@ -661,33 +662,33 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                         </div>
 
                         {/* Mid Details */}
-                        <h3 style={{ 
-                            fontSize: '1.45rem', 
-                            fontWeight: 800, 
-                            color: '#fff', 
+                        <h3 style={{
+                            fontSize: '1.45rem',
+                            fontWeight: 800,
+                            color: '#fff',
                             margin: '0 0 12px 0',
                             fontFamily: 'var(--font-title)',
                             letterSpacing: '-0.01em'
                         }}>
                             {guide.title}
                         </h3>
-                        <p style={{ 
-                            fontSize: '0.88rem', 
-                            color: 'var(--text-muted)', 
-                            lineHeight: 1.55, 
-                            marginBottom: '16px', 
-                            flexGrow: 1 
+                        <p style={{
+                            fontSize: '0.88rem',
+                            color: 'var(--text-muted)',
+                            lineHeight: 1.55,
+                            marginBottom: '16px',
+                            flexGrow: 1
                         }}>
                             {guide.desc}
                         </p>
 
                         {/* Card CTA/Footer */}
-                        <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '8px', 
-                            fontSize: '0.82rem', 
-                            fontWeight: 700, 
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
                             color: guide.badgeTextColor,
                             marginTop: 'auto'
                         }}>
@@ -702,7 +703,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
             <AnimatePresence>
                 {selectedGuide && (
                     <div style={{
-                        position: 'fixed',
+                        position: 'absolute',
                         top: 0,
                         left: 0,
                         right: 0,
@@ -711,19 +712,20 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '24px',
+                        padding: '40px 24px',
                         background: 'rgba(2, 6, 12, 0.65)',
                         backdropFilter: 'blur(20px) saturate(180%)',
-                        WebkitBackdropFilter: 'blur(20px) saturate(180%)'
+                        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                        overflow: 'auto'
                     }}>
                         {/* Semi-transparent click outside block */}
-                        <div 
-                            onClick={closeGuide} 
+                        <div
+                            onClick={closeGuide}
                             style={{
                                 position: 'absolute',
                                 top: 0, left: 0, right: 0, bottom: 0,
                                 zIndex: -1
-                            }} 
+                            }}
                         />
 
                         {/* Modal Container */}
@@ -738,11 +740,12 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                                 background: 'rgba(6, 13, 26, 0.75)',
                                 border: `1px solid rgba(255, 255, 255, 0.08)`,
                                 borderRadius: '24px',
-                                boxShadow: `0 24px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px rgba(${selectedGuide.accentColor === '#00f2ff' ? '0, 242, 255' : selectedGuide.accentColor === '#bd00ff' ? '189, 0, 255' : selectedGuide.accentColor === '#ffaa00' ? '255, 170, 0' : selectedGuide.accentColor === '#00ffb7' ? '0, 255, 183' : '0, 255, 102'}, 0.08)`,
+                                boxShadow: `0 24px 60px -15px rgba(0, 0, 0, 0.8)`,
                                 display: 'flex',
                                 flexDirection: 'column',
                                 overflow: 'hidden',
-                                position: 'relative'
+                                position: 'relative',
+                                margin: '20px auto'
                             }}
                         >
                             {/* Inner Accent Glow Bar */}
@@ -756,25 +759,25 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                                 justifyContent: 'space-between',
                                 alignItems: 'center'
                             }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                                     <div style={{
                                         width: '36px',
                                         height: '36px',
+                                        background: 'rgba(0, 0, 0, 0.4)',
                                         borderRadius: '10px',
-                                        background: 'rgba(0,0,0,0.3)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        border: '1px solid rgba(255,255,255,0.03)'
+                                        border: '1px solid rgba(255, 255, 255, 0.05)'
                                     }}>
                                         {selectedGuide.icon}
                                     </div>
-                                    <div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'var(--font-title)' }}>
                                             {selectedGuide.title}
                                         </h2>
-                                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                            Nexus Tactical Simulation
+                                        <span style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', color: selectedGuide.accentColor, letterSpacing: '0.5px' }}>
+                                            Step {currentStep + 1} of {selectedGuide.steps.length} — {selectedGuide.steps[currentStep].title}
                                         </span>
                                     </div>
                                 </div>
@@ -871,23 +874,23 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                                             exit={{ opacity: 0, y: -10 }}
                                             transition={{ duration: 0.2 }}
                                         >
-                                            <h4 style={{ 
-                                                fontSize: '1.15rem', 
-                                                fontWeight: 800, 
-                                                color: '#fff', 
+                                            <h4 style={{
+                                                fontSize: '1.15rem',
+                                                fontWeight: 800,
+                                                color: '#fff',
                                                 margin: '0 0 6px 0',
                                                 fontFamily: 'var(--font-title)'
                                             }}>
                                                 {selectedGuide.steps[currentStep].title}
                                             </h4>
-                                            <p 
-                                                style={{ 
-                                                    fontSize: '0.9rem', 
-                                                    color: 'var(--text-muted)', 
-                                                    lineHeight: 1.55, 
-                                                    margin: 0 
+                                            <p
+                                                style={{
+                                                    fontSize: '0.9rem',
+                                                    color: 'var(--text-muted)',
+                                                    lineHeight: 1.55,
+                                                    margin: 0
                                                 }}
-                                                dangerouslySetInnerHTML={{ 
+                                                dangerouslySetInnerHTML={{
                                                     __html: selectedGuide.steps[currentStep].text.replace(/\*\*(.*?)\*\*/g, `<strong style="color: #fff; text-shadow: 0 0 6px rgba(255,255,255,0.15)">$1</strong>`)
                                                 }}
                                             />
@@ -907,7 +910,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                             }}>
                                 {/* keyboard helpers */}
                                 <span style={{ fontSize: '0.65rem', color: 'rgba(255, 255, 255, 0.25)', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span style={{ padding: '2px 4px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '3px', background: 'rgba(0,0,0,0.3)' }}>←</span> 
+                                    <span style={{ padding: '2px 4px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '3px', background: 'rgba(0,0,0,0.3)' }}>←</span>
                                     <span style={{ padding: '2px 4px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '3px', background: 'rgba(0,0,0,0.3)' }}>→</span> Navigate
                                     <span style={{ padding: '2px 4px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '3px', background: 'rgba(0,0,0,0.3)', marginLeft: '6px' }}>ESC</span> Close
                                 </span>
@@ -992,7 +995,8 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
             </AnimatePresence>
 
             {/* Custom component keyframes */}
-            <style dangerouslySetInnerHTML={{__html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .tutorials-bento-grid {
                     display: grid;
                     grid-template-columns: repeat(3, 1fr);

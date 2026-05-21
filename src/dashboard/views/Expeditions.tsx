@@ -938,9 +938,9 @@ const Expeditions: React.FC = () => {
     }, [expeditions, mMultiplier, cMultiplier, dMultiplier]);
 
     return (
-        <div style={{ display: 'flex', gap: '8px', height: 'calc(100vh - 120px)', width: '100%' }}>
+        <div className="expeditions-layout">
             {/* --- Sidebar 1: Primary --- */}
-            <div style={{ width: '120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div className="expeditions-sidebar-primary">
                 {TABS.map(tab => (
                     <button
                         key={tab.id}
@@ -967,6 +967,7 @@ const Expeditions: React.FC = () => {
                         initial={{ width: 0, opacity: 0 }}
                         animate={{ width: 140, opacity: 1 }}
                         exit={{ width: 0, opacity: 0 }}
+                        className="expeditions-sidebar-secondary"
                         style={{ display: 'flex', flexDirection: 'column', gap: '4px', overflow: 'hidden' }}
                     >
                         {currentTab.sub.map(s => (
@@ -990,7 +991,7 @@ const Expeditions: React.FC = () => {
             </AnimatePresence>
 
             {/* --- Main Content Area --- */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+            <div className="expeditions-main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
                 {/* --- Switcher Header --- */}
                 <div style={{ display: 'flex', width: '100%', background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     <button

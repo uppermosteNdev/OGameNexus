@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getLinkedAccount, linkGoogleAccount, unlinkGoogleAccount, GoogleAccount } from '../../utils/googleAuth';
 import { LogIn, LogOut, CheckCircle, Smartphone, ShieldCheck, Database, TrendingUp, Cpu, Trash2, ArrowRight, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 
@@ -390,77 +391,84 @@ const Settings: React.FC = () => {
             {/* Coming Soon Modal */}
             <AnimatePresence>
                 {showComingSoon && (
-                    <>
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        zIndex: 1000,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'center',
+                        padding: '40px 24px',
+                        overflow: 'auto',
+                        WebkitOverflowScrolling: 'touch'
+                    }}>
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setShowComingSoon(false)}
                             style={{
-                                position: 'fixed',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
+                                position: 'absolute',
+                                inset: 0,
                                 backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                                backdropFilter: 'blur(8px)',
-                                zIndex: 1000,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
+                                backdropFilter: 'blur(8px)'
+                            }}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                position: 'relative',
+                                width: '400px',
+                                background: 'rgba(10, 20, 30, 0.95)',
+                                border: '1px solid var(--primary)',
+                                borderRadius: '24px',
+                                padding: '40px',
+                                textAlign: 'center',
+                                boxShadow: '0 0 40px rgba(0, 98, 255, 0.2)',
+                                margin: '20px auto'
                             }}
                         >
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                                onClick={(e) => e.stopPropagation()}
+                            <div style={{ 
+                                width: '64px', 
+                                height: '64px', 
+                                background: 'rgba(0, 98, 255, 0.1)', 
+                                borderRadius: '50%', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                margin: '0 auto 24px',
+                                border: '1px solid var(--primary)'
+                            }}>
+                                <Smartphone size={32} color="var(--primary)" />
+                            </div>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '16px', color: '#fff' }}>Deploying Soon</h2>
+                            <p style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.6, marginBottom: '32px' }}>
+                                Cloud synchronization and remote backups are currently undergoing flight trials. This feature will be available in a future transmission.
+                            </p>
+                            <button
+                                onClick={() => setShowComingSoon(false)}
                                 style={{
-                                    width: '400px',
-                                    background: 'rgba(10, 20, 30, 0.95)',
-                                    border: '1px solid var(--primary)',
-                                    borderRadius: '24px',
-                                    padding: '40px',
-                                    textAlign: 'center',
-                                    boxShadow: '0 0 40px rgba(0, 98, 255, 0.2)'
+                                    width: '100%',
+                                    padding: '14px',
+                                    borderRadius: '12px',
+                                    background: 'var(--primary)',
+                                    color: '#000',
+                                    border: 'none',
+                                    fontSize: '1rem',
+                                    fontWeight: 900,
+                                    cursor: 'pointer'
                                 }}
                             >
-                                <div style={{ 
-                                    width: '64px', 
-                                    height: '64px', 
-                                    background: 'rgba(0, 98, 255, 0.1)', 
-                                    borderRadius: '50%', 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    margin: '0 auto 24px',
-                                    border: '1px solid var(--primary)'
-                                }}>
-                                    <Smartphone size={32} color="var(--primary)" />
-                                </div>
-                                <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '16px', color: '#fff' }}>Deploying Soon</h2>
-                                <p style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.6, marginBottom: '32px' }}>
-                                    Cloud synchronization and remote backups are currently undergoing flight trials. This feature will be available in a future transmission.
-                                </p>
-                                <button
-                                    onClick={() => setShowComingSoon(false)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '14px',
-                                        borderRadius: '12px',
-                                        background: 'var(--primary)',
-                                        color: '#000',
-                                        border: 'none',
-                                        fontSize: '1rem',
-                                        fontWeight: 900,
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Acknowledge
-                                </button>
-                            </motion.div>
+                                Acknowledge
+                            </button>
                         </motion.div>
-                    </>
+                    </div>
                 )}
             </AnimatePresence>
         </div>

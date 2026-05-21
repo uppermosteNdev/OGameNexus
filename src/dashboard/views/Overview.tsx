@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import {
     Compass,
     Swords,
@@ -49,7 +50,17 @@ const Modal: React.FC<{
 }> = ({ isOpen, onClose, title, icon, children }) => (
     <AnimatePresence>
         {isOpen && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+            <div style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                padding: '40px 24px',
+                overflow: 'auto',
+                WebkitOverflowScrolling: 'touch'
+            }}>
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -72,7 +83,8 @@ const Modal: React.FC<{
                         boxShadow: '0 0 100px rgba(0, 0, 0, 1)',
                         maxHeight: '90vh',
                         display: 'flex',
-                        flexDirection: 'column'
+                        flexDirection: 'column',
+                        margin: '20px auto'
                     }}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -1042,7 +1054,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.8 }}>{p.metalMine || 0}</span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 900, color: RESOURCE_COLORS.metal }}>
-                                            {p.production ? formatNumber(p.production.metal) : 'N/A'}
+                                            {p.production ? `${formatNumber(p.production.metal)}/h` : 'N/A'}
                                         </div>
                                     </div>
 
@@ -1053,7 +1065,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.8 }}>{p.crystalMine || 0}</span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 900, color: RESOURCE_COLORS.crystal }}>
-                                            {p.production ? formatNumber(p.production.crystal) : 'N/A'}
+                                            {p.production ? `${formatNumber(p.production.crystal)}/h` : 'N/A'}
                                         </div>
                                     </div>
 
@@ -1064,7 +1076,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.8 }}>{p.deuteriumMine || 0}</span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 900, color: RESOURCE_COLORS.deuterium }}>
-                                            {p.production ? formatNumber(p.production.deuterium) : 'N/A'}
+                                            {p.production ? `${formatNumber(p.production.deuterium)}/h` : 'N/A'}
                                         </div>
                                     </div>
                                 </div>

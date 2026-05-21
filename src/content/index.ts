@@ -1020,9 +1020,9 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           };
 
           costs.innerHTML =
-            createCost(item.cost.metal, 'icons/icon-metal-81x81.png', '#E6953C') +
-            createCost(item.cost.crystal, 'icons/icon-crystal-81x81.png', '#33B6D3') +
-            createCost(item.cost.deuterium, 'icons/icon-deuterium-81x81.png', '#22C55E');
+            createCost(item.cost.metal, 'icons/resources/metal-icon-medium.jpg', '#E6953C') +
+            createCost(item.cost.crystal, 'icons/resources/crystal-icon-medium.jpg', '#33B6D3') +
+            createCost(item.cost.deuterium, 'icons/resources/deuterium-icon-medium.jpg', '#22C55E');
 
           const actions = document.createElement('div');
           const delBtn = document.createElement('div');

@@ -29,11 +29,15 @@ interface SignatureMakerProps {
 
 const BACKGROUNDS = [
     { id: '10504', name: "No Man's Sky", url: '/icons/signatures/10504.jpg' },
-    { id: '2150163743', name: 'Space Travel', url: '/icons/signatures/2150163743.jpg' },
-    { id: '2151828268', name: 'Battlecruiser Cockpit', url: '/icons/signatures/2151828268.jpg' },
+    { id: '2150163743', name: 'Skyline Carrier', url: '/icons/signatures/2150163743.jpg' },
+    { id: '2151828268', name: 'Strait of Atlas', url: '/icons/signatures/2151828268.jpg' },
     { id: '61216', name: 'Galactic Core', url: '/icons/signatures/61216.jpg' },
-    { id: '64', name: 'Deathstar', url: '/icons/signatures/64.jpg' },
-    { id: '9647', name: 'Fiery Nebula', url: '/icons/signatures/9647.jpg' }
+    { id: '64', name: 'Nexus Prime', url: '/icons/signatures/64.jpg' },
+    { id: '9647', name: 'Eye of Creation', url: '/icons/signatures/9647.jpg' },
+    { id: '2151972738', name: 'Cosmic Nebula', url: '/icons/signatures/2151972738.jpg' },
+    { id: '2', name: 'Ancient City', url: '/icons/signatures/2.jpg' },
+    { id: '2150163759', name: 'The Dreadnought', url: '/icons/signatures/2150163759.jpg' },
+    { id: '2150163795', name: 'Flight Deck Zero', url: '/icons/signatures/2150163795.jpg' },
 ];
 
 const ACCENTS = [

@@ -1260,9 +1260,9 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
             `;
 
         const resData = [
-            { amount: totalMetal, color: '#E6953C', icon: 'icons/icon-metal-81x81.png' },
-            { amount: totalCrystal, color: '#4CAEE6', icon: 'icons/icon-crystal-81x81.png' },
-            { amount: totalDeuterium, color: '#43D159', icon: 'icons/icon-deuterium-81x81.png' }
+            { amount: totalMetal, color: '#E6953C', icon: 'icons/resources/metal-icon-medium.jpg' },
+            { amount: totalCrystal, color: '#4CAEE6', icon: 'icons/resources/crystal-icon-medium.jpg' },
+            { amount: totalDeuterium, color: '#43D159', icon: 'icons/resources/deuterium-icon-medium.jpg' }
         ];
 
         resData.forEach(res => {
@@ -1766,9 +1766,9 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
             lossSummary.style.cssText = `display: flex; gap: 12px; margin-top: 2px; padding: 2px 12px; background: rgba(255,0,0,0.1); border-radius: 12px; border: 1px solid rgba(255,0,0,0.2);`;
 
             [
-                { amount: totalMetal, color: '#E6953C', icon: 'icons/icon-metal-81x81.png' },
-                { amount: totalCrystal, color: '#4CAEE6', icon: 'icons/icon-crystal-81x81.png' },
-                { amount: totalDeuterium, color: '#43D159', icon: 'icons/icon-deuterium-81x81.png' }
+                { amount: totalMetal, color: '#E6953C', icon: 'icons/resources/metal-icon-medium.jpg' },
+                { amount: totalCrystal, color: '#4CAEE6', icon: 'icons/resources/crystal-icon-medium.jpg' },
+                { amount: totalDeuterium, color: '#43D159', icon: 'icons/resources/deuterium-icon-medium.jpg' }
             ].forEach(res => {
                 if (res.amount > 0) {
                     const item = document.createElement('div');

@@ -37,7 +37,8 @@ body {
 .main-content {
     flex: 1;
     padding: 40px;
-    overflow-y: auto;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
     position: relative;
     scroll-behavior: smooth;
     z-index: 10;
@@ -111,6 +112,7 @@ h1.view-title {
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -124,6 +126,45 @@ h1.view-title {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--primary);
+}
+
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    transition: background 0.3s;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+}
+
+.sidebar-nav {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.05) transparent;
+    padding-right: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-nav:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 @keyframes twinkle {
@@ -142,4 +183,45 @@ h1.view-title {
 
 .twinkle {
     animation: twinkle 4s ease-in-out infinite;
+}
+
+/* Expeditions View Styles */
+.expeditions-layout {
+    display: flex;
+    gap: 16px;
+    height: calc(100vh - 120px);
+    width: 100%;
+}
+
+.expeditions-sidebar-primary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 80px;
+    flex-shrink: 0;
+}
+
+.expeditions-sidebar-secondary {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.expeditions-main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+/* Desktop Canvas Mode - forces native spacious high-res rendering on mobile viewports */
+.main-content > div {
+    min-width: 1400px !important;
+    min-height: 800px !important;
+    box-sizing: border-box !important;
+    position: relative !important;
 }

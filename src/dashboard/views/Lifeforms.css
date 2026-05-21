@@ -325,7 +325,7 @@
 
 /* Tech Selection Modal Styles */
 .picker-overlay {
-    position: fixed;
+    position: absolute;
     inset: 0;
     background: rgba(2, 6, 12, 0.85);
     z-index: 1000;
@@ -333,6 +333,10 @@
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(12px) saturate(180%);
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 40px 20px;
+    box-sizing: border-box;
 }
 
 .tech-picker-modal {
@@ -346,6 +350,34 @@
     max-height: 85vh;
     display: flex;
     flex-direction: column;
+    margin: auto;
+    box-sizing: border-box;
+}
+
+/* Scroll safety: On small heights or simulated small viewports, align to top, reset max-height, and use safe margin to allow natural vertical scrolling */
+@media (max-height: 850px) {
+    .picker-overlay {
+        align-items: flex-start !important;
+    }
+    .tech-picker-modal {
+        margin: 20px auto !important;
+        max-height: none !important;
+    }
+}
+
+/* Mobile responsive layout inside the modal so content doesn't squish horizontally */
+@media (max-width: 850px) {
+    .picker-main-content {
+        grid-template-columns: 1fr !important;
+        gap: 24px !important;
+    }
+    .tech-picker-modal {
+        padding: 20px !important;
+        width: 95% !important;
+    }
+    .picker-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
 }
 
 .picker-header {
@@ -2851,3 +2883,4 @@
     font-size: 0.85rem;
     font-weight: 700;
 }
+

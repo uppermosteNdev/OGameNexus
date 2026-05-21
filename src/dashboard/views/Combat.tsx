@@ -970,31 +970,40 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
     };
 
     return (
-        <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-                position: 'fixed',
-                top: 0, left: 0, right: 0, bottom: 0,
-                background: 'rgba(0,0,0,0.9)',
-                backdropFilter: 'blur(20px)',
-                zIndex: 1000,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '24px'
-            }}
-            onClick={onClose}
-        >
+        <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            padding: '40px 24px',
+            overflow: 'auto',
+            WebkitOverflowScrolling: 'touch'
+        }}>
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.9)',
+                    backdropFilter: 'blur(20px)',
+                    pointerEvents: 'auto'
+                }}
+                onClick={onClose}
+            />
             <motion.div 
                 initial={{ scale: 0.9, y: 40, rotateX: -10 }}
                 animate={{ scale: 1, y: 0, rotateX: 0 }}
                 exit={{ scale: 0.9, y: 40, rotateX: -10 }}
                 style={{
+                    position: 'relative',
                     width: '100%',
                     maxWidth: '1280px',
                     maxHeight: '94vh',
+                    margin: '20px auto',
                     background: 'linear-gradient(135deg, #1a1f25 0%, #0d1115 100%)',
                     borderRadius: '32px',
                     border: `1px solid ${themeColor}30`,
@@ -1002,7 +1011,8 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
-                    perspective: '1000px'
+                    perspective: '1000px',
+                    zIndex: 1
                 }}
                 onClick={e => e.stopPropagation()}
             >
@@ -1161,7 +1171,7 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
                     </button>
                 </div>
             </motion.div>
-        </motion.div>
+        </div>
     );
 };
 
