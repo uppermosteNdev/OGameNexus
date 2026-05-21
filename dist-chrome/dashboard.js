@@ -50370,7 +50370,7 @@ const Overview = ({ onSelect }) => {
               Tooltip,
               {
                 contentStyle: { background: "#0a141e", border: "1px solid rgba(0,242,255,0.2)", borderRadius: "12px", fontSize: "0.8rem" },
-                formatter: (val) => [Number(val || 0).toLocaleString(), "Yield (MSU)"]
+                formatter: (val, name) => [Number(val || 0).toLocaleString(), name]
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -62856,8 +62856,7 @@ const Tools = () => {
       name: "ACS Splitter",
       description: "Split combat results across multiple alliance members",
       icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 20 }),
-      component: /* @__PURE__ */ jsxRuntimeExports.jsx(AcsSplitter, {}),
-      inTesting: true
+      component: /* @__PURE__ */ jsxRuntimeExports.jsx(AcsSplitter, {})
     },
     {
       id: "plasma-optimizer",
@@ -64159,7 +64158,7 @@ const SHORTCUT_CATEGORIES = [
       { id: "tools-scrap-optimizer", label: "Scrap Merchant", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Package, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "scrap-optimizer" },
       { id: "tools-combat-sim", label: "Combat Analysis", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "combat-sim", inTesting: true },
       { id: "tools-exp-calc", label: "Expedition Calculator", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Calculator, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "exp-calc" },
-      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter", inTesting: true },
+      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter" },
       { id: "tools-plasma-optimizer", label: "Plasma Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "plasma-optimizer" },
       { id: "tools-discoverer-optimizer", label: "Discoverer Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "discoverer-optimizer" }
     ]

@@ -366,21 +366,95 @@ export function parseLifeformBonuses(html: string): { experience: any[], current
     // Extract experience data for all lifeforms
     const itemRegex = /<lifeform-item[^>]*>([\s\S]*?)<\/lifeform-item>/gi;
     const iconRegex = /class=["']lifeform-item-icon[^"']*lifeform(\d+)[^"']*["']/i;
-    const xpRegex = /data-tooltip-title=["']Level\s+(\d+):\s+(\d+)\/(\d+)\s+XP["']/i;
+
+    const langLvlPattern = "(?:Level|Stufe|Nivel|Nível|Niveau|Nivå|Livello|Poziom|Stupeň|Seviye|Уровень|Ур\\.?|Szint|Taso|Επίπεδο|Razina|Nivo|Lvl|Lv\\.?)";
+    const xpRegex = new RegExp(`(?:data-tooltip-title|title)=["']${langLvlPattern}\\s+(\\d+):\\s*(\\d+)\\s*\\/\\s*(\\d+)`, "i");
+    const fallbackXpRegex = new RegExp(`(?:data-tooltip-title|title)=["']${langLvlPattern}\\s*(\\d+)`, "i");
+    const textXpRegex = new RegExp(`${langLvlPattern}\\s+(\\d+):\\s*(\\d+)\\s*\\/\\s*(\\d+)`, "i");
+    const textLvlRegex = new RegExp(`${langLvlPattern}\\s*(\\d+)`, "i");
 
     let match;
     while ((match = itemRegex.exec(html)) !== null) {
         const content = match[1];
         const lfMatch = content.match(iconRegex);
-        const xpMatch = content.match(xpRegex);
 
-        if (lfMatch && xpMatch) {
-            experience.push({
-                lifeformId: parseInt(lfMatch[1], 10),
-                level: parseInt(xpMatch[1], 10),
-                currentExp: parseInt(xpMatch[2], 10),
-                nextLevelExp: parseInt(xpMatch[3], 10)
-            });
+        if (lfMatch) {
+            const lifeformId = parseInt(lfMatch[1], 10);
+            let level = 0;
+            let currentExp = 0;
+            let nextLevelExp = 100;
+            let found = false;
+
+            // Primary Source: Try matching inside the currentlevel class element
+            const currentLevelMatch = content.match(/class=["']currentlevel["'][^>]*>([\s\S]*?)<\/div>/i);
+            if (currentLevelMatch) {
+                const text = currentLevelMatch[1].replace(/<[^>]*>/g, ' '); // remove inner tags like <strong>
+                const match = text.match(textLvlRegex);
+                if (match) {
+                    level = parseInt(match[1], 10);
+                    found = true;
+
+                    // Now try to get the XP details if possible
+                    const xpMatch = content.match(xpRegex);
+                    if (xpMatch) {
+                        currentExp = parseInt(xpMatch[2], 10);
+                        nextLevelExp = parseInt(xpMatch[3], 10);
+                    }
+                    if (level >= 100) {
+                        currentExp = 100;
+                        nextLevelExp = 100;
+                    }
+                }
+            }
+
+            // Fallback 1: Try to find level and experience from xpbar / tooltips first if primary failed
+            if (!found) {
+                const xpMatch = content.match(xpRegex);
+                if (xpMatch) {
+                    level = parseInt(xpMatch[1], 10);
+                    currentExp = parseInt(xpMatch[2], 10);
+                    nextLevelExp = parseInt(xpMatch[3], 10);
+                    found = true;
+                } else {
+                    const fallbackMatch = content.match(fallbackXpRegex);
+                    if (fallbackMatch) {
+                        level = parseInt(fallbackMatch[1], 10);
+                        currentExp = level >= 100 ? 100 : 0;
+                        nextLevelExp = level >= 100 ? 100 : 100;
+                        found = true;
+                    }
+                }
+            }
+
+            // Fallback 2: Try checking text content of the item itself
+            if (!found) {
+                // Try searching for any level text in the item body, removing HTML tags
+                const cleanText = content.replace(/<[^>]*>/g, ' ');
+                const xpMatch = cleanText.match(textXpRegex);
+                if (xpMatch) {
+                    level = parseInt(xpMatch[1], 10);
+                    currentExp = parseInt(xpMatch[2], 10);
+                    nextLevelExp = parseInt(xpMatch[3], 10);
+                    found = true;
+                } else {
+                    const textMatch = cleanText.match(textLvlRegex);
+                    if (textMatch) {
+                        level = parseInt(textMatch[1], 10);
+                        currentExp = level >= 100 ? 100 : 0;
+                        nextLevelExp = level >= 100 ? 100 : 100;
+                        found = true;
+                    }
+                }
+            }
+
+            if (found || lifeformId > 0) {
+                experience.push({
+                    lifeformId,
+                    level,
+                    currentExp,
+                    nextLevelExp
+                });
+            }
         }
     }
 

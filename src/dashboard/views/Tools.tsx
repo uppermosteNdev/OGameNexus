@@ -77,8 +77,7 @@ const Tools: React.FC = () => {
             name: 'ACS Splitter',
             description: 'Split combat results across multiple alliance members',
             icon: <Target size={20} />,
-            component: <AcsSplitter />,
-            inTesting: true
+            component: <AcsSplitter />
         },
         {
             id: 'plasma-optimizer',

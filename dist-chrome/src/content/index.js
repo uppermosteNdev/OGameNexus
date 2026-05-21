@@ -6919,32 +6919,113 @@
     const items = document.querySelectorAll("lifeform-item");
     items.forEach((item) => {
       const icon = item.querySelector(".lifeform-item-icon");
-      const xpBar = item.querySelector(".xpbar");
-      if (icon && xpBar) {
+      if (icon) {
         const lfMatch = icon.className.match(/lifeform(\d+)/);
         if (lfMatch) {
-          const tooltipTitle = xpBar.getAttribute("data-tooltip-title");
-          if (tooltipTitle) {
-            const xpMatch = tooltipTitle.match(/Level (\d+): (\d+)\/(\d+) XP/);
-            if (xpMatch) {
-              experience.push({
-                lifeformId: parseInt(lfMatch[1]),
-                level: parseInt(xpMatch[1]),
-                currentExp: parseInt(xpMatch[2]),
-                nextLevelExp: parseInt(xpMatch[3])
-              });
-            } else {
-              const lvlMatch = tooltipTitle.match(/Level (\d+)/);
-              if (lvlMatch) {
-                const level = parseInt(lvlMatch[1]);
-                experience.push({
-                  lifeformId: parseInt(lfMatch[1]),
-                  level,
-                  currentExp: level >= 100 ? 100 : 0,
-                  nextLevelExp: level >= 100 ? 100 : 100
-                });
+          const lifeformId = parseInt(lfMatch[1]);
+          let level = 0;
+          let currentExp = 0;
+          let nextLevelExp = 100;
+          let found = false;
+          const langLvlPattern = "(?:Level|Stufe|Nivel|Nível|Niveau|Nivå|Livello|Poziom|Stupeň|Seviye|Уровень|Ур\\.?|Szint|Taso|Επίπεδο|Razina|Nivo|Lvl|Lv\\.?)";
+          const xpRegex = new RegExp(`${langLvlPattern}\\s+(\\d+):\\s*(\\d+)\\s*\\/\\s*(\\d+)`, "i");
+          const lvlRegex = new RegExp(`${langLvlPattern}\\s*(\\d+)`, "i");
+          const currentLevelNode = item.querySelector(".currentlevel");
+          if (currentLevelNode) {
+            const text = currentLevelNode.textContent || "";
+            const match = text.match(lvlRegex);
+            if (match) {
+              level = parseInt(match[1], 10);
+              found = true;
+              const xpBar = item.querySelector(".xpbar");
+              if (xpBar) {
+                const tooltipTitle = xpBar.getAttribute("data-tooltip-title") || xpBar.getAttribute("title");
+                if (tooltipTitle) {
+                  const xpMatch = tooltipTitle.match(xpRegex);
+                  if (xpMatch) {
+                    currentExp = parseInt(xpMatch[2], 10);
+                    nextLevelExp = parseInt(xpMatch[3], 10);
+                  }
+                }
+              }
+              if (level >= 100) {
+                currentExp = 100;
+                nextLevelExp = 100;
               }
             }
+          }
+          if (!found) {
+            const xpBar = item.querySelector(".xpbar");
+            if (xpBar) {
+              const tooltipTitle = xpBar.getAttribute("data-tooltip-title");
+              if (tooltipTitle) {
+                const xpMatch = tooltipTitle.match(xpRegex);
+                if (xpMatch) {
+                  level = parseInt(xpMatch[1], 10);
+                  currentExp = parseInt(xpMatch[2], 10);
+                  nextLevelExp = parseInt(xpMatch[3], 10);
+                  found = true;
+                } else {
+                  const lvlMatch = tooltipTitle.match(lvlRegex);
+                  if (lvlMatch) {
+                    level = parseInt(lvlMatch[1], 10);
+                    currentExp = level >= 100 ? 100 : 0;
+                    nextLevelExp = level >= 100 ? 100 : 100;
+                    found = true;
+                  }
+                }
+              }
+            }
+          }
+          if (!found) {
+            const tooltipElements = item.querySelectorAll("[data-tooltip-title], [title]");
+            for (const el of tooltipElements) {
+              const title = el.getAttribute("data-tooltip-title") || el.getAttribute("title");
+              if (title) {
+                const xpMatch = title.match(xpRegex);
+                if (xpMatch) {
+                  level = parseInt(xpMatch[1], 10);
+                  currentExp = parseInt(xpMatch[2], 10);
+                  nextLevelExp = parseInt(xpMatch[3], 10);
+                  found = true;
+                  break;
+                }
+                const match = title.match(lvlRegex);
+                if (match) {
+                  level = parseInt(match[1], 10);
+                  currentExp = level >= 100 ? 100 : 0;
+                  nextLevelExp = level >= 100 ? 100 : 100;
+                  found = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (!found) {
+            const text = item.textContent || "";
+            const xpMatch = text.match(xpRegex);
+            if (xpMatch) {
+              level = parseInt(xpMatch[1], 10);
+              currentExp = parseInt(xpMatch[2], 10);
+              nextLevelExp = parseInt(xpMatch[3], 10);
+              found = true;
+            } else {
+              const match = text.match(lvlRegex);
+              if (match) {
+                level = parseInt(match[1], 10);
+                currentExp = level >= 100 ? 100 : 0;
+                nextLevelExp = level >= 100 ? 100 : 100;
+                found = true;
+              }
+            }
+          }
+          if (found || lifeformId > 0) {
+            experience.push({
+              lifeformId,
+              level,
+              currentExp,
+              nextLevelExp
+            });
           }
         }
       }

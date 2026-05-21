@@ -1334,7 +1334,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             <YAxis stroke="rgba(255,255,255,0.3)" tickFormatter={(val) => formatNumber(val)} />
                             <Tooltip
                                 contentStyle={{ background: '#0a141e', border: '1px solid rgba(0,242,255,0.2)', borderRadius: '12px', fontSize: '0.8rem' }}
-                                formatter={(val: any) => [Number(val || 0).toLocaleString(), 'Yield (MSU)']}
+                                formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
                             />
                             <Area 
                                 type="monotone" 
