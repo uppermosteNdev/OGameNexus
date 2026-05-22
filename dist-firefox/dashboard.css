@@ -325,7 +325,7 @@
 
 /* Tech Selection Modal Styles */
 .picker-overlay {
-    position: fixed;
+    position: absolute;
     inset: 0;
     background: rgba(2, 6, 12, 0.85);
     z-index: 1000;
@@ -333,6 +333,10 @@
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(12px) saturate(180%);
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 40px 20px;
+    box-sizing: border-box;
 }
 
 .tech-picker-modal {
@@ -346,6 +350,34 @@
     max-height: 85vh;
     display: flex;
     flex-direction: column;
+    margin: auto;
+    box-sizing: border-box;
+}
+
+/* Scroll safety: On small heights or simulated small viewports, align to top, reset max-height, and use safe margin to allow natural vertical scrolling */
+@media (max-height: 850px) {
+    .picker-overlay {
+        align-items: flex-start !important;
+    }
+    .tech-picker-modal {
+        margin: 20px auto !important;
+        max-height: none !important;
+    }
+}
+
+/* Mobile responsive layout inside the modal so content doesn't squish horizontally */
+@media (max-width: 850px) {
+    .picker-main-content {
+        grid-template-columns: 1fr !important;
+        gap: 24px !important;
+    }
+    .tech-picker-modal {
+        padding: 20px !important;
+        width: 95% !important;
+    }
+    .picker-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
 }
 
 .picker-header {
@@ -2850,7 +2882,8 @@
     font-family: var(--font-number);
     font-size: 0.85rem;
     font-weight: 700;
-}.tools-layout {
+}
+.tools-layout {
     display: grid;
     grid-template-columns: 320px 1fr;
     gap: 32px;
@@ -3455,7 +3488,8 @@
 
 .fleet-list div:hover {
     background: rgba(255, 255, 255, 0.05) !important;
-}:root {
+}
+:root {
     --bg-dark: #02060c;
     --bg-sidebar: rgba(6, 11, 20, 0.85);
     --bg-card: rgba(13, 22, 38, 0.45);
@@ -3494,7 +3528,8 @@ body {
 .main-content {
     flex: 1;
     padding: 40px;
-    overflow-y: auto;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
     position: relative;
     scroll-behavior: smooth;
     z-index: 10;
@@ -3568,6 +3603,7 @@ h1.view-title {
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -3581,6 +3617,45 @@ h1.view-title {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--primary);
+}
+
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    transition: background 0.3s;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+}
+
+.sidebar-nav {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.05) transparent;
+    padding-right: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-nav:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 @keyframes twinkle {
@@ -3599,6 +3674,47 @@ h1.view-title {
 
 .twinkle {
     animation: twinkle 4s ease-in-out infinite;
+}
+
+/* Expeditions View Styles */
+.expeditions-layout {
+    display: flex;
+    gap: 16px;
+    height: calc(100vh - 120px);
+    width: 100%;
+}
+
+.expeditions-sidebar-primary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 80px;
+    flex-shrink: 0;
+}
+
+.expeditions-sidebar-secondary {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.expeditions-main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+/* Desktop Canvas Mode - forces native spacious high-res rendering on mobile viewports */
+.main-content > div {
+    min-width: 1400px !important;
+    min-height: 800px !important;
+    box-sizing: border-box !important;
+    position: relative !important;
 }#og-nexus-button-container {
   margin-top: 10px;
   cursor: pointer;

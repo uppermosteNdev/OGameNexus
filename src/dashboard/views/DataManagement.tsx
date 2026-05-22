@@ -101,6 +101,53 @@ const DataManagement: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
 
     // ----------------------------------------------------
+    // Database Healing Migration (Resolves 1970 Date Warp)
+    // ----------------------------------------------------
+    const healDatabaseTimestamps = async () => {
+        try {
+            console.log('OGame Nexus: Scanning database for warped 1970 timestamps...');
+            
+            // 1. Expeditions
+            const warpedExps = await db.expeditions.filter(e => e.timestamp > 0 && e.timestamp < 100000000).toArray();
+            if (warpedExps.length > 0) {
+                warpedExps.forEach(e => e.timestamp = e.timestamp * 1000);
+                await db.expeditions.bulkPut(warpedExps);
+                console.log(`OGame Nexus: Healed ${warpedExps.length} warped expeditions.`);
+            }
+
+            // 2. Lifeforms
+            const warpedLifeforms = await db.lifeformDiscoveries.filter(l => l.timestamp > 0 && l.timestamp < 100000000).toArray();
+            if (warpedLifeforms.length > 0) {
+                warpedLifeforms.forEach(l => l.timestamp = l.timestamp * 1000);
+                await db.lifeformDiscoveries.bulkPut(warpedLifeforms);
+                console.log(`OGame Nexus: Healed ${warpedLifeforms.length} warped lifeform discoveries.`);
+            }
+
+            // 3. Debris
+            const warpedDebris = await db.debrisHarvests.filter(d => d.timestamp > 0 && d.timestamp < 100000000).toArray();
+            if (warpedDebris.length > 0) {
+                warpedDebris.forEach(d => d.timestamp = d.timestamp * 1000);
+                await db.debrisHarvests.bulkPut(warpedDebris);
+                console.log(`OGame Nexus: Healed ${warpedDebris.length} warped debris field harvests.`);
+            }
+
+            // 4. Combats
+            const warpedCombats = await db.combatReports.filter(c => c.timestamp > 0 && c.timestamp < 100000000).toArray();
+            if (warpedCombats.length > 0) {
+                warpedCombats.forEach(c => c.timestamp = c.timestamp * 1000);
+                await db.combatReports.bulkPut(warpedCombats);
+                console.log(`OGame Nexus: Healed ${warpedCombats.length} warped combat reports.`);
+            }
+        } catch (e) {
+            console.error('OGame Nexus: Failed to heal database timestamps:', e);
+        }
+    };
+
+    useEffect(() => {
+        healDatabaseTimestamps();
+    }, []);
+
+    // ----------------------------------------------------
     // Nexus Export Engine
     // ----------------------------------------------------
     const handleExport = async () => {
@@ -1021,7 +1068,18 @@ const DataManagement: React.FC = () => {
             });
 
             setStats({ total: totalToProcess, processed: 0, skipped: 0, imported: 0, errors: 0 });
-            setImportLog(prev => [...prev, `Found ${totalToProcess} records to sync across ${selectedAccountsList.length} accounts.`]);
+            setImportLog(prev => [...prev, `Found ${totalToProcess} records to sync across ${selectedAccountsList.length} accounts.`, 'Indexing existing database records for fast lookup...']);
+
+            // Pre-fetch existing primary keys in-memory (O(1) checks)
+            const existingExpeditions = new Set(await db.expeditions.toCollection().primaryKeys() as string[]);
+            const existingLifeforms = new Set(await db.lifeformDiscoveries.toCollection().primaryKeys() as string[]);
+            const existingDebris = new Set(await db.debrisHarvests.toCollection().primaryKeys() as string[]);
+            const existingCombats = new Set(await db.combatReports.toCollection().primaryKeys() as string[]);
+
+            let processed = 0;
+            let skipped = 0;
+            let imported = 0;
+            let errors = 0;
 
             for (const acc of selectedAccountsList) {
                 const rawAcc = parsedData.accounts.find((r: any) => r.playerId === acc.playerId && r.serverId === acc.serverId);
@@ -1029,12 +1087,16 @@ const DataManagement: React.FC = () => {
 
                 // 1. Process Expeditions
                 if (selectedDataTypes.has('expeditions') && rawAcc.expeditions) {
+                    const expeditionsToInsert: any[] = [];
+                    let expSkipped = 0;
+                    let expErrors = 0;
+
                     for (const exp of rawAcc.expeditions) {
                         const messageId = String(exp.id);
-                        const existing = await db.expeditions.get(messageId);
-
-                        if (existing) {
-                            setStats(s => ({ ...s, processed: s.processed + 1, skipped: s.skipped + 1 }));
+                        if (existingExpeditions.has(messageId)) {
+                            processed++;
+                            skipped++;
+                            expSkipped++;
                         } else {
                             try {
                                 const resultType = mapExpeditionResult(exp.type);
@@ -1062,10 +1124,10 @@ const DataManagement: React.FC = () => {
                                 if (exp.type === 'delay') resultDetails.returnTimeAbsoluteIncreaseHours = 1;
                                 if (exp.type === 'early') resultDetails.returnTimeAbsoluteIncreaseHours = 0;
 
-                                await db.expeditions.add({
+                                expeditionsToInsert.push({
                                     messageId: messageId,
                                     playerId: String(acc.playerId),
-                                    timestamp: (exp.date || exp.dateTime || exp.timestamp || 0) / 1000,
+                                    timestamp: (exp.date || exp.dateTime || exp.timestamp || 0) / (String(exp.date || exp.dateTime || exp.timestamp || 0).length > 10 ? 1000 : 1),
                                     coords: '0:0:0', // Tracker doesn't usually export coords per item, just for the search
                                     depletion: mapDepletion(exp.depletion),
                                     size: parseInt(mapSize(exp.size)),
@@ -1073,23 +1135,44 @@ const DataManagement: React.FC = () => {
                                     resultDetails: resultDetails,
                                     tracked: true
                                 });
-                                setStats(s => ({ ...s, processed: s.processed + 1, imported: s.imported + 1 }));
+                                processed++;
+                                imported++;
                             } catch (e) {
                                 console.error(e);
-                                setStats(s => ({ ...s, processed: s.processed + 1, errors: s.errors + 1 }));
+                                processed++;
+                                errors++;
+                                expErrors++;
                             }
                         }
                     }
+
+                    if (expeditionsToInsert.length > 0) {
+                        try {
+                            await db.expeditions.bulkAdd(expeditionsToInsert);
+                        } catch (e) {
+                            console.error('Failed to bulk add expeditions:', e);
+                            errors += expeditionsToInsert.length;
+                            imported -= expeditionsToInsert.length;
+                            expErrors += expeditionsToInsert.length;
+                        }
+                    }
+
+                    setImportLog(prev => [...prev, `✓ Sync [Expeditions]: ${expeditionsToInsert.length} imported, ${expSkipped} skipped, ${expErrors} errors.`]);
+                    setStats({ total: totalToProcess, processed, skipped, imported, errors });
                 }
 
                 // 2. Process Lifeform Discoveries
                 if (selectedDataTypes.has('lifeform') && rawAcc.lifeformDiscoveries) {
+                    const lifeformsToInsert: any[] = [];
+                    let lfSkipped = 0;
+                    let lfErrors = 0;
+
                     for (const disc of rawAcc.lifeformDiscoveries) {
                         const messageId = String(disc.id);
-                        const existing = await db.lifeformDiscoveries.get(messageId);
-
-                        if (existing) {
-                            setStats(s => ({ ...s, processed: s.processed + 1, skipped: s.skipped + 1 }));
+                        if (existingLifeforms.has(messageId)) {
+                            processed++;
+                            skipped++;
+                            lfSkipped++;
                         } else {
                             try {
                                 let discoveryType: 'artifacts' | 'lifeform-xp' | 'nothing' = 'nothing';
@@ -1111,10 +1194,10 @@ const DataManagement: React.FC = () => {
                                     discoveryType = 'nothing';
                                 }
 
-                                await db.lifeformDiscoveries.add({
+                                lifeformsToInsert.push({
                                     messageId: messageId,
                                     playerId: String(acc.playerId),
-                                    timestamp: (disc.date || disc.dateTime || disc.timestamp || 0) / 1000,
+                                    timestamp: (disc.date || disc.dateTime || disc.timestamp || 0) / (String(disc.date || disc.dateTime || disc.timestamp || 0).length > 10 ? 1000 : 1),
                                     coords: '0:0:0',
                                     lifeform: lifeformId,
                                     discoveryType: discoveryType,
@@ -1123,28 +1206,49 @@ const DataManagement: React.FC = () => {
                                     artifactSize: artifactSize,
                                     tracked: true
                                 });
-                                setStats(s => ({ ...s, processed: s.processed + 1, imported: s.imported + 1 }));
+                                processed++;
+                                imported++;
                             } catch (e) {
-                                setStats(s => ({ ...s, processed: s.processed + 1, errors: s.errors + 1 }));
+                                processed++;
+                                errors++;
+                                lfErrors++;
                             }
                         }
                     }
+
+                    if (lifeformsToInsert.length > 0) {
+                        try {
+                            await db.lifeformDiscoveries.bulkAdd(lifeformsToInsert);
+                        } catch (e) {
+                            console.error('Failed to bulk add lifeforms:', e);
+                            errors += lifeformsToInsert.length;
+                            imported -= lifeformsToInsert.length;
+                            lfErrors += lifeformsToInsert.length;
+                        }
+                    }
+
+                    setImportLog(prev => [...prev, `✓ Sync [Lifeforms]: ${lifeformsToInsert.length} imported, ${lfSkipped} skipped, ${lfErrors} errors.`]);
+                    setStats({ total: totalToProcess, processed, skipped, imported, errors });
                 }
 
                 // 3. Process Debris Harvests
                 if (selectedDataTypes.has('debris') && rawAcc.debrisFieldReports) {
+                    const debrisToInsert: any[] = [];
+                    let debrisSkipped = 0;
+                    let debrisErrors = 0;
+
                     for (const report of rawAcc.debrisFieldReports) {
                         const messageId = String(report.id);
-                        const existing = await db.debrisHarvests.get(messageId);
-
-                        if (existing) {
-                            setStats(s => ({ ...s, processed: s.processed + 1, skipped: s.skipped + 1 }));
+                        if (existingDebris.has(messageId)) {
+                            processed++;
+                            skipped++;
+                            debrisSkipped++;
                         } else {
                             try {
-                                await db.debrisHarvests.add({
+                                debrisToInsert.push({
                                     messageId: messageId,
                                     playerId: String(acc.playerId),
-                                    timestamp: (report.date || 0) / 1000,
+                                    timestamp: (report.date || 0) / (String(report.date || 0).length > 10 ? 1000 : 1),
                                     coords: report.isExpeditionDebrisField ? '0:0:16' : '0:0:0',
                                     recycledResources: {
                                         metal: report.metal || 0,
@@ -1153,22 +1257,43 @@ const DataManagement: React.FC = () => {
                                     },
                                     tracked: true
                                 });
-                                setStats(s => ({ ...s, processed: s.processed + 1, imported: s.imported + 1 }));
+                                processed++;
+                                imported++;
                             } catch (e) {
-                                setStats(s => ({ ...s, processed: s.processed + 1, errors: s.errors + 1 }));
+                                processed++;
+                                errors++;
+                                debrisErrors++;
                             }
                         }
                     }
+
+                    if (debrisToInsert.length > 0) {
+                        try {
+                            await db.debrisHarvests.bulkAdd(debrisToInsert);
+                        } catch (e) {
+                            console.error('Failed to bulk add debris harvest reports:', e);
+                            errors += debrisToInsert.length;
+                            imported -= debrisToInsert.length;
+                            debrisErrors += debrisToInsert.length;
+                        }
+                    }
+
+                    setImportLog(prev => [...prev, `✓ Sync [Debris Fields]: ${debrisToInsert.length} imported, ${debrisSkipped} skipped, ${debrisErrors} errors.`]);
+                    setStats({ total: totalToProcess, processed, skipped, imported, errors });
                 }
 
                 // 4. Process Combat Reports
                 if (selectedDataTypes.has('combats') && rawAcc.combatReports) {
+                    const combatsToInsert: any[] = [];
+                    let combatSkipped = 0;
+                    let combatErrors = 0;
+
                     for (const report of rawAcc.combatReports) {
                         const messageId = String(report.id);
-                        const existing = await db.combatReports.get(messageId);
-
-                        if (existing) {
-                            setStats(s => ({ ...s, processed: s.processed + 1, skipped: s.skipped + 1 }));
+                        if (existingCombats.has(messageId)) {
+                            processed++;
+                            skipped++;
+                            combatSkipped++;
                         } else {
                             try {
                                 let winner = 'none';
@@ -1186,7 +1311,7 @@ const DataManagement: React.FC = () => {
                                                 metal: cost.metal * (count as number),
                                                 crystal: cost.crystal * (count as number),
                                                 deuterium: cost.deuterium * (count as number)
-                                            });
+                                              });
                                         }
                                     });
                                 }
@@ -1214,7 +1339,7 @@ const DataManagement: React.FC = () => {
                                 const loot = extractImportRes(report.loot);
                                 const debris = extractImportRes(report.debrisField || report.debris, true);
 
-                                await db.combatReports.add({
+                                combatsToInsert.push({
                                     messageId: messageId,
                                     playerId: String(acc.playerId),
                                     timestamp: (report.date || report.dateTime || report.timestamp || report.time || 0) / (String(report.date || report.dateTime || report.timestamp || report.time || 0).length > 10 ? 1000 : 1),
@@ -1234,13 +1359,30 @@ const DataManagement: React.FC = () => {
                                     rawFleets: report.attackers && report.defenders ? [...report.attackers, ...report.defenders] : [],
                                     rawResult: report
                                 });
-                                setStats(s => ({ ...s, processed: s.processed + 1, imported: s.imported + 1 }));
+                                processed++;
+                                imported++;
                             } catch (e) {
                                 console.error('Error importing combat report:', e);
-                                setStats(s => ({ ...s, processed: s.processed + 1, errors: s.errors + 1 }));
+                                processed++;
+                                errors++;
+                                combatErrors++;
                             }
                         }
                     }
+
+                    if (combatsToInsert.length > 0) {
+                        try {
+                            await db.combatReports.bulkAdd(combatsToInsert);
+                        } catch (e) {
+                            console.error('Failed to bulk add combat reports:', e);
+                            errors += combatsToInsert.length;
+                            imported -= combatsToInsert.length;
+                            combatErrors += combatsToInsert.length;
+                        }
+                    }
+
+                    setImportLog(prev => [...prev, `✓ Sync [Combat Reports]: ${combatsToInsert.length} imported, ${combatSkipped} skipped, ${combatErrors} errors.`]);
+                    setStats({ total: totalToProcess, processed, skipped, imported, errors });
                 }
             }
 

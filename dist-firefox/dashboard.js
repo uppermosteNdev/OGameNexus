@@ -15991,6 +15991,39 @@ const Zap = createLucideIcon("Zap", [
   ["polygon", { points: "13 2 3 14 12 14 11 22 21 10 12 10 13 2", key: "45s27k" }]
 ]);
 const Sidebar = ({ activeView, onSelect }) => {
+  const [isCollapsed, setIsCollapsed] = reactExports.useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth < 1024;
+    }
+    return true;
+  });
+  reactExports.useEffect(() => {
+    const handleDocumentClick = (e) => {
+      const sidebarElement = document.querySelector("aside");
+      if (sidebarElement && !sidebarElement.contains(e.target)) {
+        setIsCollapsed(true);
+      }
+    };
+    if (!isCollapsed) {
+      document.addEventListener("mousedown", handleDocumentClick);
+      document.addEventListener("touchstart", handleDocumentClick);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentClick);
+      document.removeEventListener("touchstart", handleDocumentClick);
+    };
+  }, [isCollapsed]);
+  const handleItemClick = (e, itemId) => {
+    if (isCollapsed) {
+      e.stopPropagation();
+      setIsCollapsed(false);
+    } else {
+      onSelect(itemId);
+      if (window.innerWidth < 1024) {
+        setIsCollapsed(true);
+      }
+    }
+  };
   const menuItems = [
     { id: "overview", label: "Empire 360", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(LayoutDashboard, { size: 22 }) },
     { id: "expeditions", label: "Expeditions", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Compass, { size: 22 }) },
@@ -16004,102 +16037,204 @@ const Sidebar = ({ activeView, onSelect }) => {
     { id: "settings", label: "Settings", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Settings$1, { size: 22 }) },
     { id: "tutorials", label: "Tutorials", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(BookOpen, { size: 22 }) }
   ];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { style: {
-    width: "var(--sidebar-width)",
-    backgroundColor: "var(--bg-sidebar)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    borderRight: "1px solid var(--border)",
-    display: "flex",
-    flexDirection: "column",
-    padding: "40px 16px",
-    zIndex: 100
-  }, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
-      display: "flex",
-      alignItems: "center",
-      gap: "12px",
-      padding: "0 12px 48px",
-      color: "var(--primary)",
-      textShadow: "0 0 10px var(--primary-glow)"
-    }, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
-        padding: "4px",
-        borderRadius: "16px",
-        background: "rgba(0, 242, 255, 0.1)",
-        border: "1px solid var(--primary)",
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    motion.aside,
+    {
+      animate: {
+        width: isCollapsed ? 80 : 280,
+        padding: isCollapsed ? "40px 8px" : "40px 16px"
+      },
+      transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+      style: {
+        height: "100%",
+        maxHeight: "100vh",
+        boxSizing: "border-box",
+        backgroundColor: "var(--bg-sidebar)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        borderRight: "1px solid var(--border)",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center"
-      }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "img",
-        {
-          src: "icons/nexus.png",
-          alt: "Planet",
-          style: {
-            width: "42px",
-            height: "42px",
-            objectFit: "contain"
-          }
+        flexDirection: "column",
+        zIndex: 100,
+        overflow: "hidden",
+        cursor: isCollapsed ? "pointer" : "default",
+        flexShrink: 0
+      },
+      onClick: () => {
+        if (isCollapsed) {
+          setIsCollapsed(false);
         }
-      ) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column" }, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 800, fontSize: "1.1rem", letterSpacing: "2px", color: "#fff" }, children: "OG NEXUS" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.65rem", color: "var(--text-muted)", letterSpacing: "1px" }, children: "COMMAND DECK" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { style: { display: "flex", flexDirection: "column", gap: "8px" }, children: menuItems.map((item) => {
-      const isActive = activeView === item.id;
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        motion.button,
-        {
-          onClick: () => onSelect(item.id),
-          whileHover: { x: 4 },
-          whileTap: { scale: 0.98 },
-          style: {
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: isCollapsed ? "center" : "flex-start",
+          gap: isCollapsed ? "0px" : "12px",
+          padding: isCollapsed ? "0 0 48px" : "0 12px 48px",
+          color: "var(--primary)",
+          textShadow: "0 0 10px var(--primary-glow)",
+          width: "100%",
+          transition: "all 0.3s ease"
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+            padding: "4px",
+            borderRadius: "16px",
+            background: "rgba(0, 242, 255, 0.1)",
+            border: "1px solid var(--primary)",
             display: "flex",
             alignItems: "center",
-            gap: "16px",
-            padding: "14px 16px",
-            borderRadius: "12px",
-            border: "none",
-            background: isActive ? "linear-gradient(90deg, rgba(0, 242, 255, 0.1) 0%, transparent 100%)" : "transparent",
-            color: isActive ? "var(--primary)" : "var(--text-muted)",
-            cursor: "pointer",
-            position: "relative",
-            textAlign: "left",
-            width: "100%",
-            overflow: "hidden"
-          },
-          children: [
-            isActive && /* @__PURE__ */ jsxRuntimeExports.jsx(
-              motion.div,
-              {
-                layoutId: "activeIndicator",
-                style: {
-                  position: "absolute",
-                  left: 0,
-                  top: "20%",
-                  bottom: "20%",
-                  width: "3px",
-                  backgroundColor: "var(--primary)",
-                  borderRadius: "0 4px 4px 0",
-                  boxShadow: "0 0 10px var(--primary)"
-                }
+            justifyContent: "center",
+            transition: "all 0.3s ease"
+          }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: "icons/nexus.png",
+              alt: "Planet",
+              style: {
+                width: isCollapsed ? "36px" : "42px",
+                height: isCollapsed ? "36px" : "42px",
+                objectFit: "contain",
+                transition: "all 0.3s ease"
               }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: isActive ? "var(--primary)" : "inherit" }, children: item.icon }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
-              fontWeight: isActive ? 600 : 400,
-              fontSize: "0.95rem",
-              letterSpacing: "0.5px"
-            }, children: item.label })
-          ]
-        },
-        item.id
-      );
-    }) })
-  ] });
+            }
+          ) }),
+          !isCollapsed && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            motion.div,
+            {
+              initial: { opacity: 0, x: -10 },
+              animate: { opacity: 1, x: 0 },
+              exit: { opacity: 0, x: -10 },
+              transition: { duration: 0.2 },
+              style: { display: "flex", flexDirection: "column", whiteSpace: "nowrap" },
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 800, fontSize: "1.1rem", letterSpacing: "2px", color: "#fff" }, children: "OG NEXUS" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.65rem", color: "var(--text-muted)", letterSpacing: "1px" }, children: "COMMAND DECK" })
+              ]
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "sidebar-nav custom-scrollbar", style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
+          flex: 1,
+          overflowY: "auto",
+          minHeight: 0
+        }, children: menuItems.map((item) => {
+          const isActive = activeView === item.id;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            motion.button,
+            {
+              onClick: (e) => handleItemClick(e, item.id),
+              whileHover: { x: isCollapsed ? 0 : 4, scale: isCollapsed ? 1.08 : 1 },
+              whileTap: { scale: 0.98 },
+              style: {
+                display: "flex",
+                alignItems: "center",
+                justifyContent: isCollapsed ? "center" : "flex-start",
+                gap: isCollapsed ? "0px" : "16px",
+                padding: isCollapsed ? "14px 0" : "14px 16px",
+                borderRadius: "12px",
+                border: "none",
+                background: isActive ? "linear-gradient(90deg, rgba(0, 242, 255, 0.1) 0%, transparent 100%)" : "transparent",
+                color: isActive ? "var(--primary)" : "var(--text-muted)",
+                cursor: "pointer",
+                position: "relative",
+                textAlign: "left",
+                width: "100%",
+                overflow: "hidden",
+                transition: "background 0.3s ease, color 0.3s ease, padding 0.3s ease, justify-content 0.3s ease"
+              },
+              title: isCollapsed ? item.label : void 0,
+              children: [
+                isActive && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  motion.div,
+                  {
+                    layoutId: "activeIndicator",
+                    style: {
+                      position: "absolute",
+                      left: 0,
+                      top: "20%",
+                      bottom: "20%",
+                      width: "3px",
+                      backgroundColor: "var(--primary)",
+                      borderRadius: "0 4px 4px 0",
+                      boxShadow: "0 0 10px var(--primary)"
+                    }
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                  color: isActive ? "var(--primary)" : "inherit",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: isCollapsed ? "100%" : "auto"
+                }, children: item.icon }),
+                !isCollapsed && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  motion.span,
+                  {
+                    initial: { opacity: 0, x: -10 },
+                    animate: { opacity: 1, x: 0 },
+                    exit: { opacity: 0, x: -10 },
+                    transition: { duration: 0.2 },
+                    style: {
+                      fontWeight: isActive ? 600 : 400,
+                      fontSize: "0.95rem",
+                      letterSpacing: "0.5px",
+                      whiteSpace: "nowrap"
+                    },
+                    children: item.label
+                  }
+                )
+              ]
+            },
+            item.id
+          );
+        }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+          display: "flex",
+          justifyContent: isCollapsed ? "center" : "flex-end",
+          paddingTop: "20px",
+          borderTop: "1px solid rgba(255, 255, 255, 0.05)",
+          marginTop: "16px",
+          width: "100%"
+        }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: (e) => {
+              e.stopPropagation();
+              setIsCollapsed(!isCollapsed);
+            },
+            style: {
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "8px",
+              borderRadius: "50%",
+              transition: "all 0.2s ease"
+            },
+            onMouseEnter: (e) => {
+              e.currentTarget.style.color = "var(--primary)";
+              e.currentTarget.style.borderColor = "var(--primary)";
+              e.currentTarget.style.background = "rgba(0, 242, 255, 0.05)";
+            },
+            onMouseLeave: (e) => {
+              e.currentTarget.style.color = "var(--text-muted)";
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.05)";
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.02)";
+            },
+            title: isCollapsed ? "Expand Menu" : "Collapse Menu",
+            children: isCollapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 18 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 18 })
+          }
+        ) })
+      ]
+    }
+  );
 };
 const StarField = () => {
   const stars = reactExports.useMemo(() => {
@@ -49162,7 +49297,17 @@ var AreaChart = /* @__PURE__ */ reactExports.forwardRef((props, ref) => {
     ref
   });
 });
-const Modal = ({ isOpen, onClose, title, icon, children }) => /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: isOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { position: "fixed", inset: 0, zIndex: 1e3, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px" }, children: [
+const Modal = ({ isOpen, onClose, title, icon, children }) => /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: isOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+  position: "absolute",
+  inset: 0,
+  zIndex: 1e3,
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "center",
+  padding: "40px 24px",
+  overflow: "auto",
+  WebkitOverflowScrolling: "touch"
+}, children: [
   /* @__PURE__ */ jsxRuntimeExports.jsx(
     motion.div,
     {
@@ -49190,7 +49335,8 @@ const Modal = ({ isOpen, onClose, title, icon, children }) => /* @__PURE__ */ js
         boxShadow: "0 0 100px rgba(0, 0, 0, 1)",
         maxHeight: "90vh",
         display: "flex",
-        flexDirection: "column"
+        flexDirection: "column",
+        margin: "20px auto"
       },
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }, children: [
@@ -50073,21 +50219,21 @@ const Overview = ({ onSelect }) => {
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/metal_mine_medium.jpg", alt: "M", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.metalMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.metal }, children: p2.production ? formatNumber$2(p2.production.metal) : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.metal }, children: p2.production ? `${formatNumber$2(p2.production.metal)}/h` : "N/A" })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/crystal_mine_medium.jpg", alt: "C", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.crystalMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.crystal }, children: p2.production ? formatNumber$2(p2.production.crystal) : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.crystal }, children: p2.production ? `${formatNumber$2(p2.production.crystal)}/h` : "N/A" })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/deuterium_mine_medium.jpg", alt: "D", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.deuteriumMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.deuterium }, children: p2.production ? formatNumber$2(p2.production.deuterium) : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.deuterium }, children: p2.production ? `${formatNumber$2(p2.production.deuterium)}/h` : "N/A" })
               ] })
             ] })
           ] }, p2.id)) })
@@ -51280,8 +51426,8 @@ const Expeditions = () => {
       positiveRate: expeditions.length > 0 ? (positiveOutcomes / expeditions.length * 100).toFixed(1) : "0.0"
     };
   }, [expeditions, mMultiplier, cMultiplier, dMultiplier]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "8px", height: "calc(100vh - 120px)", width: "100%" }, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "120px", display: "flex", flexDirection: "column", gap: "4px" }, children: TABS.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "expeditions-layout", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "expeditions-sidebar-primary", children: TABS.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         onClick: () => setActiveTab(tab.id),
@@ -51316,6 +51462,7 @@ const Expeditions = () => {
         initial: { width: 0, opacity: 0 },
         animate: { width: 140, opacity: 1 },
         exit: { width: 0, opacity: 0 },
+        className: "expeditions-sidebar-secondary",
         style: { display: "flex", flexDirection: "column", gap: "4px", overflow: "hidden" },
         children: currentTab.sub.map((s2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
@@ -51341,7 +51488,7 @@ const Expeditions = () => {
         ))
       }
     ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, display: "flex", flexDirection: "column", background: "rgba(0,0,0,0.4)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "expeditions-main-content", style: { flex: 1, display: "flex", flexDirection: "column", background: "rgba(0,0,0,0.4)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", width: "100%", background: "rgba(0,0,0,0.2)", borderBottom: "1px solid rgba(255,255,255,0.1)" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
@@ -53199,11 +53346,7 @@ Continue?`;
                             "Lvl ",
                             level
                           ] }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-                            Number(progress2).toFixed(1),
-                            "% to Lvl ",
-                            level + 1
-                          ] })
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: level >= 100 ? "MAX LEVEL" : `${Number(progress2).toFixed(1)}% to Lvl ${level + 1}` })
                         ] })
                       ] })
                     ] }, id2);
@@ -55237,198 +55380,206 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
       ] }, pIdx);
     }) });
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    motion.div,
-    {
-      initial: { opacity: 0 },
-      animate: { opacity: 1 },
-      exit: { opacity: 0 },
-      style: {
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(0,0,0,0.9)",
-        backdropFilter: "blur(20px)",
-        zIndex: 1e3,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px"
-      },
-      onClick: onClose,
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        motion.div,
-        {
-          initial: { scale: 0.9, y: 40, rotateX: -10 },
-          animate: { scale: 1, y: 0, rotateX: 0 },
-          exit: { scale: 0.9, y: 40, rotateX: -10 },
-          style: {
-            width: "100%",
-            maxWidth: "1280px",
-            maxHeight: "94vh",
-            background: "linear-gradient(135deg, #1a1f25 0%, #0d1115 100%)",
-            borderRadius: "32px",
-            border: `1px solid ${themeColor}30`,
-            boxShadow: `0 0 50px ${themeColor}15, 0 25px 50px -12px rgba(0, 0, 0, 0.8)`,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            perspective: "1000px"
-          },
-          onClick: (e) => e.stopPropagation(),
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { padding: "32px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", overflow: "hidden" }, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, transparent, ${themeColor}, transparent)` } }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "32px" }, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
-                  background: themeColor,
-                  color: "#000",
-                  padding: "12px 24px",
-                  borderRadius: "16px",
-                  fontSize: "1rem",
-                  fontWeight: 900,
-                  textTransform: "uppercase",
-                  letterSpacing: "2px",
-                  boxShadow: `0 8px 16px ${themeColor}40`
-                }, children: isAccountWin ? "OBJECTIVE SECURED" : isTie ? "TACTICAL DRAW" : "OPERATIONAL FAILURE" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.8rem", fontWeight: 900, letterSpacing: "-1px" }, children: [
-                    "Deployment Report: ",
-                    report.coords
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "0.9rem", opacity: 0.4, fontWeight: 600 }, children: [
-                    "Timestamp: ",
-                    new Date(report.timestamp * 1e3).toLocaleString()
-                  ] })
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: onClose, style: { pointerEvents: "auto", background: "rgba(255,255,255,0.05)", border: "none", color: "#fff", padding: "12px", borderRadius: "50%", cursor: "pointer", transition: "all 0.2s" }, "aria-label": "Close", children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 28 }) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flexGrow: 1, overflowY: "auto", padding: "0 48px 48px 48px" }, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "20px", alignItems: "flex-start", position: "relative", minHeight: "400px" }, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, padding: "20px" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px", justifyContent: "flex-end" }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { textAlign: "right" }, children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.7rem", opacity: 0.4, fontWeight: 800, textTransform: "uppercase" }, children: "Assault Leader" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.4rem", fontWeight: 900, color: "#fff" }, children: [
-                        "Attacker (",
-                        report.attackerName || "Unknown",
-                        ")"
-                      ] })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "60px", height: "60px", borderRadius: "50%", background: "rgba(239, 68, 68, 0.1)", border: "2px solid #ef4444", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Sword, { size: 32, color: "#ef4444" }) })
-                  ] }),
-                  renderFleet(attackers, "#ef4444")
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 1e3,
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    padding: "40px 24px",
+    overflow: "auto",
+    WebkitOverflowScrolling: "touch"
+  }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      motion.div,
+      {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        style: {
+          position: "absolute",
+          inset: 0,
+          background: "rgba(0,0,0,0.9)",
+          backdropFilter: "blur(20px)",
+          pointerEvents: "auto"
+        },
+        onClick: onClose
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      motion.div,
+      {
+        initial: { scale: 0.9, y: 40, rotateX: -10 },
+        animate: { scale: 1, y: 0, rotateX: 0 },
+        exit: { scale: 0.9, y: 40, rotateX: -10 },
+        style: {
+          position: "relative",
+          width: "100%",
+          maxWidth: "1280px",
+          maxHeight: "94vh",
+          margin: "20px auto",
+          background: "linear-gradient(135deg, #1a1f25 0%, #0d1115 100%)",
+          borderRadius: "32px",
+          border: `1px solid ${themeColor}30`,
+          boxShadow: `0 0 50px ${themeColor}15, 0 25px 50px -12px rgba(0, 0, 0, 0.8)`,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          perspective: "1000px",
+          zIndex: 1
+        },
+        onClick: (e) => e.stopPropagation(),
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { padding: "32px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", overflow: "hidden" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, transparent, ${themeColor}, transparent)` } }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "32px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+                background: themeColor,
+                color: "#000",
+                padding: "12px 24px",
+                borderRadius: "16px",
+                fontSize: "1rem",
+                fontWeight: 900,
+                textTransform: "uppercase",
+                letterSpacing: "2px",
+                boxShadow: `0 8px 16px ${themeColor}40`
+              }, children: isAccountWin ? "OBJECTIVE SECURED" : isTie ? "TACTICAL DRAW" : "OPERATIONAL FAILURE" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.8rem", fontWeight: 900, letterSpacing: "-1px" }, children: [
+                  "Deployment Report: ",
+                  report.coords
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100px", alignSelf: "stretch", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: "100px", bottom: "100px", width: "2px", background: "rgba(255,255,255,0.05)" } }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
-                    marginTop: "120px",
-                    width: "50px",
-                    height: "50px",
-                    borderRadius: "50%",
-                    background: "#0d1115",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "1.2rem",
-                    fontWeight: 900,
-                    color: themeColor,
-                    zIndex: 1,
-                    boxShadow: `0 0 20px ${themeColor}20`
-                  }, children: "VS" })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, padding: "20px" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px" }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "60px", height: "60px", borderRadius: "50%", background: "rgba(34, 197, 94, 0.1)", border: "2px solid #22c55e", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 32, color: "#22c55e" }) }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.7rem", opacity: 0.4, fontWeight: 800, textTransform: "uppercase" }, children: "Planetary Defense" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.4rem", fontWeight: 900, color: "#fff" }, children: [
-                        "Defender (",
-                        report.defenderName || "Unknown",
-                        ")"
-                      ] })
-                    ] })
-                  ] }),
-                  renderFleet(defenders, "#22c55e")
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "32px", marginTop: "48px" }, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass-card", style: { padding: "32px", position: "relative", overflow: "hidden" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, opacity: 0.5, marginBottom: "24px", letterSpacing: "1px" }, children: "RESOURCES SEIZED" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", gap: "16px" }, children: ["metal", "crystal", "deuterium"].map((res) => {
-                    var _a2;
-                    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "12px", height: "12px", borderRadius: "2px", background: RESOURCE_COLORS$2[res] } }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 700, textTransform: "capitalize" }, children: res })
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.1rem", fontWeight: 900 }, children: formatYAxis$1(((_a2 = report.loot) == null ? void 0 : _a2[res]) || 0) })
-                    ] }, res);
-                  }) }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(Box, { size: 80, style: { position: "absolute", bottom: "-20px", right: "-20px", opacity: 0.03, transform: "rotate(-15deg)" } })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass-card", style: { padding: "32px", position: "relative", overflow: "hidden" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, opacity: 0.5, marginBottom: "24px", letterSpacing: "1px" }, children: "DEBRIS FIELD GENERATION" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "16px" }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 700, opacity: 0.6 }, children: "Metal Recovery" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.1rem", fontWeight: 900 }, children: formatYAxis$1(((_b = report.debris) == null ? void 0 : _b.metal) || 0) })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 700, opacity: 0.6 }, children: "Crystal Recovery" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.1rem", fontWeight: 900 }, children: formatYAxis$1(((_c = report.debris) == null ? void 0 : _c.crystal) || 0) })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: "12px", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }, children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", fontWeight: 900, color: THEME_AMBER }, children: "EQUIVALENT YIELD" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1.6rem", fontWeight: 950, color: THEME_AMBER }, children: [
-                        formatYAxis$1((((_d = report.debris) == null ? void 0 : _d.metal) || 0) * mMultiplier + (((_e = report.debris) == null ? void 0 : _e.crystal) || 0) * cMultiplier),
-                        " MSU"
-                      ] })
-                    ] })
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 80, style: { position: "absolute", bottom: "-20px", right: "-20px", opacity: 0.03, transform: "rotate(-15deg)" } })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass-card", style: { padding: "32px", background: `${themeColor}08`, border: `1px solid ${themeColor}20`, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", position: "relative" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.9rem", fontWeight: 900, color: themeColor, marginBottom: "12px", letterSpacing: "2px" }, children: "NET OPERATIONAL PROFIT" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "3.2rem", fontWeight: 1e3, color: themeColor, textShadow: `0 0 30px ${themeColor}40` }, children: [
-                    isAccountWin ? "+" : "",
-                    formatYAxis$1((((_f = report.loot) == null ? void 0 : _f.metal) || 0) * mMultiplier + (((_g = report.loot) == null ? void 0 : _g.crystal) || 0) * cMultiplier + (((_h = report.loot) == null ? void 0 : _h.deuterium) || 0) * dMultiplier + (((_i = report.debris) == null ? void 0 : _i.metal) || 0) * mMultiplier + (((_j = report.debris) == null ? void 0 : _j.crystal) || 0) * cMultiplier - report.attackerLosses)
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.1rem", fontWeight: 800, opacity: 0.4, marginTop: "8px" }, children: "TOTAL MSU IMPACT" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(TrendingUp, { size: 100, style: { position: "absolute", opacity: 0.05, bottom: "10px" } })
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "0.9rem", opacity: 0.4, fontWeight: 600 }, children: [
+                  "Timestamp: ",
+                  new Date(report.timestamp * 1e3).toLocaleString()
                 ] })
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { padding: "32px 48px", background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "flex-end", alignItems: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                onClick: onClose,
-                style: {
-                  background: themeColor,
-                  color: "#000",
-                  border: "none",
-                  padding: "16px 48px",
-                  borderRadius: "20px",
-                  fontSize: "1rem",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: onClose, style: { pointerEvents: "auto", background: "rgba(255,255,255,0.05)", border: "none", color: "#fff", padding: "12px", borderRadius: "50%", cursor: "pointer", transition: "all 0.2s" }, "aria-label": "Close", children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 28 }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flexGrow: 1, overflowY: "auto", padding: "0 48px 48px 48px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "20px", alignItems: "flex-start", position: "relative", minHeight: "400px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, padding: "20px" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px", justifyContent: "flex-end" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { textAlign: "right" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.7rem", opacity: 0.4, fontWeight: 800, textTransform: "uppercase" }, children: "Assault Leader" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.4rem", fontWeight: 900, color: "#fff" }, children: [
+                      "Attacker (",
+                      report.attackerName || "Unknown",
+                      ")"
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "60px", height: "60px", borderRadius: "50%", background: "rgba(239, 68, 68, 0.1)", border: "2px solid #ef4444", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Sword, { size: 32, color: "#ef4444" }) })
+                ] }),
+                renderFleet(attackers, "#ef4444")
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100px", alignSelf: "stretch", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: "100px", bottom: "100px", width: "2px", background: "rgba(255,255,255,0.05)" } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+                  marginTop: "120px",
+                  width: "50px",
+                  height: "50px",
+                  borderRadius: "50%",
+                  background: "#0d1115",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1.2rem",
                   fontWeight: 900,
-                  cursor: "pointer",
-                  boxShadow: `0 8px 24px ${themeColor}40`,
-                  transition: "all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
-                },
-                onMouseEnter: (e) => e.currentTarget.style.transform = "scale(1.05) translateY(-4px)",
-                onMouseLeave: (e) => e.currentTarget.style.transform = "scale(1) translateY(0)",
-                children: "ACKNOWLEDGE REPORT"
-              }
-            ) })
-          ]
-        }
-      )
-    }
-  );
+                  color: themeColor,
+                  zIndex: 1,
+                  boxShadow: `0 0 20px ${themeColor}20`
+                }, children: "VS" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, padding: "20px" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "60px", height: "60px", borderRadius: "50%", background: "rgba(34, 197, 94, 0.1)", border: "2px solid #22c55e", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 32, color: "#22c55e" }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.7rem", opacity: 0.4, fontWeight: 800, textTransform: "uppercase" }, children: "Planetary Defense" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.4rem", fontWeight: 900, color: "#fff" }, children: [
+                      "Defender (",
+                      report.defenderName || "Unknown",
+                      ")"
+                    ] })
+                  ] })
+                ] }),
+                renderFleet(defenders, "#22c55e")
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "32px", marginTop: "48px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass-card", style: { padding: "32px", position: "relative", overflow: "hidden" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, opacity: 0.5, marginBottom: "24px", letterSpacing: "1px" }, children: "RESOURCES SEIZED" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", gap: "16px" }, children: ["metal", "crystal", "deuterium"].map((res) => {
+                  var _a2;
+                  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "12px", height: "12px", borderRadius: "2px", background: RESOURCE_COLORS$2[res] } }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 700, textTransform: "capitalize" }, children: res })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.1rem", fontWeight: 900 }, children: formatYAxis$1(((_a2 = report.loot) == null ? void 0 : _a2[res]) || 0) })
+                  ] }, res);
+                }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Box, { size: 80, style: { position: "absolute", bottom: "-20px", right: "-20px", opacity: 0.03, transform: "rotate(-15deg)" } })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass-card", style: { padding: "32px", position: "relative", overflow: "hidden" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, opacity: 0.5, marginBottom: "24px", letterSpacing: "1px" }, children: "DEBRIS FIELD GENERATION" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "16px" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 700, opacity: 0.6 }, children: "Metal Recovery" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.1rem", fontWeight: 900 }, children: formatYAxis$1(((_b = report.debris) == null ? void 0 : _b.metal) || 0) })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 700, opacity: 0.6 }, children: "Crystal Recovery" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.1rem", fontWeight: 900 }, children: formatYAxis$1(((_c = report.debris) == null ? void 0 : _c.crystal) || 0) })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: "12px", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", fontWeight: 900, color: THEME_AMBER }, children: "EQUIVALENT YIELD" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1.6rem", fontWeight: 950, color: THEME_AMBER }, children: [
+                      formatYAxis$1((((_d = report.debris) == null ? void 0 : _d.metal) || 0) * mMultiplier + (((_e = report.debris) == null ? void 0 : _e.crystal) || 0) * cMultiplier),
+                      " MSU"
+                    ] })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 80, style: { position: "absolute", bottom: "-20px", right: "-20px", opacity: 0.03, transform: "rotate(-15deg)" } })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass-card", style: { padding: "32px", background: `${themeColor}08`, border: `1px solid ${themeColor}20`, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", position: "relative" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.9rem", fontWeight: 900, color: themeColor, marginBottom: "12px", letterSpacing: "2px" }, children: "NET OPERATIONAL PROFIT" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "3.2rem", fontWeight: 1e3, color: themeColor, textShadow: `0 0 30px ${themeColor}40` }, children: [
+                  isAccountWin ? "+" : "",
+                  formatYAxis$1((((_f = report.loot) == null ? void 0 : _f.metal) || 0) * mMultiplier + (((_g = report.loot) == null ? void 0 : _g.crystal) || 0) * cMultiplier + (((_h = report.loot) == null ? void 0 : _h.deuterium) || 0) * dMultiplier + (((_i = report.debris) == null ? void 0 : _i.metal) || 0) * mMultiplier + (((_j = report.debris) == null ? void 0 : _j.crystal) || 0) * cMultiplier - report.attackerLosses)
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.1rem", fontWeight: 800, opacity: 0.4, marginTop: "8px" }, children: "TOTAL MSU IMPACT" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(TrendingUp, { size: 100, style: { position: "absolute", opacity: 0.05, bottom: "10px" } })
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { padding: "32px 48px", background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "flex-end", alignItems: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: onClose,
+              style: {
+                background: themeColor,
+                color: "#000",
+                border: "none",
+                padding: "16px 48px",
+                borderRadius: "20px",
+                fontSize: "1rem",
+                fontWeight: 900,
+                cursor: "pointer",
+                boxShadow: `0 8px 24px ${themeColor}40`,
+                transition: "all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+              },
+              onMouseEnter: (e) => e.currentTarget.style.transform = "scale(1.05) translateY(-4px)",
+              onMouseLeave: (e) => e.currentTarget.style.transform = "scale(1) translateY(0)",
+              children: "ACKNOWLEDGE REPORT"
+            }
+          ) })
+        ]
+      }
+    )
+  ] });
 };
 const THEME_CYAN$3 = "#0062ff";
 const RESOURCE_COLORS$1 = {
@@ -56314,79 +56465,89 @@ const Settings = () => {
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: showComingSoon && /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      motion.div,
-      {
-        initial: { opacity: 0 },
-        animate: { opacity: 1 },
-        exit: { opacity: 0 },
-        onClick: () => setShowComingSoon(false),
-        style: {
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.7)",
-          backdropFilter: "blur(8px)",
-          zIndex: 1e3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        },
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          motion.div,
-          {
-            initial: { opacity: 0, scale: 0.9, y: 20 },
-            animate: { opacity: 1, scale: 1, y: 0 },
-            exit: { opacity: 0, scale: 0.9, y: 20 },
-            onClick: (e) => e.stopPropagation(),
-            style: {
-              width: "400px",
-              background: "rgba(10, 20, 30, 0.95)",
-              border: "1px solid var(--primary)",
-              borderRadius: "24px",
-              padding: "40px",
-              textAlign: "center",
-              boxShadow: "0 0 40px rgba(0, 98, 255, 0.2)"
-            },
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
-                width: "64px",
-                height: "64px",
-                background: "rgba(0, 98, 255, 0.1)",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 24px",
-                border: "1px solid var(--primary)"
-              }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Smartphone, { size: 32, color: "var(--primary)" }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { style: { fontSize: "1.5rem", fontWeight: 900, marginBottom: "16px", color: "#fff" }, children: "Deploying Soon" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { fontSize: "1rem", color: "rgba(255, 255, 255, 0.6)", lineHeight: 1.6, marginBottom: "32px" }, children: "Cloud synchronization and remote backups are currently undergoing flight trials. This feature will be available in a future transmission." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => setShowComingSoon(false),
-                  style: {
-                    width: "100%",
-                    padding: "14px",
-                    borderRadius: "12px",
-                    background: "var(--primary)",
-                    color: "#000",
-                    border: "none",
-                    fontSize: "1rem",
-                    fontWeight: 900,
-                    cursor: "pointer"
-                  },
-                  children: "Acknowledge"
-                }
-              )
-            ]
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: showComingSoon && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1e3,
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "center",
+      padding: "40px 24px",
+      overflow: "auto",
+      WebkitOverflowScrolling: "touch"
+    }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        motion.div,
+        {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          exit: { opacity: 0 },
+          onClick: () => setShowComingSoon(false),
+          style: {
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            backdropFilter: "blur(8px)"
           }
-        )
-      }
-    ) }) })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        motion.div,
+        {
+          initial: { opacity: 0, scale: 0.9, y: 20 },
+          animate: { opacity: 1, scale: 1, y: 0 },
+          exit: { opacity: 0, scale: 0.9, y: 20 },
+          onClick: (e) => e.stopPropagation(),
+          style: {
+            position: "relative",
+            width: "400px",
+            background: "rgba(10, 20, 30, 0.95)",
+            border: "1px solid var(--primary)",
+            borderRadius: "24px",
+            padding: "40px",
+            textAlign: "center",
+            boxShadow: "0 0 40px rgba(0, 98, 255, 0.2)",
+            margin: "20px auto"
+          },
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+              width: "64px",
+              height: "64px",
+              background: "rgba(0, 98, 255, 0.1)",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 24px",
+              border: "1px solid var(--primary)"
+            }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Smartphone, { size: 32, color: "var(--primary)" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { style: { fontSize: "1.5rem", fontWeight: 900, marginBottom: "16px", color: "#fff" }, children: "Deploying Soon" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { fontSize: "1rem", color: "rgba(255, 255, 255, 0.6)", lineHeight: 1.6, marginBottom: "32px" }, children: "Cloud synchronization and remote backups are currently undergoing flight trials. This feature will be available in a future transmission." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => setShowComingSoon(false),
+                style: {
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: "12px",
+                  background: "var(--primary)",
+                  color: "#000",
+                  border: "none",
+                  fontSize: "1rem",
+                  fontWeight: 900,
+                  cursor: "pointer"
+                },
+                children: "Acknowledge"
+              }
+            )
+          ]
+        }
+      )
+    ] }) })
   ] });
 };
 const formatNumber$1 = (num) => {
@@ -56684,6 +56845,40 @@ const DataManagement = () => {
   const [nexusImportLog, setNexusImportLog] = reactExports.useState([]);
   const [nexusStats, setNexusStats] = reactExports.useState({ total: 0, processed: 0, skipped: 0, imported: 0, errors: 0 });
   const [isExporting, setIsExporting] = reactExports.useState(false);
+  const healDatabaseTimestamps = async () => {
+    try {
+      console.log("OGame Nexus: Scanning database for warped 1970 timestamps...");
+      const warpedExps = await db.expeditions.filter((e) => e.timestamp > 0 && e.timestamp < 1e8).toArray();
+      if (warpedExps.length > 0) {
+        warpedExps.forEach((e) => e.timestamp = e.timestamp * 1e3);
+        await db.expeditions.bulkPut(warpedExps);
+        console.log(`OGame Nexus: Healed ${warpedExps.length} warped expeditions.`);
+      }
+      const warpedLifeforms = await db.lifeformDiscoveries.filter((l2) => l2.timestamp > 0 && l2.timestamp < 1e8).toArray();
+      if (warpedLifeforms.length > 0) {
+        warpedLifeforms.forEach((l2) => l2.timestamp = l2.timestamp * 1e3);
+        await db.lifeformDiscoveries.bulkPut(warpedLifeforms);
+        console.log(`OGame Nexus: Healed ${warpedLifeforms.length} warped lifeform discoveries.`);
+      }
+      const warpedDebris = await db.debrisHarvests.filter((d) => d.timestamp > 0 && d.timestamp < 1e8).toArray();
+      if (warpedDebris.length > 0) {
+        warpedDebris.forEach((d) => d.timestamp = d.timestamp * 1e3);
+        await db.debrisHarvests.bulkPut(warpedDebris);
+        console.log(`OGame Nexus: Healed ${warpedDebris.length} warped debris field harvests.`);
+      }
+      const warpedCombats = await db.combatReports.filter((c2) => c2.timestamp > 0 && c2.timestamp < 1e8).toArray();
+      if (warpedCombats.length > 0) {
+        warpedCombats.forEach((c2) => c2.timestamp = c2.timestamp * 1e3);
+        await db.combatReports.bulkPut(warpedCombats);
+        console.log(`OGame Nexus: Healed ${warpedCombats.length} warped combat reports.`);
+      }
+    } catch (e) {
+      console.error("OGame Nexus: Failed to heal database timestamps:", e);
+    }
+  };
+  reactExports.useEffect(() => {
+    healDatabaseTimestamps();
+  }, []);
   const handleExport = async () => {
     if (!activeAccount) return;
     try {
@@ -57596,16 +57791,28 @@ const DataManagement = () => {
         if (selectedDataTypes.has("combats")) totalToProcess += ((_d2 = rawAcc.combatReports) == null ? void 0 : _d2.length) || 0;
       });
       setStats({ total: totalToProcess, processed: 0, skipped: 0, imported: 0, errors: 0 });
-      setImportLog((prev) => [...prev, `Found ${totalToProcess} records to sync across ${selectedAccountsList.length} accounts.`]);
+      setImportLog((prev) => [...prev, `Found ${totalToProcess} records to sync across ${selectedAccountsList.length} accounts.`, "Indexing existing database records for fast lookup..."]);
+      const existingExpeditions = new Set(await db.expeditions.toCollection().primaryKeys());
+      const existingLifeforms = new Set(await db.lifeformDiscoveries.toCollection().primaryKeys());
+      const existingDebris = new Set(await db.debrisHarvests.toCollection().primaryKeys());
+      const existingCombats = new Set(await db.combatReports.toCollection().primaryKeys());
+      let processed = 0;
+      let skipped = 0;
+      let imported = 0;
+      let errors = 0;
       for (const acc of selectedAccountsList) {
         const rawAcc = parsedData.accounts.find((r2) => r2.playerId === acc.playerId && r2.serverId === acc.serverId);
         setImportLog((prev) => [...prev, `Syncing data for [${acc.playerName}] (Universe ${acc.serverId})...`]);
         if (selectedDataTypes.has("expeditions") && rawAcc.expeditions) {
+          const expeditionsToInsert = [];
+          let expSkipped = 0;
+          let expErrors = 0;
           for (const exp2 of rawAcc.expeditions) {
             const messageId = String(exp2.id);
-            const existing = await db.expeditions.get(messageId);
-            if (existing) {
-              setStats((s2) => ({ ...s2, processed: s2.processed + 1, skipped: s2.skipped + 1 }));
+            if (existingExpeditions.has(messageId)) {
+              processed++;
+              skipped++;
+              expSkipped++;
             } else {
               try {
                 const resultType = mapExpeditionResult(exp2.type);
@@ -57630,10 +57837,10 @@ const DataManagement = () => {
                 if (exp2.type === "item") resultDetails.itemHash = exp2.itemHash || "";
                 if (exp2.type === "delay") resultDetails.returnTimeAbsoluteIncreaseHours = 1;
                 if (exp2.type === "early") resultDetails.returnTimeAbsoluteIncreaseHours = 0;
-                await db.expeditions.add({
+                expeditionsToInsert.push({
                   messageId,
                   playerId: String(acc.playerId),
-                  timestamp: (exp2.date || exp2.dateTime || exp2.timestamp || 0) / 1e3,
+                  timestamp: (exp2.date || exp2.dateTime || exp2.timestamp || 0) / (String(exp2.date || exp2.dateTime || exp2.timestamp || 0).length > 10 ? 1e3 : 1),
                   coords: "0:0:0",
                   // Tracker doesn't usually export coords per item, just for the search
                   depletion: mapDepletion(exp2.depletion),
@@ -57642,20 +57849,39 @@ const DataManagement = () => {
                   resultDetails,
                   tracked: true
                 });
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, imported: s2.imported + 1 }));
+                processed++;
+                imported++;
               } catch (e) {
                 console.error(e);
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, errors: s2.errors + 1 }));
+                processed++;
+                errors++;
+                expErrors++;
               }
             }
           }
+          if (expeditionsToInsert.length > 0) {
+            try {
+              await db.expeditions.bulkAdd(expeditionsToInsert);
+            } catch (e) {
+              console.error("Failed to bulk add expeditions:", e);
+              errors += expeditionsToInsert.length;
+              imported -= expeditionsToInsert.length;
+              expErrors += expeditionsToInsert.length;
+            }
+          }
+          setImportLog((prev) => [...prev, `✓ Sync [Expeditions]: ${expeditionsToInsert.length} imported, ${expSkipped} skipped, ${expErrors} errors.`]);
+          setStats({ total: totalToProcess, processed, skipped, imported, errors });
         }
         if (selectedDataTypes.has("lifeform") && rawAcc.lifeformDiscoveries) {
+          const lifeformsToInsert = [];
+          let lfSkipped = 0;
+          let lfErrors = 0;
           for (const disc of rawAcc.lifeformDiscoveries) {
             const messageId = String(disc.id);
-            const existing = await db.lifeformDiscoveries.get(messageId);
-            if (existing) {
-              setStats((s2) => ({ ...s2, processed: s2.processed + 1, skipped: s2.skipped + 1 }));
+            if (existingLifeforms.has(messageId)) {
+              processed++;
+              skipped++;
+              lfSkipped++;
             } else {
               try {
                 let discoveryType = "nothing";
@@ -57675,10 +57901,10 @@ const DataManagement = () => {
                 } else if (disc.type === "nothing") {
                   discoveryType = "nothing";
                 }
-                await db.lifeformDiscoveries.add({
+                lifeformsToInsert.push({
                   messageId,
                   playerId: String(acc.playerId),
-                  timestamp: (disc.date || disc.dateTime || disc.timestamp || 0) / 1e3,
+                  timestamp: (disc.date || disc.dateTime || disc.timestamp || 0) / (String(disc.date || disc.dateTime || disc.timestamp || 0).length > 10 ? 1e3 : 1),
                   coords: "0:0:0",
                   lifeform: lifeformId,
                   discoveryType,
@@ -57687,25 +57913,44 @@ const DataManagement = () => {
                   artifactSize,
                   tracked: true
                 });
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, imported: s2.imported + 1 }));
+                processed++;
+                imported++;
               } catch (e) {
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, errors: s2.errors + 1 }));
+                processed++;
+                errors++;
+                lfErrors++;
               }
             }
           }
+          if (lifeformsToInsert.length > 0) {
+            try {
+              await db.lifeformDiscoveries.bulkAdd(lifeformsToInsert);
+            } catch (e) {
+              console.error("Failed to bulk add lifeforms:", e);
+              errors += lifeformsToInsert.length;
+              imported -= lifeformsToInsert.length;
+              lfErrors += lifeformsToInsert.length;
+            }
+          }
+          setImportLog((prev) => [...prev, `✓ Sync [Lifeforms]: ${lifeformsToInsert.length} imported, ${lfSkipped} skipped, ${lfErrors} errors.`]);
+          setStats({ total: totalToProcess, processed, skipped, imported, errors });
         }
         if (selectedDataTypes.has("debris") && rawAcc.debrisFieldReports) {
+          const debrisToInsert = [];
+          let debrisSkipped = 0;
+          let debrisErrors = 0;
           for (const report of rawAcc.debrisFieldReports) {
             const messageId = String(report.id);
-            const existing = await db.debrisHarvests.get(messageId);
-            if (existing) {
-              setStats((s2) => ({ ...s2, processed: s2.processed + 1, skipped: s2.skipped + 1 }));
+            if (existingDebris.has(messageId)) {
+              processed++;
+              skipped++;
+              debrisSkipped++;
             } else {
               try {
-                await db.debrisHarvests.add({
+                debrisToInsert.push({
                   messageId,
                   playerId: String(acc.playerId),
-                  timestamp: (report.date || 0) / 1e3,
+                  timestamp: (report.date || 0) / (String(report.date || 0).length > 10 ? 1e3 : 1),
                   coords: report.isExpeditionDebrisField ? "0:0:16" : "0:0:0",
                   recycledResources: {
                     metal: report.metal || 0,
@@ -57714,19 +57959,38 @@ const DataManagement = () => {
                   },
                   tracked: true
                 });
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, imported: s2.imported + 1 }));
+                processed++;
+                imported++;
               } catch (e) {
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, errors: s2.errors + 1 }));
+                processed++;
+                errors++;
+                debrisErrors++;
               }
             }
           }
+          if (debrisToInsert.length > 0) {
+            try {
+              await db.debrisHarvests.bulkAdd(debrisToInsert);
+            } catch (e) {
+              console.error("Failed to bulk add debris harvest reports:", e);
+              errors += debrisToInsert.length;
+              imported -= debrisToInsert.length;
+              debrisErrors += debrisToInsert.length;
+            }
+          }
+          setImportLog((prev) => [...prev, `✓ Sync [Debris Fields]: ${debrisToInsert.length} imported, ${debrisSkipped} skipped, ${debrisErrors} errors.`]);
+          setStats({ total: totalToProcess, processed, skipped, imported, errors });
         }
         if (selectedDataTypes.has("combats") && rawAcc.combatReports) {
+          const combatsToInsert = [];
+          let combatSkipped = 0;
+          let combatErrors = 0;
           for (const report of rawAcc.combatReports) {
             const messageId = String(report.id);
-            const existing = await db.combatReports.get(messageId);
-            if (existing) {
-              setStats((s2) => ({ ...s2, processed: s2.processed + 1, skipped: s2.skipped + 1 }));
+            if (existingCombats.has(messageId)) {
+              processed++;
+              skipped++;
+              combatSkipped++;
             } else {
               try {
                 let winner = "none";
@@ -57766,7 +58030,7 @@ const DataManagement = () => {
                 };
                 const loot = extractImportRes(report.loot);
                 const debris = extractImportRes(report.debrisField || report.debris, true);
-                await db.combatReports.add({
+                combatsToInsert.push({
                   messageId,
                   playerId: String(acc.playerId),
                   timestamp: (report.date || report.dateTime || report.timestamp || report.time || 0) / (String(report.date || report.dateTime || report.timestamp || report.time || 0).length > 10 ? 1e3 : 1),
@@ -57786,13 +58050,28 @@ const DataManagement = () => {
                   rawFleets: report.attackers && report.defenders ? [...report.attackers, ...report.defenders] : [],
                   rawResult: report
                 });
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, imported: s2.imported + 1 }));
+                processed++;
+                imported++;
               } catch (e) {
                 console.error("Error importing combat report:", e);
-                setStats((s2) => ({ ...s2, processed: s2.processed + 1, errors: s2.errors + 1 }));
+                processed++;
+                errors++;
+                combatErrors++;
               }
             }
           }
+          if (combatsToInsert.length > 0) {
+            try {
+              await db.combatReports.bulkAdd(combatsToInsert);
+            } catch (e) {
+              console.error("Failed to bulk add combat reports:", e);
+              errors += combatsToInsert.length;
+              imported -= combatsToInsert.length;
+              combatErrors += combatsToInsert.length;
+            }
+          }
+          setImportLog((prev) => [...prev, `✓ Sync [Combat Reports]: ${combatsToInsert.length} imported, ${combatSkipped} skipped, ${combatErrors} errors.`]);
+          setStats({ total: totalToProcess, processed, skipped, imported, errors });
         }
       }
       setImportLog((prev) => [...prev, "✓ Import sequence complete.", "Purging safety backup... synchronization verified."]);
@@ -62800,34 +63079,6 @@ const DiscovererOptimizer = () => {
   ] });
 };
 const Tools = () => {
-  const [activeToolId, setActiveToolId] = reactExports.useState("scrap-optimizer");
-  reactExports.useEffect(() => {
-    const checkPending = () => {
-      const pending = sessionStorage.getItem("ognexus_target_subview");
-      if (pending) {
-        try {
-          const { view, tab } = JSON.parse(pending);
-          if (view === "tools" && tab) {
-            setActiveToolId(tab);
-            sessionStorage.removeItem("ognexus_target_subview");
-          }
-        } catch (e) {
-          console.error("Failed to parse target subview:", e);
-        }
-      }
-    };
-    checkPending();
-    const handleNav = (e) => {
-      const detail = e.detail;
-      if (detail && detail.view === "tools" && detail.tab) {
-        setActiveToolId(detail.tab);
-      }
-    };
-    window.addEventListener("ognexus_navigated", handleNav);
-    return () => {
-      window.removeEventListener("ognexus_navigated", handleNav);
-    };
-  }, []);
   const tools = [
     {
       id: "scrap-optimizer",
@@ -62856,7 +63107,8 @@ const Tools = () => {
       name: "ACS Splitter",
       description: "Split combat results across multiple alliance members",
       icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 20 }),
-      component: /* @__PURE__ */ jsxRuntimeExports.jsx(AcsSplitter, {})
+      component: /* @__PURE__ */ jsxRuntimeExports.jsx(AcsSplitter, {}),
+      inTesting: true
     },
     {
       id: "plasma-optimizer",
@@ -62873,6 +63125,40 @@ const Tools = () => {
       component: /* @__PURE__ */ jsxRuntimeExports.jsx(DiscovererOptimizer, {})
     }
   ];
+  const [activeToolId, setActiveToolId] = reactExports.useState("scrap-optimizer");
+  reactExports.useEffect(() => {
+    const checkPending = () => {
+      const pending = sessionStorage.getItem("ognexus_target_subview");
+      if (pending) {
+        try {
+          const { view, tab } = JSON.parse(pending);
+          if (view === "tools" && tab) {
+            const targetTool = tools.find((t2) => t2.id === tab);
+            if (targetTool && !targetTool.inTesting) {
+              setActiveToolId(tab);
+            }
+            sessionStorage.removeItem("ognexus_target_subview");
+          }
+        } catch (e) {
+          console.error("Failed to parse target subview:", e);
+        }
+      }
+    };
+    checkPending();
+    const handleNav = (e) => {
+      const detail = e.detail;
+      if (detail && detail.view === "tools" && detail.tab) {
+        const targetTool = tools.find((t2) => t2.id === detail.tab);
+        if (targetTool && !targetTool.inTesting) {
+          setActiveToolId(detail.tab);
+        }
+      }
+    };
+    window.addEventListener("ognexus_navigated", handleNav);
+    return () => {
+      window.removeEventListener("ognexus_navigated", handleNav);
+    };
+  }, [tools]);
   const activeTool = tools.find((t2) => t2.id === activeToolId);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view-container", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "view-header", children: [
@@ -62937,11 +63223,15 @@ const Tools = () => {
 };
 const BACKGROUNDS = [
   { id: "10504", name: "No Man's Sky", url: "/icons/signatures/10504.jpg" },
-  { id: "2150163743", name: "Space Travel", url: "/icons/signatures/2150163743.jpg" },
-  { id: "2151828268", name: "Battlecruiser Cockpit", url: "/icons/signatures/2151828268.jpg" },
+  { id: "2150163743", name: "Skyline Carrier", url: "/icons/signatures/2150163743.jpg" },
+  { id: "2151828268", name: "Strait of Atlas", url: "/icons/signatures/2151828268.jpg" },
   { id: "61216", name: "Galactic Core", url: "/icons/signatures/61216.jpg" },
-  { id: "64", name: "Deathstar", url: "/icons/signatures/64.jpg" },
-  { id: "9647", name: "Fiery Nebula", url: "/icons/signatures/9647.jpg" }
+  { id: "64", name: "Nexus Prime", url: "/icons/signatures/64.jpg" },
+  { id: "9647", name: "Eye of Creation", url: "/icons/signatures/9647.jpg" },
+  { id: "2151972738", name: "Cosmic Nebula", url: "/icons/signatures/2151972738.jpg" },
+  { id: "2", name: "Ancient City", url: "/icons/signatures/2.jpg" },
+  { id: "2150163759", name: "The Dreadnought", url: "/icons/signatures/2150163759.jpg" },
+  { id: "2150163795", name: "Flight Deck Zero", url: "/icons/signatures/2150163795.jpg" }
 ];
 const ACCENTS = [
   { id: "cyan", name: "Cyan Tech", color: "#00f2ff", glow: "rgba(0, 242, 255, 0.4)", bg: "rgba(0, 242, 255, 0.08)" },
@@ -64158,7 +64448,7 @@ const SHORTCUT_CATEGORIES = [
       { id: "tools-scrap-optimizer", label: "Scrap Merchant", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Package, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "scrap-optimizer" },
       { id: "tools-combat-sim", label: "Combat Analysis", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "combat-sim", inTesting: true },
       { id: "tools-exp-calc", label: "Expedition Calculator", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Calculator, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "exp-calc" },
-      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter" },
+      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter", inTesting: true },
       { id: "tools-plasma-optimizer", label: "Plasma Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "plasma-optimizer" },
       { id: "tools-discoverer-optimizer", label: "Discoverer Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "discoverer-optimizer" }
     ]
@@ -64761,7 +65051,7 @@ const WelcomeModal = ({ onLetsGo, onNeverShow, onOpenTutorials }) => {
     }
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
-    position: "fixed",
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
@@ -64771,10 +65061,11 @@ const WelcomeModal = ({ onLetsGo, onNeverShow, onOpenTutorials }) => {
     WebkitBackdropFilter: "blur(16px)",
     zIndex: 9999,
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "center",
-    padding: "24px",
-    overflowY: "auto"
+    padding: "40px 24px",
+    overflow: "auto",
+    WebkitOverflowScrolling: "touch"
   }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     motion.div,
     {
@@ -64790,7 +65081,8 @@ const WelcomeModal = ({ onLetsGo, onNeverShow, onOpenTutorials }) => {
         padding: "30px 40px",
         boxShadow: "0 0 50px rgba(0, 242, 255, 0.18), inset 0 0 20px rgba(0, 242, 255, 0.05)",
         position: "relative",
-        overflow: "hidden"
+        overflow: "hidden",
+        margin: "20px auto"
       },
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
@@ -65230,7 +65522,7 @@ const Tutorials = ({ onNavigate }) => {
         },
         {
           title: "Import Mine Production",
-          text: "Visit your in-game Resource Settings tab and then the Lifeform Player Bonuses. This allows the extension to map information about your empire production and lifeform levels.",
+          text: "Visit your in-game Resource Settings tab on every planet and then the Lifeform Player Bonuses. This allows the extension to map information about your empire production and lifeform levels.",
           images: ["icons/tutorials/T1/ResourceSettings1.jpg", "icons/tutorials/T1/ResourceSettings2.jpg"]
         }
       ]
@@ -65752,7 +66044,7 @@ const Tutorials = ({ onNavigate }) => {
       guide.id
     )) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: selectedGuide && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
-      position: "fixed",
+      position: "absolute",
       top: 0,
       left: 0,
       right: 0,
@@ -65761,10 +66053,11 @@ const Tutorials = ({ onNavigate }) => {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: "24px",
+      padding: "40px 24px",
       background: "rgba(2, 6, 12, 0.65)",
       backdropFilter: "blur(20px) saturate(180%)",
-      WebkitBackdropFilter: "blur(20px) saturate(180%)"
+      WebkitBackdropFilter: "blur(20px) saturate(180%)",
+      overflow: "auto"
     }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "div",
@@ -65793,11 +66086,12 @@ const Tutorials = ({ onNavigate }) => {
             background: "rgba(6, 13, 26, 0.75)",
             border: `1px solid rgba(255, 255, 255, 0.08)`,
             borderRadius: "24px",
-            boxShadow: `0 24px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px rgba(${selectedGuide.accentColor === "#00f2ff" ? "0, 242, 255" : selectedGuide.accentColor === "#bd00ff" ? "189, 0, 255" : selectedGuide.accentColor === "#ffaa00" ? "255, 170, 0" : selectedGuide.accentColor === "#00ffb7" ? "0, 255, 183" : "0, 255, 102"}, 0.08)`,
+            boxShadow: `0 24px 60px -15px rgba(0, 0, 0, 0.8)`,
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
-            position: "relative"
+            position: "relative",
+            margin: "20px auto"
           },
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "4px", width: "100%", background: `linear-gradient(90deg, transparent 10%, ${selectedGuide.accentColor} 50%, transparent 90%)` } }),
@@ -65808,20 +66102,27 @@ const Tutorials = ({ onNavigate }) => {
               justifyContent: "space-between",
               alignItems: "center"
             }, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "14px" }, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
                   width: "36px",
                   height: "36px",
+                  background: "rgba(0, 0, 0, 0.4)",
                   borderRadius: "10px",
-                  background: "rgba(0,0,0,0.3)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  border: "1px solid rgba(255,255,255,0.03)"
+                  border: "1px solid rgba(255, 255, 255, 0.05)"
                 }, children: selectedGuide.icon }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "2px" }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { style: { fontSize: "1.25rem", fontWeight: 800, color: "#fff", margin: 0, fontFamily: "var(--font-title)" }, children: selectedGuide.title }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.65rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Nexus Tactical Simulation" })
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.62rem", fontWeight: 800, textTransform: "uppercase", color: selectedGuide.accentColor, letterSpacing: "0.5px" }, children: [
+                    "Step ",
+                    currentStep + 1,
+                    " of ",
+                    selectedGuide.steps.length,
+                    " — ",
+                    selectedGuide.steps[currentStep].title
+                  ] })
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -66038,7 +66339,8 @@ const Tutorials = ({ onNavigate }) => {
         }
       )
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { dangerouslySetInnerHTML: { __html: `
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { dangerouslySetInnerHTML: {
+      __html: `
                 .tutorials-bento-grid {
                     display: grid;
                     grid-template-columns: repeat(3, 1fr);
@@ -66090,7 +66392,8 @@ const Tutorials = ({ onNavigate }) => {
                         grid-row: span 1;
                     }
                 }
-            ` } })
+            `
+    } })
   ] });
 };
 const App = () => {
@@ -66184,6 +66487,11 @@ const App = () => {
       }
     ) })
   ] });
+};
+const _origWarn = console.warn;
+console.warn = (...args) => {
+  if (typeof args[0] === "string" && args[0].includes("of chart should be greater than 0")) return;
+  _origWarn.apply(console, args);
 };
 const rootElement = document.getElementById("root");
 if (rootElement) {

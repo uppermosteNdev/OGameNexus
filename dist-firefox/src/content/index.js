@@ -1196,9 +1196,9 @@
             border: 1px solid ${rarityColor2}20;
             `;
       const resData = [
-        { amount: totalMetal, color: "#E6953C", icon: "icons/icon-metal-81x81.png" },
-        { amount: totalCrystal, color: "#4CAEE6", icon: "icons/icon-crystal-81x81.png" },
-        { amount: totalDeuterium, color: "#43D159", icon: "icons/icon-deuterium-81x81.png" }
+        { amount: totalMetal, color: "#E6953C", icon: "icons/resources/metal-icon-medium.jpg" },
+        { amount: totalCrystal, color: "#4CAEE6", icon: "icons/resources/crystal-icon-medium.jpg" },
+        { amount: totalDeuterium, color: "#43D159", icon: "icons/resources/deuterium-icon-medium.jpg" }
       ];
       resData.forEach((res) => {
         if (res.amount > 0) {
@@ -1688,9 +1688,9 @@
         const lossSummary = document.createElement("div");
         lossSummary.style.cssText = `display: flex; gap: 12px; margin-top: 2px; padding: 2px 12px; background: rgba(255,0,0,0.1); border-radius: 12px; border: 1px solid rgba(255,0,0,0.2);`;
         [
-          { amount: totalMetal, color: "#E6953C", icon: "icons/icon-metal-81x81.png" },
-          { amount: totalCrystal, color: "#4CAEE6", icon: "icons/icon-crystal-81x81.png" },
-          { amount: totalDeuterium, color: "#43D159", icon: "icons/icon-deuterium-81x81.png" }
+          { amount: totalMetal, color: "#E6953C", icon: "icons/resources/metal-icon-medium.jpg" },
+          { amount: totalCrystal, color: "#4CAEE6", icon: "icons/resources/crystal-icon-medium.jpg" },
+          { amount: totalDeuterium, color: "#43D159", icon: "icons/resources/deuterium-icon-medium.jpg" }
         ].forEach((res) => {
           if (res.amount > 0) {
             const item = document.createElement("div");
@@ -7411,7 +7411,7 @@
               </div>
             `;
             };
-            costs.innerHTML = createCost(item.cost.metal, "icons/icon-metal-81x81.png", "#E6953C") + createCost(item.cost.crystal, "icons/icon-crystal-81x81.png", "#33B6D3") + createCost(item.cost.deuterium, "icons/icon-deuterium-81x81.png", "#22C55E");
+            costs.innerHTML = createCost(item.cost.metal, "icons/resources/metal-icon-medium.jpg", "#E6953C") + createCost(item.cost.crystal, "icons/resources/crystal-icon-medium.jpg", "#33B6D3") + createCost(item.cost.deuterium, "icons/resources/deuterium-icon-medium.jpg", "#22C55E");
             const actions = document.createElement("div");
             const delBtn = document.createElement("div");
             delBtn.innerHTML = "&#x1F5D1;";
