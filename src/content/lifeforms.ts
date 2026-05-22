@@ -1,4 +1,4 @@
-import { injectTodaySummaryCard } from './expeditions';
+import { injectTodaySummaryCard, addSessionTrackedItems, setNewBadgeActive } from './expeditions';
 import { flyToNexusButton } from './effects';
 
 function isExtensionStillValid() {
@@ -102,6 +102,11 @@ export async function trackLifeformDiscoveries(playerId: string) {
             });
             // Update summary card if new discoveries were logged
             if (response.newCount && response.newCount > 0) {
+                const newItems = response.data.filter((disc: any) => disc.isNew).map((disc: any) => ({ ...disc, type: 'lifeform' }));
+                if (newItems.length > 0) {
+                    addSessionTrackedItems(newItems);
+                    setNewBadgeActive(true);
+                }
                 injectTodaySummaryCard(playerId, true, maxRarity);
             }
 

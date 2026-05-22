@@ -7042,6 +7042,29 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       })();
       return true;
     }
+    if (message.type === "GET_RECENT_EXPEDITIONS") {
+      const playerId = String(message.data.playerId).trim();
+      const limit = message.data.limit || 20;
+      (async () => {
+        try {
+          const [recentExp, recentLf] = await Promise.all([
+            db.expeditions.where("playerId").equals(playerId).toArray(),
+            db.lifeformDiscoveries.where("playerId").equals(playerId).toArray()
+          ]);
+          const merged = [
+            ...recentExp.map((e) => ({ ...e, type: "expedition" })),
+            ...recentLf.map((l) => ({ ...l, type: "lifeform" }))
+          ];
+          merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          const sliced = merged.slice(0, limit);
+          sendResponse({ success: true, expeditions: sliced });
+        } catch (err) {
+          console.error("OGame Nexus: Error getting recent expeditions", err);
+          sendResponse({ success: false, error: String(err) });
+        }
+      })();
+      return true;
+    }
     if (message.type === "TRACK_LIFEFORMS") {
       const { discoveries, playerId } = message.data;
       (async () => {

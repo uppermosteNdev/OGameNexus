@@ -156,6 +156,33 @@ const Settings: React.FC = () => {
         }
     };
 
+    const handleDebugDeleteLast40 = async () => {
+        const activeAcc = await db.accounts.orderBy('lastSeen').reverse().first() || await db.accounts.toCollection().last();
+        const playerId = activeAcc?.playerId;
+        if (!playerId) {
+            alert("No active player account found. Please log in or load a player first.");
+            return;
+        }
+
+        if (window.confirm("DEBUG: Are you sure you want to delete the last 40 expeditions, lifeform discoveries, and debris harvests for this player?")) {
+            try {
+                chrome.runtime.sendMessage({
+                    type: "DEBUG_DELETE_LAST_40_EXPEDITIONS",
+                    playerId: playerId
+                }, (response) => {
+                    if (response?.success) {
+                        alert(`Successfully deleted last 40 expeditions, lifeforms, and debris harvests. Total deleted entries: ${response.count}`);
+                    } else {
+                        alert(`Failed to delete: ${response?.error || 'Unknown error'}`);
+                    }
+                });
+            } catch (e) {
+                console.error("Failed to call DEBUG_DELETE_LAST_40_EXPEDITIONS", e);
+                alert("Failed to send debug request. Background script might be sleeping or disconnected.");
+            }
+        }
+    };
+
     return (
         <div className="view">
             <h1>Settings Hub</h1>

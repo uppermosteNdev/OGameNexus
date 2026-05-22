@@ -1,6 +1,25 @@
 import { SHIP_DATA } from '../db/staticData';
 import { flyToNexusButton } from './effects';
 
+let sessionRecentExpeditions: any[] = [];
+let newBadgeActive = false;
+
+export function addSessionTrackedItems(items: any[]) {
+    sessionRecentExpeditions = [...sessionRecentExpeditions, ...items];
+}
+
+export function setNewBadgeActive(active: boolean) {
+    newBadgeActive = active;
+}
+
+export function getSessionRecentExpeditions() {
+    return sessionRecentExpeditions;
+}
+
+export function getNewBadgeActive() {
+    return newBadgeActive;
+}
+
 function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
 }
@@ -94,13 +113,558 @@ export function scrapeExpeditionMessages() {
     return results;
 }
 
+function updateBadgeState(wrapper: HTMLElement) {
+    const card = wrapper.querySelector('.og-nexus-expedition-summary-card') as HTMLElement;
+    if (!card) return;
+
+    let badge = card.querySelector('.og-nexus-new-badge') as HTMLElement;
+    if (newBadgeActive) {
+        const count = sessionRecentExpeditions.length;
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'og-nexus-new-badge nexus-tooltip';
+            card.appendChild(badge);
+        }
+        badge.textContent = `${count} New`;
+        badge.setAttribute('data-nexus-tooltip', `${count} new Expeditions/Discoveries tracked`);
+    } else {
+        if (badge) {
+            badge.remove();
+        }
+    }
+}
+
+function updateCardClickability(wrapper: HTMLElement) {
+    const card = wrapper.querySelector('.og-nexus-expedition-summary-card') as HTMLElement;
+    if (!card) return;
+
+    const isExpanded = wrapper.classList.contains('og-nexus-expanded');
+    if (newBadgeActive || isExpanded) {
+        card.classList.add('clickable');
+        card.style.cursor = 'pointer';
+    } else {
+        card.classList.remove('clickable');
+        card.style.cursor = 'default';
+    }
+}
+
+function formatRelativeTime(timestampSeconds: number): string {
+    const diff = Math.floor(Date.now() / 1000 - timestampSeconds);
+    if (diff < 0) return 'just now';
+    if (diff < 60) return 'just now';
+    const mins = Math.floor(diff / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
+
+async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
+    const card = wrapper.querySelector('.og-nexus-expedition-summary-card') as HTMLElement;
+    if (!card) return;
+
+    let detailsPane = card.querySelector('.og-nexus-expedition-details-pane') as HTMLElement;
+    if (!detailsPane) {
+        detailsPane = document.createElement('div');
+        detailsPane.className = 'og-nexus-expedition-details-pane';
+        detailsPane.addEventListener('click', e => e.stopPropagation());
+        card.appendChild(detailsPane);
+    }
+
+    detailsPane.innerHTML = `
+        <div class="og-nexus-details-grid">
+            <div class="og-nexus-details-col">
+                <h4 class="og-nexus-details-title" style="color: #facc15;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;"><polygon points="12,2 22,8.5 12,15 2,8.5"></polygon><polyline points="2,8.5 12,22 22,8.5"></polyline><line x1="12" y1="15" x2="12" y2="22"></line></svg>
+                    Direct Bounty
+                </h4>
+                <div class="og-nexus-no-data">Loading recent bounty...</div>
+            </div>
+            <div class="og-nexus-details-col">
+                <h4 class="og-nexus-details-title" style="color: #38bdf8;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    Fleet Value
+                </h4>
+                <div class="og-nexus-no-data">Loading fleet...</div>
+            </div>
+        </div>
+    `;
+
+    let expeditions: any[] = [];
+    if (sessionRecentExpeditions && sessionRecentExpeditions.length > 0) {
+        expeditions = [...sessionRecentExpeditions];
+    } else {
+        expeditions = await new Promise<any[]>((resolve) => {
+            chrome.runtime.sendMessage({
+                type: "GET_RECENT_EXPEDITIONS",
+                data: { playerId, limit: 20 }
+            }, (response) => {
+                if (response?.success && response.expeditions) {
+                    resolve(response.expeditions);
+                } else {
+                    resolve([]);
+                }
+            });
+        });
+    }
+
+    if (expeditions.length === 0) {
+        detailsPane.innerHTML = `
+            <div class="og-nexus-details-grid">
+                <div style="grid-column: span 2; text-align: center; color: #64748b; padding: 20px; font-style: italic;">
+                    No tracked expedition data available for this player.
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    let totalMetal = 0;
+    let totalCrystal = 0;
+    let totalDeuterium = 0;
+    let totalDarkMatter = 0;
+    let totalArtifacts = 0;
+    let totalXp = 0;
+    let totalBlackHoles = 0;
+
+    const lifeformXp: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const shipsFound: Record<string, { amount: number; name: string; icon: string }> = {};
+    const depletionCounts = [0, 0, 0, 0, 0];
+
+    expeditions.forEach(exp => {
+        const isLifeform = exp.type === 'lifeform' || exp.discoveryType !== undefined;
+        if (isLifeform) {
+            if (exp.discoveryType === 'artifacts') {
+                totalArtifacts += exp.artifactsFound || 0;
+            } else if (exp.discoveryType === 'lifeform-xp') {
+                totalXp += exp.lifeformGainedExperience || 0;
+                const lfId = Number(exp.lifeform) || 0;
+                if (lfId >= 1 && lfId <= 4) {
+                    lifeformXp[lfId] += exp.lifeformGainedExperience || 0;
+                }
+            }
+        } else {
+            const type = (exp.result || '').toLowerCase();
+            
+            if (type === 'resources' || type === 'ressources') {
+                totalMetal += exp.resultDetails?.metal || 0;
+                totalCrystal += exp.resultDetails?.crystal || 0;
+                totalDeuterium += exp.resultDetails?.deuterium || 0;
+            } else if (type === 'darkmatter' || type === 'dark-matter') {
+                totalDarkMatter += exp.resultDetails?.darkMatter || exp.resultDetails?.darkmatter || 0;
+            } else if (type === 'fleetloss' || type === 'fleetlost') {
+                totalBlackHoles++;
+            }
+
+            if (type === 'shipwrecks' && exp.resultDetails) {
+                Object.keys(exp.resultDetails).forEach(shipId => {
+                    const details = exp.resultDetails[shipId];
+                    if (details) {
+                        const amount = parseInt(details.amount) || 0;
+                        const name = details.name || SHIP_DATA.find(s => s.id.toString() === shipId.toString())?.name || `Ship ${shipId}`;
+                        const icon = SHIP_ID_TO_ICON[shipId.toString()] || 'icons/ships/small-cargo-large.jpg';
+                        if (!shipsFound[shipId]) {
+                            shipsFound[shipId] = { amount: 0, name, icon };
+                        }
+                        shipsFound[shipId].amount += amount;
+                    }
+                });
+            }
+
+            const dep = exp.depletion ?? 1;
+            if (dep >= 1 && dep <= 5) {
+                depletionCounts[dep - 1]++;
+            }
+        }
+    });
+
+    const directMsu = totalMetal + (totalCrystal * 1.5) + (totalDeuterium * 3);
+
+    let shipMetal = 0;
+    let shipCrystal = 0;
+    let shipDeuterium = 0;
+
+    Object.keys(shipsFound).forEach(shipId => {
+        const ship = shipsFound[shipId];
+        const cost = SHIP_ID_TO_COST[shipId.toString()];
+        if (cost) {
+            shipMetal += (cost.metal || 0) * ship.amount;
+            shipCrystal += (cost.crystal || 0) * ship.amount;
+            shipDeuterium += (cost.deuterium || 0) * ship.amount;
+        }
+    });
+
+    const shipMsu = shipMetal + (shipCrystal * 1.5) + (shipDeuterium * 3);
+
+    const groupA: string[] = [];
+    if (totalMetal > 0) {
+        groupA.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}">
+                    Metal
+                </div>
+                <div class="og-nexus-details-value" style="color: #E6953C;">+${formatExactNumber(totalMetal)}</div>
+            </div>
+        `);
+    }
+    if (totalCrystal > 0) {
+        groupA.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}">
+                    Crystal
+                </div>
+                <div class="og-nexus-details-value" style="color: #4CAEE6;">+${formatExactNumber(totalCrystal)}</div>
+            </div>
+        `);
+    }
+    if (totalDeuterium > 0) {
+        groupA.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}">
+                    Deuterium
+                </div>
+                <div class="og-nexus-details-value" style="color: #43D159;">+${formatExactNumber(totalDeuterium)}</div>
+            </div>
+        `);
+    }
+
+    const groupB: string[] = [];
+    if (totalDarkMatter > 0) {
+        groupB.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/resources/dark-matter-icon-medium.jpg')}">
+                    Dark Matter
+                </div>
+                <div class="og-nexus-details-value" style="color: #9061F9;">+${formatExactNumber(totalDarkMatter)}</div>
+            </div>
+        `);
+    }
+    if (totalArtifacts > 0) {
+        groupB.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/lifeforms/artifact-icon-large.png')}">
+                    Artifacts Found
+                </div>
+                <div class="og-nexus-details-value" style="color: #EAB308;">+${formatExactNumber(totalArtifacts)}</div>
+            </div>
+        `);
+    }
+
+    const lifeformConfigs: Record<number, { name: string; icon: string; color: string }> = {
+        1: { name: 'Humans', icon: 'icons/lifeforms/humans-icon-large.jpg', color: '#22c55e' },
+        2: { name: 'Rock’tal', icon: 'icons/lifeforms/rocktal-icon-large.jpg', color: '#991b1b' },
+        3: { name: 'Mechas', icon: 'icons/lifeforms/mechas-icon-large.jpg', color: '#06b6d4' },
+        4: { name: 'Kaelesh', icon: 'icons/lifeforms/kaelesh-icon-large.jpg', color: '#a855f7' }
+    };
+
+    [1, 2, 3, 4].forEach(lfId => {
+        const xpAmount = lifeformXp[lfId];
+        if (xpAmount > 0) {
+            const config = lifeformConfigs[lfId];
+            groupB.push(`
+                <div class="og-nexus-details-item">
+                    <div class="og-nexus-details-label-group">
+                        <img class="og-nexus-details-icon" src="${chrome.runtime.getURL(config.icon)}">
+                        ${config.name} XP
+                    </div>
+                    <div class="og-nexus-details-value" style="color: ${config.color};">+${formatExactNumber(xpAmount)}</div>
+                </div>
+            `);
+        }
+    });
+
+    if (totalBlackHoles > 0) {
+        groupB.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="og-nexus-details-icon" style="padding: 1px; box-sizing: border-box; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);"><circle cx="12" cy="12" r="10" stroke-dasharray="4 2"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2" fill="#ef4444"></circle></svg>
+                    Black Holes
+                </div>
+                <div class="og-nexus-details-value" style="color: #ef4444;">${totalBlackHoles}</div>
+            </div>
+        `);
+    }
+
+    if (groupA.length > 0 && groupB.length > 0) {
+        groupB[0] = groupB[0].replace(
+            '<div class="og-nexus-details-item">',
+            '<div class="og-nexus-details-item" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 4px;">'
+        );
+    }
+
+    let msuBadgeHTML = '';
+    if (directMsu > 0) {
+        msuBadgeHTML = `
+            <div class="og-nexus-msu-badge">
+                <div class="og-nexus-details-label-group" style="font-weight: 700;">Direct MSU</div>
+                <div class="og-nexus-details-value">${formatExactNumber(Math.floor(directMsu))} MSU</div>
+            </div>
+        `;
+    }
+
+    let directBountyContent = '';
+    if (groupA.length === 0 && groupB.length === 0 && !msuBadgeHTML) {
+        directBountyContent = `<div class="og-nexus-no-data" style="margin-bottom: 8px;">No bounty found recently</div>`;
+    } else {
+        directBountyContent = `
+            <div class="og-nexus-details-list">
+                ${groupA.join('')}
+                ${groupB.join('')}
+                ${msuBadgeHTML}
+            </div>
+        `;
+    }
+
+    let fleetContent = '';
+    const shipKeys = Object.keys(shipsFound);
+    if (shipKeys.length === 0) {
+        fleetContent = `<div class="og-nexus-no-data" style="margin-bottom: 8px;">No ships found recently</div>`;
+    } else {
+        fleetContent = `
+            <div class="og-nexus-ships-grid">
+        `;
+        shipKeys.forEach(shipId => {
+            const ship = shipsFound[shipId];
+            fleetContent += `
+                <div class="og-nexus-ship-mini-card nexus-tooltip" data-nexus-tooltip="${ship.amount}x ${ship.name}" style="background-image: url('${chrome.runtime.getURL(ship.icon)}');">
+                    <div class="og-nexus-ship-mini-badge">${formatCompactNumber(ship.amount)}</div>
+                </div>
+            `;
+        });
+        fleetContent += `
+            </div>
+        `;
+
+        let fleetDetailsItems = '';
+        if (shipMetal > 0) {
+            fleetDetailsItems += `
+                <div class="og-nexus-details-item" style="font-size: 11px;">
+                    <div class="og-nexus-details-label-group" style="color: #94a3b8;">Fleet Metal Value</div>
+                    <div class="og-nexus-details-value" style="color: #E6953C;">+${formatCompactNumber(shipMetal)}</div>
+                </div>
+            `;
+        }
+        if (shipCrystal > 0) {
+            fleetDetailsItems += `
+                <div class="og-nexus-details-item" style="font-size: 11px;">
+                    <div class="og-nexus-details-label-group" style="color: #94a3b8;">Fleet Crystal Value</div>
+                    <div class="og-nexus-details-value" style="color: #4CAEE6;">+${formatCompactNumber(shipCrystal)}</div>
+                </div>
+            `;
+        }
+        if (shipDeuterium > 0) {
+            fleetDetailsItems += `
+                <div class="og-nexus-details-item" style="font-size: 11px;">
+                    <div class="og-nexus-details-label-group" style="color: #94a3b8;">Fleet Deut Value</div>
+                    <div class="og-nexus-details-value" style="color: #43D159;">+${formatCompactNumber(shipDeuterium)}</div>
+                </div>
+            `;
+        }
+
+        let fleetMsuBadgeHTML = '';
+        if (shipMsu > 0) {
+            fleetMsuBadgeHTML = `
+                <div class="og-nexus-msu-badge" style="background: linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0.05) 100%); border-color: rgba(56, 189, 248, 0.3);">
+                    <div class="og-nexus-details-label-group" style="font-weight: 700; color: #38bdf8;">Fleet MSU</div>
+                    <div class="og-nexus-details-value" style="color: #38bdf8; text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);">${formatExactNumber(Math.floor(shipMsu))} MSU</div>
+                </div>
+            `;
+        }
+
+        if (fleetDetailsItems || fleetMsuBadgeHTML) {
+            fleetContent += `
+                <div class="og-nexus-details-list" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                    ${fleetDetailsItems}
+                    ${fleetMsuBadgeHTML}
+                </div>
+            `;
+        }
+    }
+
+    const depletionsMapping = [
+        { label: 'Pristine', color: '#22c55e' },
+        { label: 'Good', color: '#eab308' },
+        { label: 'Moderate', color: '#f97316' },
+        { label: 'Low', color: '#ef4444' },
+        { label: 'Depleted', color: '#dc2626' }
+    ];
+
+    let depletionContent = `<div class="og-nexus-depletion-flex" style="margin-bottom: 10px;">`;
+    let hasAnyDepletion = false;
+    depletionCounts.forEach((count, idx) => {
+        if (count > 0) {
+            hasAnyDepletion = true;
+            const map = depletionsMapping[idx];
+            depletionContent += `
+                <div class="og-nexus-depletion-chip nexus-tooltip" data-nexus-tooltip="${count} slots at ${map.label} level">
+                    <span class="og-nexus-depletion-dot" style="background-color: ${map.color}; color: ${map.color};"></span>
+                    ${map.label}: ${count}
+                </div>
+            `;
+        }
+    });
+    if (!hasAnyDepletion) {
+        depletionContent += `<div class="og-nexus-no-data" style="padding: 2px 0;">No depletion logs</div>`;
+    }
+    depletionContent += `</div>`;
+
+    let logsListContent = `<div class="og-nexus-logs-list">`;
+    const last5 = expeditions.slice(0, 5);
+    last5.forEach(exp => {
+        const isLifeform = exp.type === 'lifeform' || exp.discoveryType !== undefined;
+        let rewardHTML = '';
+        let rowBorderColor = 'rgba(255, 255, 255, 0.04)';
+
+        if (isLifeform) {
+            const discType = exp.discoveryType;
+            let thematicColor = '#6b7280';
+            if (exp.lifeform === 1) thematicColor = '#22c55e'; // Humans
+            else if (exp.lifeform === 2) thematicColor = '#991b1b'; // Rocktal
+            else if (exp.lifeform === 3) thematicColor = '#06b6d4'; // Mechas
+            else if (exp.lifeform === 4) thematicColor = '#a855f7'; // Kaelesh
+            else if (discType === 'lifeform-xp') thematicColor = '#3b82f6';
+
+            rowBorderColor = thematicColor;
+
+            if (discType === 'artifacts') {
+                const arts = exp.artifactsFound || 0;
+                rewardHTML = `
+                    <span style="color: #EAB308;">+${formatCompactNumber(arts)} Artifacts</span>
+                    <img class="og-nexus-details-icon" style="width: 14px; height: 14px;" src="${chrome.runtime.getURL('icons/lifeforms/artifact-icon-large.png')}">
+                `;
+            } else if (discType === 'lifeform-xp') {
+                const xp = exp.lifeformGainedExperience || 0;
+                rewardHTML = `
+                    <span style="color: #3b82f6;">+${formatCompactNumber(xp)} XP</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"></path></svg>
+                `;
+            } else if (discType === 'ship-lost') {
+                rewardHTML = `<span style="color: #ef4444; font-weight: 800;">Ship Lost</span>`;
+            } else {
+                rewardHTML = `<span style="color: #64748b;">Nothing</span>`;
+            }
+        } else {
+            const type = (exp.result || '').toLowerCase();
+            const size = exp.size ?? 2;
+            const isBlackHole = type === 'fleetloss' || type === 'fleetlost';
+            if (isBlackHole) {
+                rowBorderColor = '#ef4444';
+            } else if (type !== 'nothing') {
+                if (size === 0) rowBorderColor = '#ec4899';
+                else if (size === 1) rowBorderColor = '#06b6d4';
+                else rowBorderColor = '#6b7280';
+            }
+
+            if (type === 'resources' || type === 'ressources') {
+                if (exp.resultDetails?.metal) {
+                    rewardHTML = `
+                        <span style="color: #E6953C;">+${formatCompactNumber(exp.resultDetails.metal)}</span>
+                        <img class="og-nexus-details-icon" style="width: 14px; height: 14px;" src="${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}">
+                    `;
+                } else if (exp.resultDetails?.crystal) {
+                    rewardHTML = `
+                        <span style="color: #4CAEE6;">+${formatCompactNumber(exp.resultDetails.crystal)}</span>
+                        <img class="og-nexus-details-icon" style="width: 14px; height: 14px;" src="${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}">
+                    `;
+                } else if (exp.resultDetails?.deuterium) {
+                    rewardHTML = `
+                        <span style="color: #43D159;">+${formatCompactNumber(exp.resultDetails.deuterium)}</span>
+                        <img class="og-nexus-details-icon" style="width: 14px; height: 14px;" src="${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}">
+                    `;
+                }
+            } else if (type === 'darkmatter' || type === 'dark-matter') {
+                const amount = exp.resultDetails?.darkMatter || exp.resultDetails?.darkmatter || 0;
+                rewardHTML = `
+                    <span style="color: #bd69ff;">+${formatCompactNumber(amount)}</span>
+                    <img class="og-nexus-details-icon" style="width: 14px; height: 14px;" src="${chrome.runtime.getURL('icons/resources/dark-matter-icon-medium.jpg')}">
+                `;
+            } else if (type === 'shipwrecks') {
+                let totalShips = 0;
+                let firstShipIcon = 'icons/ships/small-cargo-large.jpg';
+                if (exp.resultDetails) {
+                    Object.keys(exp.resultDetails).forEach(id => {
+                        totalShips += exp.resultDetails[id].amount || 0;
+                        firstShipIcon = SHIP_ID_TO_ICON[id.toString()] || firstShipIcon;
+                    });
+                }
+                rewardHTML = `
+                    <span style="color: #38bdf8;">+${totalShips} Ships</span>
+                    <img class="og-nexus-details-icon" style="width: 14px; height: 14px;" src="${chrome.runtime.getURL(firstShipIcon)}">
+                `;
+            } else if (type === 'item' || type === 'items') {
+                rewardHTML = `
+                    <span style="color: #EAB308;">+1 Item</span>
+                    <img class="og-nexus-details-icon" style="width: 14px; height: 14px;" src="${chrome.runtime.getURL('icons/lifeforms/artifact-icon-large.png')}">
+                `;
+            } else if (type === 'trader') {
+                rewardHTML = `<span style="color: #fb923c;">Trader</span>`;
+            } else if (isBlackHole) {
+                rewardHTML = `<span style="color: #ef4444; font-weight: 800;">Black Hole</span>`;
+            } else if (type === 'delay' || type === 'navigation' || type === 'speedup') {
+                rewardHTML = `<span style="color: #06b6d4;">Delay/Speedup</span>`;
+            } else {
+                rewardHTML = `<span style="color: #64748b;">Nothing</span>`;
+            }
+        }
+
+        const relativeTime = formatRelativeTime(exp.timestamp);
+
+        logsListContent += `
+            <div class="og-nexus-log-row" style="border-left: 3px solid ${rowBorderColor};">
+                <div class="og-nexus-log-meta">
+                    <span class="og-nexus-log-coords">${exp.coords || '[?:?:?]'}</span>
+                    <span class="og-nexus-log-time">${relativeTime}</span>
+                </div>
+                <div class="og-nexus-log-reward">${rewardHTML}</div>
+            </div>
+        `;
+    });
+    logsListContent += `</div>`;
+
+    let sessionBannerHTML = '';
+    if (sessionRecentExpeditions && sessionRecentExpeditions.length > 0) {
+        const count = sessionRecentExpeditions.length;
+        sessionBannerHTML = `
+            <div class="og-nexus-session-banner">
+                ${count} new Expeditions/Discoveries tracked
+            </div>
+        `;
+    }
+
+    detailsPane.innerHTML = `
+        ${sessionBannerHTML}
+        <div class="og-nexus-details-grid">
+            <div class="og-nexus-details-col">
+                <h4 class="og-nexus-details-title" style="color: #facc15;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;"><polygon points="12,2 22,8.5 12,15 2,8.5"></polygon><polyline points="2,8.5 12,22 22,8.5"></polyline><line x1="12" y1="15" x2="12" y2="22"></line></svg>
+                    Direct Bounty
+                </h4>
+                ${directBountyContent}
+            </div>
+            <div class="og-nexus-details-col">
+                <h4 class="og-nexus-details-title" style="color: #38bdf8;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    Fleet Value
+                </h4>
+                ${fleetContent}
+            </div>
+        </div>
+    `;
+
+    window.dispatchEvent(new CustomEvent('ogame-nexus-trigger-tooltips'));
+}
+
 export async function injectTodaySummaryCard(playerId: string, forceLoad: boolean = false, maxRarity: number = 0) {
     if (!isExtensionStillValid()) return;
 
     let existingWrapper = document.querySelector('.og-nexus-summary-wrapper') as HTMLElement;
 
-    // If it exists and we're not forcing, we're done. 
-    // It should always be visible now, so ensure display is flex.
     if (existingWrapper) {
         existingWrapper.style.display = 'flex';
         if (!forceLoad) return;
@@ -115,7 +679,6 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
         const paginator = document.querySelector('.messagePaginator');
         if (!paginator) return;
 
-        // Re-find and deduplicate
         const allWrappers = document.querySelectorAll('.og-nexus-summary-wrapper');
         existingWrapper = null as any;
 
@@ -140,15 +703,6 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
 
                 let anyChanged = false;
                 valDivs.forEach((div, i) => {
-                    const currentText = div.textContent || '0';
-                    // Extract numeric value from compact string for comparison
-                    // This is a bit tricky, but since we have the true newValues, 
-                    // we can just check if they differ from the previous source of truth if we stored it,
-                    // but comparing the rendered state is safer for UI consistency.
-                    // Actually, let's just use the animateValue and let it handle the logic.
-                    // To get the start value, we need to strip K/M or just store it.
-                    // Let's just track if the number changed at all.
-                    // A simple way: store data-value on the element.
                     const startVal = parseInt(div.getAttribute('data-value') || '0');
                     const endVal = newValues[i];
                     if (startVal !== endVal) {
@@ -166,22 +720,21 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
                         let scale = 1.35;
                         let cardGlow = '0 8px 32px rgba(0, 0, 0, 0.7)';
 
-                        // Apply rarity-based visual enhancements
-                        if (maxRarity === 2) { // Epic / Pink
+                        if (maxRarity === 2) {
                             shadowColor = 'rgba(236, 72, 153, 0.9)';
                             scale = 1.6;
                             cardGlow = '0 0 45px rgba(236, 72, 153, 0.5)';
 
                             pill.classList.remove('og-nexus-flash-rare', 'og-nexus-flash-epic');
-                            void pill.offsetWidth; // trigger reflow
+                            void pill.offsetWidth;
                             pill.classList.add('og-nexus-flash-epic');
-                        } else if (maxRarity === 1) { // Rare / Blue
+                        } else if (maxRarity === 1) {
                             shadowColor = 'rgba(59, 130, 246, 0.8)';
                             scale = 1.45;
                             cardGlow = '0 0 35px rgba(59, 130, 246, 0.4)';
 
                             pill.classList.remove('og-nexus-flash-rare', 'og-nexus-flash-epic');
-                            void pill.offsetWidth; // trigger reflow
+                            void pill.offsetWidth;
                             pill.classList.add('og-nexus-flash-rare');
                         }
 
@@ -189,7 +742,6 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
                         mainIcon.style.filter = `drop-shadow(0 0 15px ${shadowColor})`;
                         pill.style.boxShadow = cardGlow;
 
-                        // Epic Pulse
                         if (maxRarity === 2) {
                             pill.classList.add('og-nexus-epic-pulse');
                         }
@@ -203,29 +755,45 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
                     }
                 }
             }
+
+            updateBadgeState(existingWrapper);
+            updateCardClickability(existingWrapper);
+            if (existingWrapper.classList.contains('og-nexus-expanded')) {
+                updateDetailsPane(existingWrapper, playerId);
+            }
             return;
         }
 
         const totals = response.totals;
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'og-nexus-summary-wrapper nexus-tooltip';
-        wrapper.setAttribute('data-nexus-tooltip', "Today's Expedition Bounty");
+        wrapper.className = 'og-nexus-summary-wrapper';
         wrapper.style.cssText = `
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
             width: 100%;
             margin: 12px 0;
-            gap: 16px;
             position: relative;
             z-index: 10;
         `;
 
+        const pillRow = document.createElement('div');
+        pillRow.className = 'og-nexus-pill-row';
+        pillRow.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            gap: 16px;
+        `;
+        wrapper.appendChild(pillRow);
+
         const card = document.createElement('div');
-        card.className = 'og-nexus-expedition-summary-card';
+        card.className = 'og-nexus-expedition-summary-card clickable';
         card.style.cssText = `
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 8px 24px;
@@ -237,10 +805,11 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
             -webkit-backdrop-filter: blur(8px);
             font-family: 'Segoe UI', 'Roboto', 'Inter', system-ui, sans-serif;
             position: relative;
-            overflow: hidden;
+            overflow: visible;
+            box-sizing: border-box;
+            width: auto;
         `;
 
-        // Main Icon (Outside the pill)
         const mainIcon = document.createElement('img');
         mainIcon.className = 'og-nexus-main-exp-icon';
         mainIcon.src = chrome.runtime.getURL('icons/misc/expedition-icon-medium.png');
@@ -251,7 +820,7 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
             transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
             z-index: 2;
         `;
-        wrapper.appendChild(mainIcon);
+        pillRow.appendChild(mainIcon);
 
         const statsRow = document.createElement('div');
         statsRow.className = 'og-nexus-stats-row';
@@ -287,10 +856,30 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
         });
 
         card.appendChild(statsRow);
-        wrapper.appendChild(card);
+        pillRow.appendChild(card);
         paginator.parentNode?.insertBefore(wrapper, paginator);
 
-        // Re-trigger tooltips for the new card
+        updateBadgeState(wrapper);
+        updateCardClickability(wrapper);
+
+        card.addEventListener('click', async () => {
+            const isExpanded = wrapper.classList.contains('og-nexus-expanded');
+            if (!newBadgeActive && !isExpanded) {
+                return;
+            }
+
+            if (newBadgeActive) {
+                newBadgeActive = false;
+                updateBadgeState(wrapper);
+                updateCardClickability(wrapper);
+            }
+            wrapper.classList.toggle('og-nexus-expanded');
+            updateCardClickability(wrapper);
+            if (wrapper.classList.contains('og-nexus-expanded')) {
+                await updateDetailsPane(wrapper, playerId);
+            }
+        });
+
         window.dispatchEvent(new CustomEvent('ogame-nexus-trigger-tooltips'));
     });
 }
@@ -378,6 +967,11 @@ export async function trackExpeditions(playerId: string) {
 
             // Only re-fetch if actually new data was logged to IndexedDB
             if (response.newCount && response.newCount > 0) {
+                const newItems = response.data.filter((exp: any) => exp.isNew).map((exp: any) => ({ ...exp, type: 'expedition' }));
+                if (newItems.length > 0) {
+                    sessionRecentExpeditions = [...sessionRecentExpeditions, ...newItems];
+                    newBadgeActive = true;
+                }
                 injectTodaySummaryCard(playerId, true, maxRarity);
             }
         }
