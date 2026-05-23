@@ -24,6 +24,19 @@ const App: React.FC = () => {
     const [showWelcome, setShowWelcome] = useState(false);
 
     useEffect(() => {
+        const handleNav = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (detail && detail.view) {
+                setCurrentView(detail.view);
+            }
+        };
+        window.addEventListener('ognexus_navigated', handleNav);
+        return () => {
+            window.removeEventListener('ognexus_navigated', handleNav);
+        };
+    }, []);
+
+    useEffect(() => {
         const checkWelcomeStatus = () => {
             try {
                 if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {

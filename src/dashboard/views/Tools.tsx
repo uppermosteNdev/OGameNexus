@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Calculator, Shield, Cpu, Target, Zap, Globe } from 'lucide-react';
+import { Package, Calculator, Shield, Cpu, Target, Zap, Globe, ArrowUpRight } from 'lucide-react';
 import './Tools.css';
 import ScrapOptimizer from './tools/ScrapOptimizer';
 import ExpeditionCalculator from './tools/ExpeditionCalculator';
@@ -14,10 +14,24 @@ interface Tool {
     icon: React.ReactNode;
     component: React.ReactNode;
     inTesting?: boolean;
+    isBeta?: boolean;
+    isShortcut?: boolean;
+    shortcutView?: string;
+    shortcutTab?: string;
 }
 
 const Tools: React.FC = () => {
     const tools: Tool[] = [
+        {
+            id: 'empire-amortization',
+            name: 'Empire Amortization',
+            description: 'Optimize building and lifeform research ROI across the Empire',
+            icon: <Calculator size={20} />,
+            component: <div />,
+            isShortcut: true,
+            shortcutView: 'empire',
+            shortcutTab: 'amortization'
+        },
         {
             id: 'scrap-optimizer',
             name: 'Scrap Merchant',
@@ -46,7 +60,7 @@ const Tools: React.FC = () => {
             description: 'Split combat results across multiple alliance members',
             icon: <Target size={20} />,
             component: <AcsSplitter />,
-            inTesting: true
+            isBeta: true
         },
         {
             id: 'plasma-optimizer',
@@ -124,6 +138,16 @@ const Tools: React.FC = () => {
                                 className={`tool-menu-item ${activeToolId === tool.id ? 'active' : ''}`}
                                 onClick={() => {
                                     if (isTesting) return;
+                                    if (tool.isShortcut && tool.shortcutView) {
+                                        sessionStorage.setItem('ognexus_target_subview', JSON.stringify({
+                                            view: tool.shortcutView,
+                                            tab: tool.shortcutTab
+                                        }));
+                                        window.dispatchEvent(new CustomEvent('ognexus_navigated', {
+                                            detail: { view: tool.shortcutView, tab: tool.shortcutTab }
+                                        }));
+                                        return;
+                                    }
                                     setActiveToolId(tool.id);
                                 }}
                                 style={isTesting ? {
@@ -134,7 +158,26 @@ const Tools: React.FC = () => {
                                 <div className="tool-icon">{tool.icon}</div>
                                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                                        <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{tool.name}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{tool.name}</span>
+                                            {tool.isShortcut && <ArrowUpRight size={12} style={{ opacity: 0.5, color: 'var(--primary)' }} />}
+                                        </div>
+                                        {tool.isBeta && (
+                                            <span style={{
+                                                fontSize: '8px',
+                                                fontWeight: 800,
+                                                background: 'rgba(0, 242, 255, 0.15)',
+                                                color: '#00f2ff',
+                                                border: '1px solid rgba(0, 242, 255, 0.3)',
+                                                borderRadius: '4px',
+                                                padding: '1px 5px',
+                                                letterSpacing: '0.5px',
+                                                textTransform: 'uppercase',
+                                                lineHeight: 1
+                                            }}>
+                                                Beta
+                                            </span>
+                                        )}
                                         {isTesting && (
                                             <span style={{
                                                 fontSize: '8px',
@@ -169,7 +212,25 @@ const Tools: React.FC = () => {
                                     <div style={{ color: 'var(--primary)', filter: 'drop-shadow(0 0 8px var(--primary-glow))' }}>
                                         {activeTool.icon}
                                     </div>
-                                    <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-title)' }}>{activeTool.name}</h2>
+                                    <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        {activeTool.name}
+                                        {activeTool.isBeta && (
+                                            <span style={{
+                                                fontSize: '10px',
+                                                fontWeight: 800,
+                                                background: 'rgba(0, 242, 255, 0.15)',
+                                                color: '#00f2ff',
+                                                border: '1px solid rgba(0, 242, 255, 0.3)',
+                                                borderRadius: '4px',
+                                                padding: '2px 6px',
+                                                letterSpacing: '0.5px',
+                                                textTransform: 'uppercase',
+                                                lineHeight: 1
+                                            }}>
+                                                Beta
+                                            </span>
+                                        )}
+                                    </h2>
                                 </div>
                                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>{activeTool.description}</p>
                             </div>

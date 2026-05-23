@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     Target, Download, Trophy, Users, Layers, AlertCircle, TrendingUp,
-    Shield, Rocket, Info, X, Settings, PieChart, Gavel, Coins
+    Shield, Rocket, Info, X, Settings, PieChart, Gavel, Coins, Lock, Unlock
 } from 'lucide-react';
 import { SHIP_DATA, DEFENCE_DATA } from '../../../db/staticData';
 
@@ -64,6 +64,553 @@ interface RecycleReport {
     };
 }
 
+interface SankeyProps {
+    participants: Array<{
+        name: string;
+        harvestedM: number;
+        harvestedC: number;
+        targetM: number;
+        targetC: number;
+        isActive: boolean;
+    }>;
+    totalM: number;
+    totalC: number;
+    combinedReport?: any;
+}
+
+const ResourceFlowSankey: React.FC<SankeyProps> = ({ participants, totalM, totalC, combinedReport }) => {
+    // Stage 3 nodes: Harvesters (only those who harvested > 0)
+    const harvesters = participants.filter(p => (p.harvestedM + p.harvestedC) > 0);
+    // Stage 5 nodes: Receivers (active participants who receive > 0)
+    const receivers = participants.filter(p => p.isActive && (p.targetM + p.targetC) > 0);
+
+    const totalPool = totalM + totalC;
+
+    const names = participants.map(p => p.name);
+    const getPlayerColor = (name: string) => {
+        const colors = [
+            '#00f2ff', // Neon Cyan
+            '#d946ef', // Neon Purple/Magenta
+            '#fbbf24', // Neon Gold/Amber
+            '#10b981', // Neon Green
+            '#f97316', // Neon Orange
+            '#a855f7', // Neon Violet
+            '#ec4899', // Neon Pink
+            '#3b82f6', // Neon Cobalt Blue
+            '#14b8a6', // Neon Teal
+            '#f43f5e'  // Neon Crimson Red
+        ];
+        const idx = names.indexOf(name);
+        return colors[idx === -1 ? 0 : idx % colors.length];
+    };
+
+    const formatCompact = (num: number) => {
+        if (num >= 1_000_000) {
+            const val = num / 1_000_000;
+            return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + 'M';
+        }
+        if (num >= 1_000) {
+            const val = num / 1_000;
+            return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + 'K';
+        }
+        return num.toString();
+    };
+
+    // Battle values
+    const attackerLosses = combinedReport?.RESULT_DATA?.generic?.units_lost_attackers || 0;
+    const defenderLosses = combinedReport?.RESULT_DATA?.generic?.units_lost_defenders || 0;
+    const totalLosses = attackerLosses + defenderLosses || 1;
+
+    const debrisMetal = combinedReport?.RESULT_DATA?.generic?.debris_metal || 0;
+    const debrisCrystal = combinedReport?.RESULT_DATA?.generic?.debris_crystal || 0;
+    const totalDebrisGenerated = debrisMetal + debrisCrystal || totalPool;
+
+    // Faction contributions to the Debris Field
+    const attackerDebrisContrib = Math.round(totalDebrisGenerated * (attackerLosses / totalLosses));
+    const defenderDebrisContrib = Math.round(totalDebrisGenerated * (defenderLosses / totalLosses));
+
+    // List of nodes in Stage 3: Harvesters
+    const stage3Nodes: Array<{
+        name: string;
+        amount: number;
+        isUncollected?: boolean;
+    }> = harvesters.map(h => ({
+        name: h.name,
+        amount: h.harvestedM + h.harvestedC
+    }));
+
+    if (totalDebrisGenerated === 0 && totalPool === 0) {
+        return (
+            <div className="card-glass text-center" style={{ padding: '24px', marginBottom: '24px' }}>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    Sankey visualization pending. Please paste debris harvest logs (rr-) in Step 2 to generate resource flows.
+                </div>
+            </div>
+        );
+    }
+
+    // Coordinates definition
+    const width = 940;
+    // Spacious dynamic height
+    const height = Math.max(340, Math.max(stage3Nodes.length, receivers.length) * 60 + 60);
+    const centerY = height / 2;
+
+    // Horizontal Stage Alignments
+    const stage1X = 110; // Factions anchor points (cards drawn to the left)
+    const stage2X = 260; // Debris Generated capsule center
+    const stage3X = 460; // Harvester cards middle-point (anchor left: 410, anchor right: 510)
+    const stage4X = 660; // Loot Core capsule center
+    const stage5X = 810; // Receivers anchor point (cards drawn to the right)
+
+    // Stage 1 (Factions) Coordinates
+    const yAtk = centerY - 55;
+    const yDef = centerY + 55;
+
+    // Stage 3 (Harvesters & Remnants) Coordinates
+    const stage3YCoords = stage3Nodes.map((_, idx) => {
+        if (stage3Nodes.length === 1) return centerY;
+        const padding = 40;
+        const step = (height - padding * 2) / (stage3Nodes.length - 1);
+        return padding + idx * step;
+    });
+
+    // Stage 5 (Receivers) Coordinates
+    const stage5YCoords = receivers.map((_, idx) => {
+        if (receivers.length === 1) return centerY;
+        const padding = 40;
+        const step = (height - padding * 2) / (receivers.length - 1);
+        return padding + idx * step;
+    });
+
+    // Landing ports layout along capsule edges
+    // Stage 2 (Debris Capsule) left edge inflow ports (from Factions)
+    const debrisInPortsY = [centerY - 16, centerY + 16];
+
+    // Stage 2 (Debris Capsule) right edge outflow ports (to Stage 3 Harvesters)
+    const debrisOutPortsY = stage3Nodes.map((_, idx) => {
+        if (stage3Nodes.length === 1) return centerY;
+        const portHeight = 52;
+        const startY = centerY - portHeight / 2;
+        return startY + (idx * portHeight) / (stage3Nodes.length - 1);
+    });
+
+    // Stage 4 (Loot Core Capsule) left edge inflow ports (from Stage 3 Harvesters, excluding uncollected)
+    const lootInPortsY = harvesters.map((_, idx) => {
+        if (harvesters.length === 1) return centerY;
+        const portHeight = 52;
+        const startY = centerY - portHeight / 2;
+        return startY + (idx * portHeight) / (harvesters.length - 1);
+    });
+
+    // Stage 4 (Loot Core Capsule) right edge outflow ports (to Stage 5 Receivers)
+    const lootOutPortsY = receivers.map((_, idx) => {
+        if (receivers.length === 1) return centerY;
+        const portHeight = 52;
+        const startY = centerY - portHeight / 2;
+        return startY + (idx * portHeight) / (receivers.length - 1);
+    });
+
+    // Math function for smooth S-curves
+    const getBezierPath = (x1: number, y1: number, x2: number, y2: number) => {
+        const dx = Math.abs(x2 - x1) / 2;
+        return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    };
+
+    const formatNumberLocal = (num: number) => num.toLocaleString();
+
+    return (
+        <div className="card-glass margin-b-24 shadow-large glass-card" style={{ padding: '24px', overflow: 'hidden' }}>
+            <div className="split-settings-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingUp size={18} color="var(--primary)" /> Operation Debris Flow Dynamics (Sankey Flow)
+            </div>
+            <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: '0 0 20px 0', lineHeight: 1.4 }}>
+                A visual trace mapping collected raw debris from harvesters on the left, aggregating them in the tactical operational pool, and distributing them to receivers on the right based on selected split parameters.
+            </p>
+            <div style={{ width: '100%' }}>
+                <svg 
+                    viewBox={`0 0 ${width} ${height}`} 
+                    style={{ 
+                        width: '100%', 
+                        height: 'auto', 
+                        background: 'rgba(5, 8, 16, 0.65)', 
+                        borderRadius: '14px', 
+                        border: '1px solid rgba(0, 242, 255, 0.08)',
+                        display: 'block'
+                    }}
+                >
+                    <defs>
+                        {/* High-tech microdot pattern */}
+                        <pattern id="cyberGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                            <circle cx="2" cy="2" r="0.75" fill="rgba(255, 255, 255, 0.03)" />
+                        </pattern>
+
+                        {/* Radial glows */}
+                        <radialGradient id="debrisCapsuleGlow" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stopColor="#f97316" stopOpacity="0.25" />
+                            <stop offset="100%" stopColor="transparent" stopOpacity="0" />
+                        </radialGradient>
+                        <radialGradient id="poolCapsuleGlow" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stopColor="var(--primary-glow)" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="transparent" stopOpacity="0" />
+                        </radialGradient>
+
+                        {/* Stage 1 -> 2 Gradients (Factions to Debris Generated) */}
+                        <linearGradient id="grad-atk-debris" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#00f2ff" stopOpacity="0.45" />
+                            <stop offset="100%" stopColor="#f97316" stopOpacity="0.2" />
+                        </linearGradient>
+                        <linearGradient id="grad-def-debris" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#ff5f5f" stopOpacity="0.45" />
+                            <stop offset="100%" stopColor="#f97316" stopOpacity="0.2" />
+                        </linearGradient>
+
+                        {/* Stage 2 -> 3 Gradients (Debris Generated to Harvesters / Remnants) */}
+                        {stage3Nodes.map((node, idx) => {
+                            const nodeColor = node.isUncollected ? '#f43f5e' : getPlayerColor(node.name);
+                            return (
+                                <linearGradient id={`grad-debris-node-${idx}`} key={`grad-debris-node-${idx}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stopColor="#f97316" stopOpacity="0.3" />
+                                    <stop offset="100%" stopColor={nodeColor} stopOpacity="0.3" />
+                                </linearGradient>
+                            );
+                        })}
+
+                        {/* Stage 3 -> 4 Gradients (Harvesters to Loot Core) */}
+                        {harvesters.map((h, idx) => (
+                            <linearGradient id={`grad-node-pool-${idx}`} key={`grad-node-pool-${idx}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor={getPlayerColor(h.name)} stopOpacity="0.3" />
+                                <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.3" />
+                            </linearGradient>
+                        ))}
+
+                        {/* Stage 4 -> 5 Gradients (Loot Core to Receivers) */}
+                        {receivers.map((r, idx) => (
+                            <linearGradient id={`grad-pool-recv-${idx}`} key={`grad-pool-recv-${idx}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.2" />
+                                <stop offset="100%" stopColor={getPlayerColor(r.name)} stopOpacity="0.45" />
+                            </linearGradient>
+                        ))}
+                    </defs>
+
+                    {/* Dotted Grid Background */}
+                    <rect width={width} height={height} fill="url(#cyberGrid)" />
+
+                    {/* Flow Paths - Stage 1 to 2 (Factions -> Debris Field) */}
+                    {(() => {
+                        const totalDebrisBase = totalDebrisGenerated || 1;
+                        const atkStroke = Math.max(2.5, (attackerDebrisContrib / totalDebrisBase) * 28);
+                        const defStroke = Math.max(2.5, (defenderDebrisContrib / totalDebrisBase) * 28);
+
+                        return (
+                            <>
+                                {/* Attackers Inflow */}
+                                <path
+                                    d={getBezierPath(stage1X, yAtk, stage2X - 40, debrisInPortsY[0])}
+                                    stroke="url(#grad-atk-debris)"
+                                    strokeWidth={atkStroke}
+                                    fill="none"
+                                    opacity="0.5"
+                                />
+                                <path
+                                    d={getBezierPath(stage1X, yAtk, stage2X - 40, debrisInPortsY[0])}
+                                    stroke="#00f2ff"
+                                    strokeWidth="1.2"
+                                    fill="none"
+                                    opacity="0.8"
+                                />
+
+                                {/* Defenders Inflow */}
+                                <path
+                                    d={getBezierPath(stage1X, yDef, stage2X - 40, debrisInPortsY[1])}
+                                    stroke="url(#grad-def-debris)"
+                                    strokeWidth={defStroke}
+                                    fill="none"
+                                    opacity="0.5"
+                                />
+                                <path
+                                    d={getBezierPath(stage1X, yDef, stage2X - 40, debrisInPortsY[1])}
+                                    stroke="#ff5f5f"
+                                    strokeWidth="1.2"
+                                    fill="none"
+                                    opacity="0.8"
+                                />
+                            </>
+                        );
+                    })()}
+
+                    {/* Flow Paths - Stage 2 to 3 (Debris Field -> Harvesters / Remnants) */}
+                    {stage3Nodes.map((node, idx) => {
+                        const totalDebrisBase = totalDebrisGenerated || 1;
+                        const strokeW = Math.max(2.5, (node.amount / totalDebrisBase) * 28);
+                        const y1 = debrisOutPortsY[idx];
+                        const y2 = stage3YCoords[idx];
+                        const nodeColor = node.isUncollected ? '#f43f5e' : getPlayerColor(node.name);
+
+                        return (
+                            <g key={`debris-flow-${idx}`}>
+                                <path
+                                    d={getBezierPath(stage2X + 40, y1, stage3X - 55, y2)}
+                                    stroke={`url(#grad-debris-node-${idx})`}
+                                    strokeWidth={strokeW}
+                                    fill="none"
+                                    opacity="0.45"
+                                    style={{ transition: 'opacity 0.2s ease' }}
+                                />
+                                <path
+                                    d={getBezierPath(stage2X + 40, y1, stage3X - 55, y2)}
+                                    stroke={nodeColor}
+                                    strokeWidth="1.2"
+                                    fill="none"
+                                    opacity="0.85"
+                                    style={{ pointerEvents: 'none' }}
+                                />
+                                <path
+                                    d={getBezierPath(stage2X + 40, y1, stage3X - 55, y2)}
+                                    stroke="transparent"
+                                    strokeWidth={strokeW + 10}
+                                    fill="none"
+                                    style={{ cursor: 'pointer' }}
+                                    onMouseOver={(e) => {
+                                        const paths = e.currentTarget.parentNode?.querySelectorAll('path');
+                                        if (paths) {
+                                            (paths[0] as SVGPathElement).style.opacity = '0.9';
+                                            (paths[0] as SVGPathElement).style.strokeWidth = `${strokeW + 2}px`;
+                                        }
+                                    }}
+                                    onMouseOut={(e) => {
+                                        const paths = e.currentTarget.parentNode?.querySelectorAll('path');
+                                        if (paths) {
+                                            (paths[0] as SVGPathElement).style.opacity = '0.45';
+                                            (paths[0] as SVGPathElement).style.strokeWidth = `${strokeW}px`;
+                                        }
+                                    }}
+                                >
+                                    <title>{node.name}: {formatNumberLocal(node.amount)} units</title>
+                                </path>
+                            </g>
+                        );
+                    })}
+
+                    {/* Flow Paths - Stage 3 to 4 (Harvesters -> Loot Core) */}
+                    {harvesters.map((h, idx) => {
+                        const hTotal = h.harvestedM + h.harvestedC;
+                        const strokeW = Math.max(2.5, (hTotal / (totalPool || 1)) * 28);
+                        const y1 = stage3YCoords[idx];
+                        const y2 = lootInPortsY[idx];
+                        const playerCol = getPlayerColor(h.name);
+
+                        return (
+                            <g key={`harvester-flow-${idx}`}>
+                                <path
+                                    d={getBezierPath(stage3X + 55, y1, stage4X - 40, y2)}
+                                    stroke={`url(#grad-node-pool-${idx})`}
+                                    strokeWidth={strokeW}
+                                    fill="none"
+                                    opacity="0.45"
+                                    style={{ transition: 'opacity 0.2s ease' }}
+                                />
+                                <path
+                                    d={getBezierPath(stage3X + 55, y1, stage4X - 40, y2)}
+                                    stroke={playerCol}
+                                    strokeWidth="1.2"
+                                    fill="none"
+                                    opacity="0.85"
+                                    style={{ pointerEvents: 'none' }}
+                                />
+                                <path
+                                    d={getBezierPath(stage3X + 55, y1, stage4X - 40, y2)}
+                                    stroke="transparent"
+                                    strokeWidth={strokeW + 10}
+                                    fill="none"
+                                    style={{ cursor: 'pointer' }}
+                                    onMouseOver={(e) => {
+                                        const paths = e.currentTarget.parentNode?.querySelectorAll('path');
+                                        if (paths) {
+                                            (paths[0] as SVGPathElement).style.opacity = '0.9';
+                                            (paths[0] as SVGPathElement).style.strokeWidth = `${strokeW + 2}px`;
+                                        }
+                                    }}
+                                    onMouseOut={(e) => {
+                                        const paths = e.currentTarget.parentNode?.querySelectorAll('path');
+                                        if (paths) {
+                                            (paths[0] as SVGPathElement).style.opacity = '0.45';
+                                            (paths[0] as SVGPathElement).style.strokeWidth = `${strokeW}px`;
+                                        }
+                                    }}
+                                >
+                                    <title>{h.name} Contributes: {formatNumberLocal(hTotal)} units</title>
+                                </path>
+                            </g>
+                        );
+                    })}
+
+                    {/* Flow Paths - Stage 4 to 5 (Loot Core -> Receivers) */}
+                    {receivers.map((r, idx) => {
+                        const rTotal = r.targetM + r.targetC;
+                        const strokeW = Math.max(2.5, (rTotal / (totalPool || 1)) * 28);
+                        const y1 = lootOutPortsY[idx];
+                        const y2 = stage5YCoords[idx];
+                        const playerCol = getPlayerColor(r.name);
+
+                        return (
+                            <g key={`receiver-flow-${idx}`}>
+                                <path
+                                    d={getBezierPath(stage4X + 40, y1, stage5X - 5, y2)}
+                                    stroke={`url(#grad-pool-recv-${idx})`}
+                                    strokeWidth={strokeW}
+                                    fill="none"
+                                    opacity="0.5"
+                                    style={{ transition: 'opacity 0.2s ease' }}
+                                />
+                                <path
+                                    d={getBezierPath(stage4X + 40, y1, stage5X - 5, y2)}
+                                    stroke={playerCol}
+                                    strokeWidth="1.2"
+                                    fill="none"
+                                    opacity="0.85"
+                                    style={{ pointerEvents: 'none' }}
+                                />
+                                <path
+                                    d={getBezierPath(stage4X + 40, y1, stage5X - 5, y2)}
+                                    stroke="transparent"
+                                    strokeWidth={strokeW + 10}
+                                    fill="none"
+                                    style={{ cursor: 'pointer' }}
+                                    onMouseOver={(e) => {
+                                        const paths = e.currentTarget.parentNode?.querySelectorAll('path');
+                                        if (paths) {
+                                            (paths[0] as SVGPathElement).style.opacity = '0.9';
+                                            (paths[0] as SVGPathElement).style.strokeWidth = `${strokeW + 2}px`;
+                                        }
+                                    }}
+                                    onMouseOut={(e) => {
+                                        const paths = e.currentTarget.parentNode?.querySelectorAll('path');
+                                        if (paths) {
+                                            (paths[0] as SVGPathElement).style.opacity = '0.5';
+                                            (paths[0] as SVGPathElement).style.strokeWidth = `${strokeW}px`;
+                                        }
+                                    }}
+                                >
+                                    <title>{r.name} Receives: {formatNumberLocal(rTotal)} units</title>
+                                </path>
+                            </g>
+                        );
+                    })}
+
+                    {/* Stage 1: Factions (Attackers & Defenders Cards) */}
+                    <g transform={`translate(${stage1X - 110}, ${yAtk - 18})`}>
+                        <rect width="100" height="36" rx="6" fill="rgba(6, 10, 20, 0.85)" stroke="rgba(0, 242, 255, 0.2)" strokeWidth="1" />
+                        <rect width="3" height="36" fill="#00f2ff" rx="1" />
+                        <text x="12" y="14" fill="#00f2ff" style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '0.5px' }}>ATTACKERS</text>
+                        <text x="12" y="26" fill="rgba(255, 255, 255, 0.4)" style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 600 }}>{formatCompact(attackerLosses)} losses</text>
+                    </g>
+                    <circle cx={stage1X} cy={yAtk} r="5" fill="#00f2ff" filter="drop-shadow(0 0 2px #00f2ff)" />
+                    <circle cx={stage1X} cy={yAtk} r="2.5" fill="#050810" />
+
+                    <g transform={`translate(${stage1X - 110}, ${yDef - 18})`}>
+                        <rect width="100" height="36" rx="6" fill="rgba(6, 10, 20, 0.85)" stroke="rgba(255, 95, 95, 0.2)" strokeWidth="1" />
+                        <rect width="3" height="36" fill="#ff5f5f" rx="1" />
+                        <text x="12" y="14" fill="#ff5f5f" style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '0.5px' }}>DEFENDERS</text>
+                        <text x="12" y="26" fill="rgba(255, 255, 255, 0.4)" style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 600 }}>{formatCompact(defenderLosses)} losses</text>
+                    </g>
+                    <circle cx={stage1X} cy={yDef} r="5" fill="#ff5f5f" filter="drop-shadow(0 0 2px #ff5f5f)" />
+                    <circle cx={stage1X} cy={yDef} r="2.5" fill="#050810" />
+
+                    {/* Stage 2: Debris Field Capsule */}
+                    <g transform={`translate(${stage2X - 40}, ${centerY - 40})`}>
+                        <rect width="80" height="80" rx="14" fill="rgba(6, 12, 24, 0.95)" stroke="#f97316" strokeWidth="1.5" filter="drop-shadow(0 0 12px rgba(249, 115, 22, 0.25))" />
+                        <rect x="3" y="3" width="74" height="74" rx="11" fill="url(#debrisCapsuleGlow)" />
+                        <text x="40" y="26" textAnchor="middle" fill="#f97316" style={{ fontSize: '8.5px', fontWeight: 900, letterSpacing: '1px', opacity: 0.8 }}>DEBRIS</text>
+                        <text x="40" y="42" textAnchor="middle" fill="#fff" style={{ fontSize: '11px', fontWeight: 800, fontFamily: 'monospace' }}>{formatCompact(totalDebrisGenerated)}</text>
+                        <text x="40" y="56" textAnchor="middle" fill="rgba(255,255,255,0.35)" style={{ fontSize: '7.5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>generated</text>
+                    </g>
+                    {/* Stage 2 Ports */}
+                    {debrisInPortsY.map((py, idx) => (
+                        <circle key={`deb-in-p-${idx}`} cx={stage2X - 40} cy={py} r="2" fill="#f97316" />
+                    ))}
+                    {debrisOutPortsY.map((py, idx) => (
+                        <circle key={`deb-out-p-${idx}`} cx={stage2X + 40} cy={py} r="2" fill="#f97316" />
+                    ))}
+
+                    {/* Stage 3: Harvester Nodes & Space Remnants */}
+                    {stage3Nodes.map((node, idx) => {
+                        const y = stage3YCoords[idx];
+                        const isUnc = node.isUncollected;
+                        const nodeColor = isUnc ? '#f43f5e' : getPlayerColor(node.name);
+
+                        return (
+                            <g key={`node-card-${idx}`}>
+                                <circle cx={stage3X - 55} cy={y} r="5" fill={nodeColor} filter={`drop-shadow(0 0 2px ${nodeColor})`} />
+                                <circle cx={stage3X - 55} cy={y} r="2.5" fill="#050810" />
+
+                                <g transform={`translate(${stage3X - 50}, ${y - 18})`}>
+                                    <rect width="100" height="36" rx="6" fill="rgba(6, 10, 20, 0.85)" stroke={`${nodeColor}33`} strokeWidth="1" />
+                                    <rect width="3" height="36" fill={nodeColor} rx={1} />
+                                    <text x="10" y="14" fill={nodeColor} style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '0.2px' }}>
+                                        {node.name}
+                                    </text>
+                                    <text x="10" y="26" fill="rgba(255,255,255,0.4)" style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 600 }}>
+                                        {formatCompact(node.amount)} units
+                                    </text>
+                                </g>
+
+                                {/* Only show outflow port if it is NOT uncollected */}
+                                {!isUnc && (
+                                    <>
+                                        <circle cx={stage3X + 55} cy={y} r="5" fill={nodeColor} filter={`drop-shadow(0 0 2px ${nodeColor})`} />
+                                        <circle cx={stage3X + 55} cy={y} r="2.5" fill="#050810" />
+                                    </>
+                                )}
+                            </g>
+                        );
+                    })}
+
+                    {/* Stage 4: Consolidated Loot Core */}
+                    <g transform={`translate(${stage4X - 40}, ${centerY - 40})`}>
+                        <rect width="80" height="80" rx="14" fill="rgba(6, 12, 24, 0.95)" stroke="var(--primary)" strokeWidth="1.5" filter="drop-shadow(0 0 12px var(--primary-glow))" />
+                        <rect x="3" y="3" width="74" height="74" rx="11" fill="url(#poolCapsuleGlow)" />
+                        <text x="40" y="26" textAnchor="middle" fill="var(--primary)" style={{ fontSize: '9px', fontWeight: 900, letterSpacing: '1.5px', opacity: 0.8 }}>LOOT CORE</text>
+                        <text x="40" y="42" textAnchor="middle" fill="#fff" style={{ fontSize: '11px', fontWeight: 800, fontFamily: 'monospace' }}>{formatCompact(totalPool)}</text>
+                        <text x="40" y="56" textAnchor="middle" fill="rgba(255,255,255,0.35)" style={{ fontSize: '7.5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>harvested</text>
+                    </g>
+                    {/* Stage 4 Ports */}
+                    {lootInPortsY.map((py, idx) => (
+                        <circle key={`loot-in-p-${idx}`} cx={stage4X - 40} cy={py} r="2" fill="var(--primary)" />
+                    ))}
+                    {lootOutPortsY.map((py, idx) => (
+                        <circle key={`loot-out-p-${idx}`} cx={stage4X + 40} cy={py} r="2" fill="var(--primary)" />
+                    ))}
+
+                    {/* Stage 5: Receivers (Split Payouts) */}
+                    {receivers.map((r, idx) => {
+                        const y = stage5YCoords[idx];
+                        const playerColor = getPlayerColor(r.name);
+                        const rTotal = r.targetM + r.targetC;
+
+                        return (
+                            <g key={`recv-card-${idx}`}>
+                                <circle cx={stage5X - 5} cy={y} r="5" fill={playerColor} filter={`drop-shadow(0 0 2px ${playerColor})`} />
+                                <circle cx={stage5X - 5} cy={y} r="2.5" fill="#050810" />
+
+                                <g transform={`translate(${stage5X}, ${y - 18})`}>
+                                    <rect width="100" height="36" rx="6" fill="rgba(6, 10, 20, 0.85)" stroke={`${playerColor}33`} strokeWidth="1" />
+                                    <rect width="3" height="36" fill={playerColor} rx={1} />
+                                    <text x="10" y="14" fill={playerColor} style={{ fontSize: '9px', fontWeight: 800, letterSpacing: '0.2px' }}>
+                                        {r.name}
+                                    </text>
+                                    <text x="10" y="26" fill="rgba(255,255,255,0.4)" style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 600 }}>
+                                        {formatCompact(rTotal)} split
+                                    </text>
+                                </g>
+                            </g>
+                        );
+                    })}
+                </svg>
+            </div>
+        </div>
+    );
+};
+
 const AcsSplitter: React.FC = () => {
     const [apiKey, setApiKey] = useState('');
     const [reports, setReports] = useState<CombatReport[]>([]);
@@ -82,8 +629,10 @@ const AcsSplitter: React.FC = () => {
 
     // Split Configurations
     const [activeFaction, setActiveFaction] = useState<'attackers' | 'defenders'>('attackers');
-    const [splitMethod, setSplitMethod] = useState<'equal' | 'contribution' | 'capacity'>('equal');
-    const [reimburseExpenses, setReimburseExpenses] = useState(true);
+    const [splitMethod, setSplitMethod] = useState<'equal' | 'contribution' | 'capacity' | 'weighted' | 'percentage'>('equal');
+    const [reimburseExpenses, setReimburseExpenses] = useState(false);
+    const [customPercentages, setCustomPercentages] = useState<Record<string, number>>({});
+    const [percentageLocks, setPercentageLocks] = useState<Record<string, boolean>>({});
 
     // Commander Expenses Mapping (keyed by commander fleet_owner)
     const [participantSettings, setParticipantSettings] = useState<Record<string, {
@@ -92,12 +641,6 @@ const AcsSplitter: React.FC = () => {
         lossesCrystal: number;
         fuelDeut: number;
     }>>({});
-
-    const [copiedTransfers, setCopiedTransfers] = useState(false);
-
-    const getShipInfo = (id: number) => {
-        return SHIP_DATA.find(s => s.id === id) || DEFENCE_DATA.find(d => d.id === id);
-    };
 
     // Auto-populate activeFaction and participantSettings based on combat report winner
     const combinedReport = React.useMemo(() => {
@@ -180,6 +723,145 @@ const AcsSplitter: React.FC = () => {
         return result;
     }, [reports]);
 
+    const getPlayerColor = (name: string) => {
+        if (!combinedReport) return 'var(--primary)';
+        const commanders = activeFaction === 'attackers' 
+            ? combinedReport.RESULT_DATA.attackers.map(a => a.fleet_owner)
+            : combinedReport.RESULT_DATA.defenders.map(d => d.fleet_owner);
+        const colors = [
+            '#00f2ff', // Neon Cyan
+            '#d946ef', // Neon Purple/Magenta
+            '#fbbf24', // Neon Gold/Amber
+            '#10b981', // Neon Green
+            '#f97316', // Neon Orange
+            '#a855f7', // Neon Violet
+            '#ec4899', // Neon Pink
+            '#3b82f6', // Neon Cobalt Blue
+            '#14b8a6', // Neon Teal
+            '#f43f5e'  // Neon Crimson Red
+        ];
+        const idx = commanders.indexOf(name);
+        return colors[idx === -1 ? 0 : idx % colors.length];
+    };
+
+    // Slider percentage change balancing logic (keeps total = 100% and respects locks)
+    const handlePercentageChange = (changedName: string, targetVal: number) => {
+        if (percentageLocks[changedName]) return;
+        if (!combinedReport) return;
+        const commanders = activeFaction === 'attackers' 
+            ? combinedReport.RESULT_DATA.attackers.map(a => a.fleet_owner)
+            : combinedReport.RESULT_DATA.defenders.map(d => d.fleet_owner);
+        const activeCommanders = commanders.filter(name => participantSettings[name]?.active !== false);
+
+        if (activeCommanders.length <= 1) return;
+
+        const oldPercentages = { ...customPercentages };
+
+        // Calculate the sum of locked percentages of OTHER commanders
+        let sumLocked = 0;
+        activeCommanders.forEach(name => {
+            if (name !== changedName && percentageLocks[name]) {
+                sumLocked += oldPercentages[name] || 0;
+            }
+        });
+        const maxAllowed = Math.max(0, 100 - sumLocked);
+
+        // Pin value between 0 and maxAllowed
+        let newValue = Math.min(maxAllowed, Math.max(0, targetVal));
+
+        const oldValue = oldPercentages[changedName] || 0;
+        const diff = newValue - oldValue;
+
+        // Find other active commanders who are unlocked
+        const otherUnlocked = activeCommanders.filter(name => name !== changedName && !percentageLocks[name]);
+
+        if (otherUnlocked.length === 0) {
+            // If all others are locked, we cannot change this value because sum must be 100%
+            return;
+        }
+
+        const newPercentages = { ...oldPercentages };
+        newPercentages[changedName] = newValue;
+
+        let sumOther = 0;
+        otherUnlocked.forEach(name => {
+            sumOther += oldPercentages[name] || 0;
+        });
+
+        if (diff > 0) {
+            // Proportional decrease: decrease others based on their current ratio
+            otherUnlocked.forEach(name => {
+                const currentVal = oldPercentages[name] || 0;
+                const decrease = sumOther > 0 ? (currentVal / sumOther) * diff : diff / otherUnlocked.length;
+                newPercentages[name] = Math.max(0, currentVal - decrease);
+            });
+        } else {
+            // Proportional increase or equal increase if sumOther is 0
+            otherUnlocked.forEach(name => {
+                const currentVal = oldPercentages[name] || 0;
+                const increase = sumOther > 0 ? (currentVal / sumOther) * (-diff) : (-diff) / otherUnlocked.length;
+                newPercentages[name] = Math.min(100, currentVal + increase);
+            });
+        }
+
+        // Rounding/Float correction to guarantee sum is exactly 100.0%
+        newPercentages[changedName] = newValue;
+        let totalSum = activeCommanders.reduce((acc, name) => acc + (newPercentages[name] || 0), 0);
+        let error = 100 - totalSum;
+
+        if (Math.abs(error) > 0.0001) {
+            // Distribute rounding error to the first unlocked other commander
+            newPercentages[otherUnlocked[0]] = Math.min(100, Math.max(0, (newPercentages[otherUnlocked[0]] || 0) + error));
+        }
+
+        setCustomPercentages(newPercentages);
+    };
+
+    // Auto-initialize percentages equally when active commanders list changes
+    useEffect(() => {
+        if (!combinedReport) return;
+        const commanders = activeFaction === 'attackers' 
+            ? combinedReport.RESULT_DATA.attackers.map(a => a.fleet_owner)
+            : combinedReport.RESULT_DATA.defenders.map(d => d.fleet_owner);
+        const activeCommanders = commanders.filter(name => participantSettings[name]?.active !== false);
+
+        if (activeCommanders.length === 0) return;
+
+        const newPercentages = { ...customPercentages };
+        
+        // Clean up inactive/removed commanders from percentage map
+        Object.keys(newPercentages).forEach(name => {
+            if (!activeCommanders.includes(name)) {
+                delete newPercentages[name];
+            }
+        });
+
+        const existingNames = Object.keys(newPercentages);
+        const missingNames = activeCommanders.filter(name => !existingNames.includes(name));
+
+        if (missingNames.length > 0 || existingNames.length !== activeCommanders.length) {
+            // Equal distribution
+            const equalShare = 100 / activeCommanders.length;
+            activeCommanders.forEach(name => {
+                newPercentages[name] = equalShare;
+            });
+        }
+
+        // Verify total sum
+        const sum = activeCommanders.reduce((acc, name) => acc + (newPercentages[name] || 0), 0);
+        if (Math.abs(sum - 100) > 0.01) {
+            const equalShare = 100 / activeCommanders.length;
+            activeCommanders.forEach(name => {
+                newPercentages[name] = equalShare;
+            });
+        }
+
+        setCustomPercentages(newPercentages);
+    }, [combinedReport, participantSettings, activeFaction]);
+
+    const [copiedTransfers, setCopiedTransfers] = useState(false);
+
+    // Auto-populate activeFaction and participantSettings based on combat report winner
     useEffect(() => {
         if (!combinedReport) return;
         
@@ -421,11 +1103,7 @@ const AcsSplitter: React.FC = () => {
 
         cTransfers.forEach(t => {
             const key = `${t.from}->${t.to}`;
-            if (combinedMap.has(key)) {
-                combinedMap.get(key)!.crystal = t.amount;
-            } else {
-                combinedMap.set(key, { from: t.from, to: t.to, metal: 0, crystal: t.amount });
-            }
+            combinedMap.set(key, { from: t.from, to: t.to, metal: combinedMap.get(key)?.metal || 0, crystal: t.amount });
         });
 
         return Array.from(combinedMap.values());
@@ -442,6 +1120,20 @@ const AcsSplitter: React.FC = () => {
         const activeCommanders = commanders.filter(name => {
             return participantSettings[name]?.active !== false;
         });
+
+        // Helper to calculate total Structural Integrity for a given composition (Metal + Crystal cost)
+        const getStructuralIntegrity = (composition: Array<{ ship_type: number; count: number }>) => {
+            let totalSi = 0;
+            composition.forEach(ship => {
+                const sInfo = SHIP_DATA.find(s => s.id === ship.ship_type);
+                if (sInfo && sInfo.metadata?.cost) {
+                    const cost = sInfo.metadata.cost;
+                    const siPerShip = (cost.metal || 0) + (cost.crystal || 0);
+                    totalSi += siPerShip * (ship.count || 0);
+                }
+            });
+            return totalSi;
+        };
 
         // 1. Gather actual harvested resources from RRs
         const harvestedMap: Record<string, { metal: number; crystal: number }> = {};
@@ -531,6 +1223,12 @@ const AcsSplitter: React.FC = () => {
                     profitShareMap[name].metal = shareM;
                     profitShareMap[name].crystal = shareC;
                 });
+            } else if (splitMethod === 'percentage') {
+                activeCommanders.forEach(name => {
+                    const pct = customPercentages[name] !== undefined ? customPercentages[name] : (100 / activeCommanders.length);
+                    profitShareMap[name].metal = Math.floor(remainingM * (pct / 100));
+                    profitShareMap[name].crystal = Math.floor(remainingC * (pct / 100));
+                });
             } else if (splitMethod === 'contribution') {
                 const sumLossesM = totalLossesM || 1;
                 const sumLossesC = totalLossesC || 1;
@@ -546,6 +1244,24 @@ const AcsSplitter: React.FC = () => {
                     const harvested = harvestedMap[name] || { metal: 0, crystal: 0 };
                     profitShareMap[name].metal = totalHarvestedM > 0 ? Math.floor(remainingM * (harvested.metal / sumHarvestedM)) : Math.floor(remainingM / activeCommanders.length);
                     profitShareMap[name].crystal = totalHarvestedC > 0 ? Math.floor(remainingC * (harvested.crystal / sumHarvestedC)) : Math.floor(remainingC / activeCommanders.length);
+                });
+            } else if (splitMethod === 'weighted') {
+                const siMap: Record<string, number> = {};
+                let totalTeamSi = 0;
+                activeCommanders.forEach(name => {
+                    const participantData = activeFaction === 'attackers'
+                        ? combinedReport.RESULT_DATA.attackers.find(a => a.fleet_owner === name)
+                        : combinedReport.RESULT_DATA.defenders.find(d => d.fleet_owner === name);
+                    const comp = participantData?.fleet_composition || [];
+                    const si = getStructuralIntegrity(comp);
+                    siMap[name] = si;
+                    totalTeamSi += si;
+                });
+                const sumSi = totalTeamSi || 1;
+                activeCommanders.forEach(name => {
+                    const si = siMap[name] || 0;
+                    profitShareMap[name].metal = totalTeamSi > 0 ? Math.floor(remainingM * (si / sumSi)) : Math.floor(remainingM / activeCommanders.length);
+                    profitShareMap[name].crystal = totalTeamSi > 0 ? Math.floor(remainingC * (si / sumSi)) : Math.floor(remainingC / activeCommanders.length);
                 });
             }
         }
@@ -563,6 +1279,38 @@ const AcsSplitter: React.FC = () => {
             const diffM = targetM - harvested.metal;
             const diffC = targetC - harvested.crystal;
 
+            const participantData = activeFaction === 'attackers'
+                ? combinedReport.RESULT_DATA.attackers.find(a => a.fleet_owner === name)
+                : combinedReport.RESULT_DATA.defenders.find(d => d.fleet_owner === name);
+            const si = participantData ? getStructuralIntegrity(participantData.fleet_composition) : 0;
+
+            let sharePercentage = 0;
+            if (isActive) {
+                if (splitMethod === 'equal') {
+                    sharePercentage = 100 / activeCommanders.length;
+                } else if (splitMethod === 'percentage') {
+                    sharePercentage = customPercentages[name] !== undefined ? customPercentages[name] : (100 / activeCommanders.length);
+                } else if (splitMethod === 'weighted') {
+                    let totalTeamSi = 0;
+                    activeCommanders.forEach(cName => {
+                        const pData = activeFaction === 'attackers'
+                            ? combinedReport.RESULT_DATA.attackers.find(a => a.fleet_owner === cName)
+                            : combinedReport.RESULT_DATA.defenders.find(d => d.fleet_owner === cName);
+                        const comp = pData?.fleet_composition || [];
+                        totalTeamSi += getStructuralIntegrity(comp);
+                    });
+                    sharePercentage = totalTeamSi > 0 ? (si / totalTeamSi) * 100 : (100 / activeCommanders.length);
+                } else if (splitMethod === 'contribution') {
+                    const sumLosses = (totalLossesM + totalLossesC);
+                    const myLosses = (participantSettings[name]?.lossesMetal || 0) + (participantSettings[name]?.lossesCrystal || 0);
+                    sharePercentage = sumLosses > 0 ? (myLosses / sumLosses) * 100 : (100 / activeCommanders.length);
+                } else if (splitMethod === 'capacity') {
+                    const sumHarvested = (totalHarvestedM + totalHarvestedC);
+                    const myHarvested = (harvestedMap[name]?.metal || 0) + (harvestedMap[name]?.crystal || 0);
+                    sharePercentage = sumHarvested > 0 ? (myHarvested / sumHarvested) * 100 : (100 / activeCommanders.length);
+                }
+            }
+
             return {
                 name,
                 isActive,
@@ -574,7 +1322,9 @@ const AcsSplitter: React.FC = () => {
                 targetM,
                 targetC,
                 diffM,
-                diffC
+                diffC,
+                structuralIntegrity: si,
+                sharePercentage
             };
         });
 
@@ -600,7 +1350,7 @@ const AcsSplitter: React.FC = () => {
             participantPayouts,
             transfers
         };
-    }, [combinedReport, activeFaction, splitMethod, reimburseExpenses, participantSettings, rrReports]);
+    }, [combinedReport, activeFaction, splitMethod, reimburseExpenses, participantSettings, rrReports, customPercentages]);
 
     const winnerColor = combinedReport?.RESULT_DATA.generic.winner === 'attacker' ? 'var(--primary)' :
         combinedReport?.RESULT_DATA.generic.winner === 'defender' ? '#ff5f5f' :
@@ -996,22 +1746,31 @@ const AcsSplitter: React.FC = () => {
                                     className="select-custom"
                                 >
                                     <option value="equal">Standard Equal Split</option>
-                                    <option value="contribution">Contribution-based Split</option>
-                                    <option value="capacity">Capacity-based Split</option>
+                                    <option value="percentage">Percentage Split (Custom)</option>
+                                    <option value="weighted">Weighted Split (by Fleet SI)</option>
                                 </select>
                             </div>
 
                             {/* Options checkboxes */}
-                            <div className="flex-col-center">
-                                <label className="checkbox-holder">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={reimburseExpenses}
-                                        onChange={(e) => setReimburseExpenses(e.target.checked)}
-                                        className="checkbox-custom"
-                                    />
-                                    <span>Reimburse Fleet Losses First</span>
-                                </label>
+                            <div>
+                                <label className="input-label-caps" style={{ opacity: 0.5 }}>reimbursement policy</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}>
+                                    <label className="checkbox-holder" style={{ margin: 0 }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={reimburseExpenses}
+                                            onChange={(e) => setReimburseExpenses(e.target.checked)}
+                                            className="checkbox-custom"
+                                        />
+                                        <span>Reimburse Fleet Losses First</span>
+                                    </label>
+                                    <div className="tooltip-container" style={{ display: 'inline-flex', cursor: 'help' }}>
+                                        <Info size={14} color="var(--primary)" style={{ opacity: 0.6 }} />
+                                        <div className="tooltip-text">
+                                            If active, player ship losses (Lost Metal/Crystal) are paid back first from the debris harvested before splitting the remaining profits.
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1023,10 +1782,12 @@ const AcsSplitter: React.FC = () => {
                             <thead>
                                 <tr>
                                     <th style={{ width: '80px' }}>Active</th>
+                                    <th style={{ width: '170px' }}>Share %</th>
                                     <th>Commander</th>
                                     <th>Lost Metal</th>
                                     <th>Lost Crystal</th>
                                     <th>Flight Fuel Spent (Deut)</th>
+                                    <th>Fleet SI</th>
                                     <th>Debris Harvested (Metal)</th>
                                     <th>Debris Harvested (Crystal)</th>
                                 </tr>
@@ -1048,9 +1809,85 @@ const AcsSplitter: React.FC = () => {
                                                     }));
                                                 }}
                                                 className="checkbox-custom"
+                                                style={{ accentColor: getPlayerColor(p.name) }}
                                             />
                                         </td>
-                                        <td className="font-bold">{p.name}</td>
+                                        <td>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                {splitMethod === 'percentage' && p.isActive ? (
+                                                    <>
+                                                        <input 
+                                                            type="range"
+                                                            min="0"
+                                                            max="100"
+                                                            step="1"
+                                                            value={Math.round(p.sharePercentage)}
+                                                            onChange={(e) => handlePercentageChange(p.name, parseInt(e.target.value) || 0)}
+                                                            className="range-custom"
+                                                            style={{ 
+                                                                '--thumb-color': getPlayerColor(p.name),
+                                                                cursor: percentageLocks[p.name] ? 'not-allowed' : 'pointer',
+                                                                opacity: percentageLocks[p.name] ? 0.65 : 1
+                                                            } as React.CSSProperties}
+                                                        />
+                                                        <span 
+                                                            className="font-mono" 
+                                                            style={{ 
+                                                                fontSize: '0.8rem', 
+                                                                minWidth: '46px', 
+                                                                textAlign: 'right', 
+                                                                fontWeight: 800, 
+                                                                color: getPlayerColor(p.name),
+                                                                textShadow: `0 0 6px ${getPlayerColor(p.name)}40`,
+                                                                transition: 'all 0.2s ease',
+                                                                padding: '2px 4.5px',
+                                                                borderRadius: '4px',
+                                                                background: percentageLocks[p.name] ? `${getPlayerColor(p.name)}1a` : 'transparent',
+                                                                border: percentageLocks[p.name] ? `1px dashed ${getPlayerColor(p.name)}44` : '1px solid transparent'
+                                                            }}
+                                                        >
+                                                            {p.sharePercentage.toFixed(1)}%
+                                                        </span>
+                                                        <button
+                                                            onClick={() => {
+                                                                setPercentageLocks(prev => ({
+                                                                    ...prev,
+                                                                    [p.name]: !prev[p.name]
+                                                                }));
+                                                            }}
+                                                            style={{
+                                                                background: percentageLocks[p.name] ? `${getPlayerColor(p.name)}1e` : 'rgba(255,255,255,0.03)',
+                                                                border: percentageLocks[p.name] ? `1px solid ${getPlayerColor(p.name)}66` : '1px solid rgba(255,255,255,0.08)',
+                                                                borderRadius: '6px',
+                                                                color: getPlayerColor(p.name),
+                                                                cursor: 'pointer',
+                                                                padding: '5px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                transition: 'all 0.2s ease',
+                                                                boxShadow: percentageLocks[p.name] ? `0 0 8px ${getPlayerColor(p.name)}33` : 'none',
+                                                            }}
+                                                            title={percentageLocks[p.name] ? "Unlock Share Percentage (Active)" : "Lock Share Percentage"}
+                                                        >
+                                                            {percentageLocks[p.name] ? <Lock size={13} style={{ filter: `drop-shadow(0 0 2px ${getPlayerColor(p.name)})` }} /> : <Unlock size={13} style={{ opacity: 0.5 }} />}
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <span className="font-mono" style={{ fontSize: '0.8rem', color: p.isActive ? getPlayerColor(p.name) : 'rgba(255,255,255,0.2)', textShadow: p.isActive ? `0 0 6px ${getPlayerColor(p.name)}40` : 'none', fontWeight: 800 }}>
+                                                        {p.isActive ? `${p.sharePercentage.toFixed(1)}%` : '-'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="font-bold">
+                                            <span style={{ 
+                                                color: getPlayerColor(p.name), 
+                                                textShadow: `0 0 8px ${getPlayerColor(p.name)}33`
+                                            }}>
+                                                {p.name}
+                                            </span>
+                                        </td>
                                         <td>
                                             <input 
                                                 type="number"
@@ -1105,6 +1942,9 @@ const AcsSplitter: React.FC = () => {
                                                 className="table-input"
                                             />
                                         </td>
+                                        <td className="font-mono font-bold" style={{ color: p.isActive ? getPlayerColor(p.name) : 'rgba(255,255,255,0.2)', textShadow: p.isActive ? `0 0 6px ${getPlayerColor(p.name)}40` : 'none' }}>
+                                            {formatNumber(p.structuralIntegrity)}
+                                        </td>
                                         <td className="font-mono text-metal font-bold">
                                             {formatNumber(p.harvestedM)}
                                         </td>
@@ -1117,6 +1957,14 @@ const AcsSplitter: React.FC = () => {
                         </table>
                     </div>
 
+                    {/* Sankey Flow Diagram */}
+                    <ResourceFlowSankey 
+                        participants={splitCalculations.participantPayouts}
+                        totalM={splitCalculations.totalHarvestedM}
+                        totalC={splitCalculations.totalHarvestedC}
+                        combinedReport={combinedReport}
+                    />
+
                     {/* Summary & Transfers Grid */}
                     <div className="grid-2-1">
                         
@@ -1124,48 +1972,51 @@ const AcsSplitter: React.FC = () => {
                         <div className="card-glass shadow-large">
                             <div className="split-settings-header"><PieChart size={18} color="var(--primary)" /> Participant Payout Ledger</div>
                             <div className="ledger-stack">
-                                {splitCalculations.participantPayouts.filter(p => p.isActive).map((p, idx) => (
-                                    <div key={idx} className="ledger-row glass">
-                                        <div className="ledger-row-header">
-                                            <span className="ledger-name font-bold">{p.name}</span>
-                                            <span className="ledger-tag-status">Active Partner</span>
+                                {splitCalculations.participantPayouts.filter(p => p.isActive).map((p, idx) => {
+                                    const pColor = getPlayerColor(p.name);
+                                    return (
+                                        <div key={idx} className="ledger-row glass" style={{ borderLeft: `4px solid ${pColor}`, background: `linear-gradient(90deg, ${pColor}06 0%, transparent 100%)` }}>
+                                            <div className="ledger-row-header">
+                                                <span className="ledger-name font-bold" style={{ color: pColor, textShadow: `0 0 8px ${pColor}33` }}>{p.name}</span>
+                                                <span className="ledger-tag-status" style={{ background: `${pColor}1a`, color: pColor, border: `1px solid ${pColor}33` }}>Active Partner</span>
+                                            </div>
+                                            <div className="ledger-row-grid">
+                                                <div>
+                                                    <div className="ledger-small-title font-bold text-metal">Metal Target Share</div>
+                                                    <div className="ledger-small-val font-mono">{formatNumber(p.targetM)}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="ledger-small-title font-bold text-crystal">Crystal Target Share</div>
+                                                    <div className="ledger-small-val font-mono">{formatNumber(p.targetC)}</div>
+                                                </div>
+                                            </div>
+                                            <div className="balance-grid border-top-line">
+                                                <div className="balance-col">
+                                                    <span className="balance-lbl">Metal Balance:</span>
+                                                    {p.diffM >= 0 ? (
+                                                        <span className="balance-val font-mono green-color font-bold">Gets +{formatNumber(p.diffM)}</span>
+                                                    ) : (
+                                                        <span className="balance-val font-mono coral-color font-bold">Owes {formatNumber(Math.abs(p.diffM))}</span>
+                                                    )}
+                                                </div>
+                                                <div className="balance-col">
+                                                    <span className="balance-lbl">Crystal Balance:</span>
+                                                    {p.diffC >= 0 ? (
+                                                        <span className="balance-val font-mono green-color font-bold">Gets +{formatNumber(p.diffC)}</span>
+                                                    ) : (
+                                                        <span className="balance-val font-mono coral-color font-bold">Owes {formatNumber(Math.abs(p.diffC))}</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="ledger-row-grid">
-                                            <div>
-                                                <div className="ledger-small-title font-bold text-metal">Metal Target Share</div>
-                                                <div className="ledger-small-val font-mono">{formatNumber(p.targetM)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="ledger-small-title font-bold text-crystal">Crystal Target Share</div>
-                                                <div className="ledger-small-val font-mono">{formatNumber(p.targetC)}</div>
-                                            </div>
-                                        </div>
-                                        <div className="balance-grid border-top-line">
-                                            <div className="balance-col">
-                                                <span className="balance-lbl">Metal Balance:</span>
-                                                {p.diffM >= 0 ? (
-                                                    <span className="balance-val font-mono green-color font-bold">Gets +{formatNumber(p.diffM)}</span>
-                                                ) : (
-                                                    <span className="balance-val font-mono coral-color font-bold">Owes {formatNumber(Math.abs(p.diffM))}</span>
-                                                )}
-                                            </div>
-                                            <div className="balance-col">
-                                                <span className="balance-lbl">Crystal Balance:</span>
-                                                {p.diffC >= 0 ? (
-                                                    <span className="balance-val font-mono green-color font-bold">Gets +{formatNumber(p.diffC)}</span>
-                                                ) : (
-                                                    <span className="balance-val font-mono coral-color font-bold">Owes {formatNumber(Math.abs(p.diffC))}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
                         {/* Equalization balancing transfers */}
-                        <div className="card-primary glass">
-                            <label className="card-lbl-primary" style={{ color: 'var(--primary)' }}>
+                        <div className="card-equalization">
+                            <label className="card-lbl-primary" style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Coins size={16} /> Equalization Transfers
                             </label>
                             <p className="card-desc">
@@ -1180,13 +2031,13 @@ const AcsSplitter: React.FC = () => {
                                         if (t.crystal > 0) parts.push(<span key="cry" className="text-crystal font-bold">{formatNumber(t.crystal)} Crystal</span>);
                                         
                                         return (
-                                            <div key={idx} className="transfer-statement glass">
-                                                <div className="transfer-flow">
-                                                    <span className="transfer-from font-bold">{t.from}</span>
-                                                    <span className="transfer-arrow">➔</span>
-                                                    <span className="transfer-to font-bold">{t.to}</span>
+                                            <div key={idx} className="equalization-statement" style={{ borderLeft: `4px solid ${getPlayerColor(t.from)}` }}>
+                                                <div className="transfer-flow" style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center' }}>
+                                                    <span className="transfer-from font-bold" style={{ color: getPlayerColor(t.from), textShadow: `0 0 8px ${getPlayerColor(t.from)}33` }}>{t.from}</span>
+                                                    <span className="transfer-arrow-glow">➔</span>
+                                                    <span className="transfer-to font-bold" style={{ color: getPlayerColor(t.to), textShadow: `0 0 8px ${getPlayerColor(t.to)}33` }}>{t.to}</span>
                                                 </div>
-                                                <div className="transfer-details">
+                                                <div className="transfer-details" style={{ fontSize: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '6px', marginTop: '2px' }}>
                                                     {parts.reduce((prev: any, curr) => prev === null ? [curr] : [prev, " & ", curr], null)}
                                                 </div>
                                             </div>
@@ -1204,8 +2055,8 @@ const AcsSplitter: React.FC = () => {
                             {splitCalculations.transfers.length > 0 && (
                                 <button 
                                     onClick={handleCopyTransfers} 
-                                    className="btn-primary" 
-                                    style={{ width: '100%', marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                                    className="btn-copy-glow" 
+                                    style={{ width: '100%', marginTop: '16px' }}
                                 >
                                     {copiedTransfers ? 'Copied to Clipboard! ✓' : 'Copy Transfer List'}
                                 </button>
@@ -1219,12 +2070,143 @@ const AcsSplitter: React.FC = () => {
                             ← Back to Debris Harvests
                         </button>
                     </div>
-
                 </div>
             )}
-
             {/* Custom Premium Styles Block */}
             <style>{`
+                /* Styling custom range slider */
+                .range-custom {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    background: transparent;
+                    width: 80px;
+                    height: 16px;
+                    display: inline-block;
+                    margin: 0;
+                    padding: 0;
+                    vertical-align: middle;
+                }
+
+                .range-custom:focus {
+                    outline: none;
+                }
+
+                .range-custom::-webkit-slider-runnable-track {
+                    background: rgba(255, 255, 255, 0.08) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    height: 6px;
+                    border-radius: 3px;
+                    transition: background 0.2s;
+                }
+
+                .range-custom::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    margin-top: -5px;
+                    background-color: var(--thumb-color, var(--primary)) !important;
+                    height: 16px;
+                    width: 16px;
+                    border-radius: 50% !important;
+                    box-shadow: 0 0 8px var(--thumb-color, var(--primary-glow));
+                    border: 1.5px solid rgba(255, 255, 255, 0.1);
+                    transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s;
+                }
+
+                .range-custom::-webkit-slider-thumb:hover {
+                    transform: scale(1.15);
+                    filter: brightness(1.1);
+                }
+
+                .range-custom::-moz-range-track {
+                    background: rgba(255, 255, 255, 0.08) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    height: 6px;
+                    border-radius: 3px;
+                }
+
+                .range-custom::-moz-range-thumb {
+                    background-color: var(--thumb-color, var(--primary)) !important;
+                    height: 16px;
+                    width: 16px;
+                    border-radius: 50% !important;
+                    box-shadow: 0 0 8px var(--thumb-color, var(--primary-glow));
+                    border: 1.5px solid rgba(255, 255, 255, 0.1);
+                }
+
+                /* Equalization Transfers Area Overhauls */
+                .card-equalization {
+                    border-radius: 24px;
+                    padding: 28px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                    background: linear-gradient(135deg, rgba(0, 242, 255, 0.04) 0%, rgba(18, 24, 38, 0.65) 100%) !important;
+                    border: 1px solid rgba(0, 242, 255, 0.22) !important;
+                    box-shadow: 0 0 30px rgba(0, 242, 255, 0.08), inset 0 0 15px rgba(0, 242, 255, 0.02);
+                    position: relative;
+                    overflow: hidden;
+                }
+
+                .card-equalization::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 3px;
+                    background: linear-gradient(90deg, #00f2ff, #d946ef);
+                }
+
+                .equalization-statement {
+                    background: rgba(6, 10, 20, 0.7) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+                    border-radius: 12px;
+                    padding: 14px 18px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    transition: all 0.2s ease;
+                }
+
+                .equalization-statement:hover {
+                    border-color: rgba(0, 242, 255, 0.2) !important;
+                    transform: translateX(4px);
+                    box-shadow: 0 6px 20px rgba(0, 242, 255, 0.05) !important;
+                }
+
+                .transfer-arrow-glow {
+                    color: var(--primary);
+                    text-shadow: 0 0 8px var(--primary-glow);
+                    margin: 0 8px;
+                }
+
+                .btn-copy-glow {
+                    background: var(--primary) !important;
+                    color: #0b0f19 !important;
+                    border: none;
+                    border-radius: 14px;
+                    padding: 14px 24px;
+                    font-weight: 800;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    transition: all 0.2s ease !important;
+                    box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+                }
+
+                .btn-copy-glow:hover {
+                    box-shadow: 0 0 25px rgba(0, 242, 255, 0.4);
+                    transform: translateY(-2px);
+                    filter: brightness(1.1);
+                }
+
+                .btn-copy-glow:active {
+                    transform: translateY(0);
+                }
+
                 .acs-splitter-container {
                     animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                 }
@@ -2190,6 +3172,41 @@ const AcsSplitter: React.FC = () => {
                 .opacity-6 { opacity: 0.6; }
                 .padding-16 { padding: 16px; }
 
+                /* Tooltip styles */
+                .tooltip-container {
+                    position: relative;
+                    display: inline-flex;
+                    align-items: center;
+                    cursor: help;
+                }
+                .tooltip-container .tooltip-text {
+                    visibility: hidden;
+                    width: 240px;
+                    background-color: rgba(10, 20, 30, 0.95);
+                    color: #fff;
+                    text-align: left;
+                    border-radius: 8px;
+                    border: 1px solid rgba(0, 242, 255, 0.25);
+                    padding: 10px 14px;
+                    position: absolute;
+                    z-index: 100;
+                    bottom: 125%;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    opacity: 0;
+                    font-size: 0.75rem;
+                    line-height: 1.4;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                    transition: opacity 0.3s;
+                    pointer-events: none;
+                    white-space: normal;
+                    font-weight: normal;
+                }
+                .tooltip-container:hover .tooltip-text {
+                    visibility: visible;
+                    opacity: 1;
+                }
+
                 @keyframes spin {
                     to { transform: rotate(360deg); }
                 }
@@ -2217,4 +3234,3 @@ const AcsSplitter: React.FC = () => {
 };
 
 export default AcsSplitter;
-

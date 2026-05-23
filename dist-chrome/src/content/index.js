@@ -6971,6 +6971,7 @@
   }
   function renderShipsCard(aggregate) {
     const card = document.createElement("div");
+    card.className = "custom-scrollbar";
     card.style.cssText = `
         flex: 1;
         background: rgba(15, 23, 42, 0.4);
@@ -6982,6 +6983,7 @@
         backdrop-filter: blur(8px);
         overflow-y: auto;
         min-height: 180px;
+        transition: border-color 0.3s;
     `;
     const sortedShips = Object.entries(aggregate.shipsMap).sort((a, b) => b[1] - a[1]);
     if (sortedShips.length === 0) {
@@ -6994,7 +6996,7 @@
         grid-template-columns: 1fr 1fr;
         gap: 12px;
     `;
-    sortedShips.slice(0, 10).forEach(([shipId, count]) => {
+    sortedShips.forEach(([shipId, count]) => {
       let sName = "Ship " + shipId;
       let sIcon = "";
       const shipInfo = SHIP_DATA.find((s) => s.id.toString() === shipId);
@@ -7002,24 +7004,75 @@
         sName = shipInfo.name;
         sIcon = shipInfo.icon;
       }
+      const id = parseInt(shipId);
+      let shipConfig = {
+        color: "#ef4444",
+        glow: "rgba(239, 68, 68, 0.2)",
+        border: "rgba(239, 68, 68, 0.3)"
+      };
+      if (id === 202 || id === 203 || id === 210 || id === 219 || id === 208 || id === 209) {
+        shipConfig = {
+          color: "#00f2ff",
+          glow: "rgba(0, 242, 255, 0.2)",
+          border: "rgba(0, 242, 255, 0.3)"
+        };
+      } else if (id === 204 || id === 205 || id === 206) {
+        shipConfig = {
+          color: "#f59e0b",
+          glow: "rgba(245, 158, 11, 0.2)",
+          border: "rgba(245, 158, 11, 0.3)"
+        };
+      }
       const item = document.createElement("div");
       item.style.cssText = `
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(0,0,0,0.3);
-            border-radius: 4px;
-            padding: 6px 14px;
-            border-left: 2px solid #3b82f6;
-            margin-bottom: 4px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-left: 3px solid ${shipConfig.color};
+            border-radius: 6px;
+            padding: 8px 14px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
         `;
       item.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px;">
-                ${sIcon ? `<img src="${chrome.runtime.getURL(sIcon)}" style="width: 20px; height: 20px; border-radius: 2px; filter: grayscale(0.2);"/>` : ""}
-                <div style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;">${sName}</div>
+            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+                ${sIcon ? `<img src="${chrome.runtime.getURL(sIcon)}" style="width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); filter: grayscale(0.15); transition: all 0.3s;"/>` : ""}
+                <div style="font-size: 11.5px; color: #cbd5e1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; transition: color 0.3s;">${sName}</div>
             </div>
-            <div style="font-weight: 700; color: #e2e8f0; font-size: 13px;">${formatNumber$1(count)}</div>
+            <div style="font-weight: 700; color: ${shipConfig.color}; font-size: 13px; text-shadow: 0 0 8px ${shipConfig.glow}; transition: all 0.3s; padding-left: 4px;">${formatNumber$1(count)}</div>
         `;
+      const img = item.querySelector("img");
+      const text = item.querySelector("div > div");
+      item.onmouseover = () => {
+        item.style.background = "rgba(255, 255, 255, 0.05)";
+        item.style.borderColor = shipConfig.border;
+        item.style.borderLeftColor = shipConfig.color;
+        item.style.boxShadow = `0 4px 15px ${shipConfig.glow}, inset 0 0 10px rgba(255,255,255,0.01)`;
+        item.style.transform = "translateY(-1px)";
+        if (img) {
+          img.style.filter = "none";
+          img.style.borderColor = shipConfig.color;
+        }
+        if (text) {
+          text.style.color = "#ffffff";
+        }
+      };
+      item.onmouseout = () => {
+        item.style.background = "rgba(255,255,255,0.02)";
+        item.style.borderColor = "rgba(255,255,255,0.04)";
+        item.style.borderLeftColor = shipConfig.color;
+        item.style.boxShadow = "none";
+        item.style.transform = "none";
+        if (img) {
+          img.style.filter = "grayscale(0.15)";
+          img.style.borderColor = "rgba(255,255,255,0.1)";
+        }
+        if (text) {
+          text.style.color = "#cbd5e1";
+        }
+      };
       grid.appendChild(item);
     });
     card.appendChild(grid);

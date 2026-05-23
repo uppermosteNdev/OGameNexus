@@ -15528,6 +15528,16 @@ const Loader2 = createLucideIcon("Loader2", [
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
+const Lock = createLucideIcon("Lock", [
+  ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
+  ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
 const LogIn = createLucideIcon("LogIn", [
   ["path", { d: "M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4", key: "u53s6r" }],
   ["polyline", { points: "10 17 15 12 10 7", key: "1ail0h" }],
@@ -15922,6 +15932,16 @@ const Trophy = createLucideIcon("Trophy", [
   ["path", { d: "M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22", key: "1nw9bq" }],
   ["path", { d: "M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22", key: "1np0yb" }],
   ["path", { d: "M18 2H6v7a6 6 0 0 0 12 0V2Z", key: "u46fv3" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const Unlock = createLucideIcon("Unlock", [
+  ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
+  ["path", { d: "M7 11V7a5 5 0 0 1 9.9-1", key: "1mm8w8" }]
 ]);
 /**
  * @license lucide-react v0.344.0 - ISC
@@ -23385,6 +23405,7 @@ function renderPieChartCard(aggregate) {
 }
 function renderShipsCard(aggregate) {
   const card = document.createElement("div");
+  card.className = "custom-scrollbar";
   card.style.cssText = `
         flex: 1;
         background: rgba(15, 23, 42, 0.4);
@@ -23396,6 +23417,7 @@ function renderShipsCard(aggregate) {
         backdrop-filter: blur(8px);
         overflow-y: auto;
         min-height: 180px;
+        transition: border-color 0.3s;
     `;
   const sortedShips = Object.entries(aggregate.shipsMap).sort((a2, b) => b[1] - a2[1]);
   if (sortedShips.length === 0) {
@@ -23408,7 +23430,7 @@ function renderShipsCard(aggregate) {
         grid-template-columns: 1fr 1fr;
         gap: 12px;
     `;
-  sortedShips.slice(0, 10).forEach(([shipId, count]) => {
+  sortedShips.forEach(([shipId, count]) => {
     let sName = "Ship " + shipId;
     let sIcon = "";
     const shipInfo = SHIP_DATA.find((s2) => s2.id.toString() === shipId);
@@ -23416,24 +23438,75 @@ function renderShipsCard(aggregate) {
       sName = shipInfo.name;
       sIcon = shipInfo.icon;
     }
+    const id2 = parseInt(shipId);
+    let shipConfig = {
+      color: "#ef4444",
+      glow: "rgba(239, 68, 68, 0.2)",
+      border: "rgba(239, 68, 68, 0.3)"
+    };
+    if (id2 === 202 || id2 === 203 || id2 === 210 || id2 === 219 || id2 === 208 || id2 === 209) {
+      shipConfig = {
+        color: "#00f2ff",
+        glow: "rgba(0, 242, 255, 0.2)",
+        border: "rgba(0, 242, 255, 0.3)"
+      };
+    } else if (id2 === 204 || id2 === 205 || id2 === 206) {
+      shipConfig = {
+        color: "#f59e0b",
+        glow: "rgba(245, 158, 11, 0.2)",
+        border: "rgba(245, 158, 11, 0.3)"
+      };
+    }
     const item = document.createElement("div");
     item.style.cssText = `
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(0,0,0,0.3);
-            border-radius: 4px;
-            padding: 6px 14px;
-            border-left: 2px solid #3b82f6;
-            margin-bottom: 4px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-left: 3px solid ${shipConfig.color};
+            border-radius: 6px;
+            padding: 8px 14px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
         `;
     item.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px;">
-                ${sIcon ? `<img src="${chrome.runtime.getURL(sIcon)}" style="width: 20px; height: 20px; border-radius: 2px; filter: grayscale(0.2);"/>` : ""}
-                <div style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;">${sName}</div>
+            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+                ${sIcon ? `<img src="${chrome.runtime.getURL(sIcon)}" style="width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); filter: grayscale(0.15); transition: all 0.3s;"/>` : ""}
+                <div style="font-size: 11.5px; color: #cbd5e1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; transition: color 0.3s;">${sName}</div>
             </div>
-            <div style="font-weight: 700; color: #e2e8f0; font-size: 13px;">${formatNumber$3(count)}</div>
+            <div style="font-weight: 700; color: ${shipConfig.color}; font-size: 13px; text-shadow: 0 0 8px ${shipConfig.glow}; transition: all 0.3s; padding-left: 4px;">${formatNumber$3(count)}</div>
         `;
+    const img = item.querySelector("img");
+    const text = item.querySelector("div > div");
+    item.onmouseover = () => {
+      item.style.background = "rgba(255, 255, 255, 0.05)";
+      item.style.borderColor = shipConfig.border;
+      item.style.borderLeftColor = shipConfig.color;
+      item.style.boxShadow = `0 4px 15px ${shipConfig.glow}, inset 0 0 10px rgba(255,255,255,0.01)`;
+      item.style.transform = "translateY(-1px)";
+      if (img) {
+        img.style.filter = "none";
+        img.style.borderColor = shipConfig.color;
+      }
+      if (text) {
+        text.style.color = "#ffffff";
+      }
+    };
+    item.onmouseout = () => {
+      item.style.background = "rgba(255,255,255,0.02)";
+      item.style.borderColor = "rgba(255,255,255,0.04)";
+      item.style.borderLeftColor = shipConfig.color;
+      item.style.boxShadow = "none";
+      item.style.transform = "none";
+      if (img) {
+        img.style.filter = "grayscale(0.15)";
+        img.style.borderColor = "rgba(255,255,255,0.1)";
+      }
+      if (text) {
+        text.style.color = "#cbd5e1";
+      }
+    };
     grid.appendChild(item);
   });
   card.appendChild(grid);
@@ -61580,6 +61653,485 @@ const ExpeditionCalculator = () => {
     } })
   ] });
 };
+const ResourceFlowSankey = ({ participants, totalM, totalC, combinedReport }) => {
+  var _a, _b, _c, _d, _e, _f, _g, _h;
+  const harvesters = participants.filter((p2) => p2.harvestedM + p2.harvestedC > 0);
+  const receivers = participants.filter((p2) => p2.isActive && p2.targetM + p2.targetC > 0);
+  const totalPool = totalM + totalC;
+  const names = participants.map((p2) => p2.name);
+  const getPlayerColor = (name) => {
+    const colors = [
+      "#00f2ff",
+      // Neon Cyan
+      "#d946ef",
+      // Neon Purple/Magenta
+      "#fbbf24",
+      // Neon Gold/Amber
+      "#10b981",
+      // Neon Green
+      "#f97316",
+      // Neon Orange
+      "#a855f7",
+      // Neon Violet
+      "#ec4899",
+      // Neon Pink
+      "#3b82f6",
+      // Neon Cobalt Blue
+      "#14b8a6",
+      // Neon Teal
+      "#f43f5e"
+      // Neon Crimson Red
+    ];
+    const idx = names.indexOf(name);
+    return colors[idx === -1 ? 0 : idx % colors.length];
+  };
+  const formatCompact = (num) => {
+    if (num >= 1e6) {
+      const val = num / 1e6;
+      return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + "M";
+    }
+    if (num >= 1e3) {
+      const val = num / 1e3;
+      return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + "K";
+    }
+    return num.toString();
+  };
+  const attackerLosses = ((_b = (_a = combinedReport == null ? void 0 : combinedReport.RESULT_DATA) == null ? void 0 : _a.generic) == null ? void 0 : _b.units_lost_attackers) || 0;
+  const defenderLosses = ((_d = (_c = combinedReport == null ? void 0 : combinedReport.RESULT_DATA) == null ? void 0 : _c.generic) == null ? void 0 : _d.units_lost_defenders) || 0;
+  const totalLosses = attackerLosses + defenderLosses || 1;
+  const debrisMetal = ((_f = (_e = combinedReport == null ? void 0 : combinedReport.RESULT_DATA) == null ? void 0 : _e.generic) == null ? void 0 : _f.debris_metal) || 0;
+  const debrisCrystal = ((_h = (_g = combinedReport == null ? void 0 : combinedReport.RESULT_DATA) == null ? void 0 : _g.generic) == null ? void 0 : _h.debris_crystal) || 0;
+  const totalDebrisGenerated = debrisMetal + debrisCrystal || totalPool;
+  const attackerDebrisContrib = Math.round(totalDebrisGenerated * (attackerLosses / totalLosses));
+  const defenderDebrisContrib = Math.round(totalDebrisGenerated * (defenderLosses / totalLosses));
+  const stage3Nodes = harvesters.map((h) => ({
+    name: h.name,
+    amount: h.harvestedM + h.harvestedC
+  }));
+  if (totalDebrisGenerated === 0 && totalPool === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "card-glass text-center", style: { padding: "24px", marginBottom: "24px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.85rem", color: "var(--text-muted)", fontStyle: "italic" }, children: "Sankey visualization pending. Please paste debris harvest logs (rr-) in Step 2 to generate resource flows." }) });
+  }
+  const width = 940;
+  const height = Math.max(340, Math.max(stage3Nodes.length, receivers.length) * 60 + 60);
+  const centerY = height / 2;
+  const stage1X = 110;
+  const stage2X = 260;
+  const stage3X = 460;
+  const stage4X = 660;
+  const stage5X = 810;
+  const yAtk = centerY - 55;
+  const yDef = centerY + 55;
+  const stage3YCoords = stage3Nodes.map((_, idx) => {
+    if (stage3Nodes.length === 1) return centerY;
+    const padding = 40;
+    const step = (height - padding * 2) / (stage3Nodes.length - 1);
+    return padding + idx * step;
+  });
+  const stage5YCoords = receivers.map((_, idx) => {
+    if (receivers.length === 1) return centerY;
+    const padding = 40;
+    const step = (height - padding * 2) / (receivers.length - 1);
+    return padding + idx * step;
+  });
+  const debrisInPortsY = [centerY - 16, centerY + 16];
+  const debrisOutPortsY = stage3Nodes.map((_, idx) => {
+    if (stage3Nodes.length === 1) return centerY;
+    const portHeight = 52;
+    const startY = centerY - portHeight / 2;
+    return startY + idx * portHeight / (stage3Nodes.length - 1);
+  });
+  const lootInPortsY = harvesters.map((_, idx) => {
+    if (harvesters.length === 1) return centerY;
+    const portHeight = 52;
+    const startY = centerY - portHeight / 2;
+    return startY + idx * portHeight / (harvesters.length - 1);
+  });
+  const lootOutPortsY = receivers.map((_, idx) => {
+    if (receivers.length === 1) return centerY;
+    const portHeight = 52;
+    const startY = centerY - portHeight / 2;
+    return startY + idx * portHeight / (receivers.length - 1);
+  });
+  const getBezierPath = (x1, y1, x2, y2) => {
+    const dx = Math.abs(x2 - x1) / 2;
+    return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+  };
+  const formatNumberLocal = (num) => num.toLocaleString();
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-glass margin-b-24 shadow-large glass-card", style: { padding: "24px", overflow: "hidden" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "split-settings-header", style: { marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TrendingUp, { size: 18, color: "var(--primary)" }),
+      " Operation Debris Flow Dynamics (Sankey Flow)"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { fontSize: "0.8rem", opacity: 0.6, margin: "0 0 20px 0", lineHeight: 1.4 }, children: "A visual trace mapping collected raw debris from harvesters on the left, aggregating them in the tactical operational pool, and distributing them to receivers on the right based on selected split parameters." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "100%" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "svg",
+      {
+        viewBox: `0 0 ${width} ${height}`,
+        style: {
+          width: "100%",
+          height: "auto",
+          background: "rgba(5, 8, 16, 0.65)",
+          borderRadius: "14px",
+          border: "1px solid rgba(0, 242, 255, 0.08)",
+          display: "block"
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("defs", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("pattern", { id: "cyberGrid", width: "20", height: "20", patternUnits: "userSpaceOnUse", children: /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "2", cy: "2", r: "0.75", fill: "rgba(255, 255, 255, 0.03)" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("radialGradient", { id: "debrisCapsuleGlow", cx: "50%", cy: "50%", r: "50%", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "#f97316", stopOpacity: "0.25" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "transparent", stopOpacity: "0" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("radialGradient", { id: "poolCapsuleGlow", cx: "50%", cy: "50%", r: "50%", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "var(--primary-glow)", stopOpacity: "0.3" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "transparent", stopOpacity: "0" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "grad-atk-debris", x1: "0%", y1: "0%", x2: "100%", y2: "0%", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "#00f2ff", stopOpacity: "0.45" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "#f97316", stopOpacity: "0.2" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "grad-def-debris", x1: "0%", y1: "0%", x2: "100%", y2: "0%", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "#ff5f5f", stopOpacity: "0.45" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "#f97316", stopOpacity: "0.2" })
+            ] }),
+            stage3Nodes.map((node, idx) => {
+              const nodeColor = node.isUncollected ? "#f43f5e" : getPlayerColor(node.name);
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: `grad-debris-node-${idx}`, x1: "0%", y1: "0%", x2: "100%", y2: "0%", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "#f97316", stopOpacity: "0.3" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: nodeColor, stopOpacity: "0.3" })
+              ] }, `grad-debris-node-${idx}`);
+            }),
+            harvesters.map((h, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: `grad-node-pool-${idx}`, x1: "0%", y1: "0%", x2: "100%", y2: "0%", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: getPlayerColor(h.name), stopOpacity: "0.3" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "var(--primary)", stopOpacity: "0.3" })
+            ] }, `grad-node-pool-${idx}`)),
+            receivers.map((r2, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: `grad-pool-recv-${idx}`, x1: "0%", y1: "0%", x2: "100%", y2: "0%", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "var(--primary)", stopOpacity: "0.2" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: getPlayerColor(r2.name), stopOpacity: "0.45" })
+            ] }, `grad-pool-recv-${idx}`))
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width, height, fill: "url(#cyberGrid)" }),
+          (() => {
+            const totalDebrisBase = totalDebrisGenerated || 1;
+            const atkStroke = Math.max(2.5, attackerDebrisContrib / totalDebrisBase * 28);
+            const defStroke = Math.max(2.5, defenderDebrisContrib / totalDebrisBase * 28);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage1X, yAtk, stage2X - 40, debrisInPortsY[0]),
+                  stroke: "url(#grad-atk-debris)",
+                  strokeWidth: atkStroke,
+                  fill: "none",
+                  opacity: "0.5"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage1X, yAtk, stage2X - 40, debrisInPortsY[0]),
+                  stroke: "#00f2ff",
+                  strokeWidth: "1.2",
+                  fill: "none",
+                  opacity: "0.8"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage1X, yDef, stage2X - 40, debrisInPortsY[1]),
+                  stroke: "url(#grad-def-debris)",
+                  strokeWidth: defStroke,
+                  fill: "none",
+                  opacity: "0.5"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage1X, yDef, stage2X - 40, debrisInPortsY[1]),
+                  stroke: "#ff5f5f",
+                  strokeWidth: "1.2",
+                  fill: "none",
+                  opacity: "0.8"
+                }
+              )
+            ] });
+          })(),
+          stage3Nodes.map((node, idx) => {
+            const totalDebrisBase = totalDebrisGenerated || 1;
+            const strokeW = Math.max(2.5, node.amount / totalDebrisBase * 28);
+            const y1 = debrisOutPortsY[idx];
+            const y2 = stage3YCoords[idx];
+            const nodeColor = node.isUncollected ? "#f43f5e" : getPlayerColor(node.name);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage2X + 40, y1, stage3X - 55, y2),
+                  stroke: `url(#grad-debris-node-${idx})`,
+                  strokeWidth: strokeW,
+                  fill: "none",
+                  opacity: "0.45",
+                  style: { transition: "opacity 0.2s ease" }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage2X + 40, y1, stage3X - 55, y2),
+                  stroke: nodeColor,
+                  strokeWidth: "1.2",
+                  fill: "none",
+                  opacity: "0.85",
+                  style: { pointerEvents: "none" }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage2X + 40, y1, stage3X - 55, y2),
+                  stroke: "transparent",
+                  strokeWidth: strokeW + 10,
+                  fill: "none",
+                  style: { cursor: "pointer" },
+                  onMouseOver: (e) => {
+                    var _a2;
+                    const paths = (_a2 = e.currentTarget.parentNode) == null ? void 0 : _a2.querySelectorAll("path");
+                    if (paths) {
+                      paths[0].style.opacity = "0.9";
+                      paths[0].style.strokeWidth = `${strokeW + 2}px`;
+                    }
+                  },
+                  onMouseOut: (e) => {
+                    var _a2;
+                    const paths = (_a2 = e.currentTarget.parentNode) == null ? void 0 : _a2.querySelectorAll("path");
+                    if (paths) {
+                      paths[0].style.opacity = "0.45";
+                      paths[0].style.strokeWidth = `${strokeW}px`;
+                    }
+                  },
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsxs("title", { children: [
+                    node.name,
+                    ": ",
+                    formatNumberLocal(node.amount),
+                    " units"
+                  ] })
+                }
+              )
+            ] }, `debris-flow-${idx}`);
+          }),
+          harvesters.map((h, idx) => {
+            const hTotal = h.harvestedM + h.harvestedC;
+            const strokeW = Math.max(2.5, hTotal / (totalPool || 1) * 28);
+            const y1 = stage3YCoords[idx];
+            const y2 = lootInPortsY[idx];
+            const playerCol = getPlayerColor(h.name);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage3X + 55, y1, stage4X - 40, y2),
+                  stroke: `url(#grad-node-pool-${idx})`,
+                  strokeWidth: strokeW,
+                  fill: "none",
+                  opacity: "0.45",
+                  style: { transition: "opacity 0.2s ease" }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage3X + 55, y1, stage4X - 40, y2),
+                  stroke: playerCol,
+                  strokeWidth: "1.2",
+                  fill: "none",
+                  opacity: "0.85",
+                  style: { pointerEvents: "none" }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage3X + 55, y1, stage4X - 40, y2),
+                  stroke: "transparent",
+                  strokeWidth: strokeW + 10,
+                  fill: "none",
+                  style: { cursor: "pointer" },
+                  onMouseOver: (e) => {
+                    var _a2;
+                    const paths = (_a2 = e.currentTarget.parentNode) == null ? void 0 : _a2.querySelectorAll("path");
+                    if (paths) {
+                      paths[0].style.opacity = "0.9";
+                      paths[0].style.strokeWidth = `${strokeW + 2}px`;
+                    }
+                  },
+                  onMouseOut: (e) => {
+                    var _a2;
+                    const paths = (_a2 = e.currentTarget.parentNode) == null ? void 0 : _a2.querySelectorAll("path");
+                    if (paths) {
+                      paths[0].style.opacity = "0.45";
+                      paths[0].style.strokeWidth = `${strokeW}px`;
+                    }
+                  },
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsxs("title", { children: [
+                    h.name,
+                    " Contributes: ",
+                    formatNumberLocal(hTotal),
+                    " units"
+                  ] })
+                }
+              )
+            ] }, `harvester-flow-${idx}`);
+          }),
+          receivers.map((r2, idx) => {
+            const rTotal = r2.targetM + r2.targetC;
+            const strokeW = Math.max(2.5, rTotal / (totalPool || 1) * 28);
+            const y1 = lootOutPortsY[idx];
+            const y2 = stage5YCoords[idx];
+            const playerCol = getPlayerColor(r2.name);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage4X + 40, y1, stage5X - 5, y2),
+                  stroke: `url(#grad-pool-recv-${idx})`,
+                  strokeWidth: strokeW,
+                  fill: "none",
+                  opacity: "0.5",
+                  style: { transition: "opacity 0.2s ease" }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage4X + 40, y1, stage5X - 5, y2),
+                  stroke: playerCol,
+                  strokeWidth: "1.2",
+                  fill: "none",
+                  opacity: "0.85",
+                  style: { pointerEvents: "none" }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: getBezierPath(stage4X + 40, y1, stage5X - 5, y2),
+                  stroke: "transparent",
+                  strokeWidth: strokeW + 10,
+                  fill: "none",
+                  style: { cursor: "pointer" },
+                  onMouseOver: (e) => {
+                    var _a2;
+                    const paths = (_a2 = e.currentTarget.parentNode) == null ? void 0 : _a2.querySelectorAll("path");
+                    if (paths) {
+                      paths[0].style.opacity = "0.9";
+                      paths[0].style.strokeWidth = `${strokeW + 2}px`;
+                    }
+                  },
+                  onMouseOut: (e) => {
+                    var _a2;
+                    const paths = (_a2 = e.currentTarget.parentNode) == null ? void 0 : _a2.querySelectorAll("path");
+                    if (paths) {
+                      paths[0].style.opacity = "0.5";
+                      paths[0].style.strokeWidth = `${strokeW}px`;
+                    }
+                  },
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsxs("title", { children: [
+                    r2.name,
+                    " Receives: ",
+                    formatNumberLocal(rTotal),
+                    " units"
+                  ] })
+                }
+              )
+            ] }, `receiver-flow-${idx}`);
+          }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { transform: `translate(${stage1X - 110}, ${yAtk - 18})`, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "100", height: "36", rx: "6", fill: "rgba(6, 10, 20, 0.85)", stroke: "rgba(0, 242, 255, 0.2)", strokeWidth: "1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "3", height: "36", fill: "#00f2ff", rx: "1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "12", y: "14", fill: "#00f2ff", style: { fontSize: "9px", fontWeight: 800, letterSpacing: "0.5px" }, children: "ATTACKERS" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("text", { x: "12", y: "26", fill: "rgba(255, 255, 255, 0.4)", style: { fontSize: "8px", fontFamily: "monospace", fontWeight: 600 }, children: [
+              formatCompact(attackerLosses),
+              " losses"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage1X, cy: yAtk, r: "5", fill: "#00f2ff", filter: "drop-shadow(0 0 2px #00f2ff)" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage1X, cy: yAtk, r: "2.5", fill: "#050810" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { transform: `translate(${stage1X - 110}, ${yDef - 18})`, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "100", height: "36", rx: "6", fill: "rgba(6, 10, 20, 0.85)", stroke: "rgba(255, 95, 95, 0.2)", strokeWidth: "1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "3", height: "36", fill: "#ff5f5f", rx: "1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "12", y: "14", fill: "#ff5f5f", style: { fontSize: "9px", fontWeight: 800, letterSpacing: "0.5px" }, children: "DEFENDERS" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("text", { x: "12", y: "26", fill: "rgba(255, 255, 255, 0.4)", style: { fontSize: "8px", fontFamily: "monospace", fontWeight: 600 }, children: [
+              formatCompact(defenderLosses),
+              " losses"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage1X, cy: yDef, r: "5", fill: "#ff5f5f", filter: "drop-shadow(0 0 2px #ff5f5f)" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage1X, cy: yDef, r: "2.5", fill: "#050810" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { transform: `translate(${stage2X - 40}, ${centerY - 40})`, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "80", height: "80", rx: "14", fill: "rgba(6, 12, 24, 0.95)", stroke: "#f97316", strokeWidth: "1.5", filter: "drop-shadow(0 0 12px rgba(249, 115, 22, 0.25))" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "3", y: "3", width: "74", height: "74", rx: "11", fill: "url(#debrisCapsuleGlow)" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "40", y: "26", textAnchor: "middle", fill: "#f97316", style: { fontSize: "8.5px", fontWeight: 900, letterSpacing: "1px", opacity: 0.8 }, children: "DEBRIS" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "40", y: "42", textAnchor: "middle", fill: "#fff", style: { fontSize: "11px", fontWeight: 800, fontFamily: "monospace" }, children: formatCompact(totalDebrisGenerated) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "40", y: "56", textAnchor: "middle", fill: "rgba(255,255,255,0.35)", style: { fontSize: "7.5px", textTransform: "uppercase", letterSpacing: "0.5px" }, children: "generated" })
+          ] }),
+          debrisInPortsY.map((py, idx) => /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage2X - 40, cy: py, r: "2", fill: "#f97316" }, `deb-in-p-${idx}`)),
+          debrisOutPortsY.map((py, idx) => /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage2X + 40, cy: py, r: "2", fill: "#f97316" }, `deb-out-p-${idx}`)),
+          stage3Nodes.map((node, idx) => {
+            const y2 = stage3YCoords[idx];
+            const isUnc = node.isUncollected;
+            const nodeColor = isUnc ? "#f43f5e" : getPlayerColor(node.name);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage3X - 55, cy: y2, r: "5", fill: nodeColor, filter: `drop-shadow(0 0 2px ${nodeColor})` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage3X - 55, cy: y2, r: "2.5", fill: "#050810" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { transform: `translate(${stage3X - 50}, ${y2 - 18})`, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "100", height: "36", rx: "6", fill: "rgba(6, 10, 20, 0.85)", stroke: `${nodeColor}33`, strokeWidth: "1" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "3", height: "36", fill: nodeColor, rx: 1 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "10", y: "14", fill: nodeColor, style: { fontSize: "9px", fontWeight: 800, letterSpacing: "0.2px" }, children: node.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("text", { x: "10", y: "26", fill: "rgba(255,255,255,0.4)", style: { fontSize: "8px", fontFamily: "monospace", fontWeight: 600 }, children: [
+                  formatCompact(node.amount),
+                  " units"
+                ] })
+              ] }),
+              !isUnc && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage3X + 55, cy: y2, r: "5", fill: nodeColor, filter: `drop-shadow(0 0 2px ${nodeColor})` }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage3X + 55, cy: y2, r: "2.5", fill: "#050810" })
+              ] })
+            ] }, `node-card-${idx}`);
+          }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { transform: `translate(${stage4X - 40}, ${centerY - 40})`, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "80", height: "80", rx: "14", fill: "rgba(6, 12, 24, 0.95)", stroke: "var(--primary)", strokeWidth: "1.5", filter: "drop-shadow(0 0 12px var(--primary-glow))" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "3", y: "3", width: "74", height: "74", rx: "11", fill: "url(#poolCapsuleGlow)" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "40", y: "26", textAnchor: "middle", fill: "var(--primary)", style: { fontSize: "9px", fontWeight: 900, letterSpacing: "1.5px", opacity: 0.8 }, children: "LOOT CORE" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "40", y: "42", textAnchor: "middle", fill: "#fff", style: { fontSize: "11px", fontWeight: 800, fontFamily: "monospace" }, children: formatCompact(totalPool) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "40", y: "56", textAnchor: "middle", fill: "rgba(255,255,255,0.35)", style: { fontSize: "7.5px", textTransform: "uppercase", letterSpacing: "0.5px" }, children: "harvested" })
+          ] }),
+          lootInPortsY.map((py, idx) => /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage4X - 40, cy: py, r: "2", fill: "var(--primary)" }, `loot-in-p-${idx}`)),
+          lootOutPortsY.map((py, idx) => /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage4X + 40, cy: py, r: "2", fill: "var(--primary)" }, `loot-out-p-${idx}`)),
+          receivers.map((r2, idx) => {
+            const y2 = stage5YCoords[idx];
+            const playerColor = getPlayerColor(r2.name);
+            const rTotal = r2.targetM + r2.targetC;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage5X - 5, cy: y2, r: "5", fill: playerColor, filter: `drop-shadow(0 0 2px ${playerColor})` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: stage5X - 5, cy: y2, r: "2.5", fill: "#050810" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { transform: `translate(${stage5X}, ${y2 - 18})`, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "100", height: "36", rx: "6", fill: "rgba(6, 10, 20, 0.85)", stroke: `${playerColor}33`, strokeWidth: "1" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "3", height: "36", fill: playerColor, rx: 1 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: "10", y: "14", fill: playerColor, style: { fontSize: "9px", fontWeight: 800, letterSpacing: "0.2px" }, children: r2.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("text", { x: "10", y: "26", fill: "rgba(255,255,255,0.4)", style: { fontSize: "8px", fontFamily: "monospace", fontWeight: 600 }, children: [
+                  formatCompact(rTotal),
+                  " split"
+                ] })
+              ] })
+            ] }, `recv-card-${idx}`);
+          })
+        ]
+      }
+    ) })
+  ] });
+};
 const AcsSplitter = () => {
   const [apiKey, setApiKey] = reactExports.useState("");
   const [reports, setReports] = reactExports.useState([]);
@@ -61593,9 +62145,10 @@ const AcsSplitter = () => {
   const [skippedRrKeys, setSkippedRrKeys] = reactExports.useState([]);
   const [activeFaction, setActiveFaction] = reactExports.useState("attackers");
   const [splitMethod, setSplitMethod] = reactExports.useState("equal");
-  const [reimburseExpenses, setReimburseExpenses] = reactExports.useState(true);
+  const [reimburseExpenses, setReimburseExpenses] = reactExports.useState(false);
+  const [customPercentages, setCustomPercentages] = reactExports.useState({});
+  const [percentageLocks, setPercentageLocks] = reactExports.useState({});
   const [participantSettings, setParticipantSettings] = reactExports.useState({});
-  const [copiedTransfers, setCopiedTransfers] = reactExports.useState(false);
   const combinedReport = React$3.useMemo(() => {
     if (reports.length === 0) return null;
     const first = reports[0];
@@ -61667,6 +62220,117 @@ const AcsSplitter = () => {
     result.RESULT_DATA.defenders = mergeFleets(reports.map((r2) => r2.RESULT_DATA.defenders));
     return result;
   }, [reports]);
+  const getPlayerColor = (name) => {
+    if (!combinedReport) return "var(--primary)";
+    const commanders = activeFaction === "attackers" ? combinedReport.RESULT_DATA.attackers.map((a2) => a2.fleet_owner) : combinedReport.RESULT_DATA.defenders.map((d) => d.fleet_owner);
+    const colors = [
+      "#00f2ff",
+      // Neon Cyan
+      "#d946ef",
+      // Neon Purple/Magenta
+      "#fbbf24",
+      // Neon Gold/Amber
+      "#10b981",
+      // Neon Green
+      "#f97316",
+      // Neon Orange
+      "#a855f7",
+      // Neon Violet
+      "#ec4899",
+      // Neon Pink
+      "#3b82f6",
+      // Neon Cobalt Blue
+      "#14b8a6",
+      // Neon Teal
+      "#f43f5e"
+      // Neon Crimson Red
+    ];
+    const idx = commanders.indexOf(name);
+    return colors[idx === -1 ? 0 : idx % colors.length];
+  };
+  const handlePercentageChange = (changedName, targetVal) => {
+    if (percentageLocks[changedName]) return;
+    if (!combinedReport) return;
+    const commanders = activeFaction === "attackers" ? combinedReport.RESULT_DATA.attackers.map((a2) => a2.fleet_owner) : combinedReport.RESULT_DATA.defenders.map((d) => d.fleet_owner);
+    const activeCommanders = commanders.filter((name) => {
+      var _a;
+      return ((_a = participantSettings[name]) == null ? void 0 : _a.active) !== false;
+    });
+    if (activeCommanders.length <= 1) return;
+    const oldPercentages = { ...customPercentages };
+    let sumLocked = 0;
+    activeCommanders.forEach((name) => {
+      if (name !== changedName && percentageLocks[name]) {
+        sumLocked += oldPercentages[name] || 0;
+      }
+    });
+    const maxAllowed = Math.max(0, 100 - sumLocked);
+    let newValue = Math.min(maxAllowed, Math.max(0, targetVal));
+    const oldValue = oldPercentages[changedName] || 0;
+    const diff = newValue - oldValue;
+    const otherUnlocked = activeCommanders.filter((name) => name !== changedName && !percentageLocks[name]);
+    if (otherUnlocked.length === 0) {
+      return;
+    }
+    const newPercentages = { ...oldPercentages };
+    newPercentages[changedName] = newValue;
+    let sumOther = 0;
+    otherUnlocked.forEach((name) => {
+      sumOther += oldPercentages[name] || 0;
+    });
+    if (diff > 0) {
+      otherUnlocked.forEach((name) => {
+        const currentVal = oldPercentages[name] || 0;
+        const decrease = sumOther > 0 ? currentVal / sumOther * diff : diff / otherUnlocked.length;
+        newPercentages[name] = Math.max(0, currentVal - decrease);
+      });
+    } else {
+      otherUnlocked.forEach((name) => {
+        const currentVal = oldPercentages[name] || 0;
+        const increase = sumOther > 0 ? currentVal / sumOther * -diff : -diff / otherUnlocked.length;
+        newPercentages[name] = Math.min(100, currentVal + increase);
+      });
+    }
+    newPercentages[changedName] = newValue;
+    let totalSum = activeCommanders.reduce((acc, name) => acc + (newPercentages[name] || 0), 0);
+    let error2 = 100 - totalSum;
+    if (Math.abs(error2) > 1e-4) {
+      newPercentages[otherUnlocked[0]] = Math.min(100, Math.max(0, (newPercentages[otherUnlocked[0]] || 0) + error2));
+    }
+    setCustomPercentages(newPercentages);
+  };
+  reactExports.useEffect(() => {
+    if (!combinedReport) return;
+    const commanders = activeFaction === "attackers" ? combinedReport.RESULT_DATA.attackers.map((a2) => a2.fleet_owner) : combinedReport.RESULT_DATA.defenders.map((d) => d.fleet_owner);
+    const activeCommanders = commanders.filter((name) => {
+      var _a;
+      return ((_a = participantSettings[name]) == null ? void 0 : _a.active) !== false;
+    });
+    if (activeCommanders.length === 0) return;
+    const newPercentages = { ...customPercentages };
+    Object.keys(newPercentages).forEach((name) => {
+      if (!activeCommanders.includes(name)) {
+        delete newPercentages[name];
+      }
+    });
+    const existingNames = Object.keys(newPercentages);
+    const missingNames = activeCommanders.filter((name) => !existingNames.includes(name));
+    if (missingNames.length > 0 || existingNames.length !== activeCommanders.length) {
+      const equalShare = 100 / activeCommanders.length;
+      activeCommanders.forEach((name) => {
+        newPercentages[name] = equalShare;
+      });
+    }
+    const sum = activeCommanders.reduce((acc, name) => acc + (newPercentages[name] || 0), 0);
+    if (Math.abs(sum - 100) > 0.01) {
+      const equalShare = 100 / activeCommanders.length;
+      activeCommanders.forEach((name) => {
+        newPercentages[name] = equalShare;
+      });
+    }
+    setCustomPercentages(newPercentages);
+  }, [combinedReport, participantSettings, activeFaction]);
+  const [copiedTransfers, setCopiedTransfers] = reactExports.useState(false);
   reactExports.useEffect(() => {
     if (!combinedReport) return;
     const winner = combinedReport.RESULT_DATA.generic.winner;
@@ -61852,12 +62516,9 @@ const AcsSplitter = () => {
       combinedMap.set(key, { from: t2.from, to: t2.to, metal: t2.amount, crystal: 0 });
     });
     cTransfers.forEach((t2) => {
+      var _a;
       const key = `${t2.from}->${t2.to}`;
-      if (combinedMap.has(key)) {
-        combinedMap.get(key).crystal = t2.amount;
-      } else {
-        combinedMap.set(key, { from: t2.from, to: t2.to, metal: 0, crystal: t2.amount });
-      }
+      combinedMap.set(key, { from: t2.from, to: t2.to, metal: ((_a = combinedMap.get(key)) == null ? void 0 : _a.metal) || 0, crystal: t2.amount });
     });
     return Array.from(combinedMap.values());
   };
@@ -61868,6 +62529,19 @@ const AcsSplitter = () => {
       var _a;
       return ((_a = participantSettings[name]) == null ? void 0 : _a.active) !== false;
     });
+    const getStructuralIntegrity = (composition) => {
+      let totalSi = 0;
+      composition.forEach((ship) => {
+        var _a;
+        const sInfo = SHIP_DATA.find((s2) => s2.id === ship.ship_type);
+        if (sInfo && ((_a = sInfo.metadata) == null ? void 0 : _a.cost)) {
+          const cost = sInfo.metadata.cost;
+          const siPerShip = (cost.metal || 0) + (cost.crystal || 0);
+          totalSi += siPerShip * (ship.count || 0);
+        }
+      });
+      return totalSi;
+    };
     const harvestedMap = {};
     commanders.forEach((name) => {
       harvestedMap[name] = { metal: 0, crystal: 0 };
@@ -61940,6 +62614,12 @@ const AcsSplitter = () => {
           profitShareMap[name].metal = shareM;
           profitShareMap[name].crystal = shareC;
         });
+      } else if (splitMethod === "percentage") {
+        activeCommanders.forEach((name) => {
+          const pct = customPercentages[name] !== void 0 ? customPercentages[name] : 100 / activeCommanders.length;
+          profitShareMap[name].metal = Math.floor(remainingM * (pct / 100));
+          profitShareMap[name].crystal = Math.floor(remainingC * (pct / 100));
+        });
       } else if (splitMethod === "contribution") {
         const sumLossesM = totalLossesM || 1;
         const sumLossesC = totalLossesC || 1;
@@ -61956,10 +62636,26 @@ const AcsSplitter = () => {
           profitShareMap[name].metal = totalHarvestedM > 0 ? Math.floor(remainingM * (harvested.metal / sumHarvestedM)) : Math.floor(remainingM / activeCommanders.length);
           profitShareMap[name].crystal = totalHarvestedC > 0 ? Math.floor(remainingC * (harvested.crystal / sumHarvestedC)) : Math.floor(remainingC / activeCommanders.length);
         });
+      } else if (splitMethod === "weighted") {
+        const siMap = {};
+        let totalTeamSi = 0;
+        activeCommanders.forEach((name) => {
+          const participantData = activeFaction === "attackers" ? combinedReport.RESULT_DATA.attackers.find((a2) => a2.fleet_owner === name) : combinedReport.RESULT_DATA.defenders.find((d) => d.fleet_owner === name);
+          const comp = (participantData == null ? void 0 : participantData.fleet_composition) || [];
+          const si2 = getStructuralIntegrity(comp);
+          siMap[name] = si2;
+          totalTeamSi += si2;
+        });
+        const sumSi = totalTeamSi || 1;
+        activeCommanders.forEach((name) => {
+          const si2 = siMap[name] || 0;
+          profitShareMap[name].metal = totalTeamSi > 0 ? Math.floor(remainingM * (si2 / sumSi)) : Math.floor(remainingM / activeCommanders.length);
+          profitShareMap[name].crystal = totalTeamSi > 0 ? Math.floor(remainingC * (si2 / sumSi)) : Math.floor(remainingC / activeCommanders.length);
+        });
       }
     }
     const participantPayouts = commanders.map((name) => {
-      var _a, _b, _c;
+      var _a, _b, _c, _d, _e, _f, _g;
       const isActive = activeCommanders.includes(name);
       const reimb = reimbursementMap[name] || { metal: 0, crystal: 0 };
       const profit = profitShareMap[name] || { metal: 0, crystal: 0 };
@@ -61968,18 +62664,46 @@ const AcsSplitter = () => {
       const targetC = isActive ? reimb.crystal + profit.crystal : 0;
       const diffM = targetM - harvested.metal;
       const diffC = targetC - harvested.crystal;
+      const participantData = activeFaction === "attackers" ? combinedReport.RESULT_DATA.attackers.find((a2) => a2.fleet_owner === name) : combinedReport.RESULT_DATA.defenders.find((d) => d.fleet_owner === name);
+      const si2 = participantData ? getStructuralIntegrity(participantData.fleet_composition) : 0;
+      let sharePercentage = 0;
+      if (isActive) {
+        if (splitMethod === "equal") {
+          sharePercentage = 100 / activeCommanders.length;
+        } else if (splitMethod === "percentage") {
+          sharePercentage = customPercentages[name] !== void 0 ? customPercentages[name] : 100 / activeCommanders.length;
+        } else if (splitMethod === "weighted") {
+          let totalTeamSi = 0;
+          activeCommanders.forEach((cName) => {
+            const pData = activeFaction === "attackers" ? combinedReport.RESULT_DATA.attackers.find((a2) => a2.fleet_owner === cName) : combinedReport.RESULT_DATA.defenders.find((d) => d.fleet_owner === cName);
+            const comp = (pData == null ? void 0 : pData.fleet_composition) || [];
+            totalTeamSi += getStructuralIntegrity(comp);
+          });
+          sharePercentage = totalTeamSi > 0 ? si2 / totalTeamSi * 100 : 100 / activeCommanders.length;
+        } else if (splitMethod === "contribution") {
+          const sumLosses = totalLossesM + totalLossesC;
+          const myLosses = (((_a = participantSettings[name]) == null ? void 0 : _a.lossesMetal) || 0) + (((_b = participantSettings[name]) == null ? void 0 : _b.lossesCrystal) || 0);
+          sharePercentage = sumLosses > 0 ? myLosses / sumLosses * 100 : 100 / activeCommanders.length;
+        } else if (splitMethod === "capacity") {
+          const sumHarvested = totalHarvestedM + totalHarvestedC;
+          const myHarvested = (((_c = harvestedMap[name]) == null ? void 0 : _c.metal) || 0) + (((_d = harvestedMap[name]) == null ? void 0 : _d.crystal) || 0);
+          sharePercentage = sumHarvested > 0 ? myHarvested / sumHarvested * 100 : 100 / activeCommanders.length;
+        }
+      }
       return {
         name,
         isActive,
-        lossesMetal: ((_a = participantSettings[name]) == null ? void 0 : _a.lossesMetal) || 0,
-        lossesCrystal: ((_b = participantSettings[name]) == null ? void 0 : _b.lossesCrystal) || 0,
-        fuelDeut: ((_c = participantSettings[name]) == null ? void 0 : _c.fuelDeut) || 0,
+        lossesMetal: ((_e = participantSettings[name]) == null ? void 0 : _e.lossesMetal) || 0,
+        lossesCrystal: ((_f = participantSettings[name]) == null ? void 0 : _f.lossesCrystal) || 0,
+        fuelDeut: ((_g = participantSettings[name]) == null ? void 0 : _g.fuelDeut) || 0,
         harvestedM: harvested.metal,
         harvestedC: harvested.crystal,
         targetM,
         targetC,
         diffM,
-        diffC
+        diffC,
+        structuralIntegrity: si2,
+        sharePercentage
       };
     });
     const activePayouts = participantPayouts.filter((p2) => p2.isActive);
@@ -62003,7 +62727,7 @@ const AcsSplitter = () => {
       participantPayouts,
       transfers
     };
-  }, [combinedReport, activeFaction, splitMethod, reimburseExpenses, participantSettings, rrReports]);
+  }, [combinedReport, activeFaction, splitMethod, reimburseExpenses, participantSettings, rrReports, customPercentages]);
   const winnerColor = (combinedReport == null ? void 0 : combinedReport.RESULT_DATA.generic.winner) === "attacker" ? "var(--primary)" : (combinedReport == null ? void 0 : combinedReport.RESULT_DATA.generic.winner) === "defender" ? "#ff5f5f" : "var(--text-muted)";
   const winnerIcon = (combinedReport == null ? void 0 : combinedReport.RESULT_DATA.generic.winner) === "attacker" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Rocket, { size: 20 }) : (combinedReport == null ? void 0 : combinedReport.RESULT_DATA.generic.winner) === "defender" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 20 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Gavel, { size: 20 });
   const handleCopyTransfers = () => {
@@ -62389,24 +63113,33 @@ const AcsSplitter = () => {
                 className: "select-custom",
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "equal", children: "Standard Equal Split" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "contribution", children: "Contribution-based Split" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "capacity", children: "Capacity-based Split" })
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "percentage", children: "Percentage Split (Custom)" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "weighted", children: "Weighted Split (by Fleet SI)" })
                 ]
               }
             )
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-col-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "checkbox-holder", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: reimburseExpenses,
-                onChange: (e) => setReimburseExpenses(e.target.checked),
-                className: "checkbox-custom"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Reimburse Fleet Losses First" })
-          ] }) })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "input-label-caps", style: { opacity: 0.5 }, children: "reimbursement policy" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", height: "38px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "checkbox-holder", style: { margin: 0 }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: reimburseExpenses,
+                    onChange: (e) => setReimburseExpenses(e.target.checked),
+                    className: "checkbox-custom"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Reimburse Fleet Losses First" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tooltip-container", style: { display: "inline-flex", cursor: "help" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Info, { size: 14, color: "var(--primary)", style: { opacity: 0.6 } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tooltip-text", children: "If active, player ship losses (Lost Metal/Crystal) are paid back first from the debris harvested before splitting the remaining profits." })
+              ] })
+            ] })
+          ] })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-glass margin-b-24 shadow-large overflow-x", children: [
@@ -62417,10 +63150,12 @@ const AcsSplitter = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "expenses-table", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { width: "80px" }, children: "Active" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { width: "170px" }, children: "Share %" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Commander" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Lost Metal" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Lost Crystal" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Flight Fuel Spent (Deut)" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Fleet SI" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Debris Harvested (Metal)" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Debris Harvested (Crystal)" })
           ] }) }),
@@ -62441,10 +63176,82 @@ const AcsSplitter = () => {
                       }
                     }));
                   },
-                  className: "checkbox-custom"
+                  className: "checkbox-custom",
+                  style: { accentColor: getPlayerColor(p2.name) }
                 }
               ) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "font-bold", children: p2.name }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: splitMethod === "percentage" && p2.isActive ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "range",
+                    min: "0",
+                    max: "100",
+                    step: "1",
+                    value: Math.round(p2.sharePercentage),
+                    onChange: (e) => handlePercentageChange(p2.name, parseInt(e.target.value) || 0),
+                    className: "range-custom",
+                    style: {
+                      "--thumb-color": getPlayerColor(p2.name),
+                      cursor: percentageLocks[p2.name] ? "not-allowed" : "pointer",
+                      opacity: percentageLocks[p2.name] ? 0.65 : 1
+                    }
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "span",
+                  {
+                    className: "font-mono",
+                    style: {
+                      fontSize: "0.8rem",
+                      minWidth: "46px",
+                      textAlign: "right",
+                      fontWeight: 800,
+                      color: getPlayerColor(p2.name),
+                      textShadow: `0 0 6px ${getPlayerColor(p2.name)}40`,
+                      transition: "all 0.2s ease",
+                      padding: "2px 4.5px",
+                      borderRadius: "4px",
+                      background: percentageLocks[p2.name] ? `${getPlayerColor(p2.name)}1a` : "transparent",
+                      border: percentageLocks[p2.name] ? `1px dashed ${getPlayerColor(p2.name)}44` : "1px solid transparent"
+                    },
+                    children: [
+                      p2.sharePercentage.toFixed(1),
+                      "%"
+                    ]
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => {
+                      setPercentageLocks((prev) => ({
+                        ...prev,
+                        [p2.name]: !prev[p2.name]
+                      }));
+                    },
+                    style: {
+                      background: percentageLocks[p2.name] ? `${getPlayerColor(p2.name)}1e` : "rgba(255,255,255,0.03)",
+                      border: percentageLocks[p2.name] ? `1px solid ${getPlayerColor(p2.name)}66` : "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "6px",
+                      color: getPlayerColor(p2.name),
+                      cursor: "pointer",
+                      padding: "5px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      transition: "all 0.2s ease",
+                      boxShadow: percentageLocks[p2.name] ? `0 0 8px ${getPlayerColor(p2.name)}33` : "none"
+                    },
+                    title: percentageLocks[p2.name] ? "Unlock Share Percentage (Active)" : "Lock Share Percentage",
+                    children: percentageLocks[p2.name] ? /* @__PURE__ */ jsxRuntimeExports.jsx(Lock, { size: 13, style: { filter: `drop-shadow(0 0 2px ${getPlayerColor(p2.name)})` } }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Unlock, { size: 13, style: { opacity: 0.5 } })
+                  }
+                )
+              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono", style: { fontSize: "0.8rem", color: p2.isActive ? getPlayerColor(p2.name) : "rgba(255,255,255,0.2)", textShadow: p2.isActive ? `0 0 6px ${getPlayerColor(p2.name)}40` : "none", fontWeight: 800 }, children: p2.isActive ? `${p2.sharePercentage.toFixed(1)}%` : "-" }) }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "font-bold", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                color: getPlayerColor(p2.name),
+                textShadow: `0 0 8px ${getPlayerColor(p2.name)}33`
+              }, children: p2.name }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "input",
                 {
@@ -62502,59 +63309,72 @@ const AcsSplitter = () => {
                   className: "table-input"
                 }
               ) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "font-mono font-bold", style: { color: p2.isActive ? getPlayerColor(p2.name) : "rgba(255,255,255,0.2)", textShadow: p2.isActive ? `0 0 6px ${getPlayerColor(p2.name)}40` : "none" }, children: formatNumber2(p2.structuralIntegrity) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "font-mono text-metal font-bold", children: formatNumber2(p2.harvestedM) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "font-mono text-crystal font-bold", children: formatNumber2(p2.harvestedC) })
             ] }, idx);
           }) })
         ] })
       ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ResourceFlowSankey,
+        {
+          participants: splitCalculations.participantPayouts,
+          totalM: splitCalculations.totalHarvestedM,
+          totalC: splitCalculations.totalHarvestedC,
+          combinedReport
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid-2-1", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-glass shadow-large", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "split-settings-header", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(PieChart$1, { size: 18, color: "var(--primary)" }),
             " Participant Payout Ledger"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-stack", children: splitCalculations.participantPayouts.filter((p2) => p2.isActive).map((p2, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ledger-row glass", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ledger-row-header", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ledger-name font-bold", children: p2.name }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ledger-tag-status", children: "Active Partner" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ledger-row-grid", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-title font-bold text-metal", children: "Metal Target Share" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-val font-mono", children: formatNumber2(p2.targetM) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-stack", children: splitCalculations.participantPayouts.filter((p2) => p2.isActive).map((p2, idx) => {
+            const pColor = getPlayerColor(p2.name);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ledger-row glass", style: { borderLeft: `4px solid ${pColor}`, background: `linear-gradient(90deg, ${pColor}06 0%, transparent 100%)` }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ledger-row-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ledger-name font-bold", style: { color: pColor, textShadow: `0 0 8px ${pColor}33` }, children: p2.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ledger-tag-status", style: { background: `${pColor}1a`, color: pColor, border: `1px solid ${pColor}33` }, children: "Active Partner" })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-title font-bold text-crystal", children: "Crystal Target Share" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-val font-mono", children: formatNumber2(p2.targetC) })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "balance-grid border-top-line", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "balance-col", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "balance-lbl", children: "Metal Balance:" }),
-                p2.diffM >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono green-color font-bold", children: [
-                  "Gets +",
-                  formatNumber2(p2.diffM)
-                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono coral-color font-bold", children: [
-                  "Owes ",
-                  formatNumber2(Math.abs(p2.diffM))
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ledger-row-grid", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-title font-bold text-metal", children: "Metal Target Share" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-val font-mono", children: formatNumber2(p2.targetM) })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-title font-bold text-crystal", children: "Crystal Target Share" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ledger-small-val font-mono", children: formatNumber2(p2.targetC) })
                 ] })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "balance-col", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "balance-lbl", children: "Crystal Balance:" }),
-                p2.diffC >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono green-color font-bold", children: [
-                  "Gets +",
-                  formatNumber2(p2.diffC)
-                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono coral-color font-bold", children: [
-                  "Owes ",
-                  formatNumber2(Math.abs(p2.diffC))
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "balance-grid border-top-line", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "balance-col", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "balance-lbl", children: "Metal Balance:" }),
+                  p2.diffM >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono green-color font-bold", children: [
+                    "Gets +",
+                    formatNumber2(p2.diffM)
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono coral-color font-bold", children: [
+                    "Owes ",
+                    formatNumber2(Math.abs(p2.diffM))
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "balance-col", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "balance-lbl", children: "Crystal Balance:" }),
+                  p2.diffC >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono green-color font-bold", children: [
+                    "Gets +",
+                    formatNumber2(p2.diffC)
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "balance-val font-mono coral-color font-bold", children: [
+                    "Owes ",
+                    formatNumber2(Math.abs(p2.diffC))
+                  ] })
                 ] })
               ] })
-            ] })
-          ] }, idx)) })
+            ] }, idx);
+          }) })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-primary glass", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "card-lbl-primary", style: { color: "var(--primary)" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-equalization", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "card-lbl-primary", style: { color: "var(--primary)", display: "flex", alignItems: "center", gap: "8px" }, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(Coins, { size: 16 }),
             " Equalization Transfers"
           ] }),
@@ -62569,13 +63389,13 @@ const AcsSplitter = () => {
               formatNumber2(t2.crystal),
               " Crystal"
             ] }, "cry"));
-            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "transfer-statement glass", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "transfer-flow", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "transfer-from font-bold", children: t2.from }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "transfer-arrow", children: "➔" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "transfer-to font-bold", children: t2.to })
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "equalization-statement", style: { borderLeft: `4px solid ${getPlayerColor(t2.from)}` }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "transfer-flow", style: { fontSize: "0.9rem", display: "flex", alignItems: "center" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "transfer-from font-bold", style: { color: getPlayerColor(t2.from), textShadow: `0 0 8px ${getPlayerColor(t2.from)}33` }, children: t2.from }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "transfer-arrow-glow", children: "➔" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "transfer-to font-bold", style: { color: getPlayerColor(t2.to), textShadow: `0 0 8px ${getPlayerColor(t2.to)}33` }, children: t2.to })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "transfer-details", children: parts.reduce((prev, curr) => prev === null ? [curr] : [prev, " & ", curr], null) })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "transfer-details", style: { fontSize: "0.85rem", borderTop: "1px solid rgba(255,255,255,0.03)", paddingTop: "6px", marginTop: "2px" }, children: parts.reduce((prev, curr) => prev === null ? [curr] : [prev, " & ", curr], null) })
             ] }, idx);
           }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "balanced-banner glass text-center", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(Trophy, { size: 36, color: "var(--primary)", style: { marginBottom: "12px" } }),
@@ -62586,8 +63406,8 @@ const AcsSplitter = () => {
             "button",
             {
               onClick: handleCopyTransfers,
-              className: "btn-primary",
-              style: { width: "100%", marginTop: "16px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" },
+              className: "btn-copy-glow",
+              style: { width: "100%", marginTop: "16px" },
               children: copiedTransfers ? "Copied to Clipboard! ✓" : "Copy Transfer List"
             }
           )
@@ -62596,6 +63416,139 @@ const AcsSplitter = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "nav-bottom-actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setCurrentStep(2), className: "btn-back", children: "← Back to Debris Harvests" }) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+                /* Styling custom range slider */
+                .range-custom {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    background: transparent;
+                    width: 80px;
+                    height: 16px;
+                    display: inline-block;
+                    margin: 0;
+                    padding: 0;
+                    vertical-align: middle;
+                }
+
+                .range-custom:focus {
+                    outline: none;
+                }
+
+                .range-custom::-webkit-slider-runnable-track {
+                    background: rgba(255, 255, 255, 0.08) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    height: 6px;
+                    border-radius: 3px;
+                    transition: background 0.2s;
+                }
+
+                .range-custom::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    margin-top: -5px;
+                    background-color: var(--thumb-color, var(--primary)) !important;
+                    height: 16px;
+                    width: 16px;
+                    border-radius: 50% !important;
+                    box-shadow: 0 0 8px var(--thumb-color, var(--primary-glow));
+                    border: 1.5px solid rgba(255, 255, 255, 0.1);
+                    transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s;
+                }
+
+                .range-custom::-webkit-slider-thumb:hover {
+                    transform: scale(1.15);
+                    filter: brightness(1.1);
+                }
+
+                .range-custom::-moz-range-track {
+                    background: rgba(255, 255, 255, 0.08) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    height: 6px;
+                    border-radius: 3px;
+                }
+
+                .range-custom::-moz-range-thumb {
+                    background-color: var(--thumb-color, var(--primary)) !important;
+                    height: 16px;
+                    width: 16px;
+                    border-radius: 50% !important;
+                    box-shadow: 0 0 8px var(--thumb-color, var(--primary-glow));
+                    border: 1.5px solid rgba(255, 255, 255, 0.1);
+                }
+
+                /* Equalization Transfers Area Overhauls */
+                .card-equalization {
+                    border-radius: 24px;
+                    padding: 28px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                    background: linear-gradient(135deg, rgba(0, 242, 255, 0.04) 0%, rgba(18, 24, 38, 0.65) 100%) !important;
+                    border: 1px solid rgba(0, 242, 255, 0.22) !important;
+                    box-shadow: 0 0 30px rgba(0, 242, 255, 0.08), inset 0 0 15px rgba(0, 242, 255, 0.02);
+                    position: relative;
+                    overflow: hidden;
+                }
+
+                .card-equalization::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 3px;
+                    background: linear-gradient(90deg, #00f2ff, #d946ef);
+                }
+
+                .equalization-statement {
+                    background: rgba(6, 10, 20, 0.7) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+                    border-radius: 12px;
+                    padding: 14px 18px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    transition: all 0.2s ease;
+                }
+
+                .equalization-statement:hover {
+                    border-color: rgba(0, 242, 255, 0.2) !important;
+                    transform: translateX(4px);
+                    box-shadow: 0 6px 20px rgba(0, 242, 255, 0.05) !important;
+                }
+
+                .transfer-arrow-glow {
+                    color: var(--primary);
+                    text-shadow: 0 0 8px var(--primary-glow);
+                    margin: 0 8px;
+                }
+
+                .btn-copy-glow {
+                    background: var(--primary) !important;
+                    color: #0b0f19 !important;
+                    border: none;
+                    border-radius: 14px;
+                    padding: 14px 24px;
+                    font-weight: 800;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    transition: all 0.2s ease !important;
+                    box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+                }
+
+                .btn-copy-glow:hover {
+                    box-shadow: 0 0 25px rgba(0, 242, 255, 0.4);
+                    transform: translateY(-2px);
+                    filter: brightness(1.1);
+                }
+
+                .btn-copy-glow:active {
+                    transform: translateY(0);
+                }
+
                 .acs-splitter-container {
                     animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                 }
@@ -63560,6 +64513,41 @@ const AcsSplitter = () => {
                 .font-sm { font-size: 0.8rem; }
                 .opacity-6 { opacity: 0.6; }
                 .padding-16 { padding: 16px; }
+
+                /* Tooltip styles */
+                .tooltip-container {
+                    position: relative;
+                    display: inline-flex;
+                    align-items: center;
+                    cursor: help;
+                }
+                .tooltip-container .tooltip-text {
+                    visibility: hidden;
+                    width: 240px;
+                    background-color: rgba(10, 20, 30, 0.95);
+                    color: #fff;
+                    text-align: left;
+                    border-radius: 8px;
+                    border: 1px solid rgba(0, 242, 255, 0.25);
+                    padding: 10px 14px;
+                    position: absolute;
+                    z-index: 100;
+                    bottom: 125%;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    opacity: 0;
+                    font-size: 0.75rem;
+                    line-height: 1.4;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                    transition: opacity 0.3s;
+                    pointer-events: none;
+                    white-space: normal;
+                    font-weight: normal;
+                }
+                .tooltip-container:hover .tooltip-text {
+                    visibility: visible;
+                    opacity: 1;
+                }
 
                 @keyframes spin {
                     to { transform: rotate(360deg); }
@@ -64533,6 +65521,16 @@ const DiscovererOptimizer = () => {
 const Tools = () => {
   const tools = [
     {
+      id: "empire-amortization",
+      name: "Empire Amortization",
+      description: "Optimize building and lifeform research ROI across the Empire",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Calculator, { size: 20 }),
+      component: /* @__PURE__ */ jsxRuntimeExports.jsx("div", {}),
+      isShortcut: true,
+      shortcutView: "empire",
+      shortcutTab: "amortization"
+    },
+    {
       id: "scrap-optimizer",
       name: "Scrap Merchant",
       description: "Optimize fleet scrapping for maximum resource return",
@@ -64560,7 +65558,7 @@ const Tools = () => {
       description: "Split combat results across multiple alliance members",
       icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 20 }),
       component: /* @__PURE__ */ jsxRuntimeExports.jsx(AcsSplitter, {}),
-      inTesting: true
+      isBeta: true
     },
     {
       id: "plasma-optimizer",
@@ -64628,6 +65626,16 @@ const Tools = () => {
               className: `tool-menu-item ${activeToolId === tool.id ? "active" : ""}`,
               onClick: () => {
                 if (isTesting) return;
+                if (tool.isShortcut && tool.shortcutView) {
+                  sessionStorage.setItem("ognexus_target_subview", JSON.stringify({
+                    view: tool.shortcutView,
+                    tab: tool.shortcutTab
+                  }));
+                  window.dispatchEvent(new CustomEvent("ognexus_navigated", {
+                    detail: { view: tool.shortcutView, tab: tool.shortcutTab }
+                  }));
+                  return;
+                }
                 setActiveToolId(tool.id);
               },
               style: isTesting ? {
@@ -64638,7 +65646,22 @@ const Tools = () => {
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tool-icon", children: tool.icon }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", flex: 1 }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 700 }, children: tool.name }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "4px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 700 }, children: tool.name }),
+                      tool.isShortcut && /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowUpRight, { size: 12, style: { opacity: 0.5, color: "var(--primary)" } })
+                    ] }),
+                    tool.isBeta && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                      fontSize: "8px",
+                      fontWeight: 800,
+                      background: "rgba(0, 242, 255, 0.15)",
+                      color: "#00f2ff",
+                      border: "1px solid rgba(0, 242, 255, 0.3)",
+                      borderRadius: "4px",
+                      padding: "1px 5px",
+                      letterSpacing: "0.5px",
+                      textTransform: "uppercase",
+                      lineHeight: 1
+                    }, children: "Beta" }),
                     isTesting && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
                       fontSize: "8px",
                       fontWeight: 800,
@@ -64664,7 +65687,21 @@ const Tools = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginBottom: "32px", borderBottom: "1px solid var(--border)", paddingBottom: "20px" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "var(--primary)", filter: "drop-shadow(0 0 8px var(--primary-glow))" }, children: activeTool.icon }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { style: { margin: 0, fontSize: "1.5rem", fontWeight: 700, fontFamily: "var(--font-title)" }, children: activeTool.name })
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { style: { margin: 0, fontSize: "1.5rem", fontWeight: 700, fontFamily: "var(--font-title)", display: "flex", alignItems: "center", gap: "8px" }, children: [
+              activeTool.name,
+              activeTool.isBeta && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                fontSize: "10px",
+                fontWeight: 800,
+                background: "rgba(0, 242, 255, 0.15)",
+                color: "#00f2ff",
+                border: "1px solid rgba(0, 242, 255, 0.3)",
+                borderRadius: "4px",
+                padding: "2px 6px",
+                letterSpacing: "0.5px",
+                textTransform: "uppercase",
+                lineHeight: 1
+              }, children: "Beta" })
+            ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { margin: 0, color: "var(--text-muted)", fontSize: "0.9rem" }, children: activeTool.description })
         ] }),
@@ -65900,7 +66937,7 @@ const SHORTCUT_CATEGORIES = [
       { id: "tools-scrap-optimizer", label: "Scrap Merchant", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Package, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "scrap-optimizer" },
       { id: "tools-combat-sim", label: "Combat Analysis", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "combat-sim", inTesting: true },
       { id: "tools-exp-calc", label: "Expedition Calculator", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Calculator, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "exp-calc" },
-      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter" },
+      { id: "tools-acs-splitter", label: "ACS Splitter", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "acs-splitter", isBeta: true },
       { id: "tools-plasma-optimizer", label: "Plasma Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "plasma-optimizer" },
       { id: "tools-discoverer-optimizer", label: "Discoverer Tech", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 16 }), color: "#14b8a6", glowColor: "rgba(20, 184, 166, 0.3)", view: "tools", tab: "discoverer-optimizer" }
     ]
@@ -66162,10 +67199,21 @@ const Hotbar = ({ onSelect }) => {
                                   children: [
                                     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
                                       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: isSelected ? subItem.color : "inherit", display: "flex", alignItems: "center", opacity: isSelected ? 1 : 0.6 }, children: subItem.icon }),
-                                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: [
                                         subItem.label,
-                                        " ",
-                                        isTesting ? "(In Testing)" : ""
+                                        subItem.isBeta && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                                          fontSize: "8px",
+                                          fontWeight: 800,
+                                          background: "rgba(0, 242, 255, 0.15)",
+                                          color: "#00f2ff",
+                                          border: "1px solid rgba(0, 242, 255, 0.3)",
+                                          borderRadius: "4px",
+                                          padding: "1px 4px",
+                                          letterSpacing: "0.5px",
+                                          textTransform: "uppercase",
+                                          lineHeight: 1
+                                        }, children: "Beta" }),
+                                        isTesting && "(In Testing)"
                                       ] })
                                     ] }),
                                     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
@@ -66254,8 +67302,8 @@ const Hotbar = ({ onSelect }) => {
                         },
                         children: [
                           fullLabel,
-                          " ",
-                          shortcut.inTesting ? "(In Testing)" : "",
+                          shortcut.isBeta ? " (BETA)" : "",
+                          shortcut.inTesting ? " (In Testing)" : "",
                           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
                             position: "absolute",
                             bottom: "-4px",
@@ -67851,6 +68899,18 @@ const Tutorials = ({ onNavigate }) => {
 const App = () => {
   const [currentView, setCurrentView] = reactExports.useState("overview");
   const [showWelcome, setShowWelcome] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    const handleNav = (e) => {
+      const detail = e.detail;
+      if (detail && detail.view) {
+        setCurrentView(detail.view);
+      }
+    };
+    window.addEventListener("ognexus_navigated", handleNav);
+    return () => {
+      window.removeEventListener("ognexus_navigated", handleNav);
+    };
+  }, []);
   reactExports.useEffect(() => {
     const checkWelcomeStatus = () => {
       try {
