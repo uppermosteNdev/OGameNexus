@@ -59245,7 +59245,14 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
 const THEME_CYAN$2 = "#00f2ff";
 const THEME_PURPLE = "#a855f7";
 const AmortizationView = ({ planets, account }) => {
-  const [selectedPlanets, setSelectedPlanets] = reactExports.useState(planets.map((p2) => p2.id));
+  const [selectedPlanets, setSelectedPlanets] = reactExports.useState([]);
+  const [lastInitializedPlayerId, setLastInitializedPlayerId] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (planets.length > 0 && (account == null ? void 0 : account.playerId) !== lastInitializedPlayerId) {
+      setSelectedPlanets(planets.map((p2) => p2.id));
+      setLastInitializedPlayerId((account == null ? void 0 : account.playerId) || null);
+    }
+  }, [planets, account == null ? void 0 : account.playerId, lastInitializedPlayerId]);
   const [filters, setFilters] = reactExports.useState({
     [AmortizationType.Mines]: true,
     [AmortizationType.LifeformProductionBuildings]: true,

@@ -1,7 +1,7 @@
 # OGame Nexus
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0.0-cyan.svg)](https://github.com/uppermosten94/OGNexusExtension)
+[![Version](https://img.shields.io/badge/version-1.0.6-cyan.svg)](https://github.com/uppermosten94/OGNexusExtension)
 [![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Firefox%20%7C%20Edge-purple.svg)]()
 [![Built With](https://img.shields.io/badge/built%20with-React%20%7C%20Vite%20%7C%20TypeScript%20%7C%20Three.js-gradient.svg)]()
 
@@ -54,9 +54,10 @@
 ## 📦 Installation & Setup
 
 ### 🌐 Direct Install
-You can install OGame Nexus directly from the Chrome Web Store:
+You can install OGame Nexus directly from the Chrome Web Store or Firefox Add-ons:
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-Get_it_on-blue?style=for-the-badge&logo=google-chrome&logoColor=white)](https://chromewebstore.google.com/detail/ogame-nexus/iadbnpggklcnmjndildidalmfgdjhakp)
+[![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-Get_it_on-orange?style=for-the-badge&logo=firefox-browser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/ogame-nexus/)
 
 ---
 

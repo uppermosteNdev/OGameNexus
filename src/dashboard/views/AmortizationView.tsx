@@ -22,7 +22,16 @@ const THEME_CYAN = '#00f2ff';
 const THEME_PURPLE = '#a855f7';
 
 const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account }) => {
-    const [selectedPlanets, setSelectedPlanets] = useState<string[]>(planets.map(p => p.id));
+    const [selectedPlanets, setSelectedPlanets] = useState<string[]>([]);
+    const [lastInitializedPlayerId, setLastInitializedPlayerId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (planets.length > 0 && account?.playerId !== lastInitializedPlayerId) {
+            setSelectedPlanets(planets.map(p => p.id));
+            setLastInitializedPlayerId(account?.playerId || null);
+        }
+    }, [planets, account?.playerId, lastInitializedPlayerId]);
+
     const [filters, setFilters] = useState<{ [key in AmortizationType]: boolean }>({
         [AmortizationType.Mines]: true,
         [AmortizationType.LifeformProductionBuildings]: true,
