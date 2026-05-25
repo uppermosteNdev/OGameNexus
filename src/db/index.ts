@@ -14,6 +14,12 @@ export interface Account {
     avatarUrl?: string;
     serverUrl?: string;
     playerClass?: number; // 1: Collector, 2: Warrior, 3: Discoverer
+    allianceClass?: number; // 0: None/Other, 1: Trader, 2: Researcher, 3: Warrior
+    hasCommander?: boolean;
+    hasAdmiral?: boolean;
+    hasEngineer?: boolean;
+    hasGeologist?: boolean;
+    hasTechnocrat?: boolean;
     lastSeen: number;
     // Current / Total (Type 0)
     score?: number;
@@ -122,6 +128,24 @@ export interface Planet {
     ships?: Record<number, number>;
     defenses?: Record<number, number>;
     lastUpdated: number;
+    activeItems?: ActiveItem[];
+    boosters?: {
+        metal: number;
+        crystal: number;
+        deuterium: number;
+    };
+}
+
+export interface ActiveItem {
+    name: string;
+    title: string;
+    rarity?: string;
+    timeRemaining?: string;
+    expiryTimestamp?: number;
+    duration?: string;
+    isPermanent: boolean;
+    bonus?: number;
+    type: 'metal' | 'crystal' | 'deuterium' | 'resource' | 'expedition_res' | 'expedition_slots' | 'fleet_slots' | 'fields' | 'other';
 }
 
 export interface Expedition {

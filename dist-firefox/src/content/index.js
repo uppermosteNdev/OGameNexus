@@ -6035,10 +6035,116 @@
       });
       if (lfBuildings.length > 0) planet.lifeformBuildings = lfBuildings;
       if (lfSetup.length > 0) planet.lifeformSetup = lfSetup;
+      const activeItems = [];
+      const boosters = { metal: 0, crystal: 0, deuterium: 0 };
+      const itemEls = planetDiv.querySelectorAll(".empireItems .item_img");
+      itemEls.forEach((itemEl) => {
+        var _a2;
+        const tooltipTitle = itemEl.getAttribute("data-tooltip-title") || "";
+        const titleParts = tooltipTitle.split("|");
+        const title = titleParts[0].trim();
+        const bodyHtml = titleParts.slice(1).join("|");
+        const lowerTitle = title.toLowerCase();
+        let type = "other";
+        let bonus = 0;
+        if (lowerTitle.includes("metal booster")) {
+          type = "metal";
+          if (lowerTitle.includes("platinum")) bonus = 0.4;
+          else if (lowerTitle.includes("gold")) bonus = 0.3;
+          else if (lowerTitle.includes("silver")) bonus = 0.2;
+          else if (lowerTitle.includes("bronze")) bonus = 0.1;
+        } else if (lowerTitle.includes("crystal booster")) {
+          type = "crystal";
+          if (lowerTitle.includes("platinum")) bonus = 0.4;
+          else if (lowerTitle.includes("gold")) bonus = 0.3;
+          else if (lowerTitle.includes("silver")) bonus = 0.2;
+          else if (lowerTitle.includes("bronze")) bonus = 0.1;
+        } else if (lowerTitle.includes("deuterium booster")) {
+          type = "deuterium";
+          if (lowerTitle.includes("platinum")) bonus = 0.4;
+          else if (lowerTitle.includes("gold")) bonus = 0.3;
+          else if (lowerTitle.includes("silver")) bonus = 0.2;
+          else if (lowerTitle.includes("bronze")) bonus = 0.1;
+        } else if (lowerTitle.includes("expedition resource booster")) {
+          type = "expedition_res";
+        } else if (lowerTitle.includes("resource booster")) {
+          type = "resource";
+        } else if (lowerTitle.includes("expedition slots")) {
+          type = "expedition_slots";
+        } else if (lowerTitle.includes("fleet slots")) {
+          type = "fleet_slots";
+        } else if (lowerTitle.includes("planet fields")) {
+          type = "fields";
+        }
+        const titlePercentMatch = title.match(/\((\d+)%\)/);
+        if (titlePercentMatch) {
+          bonus = parseInt(titlePercentMatch[1], 10) / 100;
+        }
+        let rarity = "";
+        const parentClass = ((_a2 = itemEl.parentElement) == null ? void 0 : _a2.className) || "";
+        const rarityMatch = parentClass.match(/r_(\w+)/);
+        if (rarityMatch) rarity = rarityMatch[1];
+        let timeRemaining = "";
+        let expiryTimestamp;
+        let duration = "";
+        let isPermanent = false;
+        const decodedHtml = bodyHtml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#43;/g, "+");
+        const restTimeMatch = decodedHtml.match(/class="restTime"[^>]*>Time remaining:\s*([^<]+)/i) || decodedHtml.match(/Time remaining:\s*([^<]+)/i);
+        if (restTimeMatch) {
+          timeRemaining = restTimeMatch[1].trim();
+          const secondsRemaining = parseOgameTime(timeRemaining);
+          if (secondsRemaining > 0) {
+            expiryTimestamp = Date.now() + secondsRemaining * 1e3;
+          }
+        }
+        const durationMatch = decodedHtml.match(/Duration:\s*([^<]+)/i);
+        if (durationMatch) {
+          duration = durationMatch[1].trim();
+          if (duration.toLowerCase().includes("permanent")) {
+            isPermanent = true;
+          }
+        }
+        activeItems.push({
+          name: title,
+          title,
+          rarity,
+          timeRemaining,
+          expiryTimestamp,
+          duration,
+          isPermanent,
+          bonus,
+          type
+        });
+        if (bonus > 0) {
+          if (type === "metal") boosters.metal += bonus;
+          else if (type === "crystal") boosters.crystal += bonus;
+          else if (type === "deuterium") boosters.deuterium += bonus;
+          else if (type === "resource") {
+            boosters.metal += bonus;
+            boosters.crystal += bonus;
+            boosters.deuterium += bonus;
+          }
+        }
+      });
+      if (activeItems.length > 0) {
+        planet.activeItems = activeItems;
+        planet.boosters = boosters;
+      }
       planets.push(planet);
     });
-    console.log(`OGame Nexus: Successfully scraped ${planets.length} planets from Empire page. Sections: [Buildings, Facilities, Ships, Defense, Research, Lifeform Buildings, Lifeform Research]`);
+    console.log(`OGame Nexus: Successfully scraped ${planets.length} planets from Empire page. Sections: [Buildings, Facilities, Ships, Defense, Research, Lifeform Buildings, Lifeform Research, Active Boosters]`);
     return { planets, research };
+  }
+  function parseOgameTime(timeStr) {
+    const regex = /(?:(\d+)w)?\s*(?:(\d+)d)?\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?/i;
+    const matches = timeStr.match(regex);
+    if (!matches) return 0;
+    const weeks = parseInt(matches[1] || "0", 10);
+    const days = parseInt(matches[2] || "0", 10);
+    const hours = parseInt(matches[3] || "0", 10);
+    const minutes = parseInt(matches[4] || "0", 10);
+    const seconds = parseInt(matches[5] || "0", 10);
+    return weeks * 7 * 24 * 3600 + days * 24 * 3600 + hours * 3600 + minutes * 60 + seconds;
   }
   function mapTechToPlanet(planet, techId, level) {
     switch (techId) {
@@ -7220,6 +7326,47 @@
     if (tooltipTitle.includes("Discoverer")) return 3;
     return void 0;
   }
+  function scrapeOfficers() {
+    const officers = {
+      hasCommander: false,
+      hasAdmiral: false,
+      hasEngineer: false,
+      hasGeologist: false,
+      hasTechnocrat: false
+    };
+    const officersEl = document.querySelector("#officers");
+    if (officersEl) {
+      const checkActive = (selector) => {
+        const el = officersEl.querySelector(selector);
+        if (!el) return false;
+        if (el.classList.contains("on")) return true;
+        const title = el.getAttribute("data-tooltip-title") || "";
+        const lowerTitle = title.toLowerCase();
+        if (lowerTitle.includes("active") || lowerTitle.includes("still active")) {
+          return true;
+        }
+        return false;
+      };
+      officers.hasCommander = checkActive("a.commander");
+      officers.hasAdmiral = checkActive("a.admiral");
+      officers.hasEngineer = checkActive("a.engineer");
+      officers.hasGeologist = checkActive("a.geologist");
+      officers.hasTechnocrat = checkActive("a.technocrat");
+    }
+    return officers;
+  }
+  function scrapeAllianceClass() {
+    const url = window.location.href;
+    if (!url.includes("page=ingame") || !url.includes("component=resourcesettings")) return void 0;
+    const allyRow = document.querySelector('tr[data-techid="1005"]');
+    if (!allyRow) return void 0;
+    const classEl = allyRow.querySelector(".allianceclass");
+    if (!classEl) return 0;
+    if (classEl.classList.contains("trader")) return 1;
+    if (classEl.classList.contains("researcher")) return 2;
+    if (classEl.classList.contains("warrior")) return 3;
+    return 0;
+  }
   function scrapePlanetList() {
     const planets = [];
     const planetNodes = document.querySelectorAll("#planetList .smallplanet");
@@ -7331,13 +7478,110 @@
         totalPlayers = parseInt(sMatch[3]);
       }
     }
+    const activeItems = [];
+    const boosters = { metal: 0, crystal: 0, deuterium: 0 };
+    const activeItemsEl = document.querySelector(".active_items");
+    if (activeItemsEl) {
+      const itemContainers = activeItemsEl.querySelectorAll("div[data-uuid]");
+      itemContainers.forEach((container) => {
+        const itemEl = container.querySelector("a.active_item");
+        if (!itemEl) return;
+        const tooltipTitle = itemEl.getAttribute("data-tooltip-title") || "";
+        const titleParts = tooltipTitle.split("|");
+        const title = titleParts[0].trim();
+        const bodyHtml = titleParts.slice(1).join("|");
+        const lowerTitle = title.toLowerCase();
+        let type = "other";
+        let bonus = 0;
+        if (lowerTitle.includes("metal booster")) {
+          type = "metal";
+          if (lowerTitle.includes("platinum")) bonus = 0.4;
+          else if (lowerTitle.includes("gold")) bonus = 0.3;
+          else if (lowerTitle.includes("silver")) bonus = 0.2;
+          else if (lowerTitle.includes("bronze")) bonus = 0.1;
+        } else if (lowerTitle.includes("crystal booster")) {
+          type = "crystal";
+          if (lowerTitle.includes("platinum")) bonus = 0.4;
+          else if (lowerTitle.includes("gold")) bonus = 0.3;
+          else if (lowerTitle.includes("silver")) bonus = 0.2;
+          else if (lowerTitle.includes("bronze")) bonus = 0.1;
+        } else if (lowerTitle.includes("deuterium booster")) {
+          type = "deuterium";
+          if (lowerTitle.includes("platinum")) bonus = 0.4;
+          else if (lowerTitle.includes("gold")) bonus = 0.3;
+          else if (lowerTitle.includes("silver")) bonus = 0.2;
+          else if (lowerTitle.includes("bronze")) bonus = 0.1;
+        } else if (lowerTitle.includes("expedition resource booster")) {
+          type = "expedition_res";
+        } else if (lowerTitle.includes("resource booster")) {
+          type = "resource";
+        } else if (lowerTitle.includes("expedition slots")) {
+          type = "expedition_slots";
+        } else if (lowerTitle.includes("fleet slots")) {
+          type = "fleet_slots";
+        } else if (lowerTitle.includes("planet fields")) {
+          type = "fields";
+        }
+        const titlePercentMatch = title.match(/\((\d+)%\)/);
+        if (titlePercentMatch) {
+          bonus = parseInt(titlePercentMatch[1], 10) / 100;
+        }
+        let rarity = "";
+        const elClass = itemEl.className || "";
+        const parentClass = container.className || "";
+        const rarityMatch = elClass.match(/r_(\w+)/) || parentClass.match(/r_(\w+)/);
+        if (rarityMatch) rarity = rarityMatch[1];
+        let timeRemaining = "";
+        let expiryTimestamp;
+        let duration = "";
+        let isPermanent = false;
+        const decodedHtml = bodyHtml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#43;/g, "+");
+        const restTimeMatch = decodedHtml.match(/class="restTime"[^>]*>Time remaining:\s*([^<]+)/i) || decodedHtml.match(/Time remaining:\s*([^<]+)/i);
+        if (restTimeMatch) {
+          timeRemaining = restTimeMatch[1].trim();
+          const secondsRemaining = parseOgameTime(timeRemaining);
+          if (secondsRemaining > 0) {
+            expiryTimestamp = Date.now() + secondsRemaining * 1e3;
+          }
+        }
+        const durationMatch = decodedHtml.match(/Duration:\s*([^<]+)/i);
+        if (durationMatch) {
+          duration = durationMatch[1].trim();
+          if (duration.toLowerCase().includes("permanent")) {
+            isPermanent = true;
+          }
+        }
+        activeItems.push({
+          name: title,
+          title,
+          rarity,
+          timeRemaining,
+          expiryTimestamp,
+          duration,
+          isPermanent,
+          bonus,
+          type
+        });
+        if (bonus > 0) {
+          if (type === "metal") boosters.metal += bonus;
+          else if (type === "crystal") boosters.crystal += bonus;
+          else if (type === "deuterium") boosters.deuterium += bonus;
+          else if (type === "resource") {
+            boosters.metal += bonus;
+            boosters.crystal += bonus;
+            boosters.deuterium += bonus;
+          }
+        }
+      });
+    }
     return {
       planetData: {
         diameter,
         fieldsUsed,
         fieldsTotal,
         tempMin,
-        tempMax
+        tempMax,
+        ...activeItemsEl ? { activeItems, boosters } : {}
       },
       accountData: {
         score,
@@ -7716,7 +7960,9 @@
         allianceTag: getMetaContent("ogame-alliance-tag") || void 0,
         avatarUrl: avatarUrl || void 0,
         serverUrl: window.location.origin,
-        playerClass: scrapePlayerClass()
+        playerClass: scrapePlayerClass(),
+        allianceClass: scrapeAllianceClass(),
+        ...scrapeOfficers()
       },
       planets,
       activePlanetId: getActivePlanetId(),

@@ -180,7 +180,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
             steps: [
                 {
                     title: "Lifeforms Menu",
-                    text: "Inside the **Empire Overview** area of the **Lifeforms Menu** you are greeted by the overall bonuses and power-ups your account has.<br /><br />Also, by clicking on any planet, you will be able to play-around with the lifeform setup on that planet.<br /><br />Here, we can see a clear differentiation between the **LIVE** setup of the OGame account and the **Sandbox** technologies; meaning that any changes, on any planet, made to the Lifeform Setup will be marked as **\"Sandbox\"** / different than LIVE. Whenever you are done theorycrafting and want to go back to LIVE version, you can click the **Revert** button.",
+                    text: "Inside the **Empire Overview** area of the **Lifeforms Menu** you are greeted by the overall bonuses and power-ups your account has.<br /><br />Also, by clicking on any planet, you will be able to play-around with the lifeform setup on that planet.<br /><br />Here, we can see a clear differentiation between the **LIVE** setup of the OGame account and the **Sandbox** technologies; meaning that any changes, on any planet, made to the Lifeform Setup will be marked as **\"Sandbox\"** / different than LIVE. Whenever you are done theorycrafting and want to go back to LIVE version, you can click the **Update to Live versions** button.",
                     images: ["icons/tutorials/T4/LifeformsTut1.jpg", "icons/tutorials/T4/LifeformsTut2.jpg"]
                 },
                 {

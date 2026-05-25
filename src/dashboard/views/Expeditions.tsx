@@ -199,7 +199,8 @@ const GenericExpeditionTable: React.FC<{
     const today = getStartOfDay(now);
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
 
-    const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - today.getDay());
+    const day = today.getDay() || 7;
+    const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - (day - 1));
     const lastWeekStart = new Date(weekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
 
     const monthStart = new Date(today); monthStart.setDate(1);

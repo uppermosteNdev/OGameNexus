@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { parseProduction, parseOverview, parsePlayerDataXml, parseSupplies, parseResearches, parseLifeformResearch, parseLifeformBuildings, parseLifeformBonuses, parseServerDataXml } from "./scrapers";
 import { LIFEFORM_BUILDING_DATA } from "../db/staticData";
-import { AMORTIZATION_TABLE } from "../utils/amortizationCalc";
+import { AMORTIZATION_TABLE, calculateEmpireProduction } from "../utils/amortizationCalc";
 
 function cleanObject(obj: any) {
     const cleaned = { ...obj };
@@ -251,7 +251,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
 
                 if (planets && planets.length > 0 && account?.playerId) {
-                    await db.transaction('rw', [db.planets], async () => {
+                    await db.transaction('rw', [db.planets, db.accounts], async () => {
                         const existingPlanets = await db.planets.where('playerId').equals(account.playerId).toArray();
 
                         for (const p of planets) {
@@ -319,6 +319,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     sandboxSetup: [], // Initialize new planets with empty sandbox
                                     lifeformSetup: []
                                 });
+                            }
+                        }
+
+                        // Fetch the fully merged and updated list of planets to compute accurate global production
+                        const updatedPlanets = await db.planets.where('playerId').equals(account.playerId).toArray();
+                        const updatedAccount = await db.accounts.get(account.playerId);
+                        if (updatedAccount) {
+                            // Expired items check: filter out any activeItems that have already expired
+                            const now = Date.now();
+                            for (const pl of updatedPlanets) {
+                                if (pl.activeItems && pl.activeItems.length > 0) {
+                                    const activeCount = pl.activeItems.length;
+                                    const remainingItems = pl.activeItems.filter(item => !item.expiryTimestamp || item.expiryTimestamp > now);
+                                    
+                                    // If any items were removed, re-calculate the cumulative boosters object
+                                    if (remainingItems.length < activeCount) {
+                                        const boosters = { metal: 0, crystal: 0, deuterium: 0 };
+                                        remainingItems.forEach(item => {
+                                            if (item.bonus && item.bonus > 0) {
+                                                if (item.type === 'metal') boosters.metal += item.bonus;
+                                                else if (item.type === 'crystal') boosters.crystal += item.bonus;
+                                                else if (item.type === 'deuterium') boosters.deuterium += item.bonus;
+                                                else if (item.type === 'resource') {
+                                                    boosters.metal += item.bonus;
+                                                    boosters.crystal += item.bonus;
+                                                    boosters.deuterium += item.bonus;
+                                                }
+                                            }
+                                        });
+                                        pl.activeItems = remainingItems;
+                                        pl.boosters = boosters;
+                                        // Save corrected boosters/items in DB
+                                        await db.planets.update(pl.id, { activeItems: pl.activeItems, boosters: pl.boosters });
+                                    }
+                                }
+                            }
+
+                            // Calculate production offline using updated global database values
+                            const productionResults = calculateEmpireProduction({
+                                account: updatedAccount,
+                                planets: updatedPlanets
+                            });
+
+                            for (const pl of updatedPlanets) {
+                                const prod = productionResults.planets[pl.id]?.total;
+                                if (prod) {
+                                    await db.planets.update(pl.id, {
+                                        production: {
+                                            metal: Math.floor(prod.metal),
+                                            crystal: Math.floor(prod.crystal),
+                                            deuterium: Math.floor(prod.deuterium),
+                                            lastUpdated: Date.now()
+                                        }
+                                    });
+                                }
                             }
                         }
 

@@ -153,7 +153,7 @@ export function formatROI(hours: number): string {
 }
 
 function getPlanetTechMultiplier(planet: any, account: any): number {
-    const lfLevel = account.lifeformExperience?.find((e: any) => e.id === planet.lifeformId || e.lifeformId === planet.lifeformId)?.level || 0;
+    const lfLevel = account?.lifeformExperience?.find((e: any) => e.id === planet.lifeformId || e.lifeformId === planet.lifeformId)?.level || 0;
     const lfLevelBonus = lfLevel * 0.001; // 0.1% per level
 
     let buildingBonus = 0;
@@ -169,8 +169,9 @@ function getPlanetTechMultiplier(planet: any, account: any): number {
 
 function calculateTotalExpeditionBonus(state: EmpireState, type: 'expo_res' | 'expo_si'): number {
     let totalBonus = 0;
-    state.planets.forEach(p => {
-        const techMult = getPlanetTechMultiplier(p, state.account);
+    const planets = state?.planets || [];
+    planets.forEach(p => {
+        const techMult = getPlanetTechMultiplier(p, state?.account);
         p.lifeformSetup?.forEach((t: any) => {
             const level = t.level || 0;
             const entry = AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId);
@@ -204,9 +205,9 @@ export interface ProductionResults {
 }
 
 export function calculateEmpireProduction(state: EmpireState): ProductionResults {
-    const { account, planets } = state;
-    const universeSpeed = account.universeSpeed || 1;
-    const playerClass = account.playerClass || 0;
+    const { account, planets } = state || {};
+    const universeSpeed = account?.universeSpeed || 1;
+    const playerClass = account?.playerClass || 0;
 
     let globalEuroMetal = 0;
     let globalEuroCrystal = 0;
@@ -263,7 +264,7 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         results.empireBase.crystal += baseCrystal;
         results.empireBase.deuterium += baseDeut;
 
-        const plasmaLevel = account.researches?.find((r: any) => r.id === 122)?.level || 0;
+        const plasmaLevel = account?.researches?.find((r: any) => r.id === 122)?.level || 0;
         const plasmaMetal = plasmaLevel * 0.01;
         const plasmaCrystal = plasmaLevel * (0.66 / 100);
         const plasmaDeut = plasmaLevel * (0.33 / 100);
@@ -283,14 +284,26 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
             classMetal = 0.25; classCrystal = 0.25; classDeut = 0.25;
         }
 
-        const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal;
-        const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal;
-        const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut;
+        const geologistBonus = account?.hasGeologist ? 0.1 : 0;
+        const staffBonus = (account?.hasCommander && account?.hasAdmiral && account?.hasEngineer && account?.hasGeologist && account?.hasTechnocrat) ? 0.02 : 0;
+        const allyTraderBonus = account?.allianceClass === 1 ? 0.05 : 0;
+
+        const boosterMetal = p.boosters?.metal || 0;
+        const boosterCrystal = p.boosters?.crystal || 0;
+        const boosterDeut = p.boosters?.deuterium || 0;
+
+        const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal + boosterMetal + geologistBonus + staffBonus + allyTraderBonus;
+        const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal + boosterCrystal + geologistBonus + staffBonus + allyTraderBonus;
+        const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut + boosterDeut + geologistBonus + staffBonus + allyTraderBonus;
 
         results.planets[p.id] = {
             base: { metal: baseMetal, crystal: baseCrystal, deuterium: baseDeut },
             mult: { metal: multMetal, crystal: multCrystal, deuterium: multDeut },
-            total: { metal: baseMetal * multMetal, crystal: baseCrystal * multCrystal, deuterium: baseDeut * multDeut }
+            total: { 
+                metal: (baseMetal * multMetal) + (30 * universeSpeed), 
+                crystal: (baseCrystal * multCrystal) + (15 * universeSpeed), 
+                deuterium: baseDeut * multDeut 
+            }
         };
     });
 
@@ -372,7 +385,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                     if (entry.name === "Crystal Mine") currentLevel = p.crystalMine || 0;
                     if (entry.name === "Deuterium Mine") currentLevel = p.deuteriumMine || 0;
                 } else if (entry.type === AmortizationType.PlasmaTechnology) {
-                    currentLevel = state.account.researches?.find((r: any) => r.id === 122)?.level || 0;
+                    currentLevel = state.account?.researches?.find((r: any) => r.id === 122)?.level || 0;
                 } else if (entry.id && (entry.type === AmortizationType.LifeformProductionBuildings || entry.type === AmortizationType.LifeformResearchBuildings)) {
                     currentLevel = p.lifeformBuildings?.find((b: any) => b.id === entry.id)?.level || 0;
                 } else if (entry.id && (entry.type === AmortizationType.LifeformProductionResearches || entry.type === AmortizationType.LifeformExpeditionResearches)) {
@@ -403,7 +416,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                 let prodIncrease = 0;
                 let prodDelta: Cost = { metal: 0, crystal: 0, deuterium: 0 };
                 const effect = entry.effect as any;
-                const universeSpeed = state.account.universeSpeed || 1;
+                const universeSpeed = state.account?.universeSpeed || 1;
 
                 if (entry.type === AmortizationType.Mines) {
                     const temp = p.tempMax || 20;
@@ -477,7 +490,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
 
                                     if (tEffect.type === 'kaelesh_discovery_adv') {
                                         // Discovery Adv mult boost also affects Slots and Enemies indirectly.
-                                        const computerLevel = state.account.researches?.find((r: any) => r.id === 108)?.level || 10;
+                                        const computerLevel = state.account?.researches?.find((r: any) => r.id === 108)?.level || 10;
                                         const slts = computerLevel + 3;
 
                                         // Bonus from Slot gain (0.004 per level) and Enemies (0.00045 per level)
@@ -528,7 +541,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                         const trueD_si = baselineSi.deuterium / (1 + currentSiBonus);
 
                         if (isKaeleshAdv) {
-                            const computerLevel = state.account.researches?.find((r: any) => r.id === 108)?.level || 10;
+                            const computerLevel = state.account?.researches?.find((r: any) => r.id === 108)?.level || 10;
                             const estimatedSlots = computerLevel + 3; // Base 1 + Computer + 2 Discovery bonus
 
                             // 1. Direct Resource Bonus part (0.2% per level)

@@ -1,4 +1,4 @@
-import { Planet } from '../db';
+import { Planet, ActiveItem } from '../db';
 import { LIFEFORM_TECH_DATA } from '../db/lifeformTechData';
 
 function getEntityLevel(el: Element): number {
@@ -152,11 +152,142 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
         if (lfBuildings.length > 0) planet.lifeformBuildings = lfBuildings;
         if (lfSetup.length > 0) planet.lifeformSetup = lfSetup;
 
+        // Scrape Active Boosters / Items
+        const activeItems: ActiveItem[] = [];
+        const boosters = { metal: 0, crystal: 0, deuterium: 0 };
+        
+        const itemEls = planetDiv.querySelectorAll('.empireItems .item_img');
+        itemEls.forEach(itemEl => {
+            const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || '';
+            const titleParts = tooltipTitle.split('|');
+            const title = titleParts[0].trim();
+            const bodyHtml = titleParts.slice(1).join('|');
+            
+            const lowerTitle = title.toLowerCase();
+            let type: ActiveItem['type'] = 'other';
+            let bonus = 0;
+            
+            if (lowerTitle.includes('metal booster')) {
+                type = 'metal';
+                if (lowerTitle.includes('platinum')) bonus = 0.40;
+                else if (lowerTitle.includes('gold')) bonus = 0.30;
+                else if (lowerTitle.includes('silver')) bonus = 0.20;
+                else if (lowerTitle.includes('bronze')) bonus = 0.10;
+            } else if (lowerTitle.includes('crystal booster')) {
+                type = 'crystal';
+                if (lowerTitle.includes('platinum')) bonus = 0.40;
+                else if (lowerTitle.includes('gold')) bonus = 0.30;
+                else if (lowerTitle.includes('silver')) bonus = 0.20;
+                else if (lowerTitle.includes('bronze')) bonus = 0.10;
+            } else if (lowerTitle.includes('deuterium booster')) {
+                type = 'deuterium';
+                if (lowerTitle.includes('platinum')) bonus = 0.40;
+                else if (lowerTitle.includes('gold')) bonus = 0.30;
+                else if (lowerTitle.includes('silver')) bonus = 0.20;
+                else if (lowerTitle.includes('bronze')) bonus = 0.10;
+            } else if (lowerTitle.includes('expedition resource booster')) {
+                type = 'expedition_res';
+            } else if (lowerTitle.includes('resource booster')) {
+                type = 'resource';
+            } else if (lowerTitle.includes('expedition slots')) {
+                type = 'expedition_slots';
+            } else if (lowerTitle.includes('fleet slots')) {
+                type = 'fleet_slots';
+            } else if (lowerTitle.includes('planet fields')) {
+                type = 'fields';
+            }
+            
+            const titlePercentMatch = title.match(/\((\d+)%\)/);
+            if (titlePercentMatch) {
+                bonus = parseInt(titlePercentMatch[1], 10) / 100;
+            }
+            
+            let rarity = '';
+            const parentClass = itemEl.parentElement?.className || '';
+            const rarityMatch = parentClass.match(/r_(\w+)/);
+            if (rarityMatch) rarity = rarityMatch[1];
+            
+            let timeRemaining = '';
+            let expiryTimestamp: number | undefined;
+            let duration = '';
+            let isPermanent = false;
+            
+            const decodedHtml = bodyHtml
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#43;/g, '+');
+            
+            const restTimeMatch = decodedHtml.match(/class="restTime"[^>]*>Time remaining:\s*([^<]+)/i) || 
+                                  decodedHtml.match(/Time remaining:\s*([^<]+)/i);
+            if (restTimeMatch) {
+                timeRemaining = restTimeMatch[1].trim();
+                const secondsRemaining = parseOgameTime(timeRemaining);
+                if (secondsRemaining > 0) {
+                    expiryTimestamp = Date.now() + (secondsRemaining * 1000);
+                }
+            }
+            
+            const durationMatch = decodedHtml.match(/Duration:\s*([^<]+)/i);
+            if (durationMatch) {
+                duration = durationMatch[1].trim();
+                if (duration.toLowerCase().includes('permanent')) {
+                    isPermanent = true;
+                }
+            }
+            
+            activeItems.push({
+                name: title,
+                title,
+                rarity,
+                timeRemaining,
+                expiryTimestamp,
+                duration,
+                isPermanent,
+                bonus,
+                type
+            });
+            
+            if (bonus > 0) {
+                if (type === 'metal') boosters.metal += bonus;
+                else if (type === 'crystal') boosters.crystal += bonus;
+                else if (type === 'deuterium') boosters.deuterium += bonus;
+                else if (type === 'resource') {
+                    boosters.metal += bonus;
+                    boosters.crystal += bonus;
+                    boosters.deuterium += bonus;
+                }
+            }
+        });
+        
+        if (activeItems.length > 0) {
+            planet.activeItems = activeItems;
+            planet.boosters = boosters;
+        }
+
         planets.push(planet);
     });
 
-    console.log(`OGame Nexus: Successfully scraped ${planets.length} planets from Empire page. Sections: [Buildings, Facilities, Ships, Defense, Research, Lifeform Buildings, Lifeform Research]`);
+    console.log(`OGame Nexus: Successfully scraped ${planets.length} planets from Empire page. Sections: [Buildings, Facilities, Ships, Defense, Research, Lifeform Buildings, Lifeform Research, Active Boosters]`);
     return { planets, research };
+}
+
+export function parseOgameTime(timeStr: string): number {
+    const regex = /(?:(\d+)w)?\s*(?:(\d+)d)?\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?/i;
+    const matches = timeStr.match(regex);
+    if (!matches) return 0;
+    
+    const weeks = parseInt(matches[1] || '0', 10);
+    const days = parseInt(matches[2] || '0', 10);
+    const hours = parseInt(matches[3] || '0', 10);
+    const minutes = parseInt(matches[4] || '0', 10);
+    const seconds = parseInt(matches[5] || '0', 10);
+    
+    return (weeks * 7 * 24 * 3600) + 
+           (days * 24 * 3600) + 
+           (hours * 3600) + 
+           (minutes * 60) + 
+           seconds;
 }
 
 

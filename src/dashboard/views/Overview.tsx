@@ -27,6 +27,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { SHIP_DATA } from '../../db/staticData';
 import { renderAnalyticsTab } from '../../content/analytics';
+import { calculateEmpireProduction } from '../../utils/amortizationCalc';
 
 import {
     ResponsiveContainer,
@@ -260,20 +261,30 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
     const rates = settings || { metal: 3, crystal: 2, deuterium: 1 };
 
+    // Calculate dynamic production on-the-fly using standard engine
+    const calcResults = useMemo(() => {
+        if (!activeAccount || planets.length === 0) return null;
+        return calculateEmpireProduction({ account: activeAccount, planets });
+    }, [activeAccount, planets]);
+
     // Calculate totals and capture freshness
     const totals = useMemo(() => {
-        return planets.reduce((acc, p) => {
-            if (p.production) {
-                acc.metal += p.production.metal;
-                acc.crystal += p.production.crystal;
-                acc.deuterium += p.production.deuterium;
-                if (acc.lastUpdated === 0 || p.production.lastUpdated < acc.lastUpdated) {
-                    acc.lastUpdated = p.production.lastUpdated;
+        const result = { metal: 0, crystal: 0, deuterium: 0, lastUpdated: 0 };
+        if (!calcResults) return result;
+        
+        planets.forEach(p => {
+            const prod = calcResults.planets[p.id]?.total;
+            if (prod) {
+                result.metal += prod.metal;
+                result.crystal += prod.crystal;
+                result.deuterium += prod.deuterium;
+                if (result.lastUpdated === 0 || p.lastUpdated < result.lastUpdated) {
+                    result.lastUpdated = p.lastUpdated;
                 }
             }
-            return acc;
-        }, { metal: 0, crystal: 0, deuterium: 0, lastUpdated: 0 });
-    }, [planets]);
+        });
+        return result;
+    }, [planets, calcResults]);
 
     const mMultiplier = 1;
     const cMultiplier = rates.metal / rates.crystal;
@@ -1011,7 +1022,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                         <ResponsiveContainer width="100%" height="85%" minWidth={0} minHeight={0}>
                             <BarChart data={planets.filter(p => p.type === 'planet').map(p => ({
                                 name: p.name,
-                                msu: p.production ? (p.production.metal * mMultiplier) + (p.production.crystal * cMultiplier) + (p.production.deuterium * dMultiplier) : 0
+                                msu: calcResults?.planets[p.id] ? (calcResults.planets[p.id].total.metal * mMultiplier) + (calcResults.planets[p.id].total.crystal * cMultiplier) + (calcResults.planets[p.id].total.deuterium * dMultiplier) : 0
                             }))}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                                 <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} />
@@ -1054,7 +1065,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.8 }}>{p.metalMine || 0}</span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 900, color: RESOURCE_COLORS.metal }}>
-                                            {p.production ? `${formatNumber(p.production.metal)}/h` : 'N/A'}
+                                            {calcResults?.planets[p.id] ? `${formatNumber(calcResults.planets[p.id].total.metal)}/h` : 'N/A'}
                                         </div>
                                     </div>
 
@@ -1065,7 +1076,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.8 }}>{p.crystalMine || 0}</span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 900, color: RESOURCE_COLORS.crystal }}>
-                                            {p.production ? `${formatNumber(p.production.crystal)}/h` : 'N/A'}
+                                            {calcResults?.planets[p.id] ? `${formatNumber(calcResults.planets[p.id].total.crystal)}/h` : 'N/A'}
                                         </div>
                                     </div>
 
@@ -1076,7 +1087,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.8 }}>{p.deuteriumMine || 0}</span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 900, color: RESOURCE_COLORS.deuterium }}>
-                                            {p.production ? `${formatNumber(p.production.deuterium)}/h` : 'N/A'}
+                                            {calcResults?.planets[p.id] ? `${formatNumber(calcResults.planets[p.id].total.deuterium)}/h` : 'N/A'}
                                         </div>
                                     </div>
                                 </div>

@@ -6737,6 +6737,118 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       effect: { type: "plasma", value: 1 }
     }
   ];
+  function getPlanetTechMultiplier(planet, account) {
+    var _a, _b, _c;
+    const lfLevel = ((_b = (_a = account == null ? void 0 : account.lifeformExperience) == null ? void 0 : _a.find((e) => e.id === planet.lifeformId || e.lifeformId === planet.lifeformId)) == null ? void 0 : _b.level) || 0;
+    const lfLevelBonus = lfLevel * 1e-3;
+    let buildingBonus = 0;
+    (_c = planet.lifeformBuildings) == null ? void 0 : _c.forEach((b) => {
+      const entry = AMORTIZATION_TABLE.find((e) => e.id === b.id);
+      if (entry && entry.effect && entry.effect.type === "tech_bonus") {
+        buildingBonus += b.level * entry.effect.value;
+      }
+    });
+    return 1 + lfLevelBonus + buildingBonus;
+  }
+  function calculateEmpireProduction(state) {
+    const { account, planets } = state || {};
+    const universeSpeed = (account == null ? void 0 : account.universeSpeed) || 1;
+    const playerClass = (account == null ? void 0 : account.playerClass) || 0;
+    let globalEuroMetal = 0;
+    let globalEuroCrystal = 0;
+    let globalEuroDeut = 0;
+    planets.forEach((p) => {
+      var _a;
+      const techMult = getPlanetTechMultiplier(p, account);
+      (_a = p.lifeformSetup) == null ? void 0 : _a.forEach((t) => {
+        const level = t.level || 0;
+        const entry = AMORTIZATION_TABLE.find((e) => e.id === t.selectedTechId);
+        if (entry && entry.effect && entry.effect.target === "global") {
+          const val = entry.effect.value * level * techMult;
+          if (entry.effect.type === "metal") globalEuroMetal += val;
+          if (entry.effect.type === "crystal") globalEuroCrystal += val;
+          if (entry.effect.type === "deuterium") globalEuroDeut += val;
+          if (entry.effect.type === "all") {
+            globalEuroMetal += val;
+            globalEuroCrystal += val;
+            globalEuroDeut += val;
+          }
+        }
+      });
+    });
+    const results = {
+      empireBase: { metal: 0, crystal: 0, deuterium: 0 },
+      planets: {},
+      globalBonuses: { metal: globalEuroMetal, crystal: globalEuroCrystal, deuterium: globalEuroDeut }
+    };
+    planets.forEach((p) => {
+      var _a, _b, _c, _d, _e, _f;
+      const m = p.metalMine || 0;
+      const c = p.crystalMine || 0;
+      const d = p.deuteriumMine || 0;
+      const temp = p.tempMax || 20;
+      let slot = 0;
+      try {
+        slot = parseInt(p.coords.split(":")[2]);
+      } catch (e) {
+      }
+      let metalPosFactor = 1;
+      if (slot === 6 || slot === 10) metalPosFactor = 1.17;
+      else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
+      else if (slot === 8) metalPosFactor = 1.35;
+      let crystalPosFactor = 1;
+      if (slot === 1) crystalPosFactor = 1.4;
+      else if (slot === 2) crystalPosFactor = 1.3;
+      else if (slot === 3) crystalPosFactor = 1.2;
+      const baseMetal = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor;
+      const baseCrystal = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor;
+      const baseDeut = 10 * d * Math.pow(1.1, d) * (1.44 - 4e-3 * temp) * universeSpeed;
+      results.empireBase.metal += baseMetal;
+      results.empireBase.crystal += baseCrystal;
+      results.empireBase.deuterium += baseDeut;
+      const plasmaLevel = ((_b = (_a = account == null ? void 0 : account.researches) == null ? void 0 : _a.find((r) => r.id === 122)) == null ? void 0 : _b.level) || 0;
+      const plasmaMetal = plasmaLevel * 0.01;
+      const plasmaCrystal = plasmaLevel * (0.66 / 100);
+      const plasmaDeut = plasmaLevel * (0.33 / 100);
+      let lfbMetal = 0, lfbCrystal = 0, lfbDeut = 0;
+      (_c = p.lifeformBuildings) == null ? void 0 : _c.forEach((b) => {
+        if (b.id === 12106) lfbMetal += b.level * 0.02;
+        if (b.id === 12109) lfbCrystal += b.level * 0.02;
+        if (b.id === 12110) lfbDeut += b.level * 0.02;
+        if (b.id === 13110) lfbDeut += b.level * 0.02;
+        if (b.id === 11106) lfbMetal += b.level * 0.015;
+        if (b.id === 11108) {
+          lfbCrystal += b.level * 0.015;
+          lfbDeut += b.level * 0.01;
+        }
+      });
+      let classMetal = 0, classCrystal = 0, classDeut = 0;
+      if (playerClass === 1) {
+        classMetal = 0.25;
+        classCrystal = 0.25;
+        classDeut = 0.25;
+      }
+      const geologistBonus = (account == null ? void 0 : account.hasGeologist) ? 0.1 : 0;
+      const staffBonus = (account == null ? void 0 : account.hasCommander) && (account == null ? void 0 : account.hasAdmiral) && (account == null ? void 0 : account.hasEngineer) && (account == null ? void 0 : account.hasGeologist) && (account == null ? void 0 : account.hasTechnocrat) ? 0.02 : 0;
+      const allyTraderBonus = (account == null ? void 0 : account.allianceClass) === 1 ? 0.05 : 0;
+      const boosterMetal = ((_d = p.boosters) == null ? void 0 : _d.metal) || 0;
+      const boosterCrystal = ((_e = p.boosters) == null ? void 0 : _e.crystal) || 0;
+      const boosterDeut = ((_f = p.boosters) == null ? void 0 : _f.deuterium) || 0;
+      const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal + boosterMetal + geologistBonus + staffBonus + allyTraderBonus;
+      const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal + boosterCrystal + geologistBonus + staffBonus + allyTraderBonus;
+      const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut + boosterDeut + geologistBonus + staffBonus + allyTraderBonus;
+      results.planets[p.id] = {
+        base: { metal: baseMetal, crystal: baseCrystal, deuterium: baseDeut },
+        mult: { metal: multMetal, crystal: multCrystal, deuterium: multDeut },
+        total: {
+          metal: baseMetal * multMetal + 30 * universeSpeed,
+          crystal: baseCrystal * multCrystal + 15 * universeSpeed,
+          deuterium: baseDeut * multDeut
+        }
+      };
+    });
+    return results;
+  }
   function cleanObject(obj) {
     const cleaned = { ...obj };
     Object.keys(cleaned).forEach((key) => cleaned[key] === void 0 && delete cleaned[key]);
@@ -6887,8 +6999,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             }));
           }
           if (planets && planets.length > 0 && (account == null ? void 0 : account.playerId)) {
-            await db.transaction("rw", [db.planets], async () => {
-              var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+            await db.transaction("rw", [db.planets, db.accounts], async () => {
+              var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
               const existingPlanets = await db.planets.where("playerId").equals(account.playerId).toArray();
               for (const p of planets) {
                 const existing = existingPlanets.find((ep) => ep.id === p.id);
@@ -6949,6 +7061,52 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     // Initialize new planets with empty sandbox
                     lifeformSetup: []
                   });
+                }
+              }
+              const updatedPlanets = await db.planets.where("playerId").equals(account.playerId).toArray();
+              const updatedAccount = await db.accounts.get(account.playerId);
+              if (updatedAccount) {
+                const now = Date.now();
+                for (const pl of updatedPlanets) {
+                  if (pl.activeItems && pl.activeItems.length > 0) {
+                    const activeCount = pl.activeItems.length;
+                    const remainingItems = pl.activeItems.filter((item) => !item.expiryTimestamp || item.expiryTimestamp > now);
+                    if (remainingItems.length < activeCount) {
+                      const boosters = { metal: 0, crystal: 0, deuterium: 0 };
+                      remainingItems.forEach((item) => {
+                        if (item.bonus && item.bonus > 0) {
+                          if (item.type === "metal") boosters.metal += item.bonus;
+                          else if (item.type === "crystal") boosters.crystal += item.bonus;
+                          else if (item.type === "deuterium") boosters.deuterium += item.bonus;
+                          else if (item.type === "resource") {
+                            boosters.metal += item.bonus;
+                            boosters.crystal += item.bonus;
+                            boosters.deuterium += item.bonus;
+                          }
+                        }
+                      });
+                      pl.activeItems = remainingItems;
+                      pl.boosters = boosters;
+                      await db.planets.update(pl.id, { activeItems: pl.activeItems, boosters: pl.boosters });
+                    }
+                  }
+                }
+                const productionResults = calculateEmpireProduction({
+                  account: updatedAccount,
+                  planets: updatedPlanets
+                });
+                for (const pl of updatedPlanets) {
+                  const prod = (_n = productionResults.planets[pl.id]) == null ? void 0 : _n.total;
+                  if (prod) {
+                    await db.planets.update(pl.id, {
+                      production: {
+                        metal: Math.floor(prod.metal),
+                        crystal: Math.floor(prod.crystal),
+                        deuterium: Math.floor(prod.deuterium),
+                        lastUpdated: Date.now()
+                      }
+                    });
+                  }
                 }
               }
               if (message.data.isFullPlanetList) {

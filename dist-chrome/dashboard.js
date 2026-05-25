@@ -23620,6 +23620,721 @@ function renderTotalsTable(ag2, globalAg) {
   card.appendChild(t2);
   return card;
 }
+var AmortizationType = /* @__PURE__ */ ((AmortizationType2) => {
+  AmortizationType2[AmortizationType2["Mines"] = 1] = "Mines";
+  AmortizationType2[AmortizationType2["LifeformProductionBuildings"] = 2] = "LifeformProductionBuildings";
+  AmortizationType2[AmortizationType2["LifeformResearchBuildings"] = 3] = "LifeformResearchBuildings";
+  AmortizationType2[AmortizationType2["LifeformProductionResearches"] = 4] = "LifeformProductionResearches";
+  AmortizationType2[AmortizationType2["LifeformExpeditionResearches"] = 5] = "LifeformExpeditionResearches";
+  AmortizationType2[AmortizationType2["PlasmaTechnology"] = 6] = "PlasmaTechnology";
+  return AmortizationType2;
+})(AmortizationType || {});
+const DEFAULT_RATES = {
+  metal: 3,
+  crystal: 2,
+  deuterium: 1
+};
+const AMORTIZATION_TABLE = [
+  // Mines
+  {
+    name: "Metal Mine",
+    id: null,
+    type: 1,
+    baseCost: { metal: 60, crystal: 15, deuterium: 0 },
+    costFormula: (level) => ({
+      metal: Math.floor(60 * Math.pow(1.5, level - 1)),
+      crystal: Math.floor(15 * Math.pow(1.5, level - 1)),
+      deuterium: 0
+    }),
+    reduction: "mineralResearchCenter",
+    effect: { type: "metal", value: "mine_formula" }
+  },
+  {
+    name: "Crystal Mine",
+    id: null,
+    type: 1,
+    baseCost: { metal: 48, crystal: 24, deuterium: 0 },
+    costFormula: (level) => ({
+      metal: Math.floor(48 * Math.pow(1.6, level - 1)),
+      crystal: Math.floor(24 * Math.pow(1.6, level - 1)),
+      deuterium: 0
+    }),
+    reduction: "mineralResearchCenter",
+    effect: { type: "crystal", value: "mine_formula" }
+  },
+  {
+    name: "Deuterium Mine",
+    id: null,
+    type: 1,
+    baseCost: { metal: 225, crystal: 75, deuterium: 0 },
+    costFormula: (level) => ({
+      metal: Math.floor(225 * Math.pow(1.5, level - 1)),
+      crystal: Math.floor(75 * Math.pow(1.5, level - 1)),
+      deuterium: 0
+    }),
+    reduction: "mineralResearchCenter",
+    effect: { type: "deuterium", value: "mine_formula" }
+  },
+  // LF Buildings
+  { name: "High-Performance Transformer", id: 13107, type: 3, baseCost: { metal: 35e3, crystal: 15e3, deuterium: 1e4 }, multiplier: 1.5, lifeformId: 3, effect: { type: "tech_bonus", value: 3e-3 } },
+  { name: "Chip Mass Production", id: 13111, type: 3, baseCost: { metal: 55e3, crystal: 5e4, deuterium: 3e4 }, multiplier: 1.5, lifeformId: 3, effect: { type: "tech_bonus", value: 4e-3 } },
+  { name: "High-Performance Synthesiser", id: 13110, type: 2, baseCost: { metal: 1e5, crystal: 4e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 3, effect: { type: "deuterium", value: 0.02, target: "mine" } },
+  { name: "High Energy Smelting", id: 11106, type: 2, baseCost: { metal: 9e3, crystal: 6e3, deuterium: 3e3 }, multiplier: 1.5, lifeformId: 1, effect: { type: "metal", value: 0.015, target: "mine" } },
+  { name: "Fusion-Powered Production", id: 11108, type: 2, baseCost: { metal: 5e4, crystal: 25e3, deuterium: 15e3 }, multiplier: 1.5, lifeformId: 1, effect: { type: "multiple", values: { metal: 0, crystal: 0.015, deuterium: 0.01 }, target: "mine" } },
+  { name: "Metropolis", id: 11111, type: 3, baseCost: { metal: 8e4, crystal: 35e3, deuterium: 6e4 }, multiplier: 1.5, lifeformId: 1, effect: { type: "tech_bonus", value: 5e-3 } },
+  { name: "Magma Forge", id: 12106, type: 2, baseCost: { metal: 1e4, crystal: 8e3, deuterium: 1e3 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "metal", value: 0.02, target: "mine" } },
+  { name: "Crystal Refinery", id: 12109, type: 2, baseCost: { metal: 85e3, crystal: 44e3, deuterium: 25e3 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "crystal", value: 0.02, target: "mine" } },
+  { name: "Deuterium Synthesiser", id: 12110, type: 2, baseCost: { metal: 12e4, crystal: 5e4, deuterium: 2e4 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "deuterium", value: 0.02, target: "mine" } },
+  // LF Techs
+  { name: "Catalyser Technology", id: 3, type: 4, baseCost: { metal: 1e4, crystal: 6e3, deuterium: 1e3 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
+  { name: "High-Performance Extractors", id: 5, type: 4, baseCost: { metal: 7e3, crystal: 1e4, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 1, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
+  { name: "Acoustic Scanning", id: 6, type: 4, baseCost: { metal: 7500, crystal: 12500, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "crystal", value: 8e-4, target: "global" } },
+  { name: "Sulphide Process", id: 8, type: 4, baseCost: { metal: 7500, crystal: 12500, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
+  { name: "High Energy Pump Systems", id: 10, type: 4, baseCost: { metal: 15e3, crystal: 1e4, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
+  { name: "Telekinetic Tractor Beam", id: 16, type: 5, baseCost: { metal: 2e4, crystal: 15e3, deuterium: 7500 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "expo_si", value: 2e-3 } },
+  { name: "Magma-Powered Production", id: 18, type: 4, baseCost: { metal: 25e3, crystal: 2e4, deuterium: 1e4 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
+  { name: "Enhanced Sensor Technology", id: 20, type: 5, baseCost: { metal: 25e3, crystal: 2e4, deuterium: 1e4 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "expo_res", value: 2e-3 } },
+  { name: "Automated Transport Lines", id: 23, type: 4, baseCost: { metal: 5e4, crystal: 5e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
+  { name: "Depth Sounding", id: 26, type: 4, baseCost: { metal: 7e4, crystal: 4e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "metal", value: 8e-4, target: "global" } },
+  { name: "Enhanced Production Technologies", id: 29, type: 4, baseCost: { metal: 8e4, crystal: 5e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 1, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
+  { name: "Hardened Diamond Drill Heads", id: 38, type: 4, baseCost: { metal: 85e3, crystal: 4e4, deuterium: 35e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "metal", value: 8e-4, target: "global" } },
+  { name: "Seismic Mining Technology", id: 42, type: 4, baseCost: { metal: 12e4, crystal: 3e4, deuterium: 25e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "crystal", value: 8e-4, target: "global" } },
+  { name: "Sixth Sense", id: 44, type: 5, baseCost: { metal: 12e4, crystal: 3e4, deuterium: 25e3 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "expo_res", value: 2e-3 } },
+  { name: "Magma-Powered Pump Systems", id: 46, type: 4, baseCost: { metal: 1e5, crystal: 4e4, deuterium: 3e4 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
+  { name: "Psychoharmoniser", id: 48, type: 4, baseCost: { metal: 1e5, crystal: 4e4, deuterium: 3e4 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
+  { name: "Artificial Swarm Intelligence", id: 51, type: 4, baseCost: { metal: 2e5, crystal: 1e5, deuterium: 1e5 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
+  // Level * 1.7 scale
+  { name: "Rock’tal Collector Enhancement", id: 70, type: 4, baseCost: { metal: 3e5, crystal: 18e4, deuterium: 12e4 }, multiplier: 1.7, lifeformId: 2, reduction: "research_centers", effect: { type: "all", value: 2e-3, target: "global" } },
+  { name: "Kaelesh Discoverer Enhancement", id: 72, type: 5, baseCost: { metal: 3e5, crystal: 18e4, deuterium: 12e4 }, multiplier: 1.7, lifeformId: 4, reduction: "research_centers", effect: { type: "kaelesh_discovery_adv", value: 2e-3 } },
+  // Plasma
+  {
+    name: "Plasma Technology",
+    id: 122,
+    type: 6,
+    baseCost: { metal: 2e3, crystal: 4e3, deuterium: 1e3 },
+    costFormula: (level) => ({
+      metal: Math.floor(2e3 * Math.pow(2, level - 1)),
+      crystal: Math.floor(4e3 * Math.pow(2, level - 1)),
+      deuterium: Math.floor(1e3 * Math.pow(2, level - 1))
+    }),
+    reduction: "improvedStellarator",
+    effect: { type: "plasma", value: 1 }
+  }
+];
+function calculateMSU(cost, rates = DEFAULT_RATES) {
+  const mMultiplier = 1;
+  const cMultiplier = rates.metal / rates.crystal;
+  const dMultiplier = rates.metal / rates.deuterium;
+  return cost.metal * mMultiplier + cost.crystal * cMultiplier + cost.deuterium * dMultiplier;
+}
+function formatROI(hours) {
+  if (hours === Infinity || isNaN(hours)) return "∞";
+  const years = Math.floor(hours / (24 * 365));
+  const weeks = Math.floor(hours % (24 * 365) / (24 * 7));
+  const days = Math.floor(hours % (24 * 7) / 24);
+  const h = Math.floor(hours % 24);
+  const m2 = Math.floor(hours * 60 % 60);
+  const parts = [];
+  if (years > 0) parts.push(`${years}y`);
+  if (weeks > 0) parts.push(`${weeks}w`);
+  if (days > 0) parts.push(`${days}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m2 > 0 || parts.length === 0) parts.push(`${m2}m`);
+  return parts.join(" ");
+}
+function getPlanetTechMultiplier(planet, account) {
+  var _a, _b, _c;
+  const lfLevel = ((_b = (_a = account == null ? void 0 : account.lifeformExperience) == null ? void 0 : _a.find((e) => e.id === planet.lifeformId || e.lifeformId === planet.lifeformId)) == null ? void 0 : _b.level) || 0;
+  const lfLevelBonus = lfLevel * 1e-3;
+  let buildingBonus = 0;
+  (_c = planet.lifeformBuildings) == null ? void 0 : _c.forEach((b) => {
+    const entry = AMORTIZATION_TABLE.find((e) => e.id === b.id);
+    if (entry && entry.effect && entry.effect.type === "tech_bonus") {
+      buildingBonus += b.level * entry.effect.value;
+    }
+  });
+  return 1 + lfLevelBonus + buildingBonus;
+}
+function calculateTotalExpeditionBonus(state, type) {
+  let totalBonus = 0;
+  const planets = (state == null ? void 0 : state.planets) || [];
+  planets.forEach((p2) => {
+    var _a;
+    const techMult = getPlanetTechMultiplier(p2, state == null ? void 0 : state.account);
+    (_a = p2.lifeformSetup) == null ? void 0 : _a.forEach((t2) => {
+      const level = t2.level || 0;
+      const entry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
+      if (entry && entry.effect && level > 0) {
+        const effect = entry.effect;
+        if (effect.type === type || effect.type === "kaelesh_discovery_adv") {
+          totalBonus += effect.value * level * techMult;
+        }
+      }
+    });
+  });
+  return totalBonus;
+}
+function calculateEmpireProduction(state) {
+  const { account, planets } = state || {};
+  const universeSpeed = (account == null ? void 0 : account.universeSpeed) || 1;
+  const playerClass = (account == null ? void 0 : account.playerClass) || 0;
+  let globalEuroMetal = 0;
+  let globalEuroCrystal = 0;
+  let globalEuroDeut = 0;
+  planets.forEach((p2) => {
+    var _a;
+    const techMult = getPlanetTechMultiplier(p2, account);
+    (_a = p2.lifeformSetup) == null ? void 0 : _a.forEach((t2) => {
+      const level = t2.level || 0;
+      const entry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
+      if (entry && entry.effect && entry.effect.target === "global") {
+        const val = entry.effect.value * level * techMult;
+        if (entry.effect.type === "metal") globalEuroMetal += val;
+        if (entry.effect.type === "crystal") globalEuroCrystal += val;
+        if (entry.effect.type === "deuterium") globalEuroDeut += val;
+        if (entry.effect.type === "all") {
+          globalEuroMetal += val;
+          globalEuroCrystal += val;
+          globalEuroDeut += val;
+        }
+      }
+    });
+  });
+  const results = {
+    empireBase: { metal: 0, crystal: 0, deuterium: 0 },
+    planets: {},
+    globalBonuses: { metal: globalEuroMetal, crystal: globalEuroCrystal, deuterium: globalEuroDeut }
+  };
+  planets.forEach((p2) => {
+    var _a, _b, _c, _d, _e, _f;
+    const m2 = p2.metalMine || 0;
+    const c2 = p2.crystalMine || 0;
+    const d = p2.deuteriumMine || 0;
+    const temp = p2.tempMax || 20;
+    let slot = 0;
+    try {
+      slot = parseInt(p2.coords.split(":")[2]);
+    } catch (e) {
+    }
+    let metalPosFactor = 1;
+    if (slot === 6 || slot === 10) metalPosFactor = 1.17;
+    else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
+    else if (slot === 8) metalPosFactor = 1.35;
+    let crystalPosFactor = 1;
+    if (slot === 1) crystalPosFactor = 1.4;
+    else if (slot === 2) crystalPosFactor = 1.3;
+    else if (slot === 3) crystalPosFactor = 1.2;
+    const baseMetal = 30 * m2 * Math.pow(1.1, m2) * universeSpeed * metalPosFactor;
+    const baseCrystal = 20 * c2 * Math.pow(1.1, c2) * universeSpeed * crystalPosFactor;
+    const baseDeut = 10 * d * Math.pow(1.1, d) * (1.44 - 4e-3 * temp) * universeSpeed;
+    results.empireBase.metal += baseMetal;
+    results.empireBase.crystal += baseCrystal;
+    results.empireBase.deuterium += baseDeut;
+    const plasmaLevel = ((_b = (_a = account == null ? void 0 : account.researches) == null ? void 0 : _a.find((r2) => r2.id === 122)) == null ? void 0 : _b.level) || 0;
+    const plasmaMetal = plasmaLevel * 0.01;
+    const plasmaCrystal = plasmaLevel * (0.66 / 100);
+    const plasmaDeut = plasmaLevel * (0.33 / 100);
+    let lfbMetal = 0, lfbCrystal = 0, lfbDeut = 0;
+    (_c = p2.lifeformBuildings) == null ? void 0 : _c.forEach((b) => {
+      if (b.id === 12106) lfbMetal += b.level * 0.02;
+      if (b.id === 12109) lfbCrystal += b.level * 0.02;
+      if (b.id === 12110) lfbDeut += b.level * 0.02;
+      if (b.id === 13110) lfbDeut += b.level * 0.02;
+      if (b.id === 11106) lfbMetal += b.level * 0.015;
+      if (b.id === 11108) {
+        lfbCrystal += b.level * 0.015;
+        lfbDeut += b.level * 0.01;
+      }
+    });
+    let classMetal = 0, classCrystal = 0, classDeut = 0;
+    if (playerClass === 1) {
+      classMetal = 0.25;
+      classCrystal = 0.25;
+      classDeut = 0.25;
+    }
+    const geologistBonus = (account == null ? void 0 : account.hasGeologist) ? 0.1 : 0;
+    const staffBonus = (account == null ? void 0 : account.hasCommander) && (account == null ? void 0 : account.hasAdmiral) && (account == null ? void 0 : account.hasEngineer) && (account == null ? void 0 : account.hasGeologist) && (account == null ? void 0 : account.hasTechnocrat) ? 0.02 : 0;
+    const allyTraderBonus = (account == null ? void 0 : account.allianceClass) === 1 ? 0.05 : 0;
+    const boosterMetal = ((_d = p2.boosters) == null ? void 0 : _d.metal) || 0;
+    const boosterCrystal = ((_e = p2.boosters) == null ? void 0 : _e.crystal) || 0;
+    const boosterDeut = ((_f = p2.boosters) == null ? void 0 : _f.deuterium) || 0;
+    const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal + boosterMetal + geologistBonus + staffBonus + allyTraderBonus;
+    const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal + boosterCrystal + geologistBonus + staffBonus + allyTraderBonus;
+    const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut + boosterDeut + geologistBonus + staffBonus + allyTraderBonus;
+    results.planets[p2.id] = {
+      base: { metal: baseMetal, crystal: baseCrystal, deuterium: baseDeut },
+      mult: { metal: multMetal, crystal: multCrystal, deuterium: multDeut },
+      total: {
+        metal: baseMetal * multMetal + 30 * universeSpeed,
+        crystal: baseCrystal * multCrystal + 15 * universeSpeed,
+        deuterium: baseDeut * multDeut
+      }
+    };
+  });
+  return results;
+}
+function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES, limit = 25, expoAverages, selectedPlanetIds) {
+  var _a, _b, _c, _d;
+  const state = JSON.parse(JSON.stringify({ planets, account }));
+  const resultItems = [];
+  const REDUCTION_IDS = {
+    mineralResearchCenter: 12111,
+    megalith: 12108,
+    researchCentre: 11103,
+    runeTechnologium: 12103,
+    roboticsResearchCentre: 13103,
+    vortexChamber: 14103,
+    improvedStellarator: 34
+  };
+  const getReduction = (type, planet, state2) => {
+    var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l;
+    if (!type) return 0;
+    if (type === "mineralResearchCenter") {
+      const level = ((_b2 = (_a2 = planet.lifeformBuildings) == null ? void 0 : _a2.find((b) => b.id === REDUCTION_IDS.mineralResearchCenter)) == null ? void 0 : _b2.level) || 0;
+      return level * 5e-3;
+    }
+    if (type === "megalith") {
+      const level = ((_d2 = (_c2 = planet.lifeformBuildings) == null ? void 0 : _c2.find((b) => b.id === REDUCTION_IDS.megalith)) == null ? void 0 : _d2.level) || 0;
+      return level * 0.01;
+    }
+    if (type === "research_centers") {
+      const l1 = ((_f = (_e = planet.lifeformBuildings) == null ? void 0 : _e.find((b) => b.id === REDUCTION_IDS.researchCentre)) == null ? void 0 : _f.level) || 0;
+      const l2 = ((_h = (_g = planet.lifeformBuildings) == null ? void 0 : _g.find((b) => b.id === REDUCTION_IDS.runeTechnologium)) == null ? void 0 : _h.level) || 0;
+      const l3 = ((_j = (_i = planet.lifeformBuildings) == null ? void 0 : _i.find((b) => b.id === REDUCTION_IDS.roboticsResearchCentre)) == null ? void 0 : _j.level) || 0;
+      const l4 = ((_l = (_k = planet.lifeformBuildings) == null ? void 0 : _k.find((b) => b.id === REDUCTION_IDS.vortexChamber)) == null ? void 0 : _l.level) || 0;
+      return (l1 + l2 + l3 + l4) * 25e-4;
+    }
+    if (type === "improvedStellarator") {
+      let totalBoostedLevel = 0;
+      state2.planets.forEach((pl2) => {
+        var _a3;
+        const tech = (_a3 = pl2.lifeformSetup) == null ? void 0 : _a3.find((t2) => t2.selectedTechId === REDUCTION_IDS.improvedStellarator);
+        if (tech && tech.level > 0) {
+          const techMult = getPlanetTechMultiplier(pl2, state2.account);
+          totalBoostedLevel += tech.level * techMult;
+        }
+      });
+      const reduction = totalBoostedLevel * 15e-4;
+      return Math.min(0.5, reduction);
+    }
+    return 0;
+  };
+  for (let i = 0; i < limit; i++) {
+    const prodData = calculateEmpireProduction(state);
+    const candidates = [];
+    const currentResBonus = calculateTotalExpeditionBonus(state, "expo_res");
+    const currentSiBonus = calculateTotalExpeditionBonus(state, "expo_si");
+    state.planets.forEach((p2) => {
+      const isSelected = !selectedPlanetIds || selectedPlanetIds.includes(p2.id);
+      if (i === 0) console.groupCollapsed(`[Amortization Debug] Evaluating Planet: ${p2.coords} (${p2.name}) [Selected: ${isSelected}]`);
+      AMORTIZATION_TABLE.forEach((entry) => {
+        var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
+        if (!filters[entry.type]) return;
+        if (!isSelected && entry.type !== 6) return;
+        const isBuilding = entry.type === 2 || entry.type === 3;
+        if (entry.lifeformId && entry.lifeformId !== p2.lifeformId && isBuilding) return;
+        let currentLevel = 0;
+        if (entry.type === 1) {
+          if (entry.name === "Metal Mine") currentLevel = p2.metalMine || 0;
+          if (entry.name === "Crystal Mine") currentLevel = p2.crystalMine || 0;
+          if (entry.name === "Deuterium Mine") currentLevel = p2.deuteriumMine || 0;
+        } else if (entry.type === 6) {
+          currentLevel = ((_c2 = (_b2 = (_a2 = state.account) == null ? void 0 : _a2.researches) == null ? void 0 : _b2.find((r2) => r2.id === 122)) == null ? void 0 : _c2.level) || 0;
+        } else if (entry.id && (entry.type === 2 || entry.type === 3)) {
+          currentLevel = ((_e = (_d2 = p2.lifeformBuildings) == null ? void 0 : _d2.find((b) => b.id === entry.id)) == null ? void 0 : _e.level) || 0;
+        } else if (entry.id && (entry.type === 4 || entry.type === 5)) {
+          const tech = (_f = p2.lifeformSetup) == null ? void 0 : _f.find((t2) => t2.selectedTechId === entry.id);
+          if (!tech) return;
+          currentLevel = tech.level;
+        }
+        const nextLevel = currentLevel + 1;
+        const reduction = getReduction(entry.reduction || "", p2, state);
+        const discountFactor = Math.max(0.01, 1 - reduction);
+        let cost;
+        if (entry.costFormula) {
+          cost = entry.costFormula(nextLevel);
+        } else {
+          const factor = nextLevel * Math.pow(entry.multiplier, nextLevel - 1);
+          cost = {
+            metal: Math.floor(entry.baseCost.metal * factor),
+            crystal: Math.floor(entry.baseCost.crystal * factor),
+            deuterium: Math.floor(entry.baseCost.deuterium * factor)
+          };
+        }
+        cost.metal = Math.floor(cost.metal * discountFactor);
+        cost.crystal = Math.floor(cost.crystal * discountFactor);
+        cost.deuterium = Math.floor(cost.deuterium * discountFactor);
+        let prodIncrease = 0;
+        let prodDelta = { metal: 0, crystal: 0, deuterium: 0 };
+        const effect = entry.effect;
+        const universeSpeed = ((_g = state.account) == null ? void 0 : _g.universeSpeed) || 1;
+        if (entry.type === 1) {
+          const temp = p2.tempMax || 20;
+          let slot = 0;
+          try {
+            slot = parseInt(p2.coords.split(":")[2]);
+          } catch (e) {
+          }
+          let metalPosFactor = 1;
+          if (slot === 6 || slot === 10) metalPosFactor = 1.17;
+          else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
+          else if (slot === 8) metalPosFactor = 1.35;
+          let crystalPosFactor = 1;
+          if (slot === 1) crystalPosFactor = 1.4;
+          else if (slot === 2) crystalPosFactor = 1.3;
+          else if (slot === 3) crystalPosFactor = 1.2;
+          const mNext = entry.name === "Metal Mine" ? nextLevel : p2.metalMine || 0;
+          const cNext = entry.name === "Crystal Mine" ? nextLevel : p2.crystalMine || 0;
+          const dNext = entry.name === "Deuterium Mine" ? nextLevel : p2.deuteriumMine || 0;
+          const bM_next = 30 * mNext * Math.pow(1.1, mNext) * universeSpeed * metalPosFactor;
+          const bC_next = 20 * cNext * Math.pow(1.1, cNext) * universeSpeed * crystalPosFactor;
+          const bD_next = 10 * dNext * Math.pow(1.1, dNext) * (1.44 - 4e-3 * temp) * universeSpeed;
+          const pData = prodData.planets[p2.id];
+          prodDelta = {
+            metal: (bM_next - pData.base.metal) * pData.mult.metal,
+            crystal: (bC_next - pData.base.crystal) * pData.mult.crystal,
+            deuterium: (bD_next - pData.base.deuterium) * pData.mult.deuterium
+          };
+          prodIncrease = calculateMSU(prodDelta, rates);
+        } else if (effect) {
+          if (effect.type === "plasma") {
+            prodDelta = {
+              metal: prodData.empireBase.metal * 0.01,
+              crystal: prodData.empireBase.crystal * 66e-4,
+              deuterium: prodData.empireBase.deuterium * 33e-4
+            };
+            prodIncrease = calculateMSU(prodDelta, rates);
+          } else if (effect.type === "tech_bonus") {
+            const factor = effect.value;
+            let deltaM = 0, deltaC = 0, deltaD = 0;
+            (_h = p2.lifeformSetup) == null ? void 0 : _h.forEach((t2) => {
+              var _a3, _b3, _c3, _d3, _e2, _f2, _g2, _h2, _i2;
+              const level = t2.level || 0;
+              const tEntry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
+              if (tEntry && tEntry.effect) {
+                const tEffect = tEntry.effect;
+                const tVal = tEffect.value * level * factor;
+                if (tEffect.target === "global") {
+                  if (tEffect.type === "metal" || tEffect.type === "all") deltaM += prodData.empireBase.metal * tVal;
+                  if (tEffect.type === "crystal" || tEffect.type === "all") deltaC += prodData.empireBase.crystal * tVal;
+                  if (tEffect.type === "deuterium" || tEffect.type === "all") deltaD += prodData.empireBase.deuterium * tVal;
+                } else if (tEffect.target === "mine") {
+                  if (tEffect.type === "metal") deltaM += prodData.planets[p2.id].base.metal * tVal;
+                  if (tEffect.type === "crystal") deltaC += prodData.planets[p2.id].base.crystal * tVal;
+                  if (tEffect.type === "deuterium") deltaD += prodData.planets[p2.id].base.deuterium * tVal;
+                } else if (tEffect.type === "expo_res" || tEffect.type === "kaelesh_discovery_adv") {
+                  const baseline = ((_a3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _a3.metal) || ((_b3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _b3.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
+                  const trueM = baseline.metal / (1 + currentResBonus);
+                  const trueC = baseline.crystal / (1 + currentResBonus);
+                  const trueD = baseline.deuterium / (1 + currentResBonus);
+                  deltaM += trueM * tVal;
+                  deltaC += trueC * tVal;
+                  deltaD += trueD * tVal;
+                  if (tEffect.type === "kaelesh_discovery_adv") {
+                    const computerLevel = ((_e2 = (_d3 = (_c3 = state.account) == null ? void 0 : _c3.researches) == null ? void 0 : _d3.find((r2) => r2.id === 108)) == null ? void 0 : _e2.level) || 10;
+                    const slts = computerLevel + 3;
+                    const indirectBasePerLevel = 4e-3 / slts + 45e-5;
+                    const indirectGainFactor = indirectBasePerLevel * level * factor;
+                    const baselineSi = ((_f2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _f2.metal) || ((_g2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _g2.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
+                    const totalM = trueM * (1 + currentResBonus) + baselineSi.metal / (1 + currentSiBonus) * (1 + currentSiBonus);
+                    const totalC = trueC * (1 + currentResBonus) + baselineSi.crystal / (1 + currentSiBonus) * (1 + currentSiBonus);
+                    const totalD = trueD * (1 + currentResBonus) + baselineSi.deuterium / (1 + currentSiBonus) * (1 + currentSiBonus);
+                    deltaM += totalM * indirectGainFactor;
+                    deltaC += totalC * indirectGainFactor;
+                    deltaD += totalD * indirectGainFactor;
+                  }
+                } else if (tEffect.type === "expo_si") {
+                  const baseline = ((_h2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _h2.metal) || ((_i2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _i2.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
+                  const trueM = baseline.metal / (1 + currentSiBonus);
+                  const trueC = baseline.crystal / (1 + currentSiBonus);
+                  const trueD = baseline.deuterium / (1 + currentSiBonus);
+                  deltaM += trueM * tVal;
+                  deltaC += trueC * tVal;
+                  deltaD += trueD * tVal;
+                }
+              }
+            });
+            prodDelta = { metal: deltaM, crystal: deltaC, deuterium: deltaD };
+            prodIncrease = calculateMSU(prodDelta, rates);
+          } else if (effect.type === "expo_res" || effect.type === "expo_si" || effect.type === "kaelesh_discovery_adv") {
+            const isKaeleshAdv = effect.type === "kaelesh_discovery_adv";
+            const techMult = getPlanetTechMultiplier(p2, state.account);
+            const effectiveValue = effect.value * techMult;
+            const baselineRes = ((_i = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _i.metal) || ((_j = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _j.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
+            const baselineSi = ((_k = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _k.metal) || ((_l = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _l.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
+            const trueM_res = baselineRes.metal / (1 + currentResBonus);
+            const trueC_res = baselineRes.crystal / (1 + currentResBonus);
+            const trueD_res = baselineRes.deuterium / (1 + currentResBonus);
+            const trueM_si = baselineSi.metal / (1 + currentSiBonus);
+            const trueC_si = baselineSi.crystal / (1 + currentSiBonus);
+            const trueD_si = baselineSi.deuterium / (1 + currentSiBonus);
+            if (isKaeleshAdv) {
+              const computerLevel = ((_o = (_n = (_m = state.account) == null ? void 0 : _m.researches) == null ? void 0 : _n.find((r2) => r2.id === 108)) == null ? void 0 : _o.level) || 10;
+              const estimatedSlots = computerLevel + 3;
+              const directM = trueM_res * effectiveValue;
+              const directC = trueC_res * effectiveValue;
+              const directD = trueD_res * effectiveValue;
+              const totalMSUYield = calculateMSU({
+                metal: trueM_res * (1 + currentResBonus) + trueM_si * (1 + currentSiBonus),
+                crystal: trueC_res * (1 + currentResBonus) + trueC_si * (1 + currentSiBonus),
+                deuterium: trueD_res * (1 + currentResBonus) + trueD_si * (1 + currentSiBonus)
+              }, rates);
+              const slotMSU = 4e-3 * techMult / estimatedSlots * totalMSUYield;
+              const enemyMSU = 45e-5 * techMult * totalMSUYield;
+              const extraMSU = slotMSU + enemyMSU;
+              const weightM = (trueM_res * (1 + currentResBonus) + trueM_si * (1 + currentSiBonus)) * rates.metal / (totalMSUYield || 1);
+              const weightC = (trueC_res * (1 + currentResBonus) + trueC_si * (1 + currentSiBonus)) * rates.crystal / (totalMSUYield || 1);
+              const weightD = (trueD_res * (1 + currentResBonus) + trueD_si * (1 + currentSiBonus)) * rates.deuterium / (totalMSUYield || 1);
+              prodDelta = {
+                metal: directM + extraMSU * weightM / (rates.metal || 1),
+                crystal: directC + extraMSU * weightC / (rates.crystal || 1),
+                deuterium: directD + extraMSU * weightD / (rates.deuterium || 1)
+              };
+              prodIncrease = calculateMSU(prodDelta, rates);
+            } else {
+              const isRes = effect.type === "expo_res";
+              const trueM = isRes ? trueM_res : trueM_si;
+              const trueC = isRes ? trueC_res : trueC_si;
+              const trueD = isRes ? trueD_res : trueD_si;
+              prodDelta = {
+                metal: trueM * effectiveValue,
+                crystal: trueC * effectiveValue,
+                deuterium: trueD * effectiveValue
+              };
+              prodIncrease = calculateMSU(prodDelta, rates);
+            }
+          } else {
+            const target = effect.target;
+            const techMult = entry.type === 4 || entry.type === 5 ? getPlanetTechMultiplier(p2, state.account) : 1;
+            if (effect.type === "multiple") {
+              const mInc = (target === "global" ? prodData.empireBase.metal : prodData.planets[p2.id].base.metal) * (effect.values.metal * techMult);
+              const cInc = (target === "global" ? prodData.empireBase.crystal : prodData.planets[p2.id].base.crystal) * (effect.values.crystal * techMult);
+              const dInc = (target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium) * (effect.values.deuterium * techMult);
+              prodDelta = { metal: mInc, crystal: cInc, deuterium: dInc };
+            } else {
+              const effectiveValue = effect.value * techMult;
+              const mInc = (target === "global" ? prodData.empireBase.metal : prodData.planets[p2.id].base.metal) * (effect.type === "metal" || effect.type === "all" ? effectiveValue : 0);
+              const cInc = (target === "global" ? prodData.empireBase.crystal : prodData.planets[p2.id].base.crystal) * (effect.type === "crystal" || effect.type === "all" || effect.type === "crystal_deuterium" ? effectiveValue : 0);
+              const dInc = (target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium) * (effect.type === "deuterium" || effect.type === "all" || effect.type === "crystal_deuterium" ? effectiveValue : 0);
+              prodDelta = { metal: mInc, crystal: cInc, deuterium: dInc };
+            }
+            prodIncrease = calculateMSU(prodDelta, rates);
+          }
+        }
+        if (prodIncrease > 0) {
+          const msuCost = calculateMSU(cost, rates);
+          const roiHours = msuCost / prodIncrease;
+          if (i === 0) {
+            let breakdownStr = "";
+            if (entry.type === 1) {
+              const pData = prodData.planets[p2.id];
+              const resKey = entry.name === "Metal Mine" ? "metal" : entry.name === "Crystal Mine" ? "crystal" : "deuterium";
+              const m2 = pData.mult[resKey];
+              const plasmaLevel = ((_q = (_p = state.account.researches) == null ? void 0 : _p.find((r2) => r2.id === 122)) == null ? void 0 : _q.level) || 0;
+              const plasmaB = resKey === "metal" ? plasmaLevel * 0.01 : resKey === "crystal" ? plasmaLevel * (0.66 / 100) : plasmaLevel * (0.33 / 100);
+              let lfbB = 0;
+              (_r = p2.lifeformBuildings) == null ? void 0 : _r.forEach((b) => {
+                if (resKey === "metal") {
+                  if (b.id === 12106) lfbB += b.level * 0.02;
+                  if (b.id === 11106) lfbB += b.level * 0.015;
+                } else if (resKey === "crystal") {
+                  if (b.id === 12109) lfbB += b.level * 0.02;
+                  if (b.id === 11108) lfbB += b.level * 0.015;
+                } else if (resKey === "deuterium") {
+                  if (b.id === 12110) lfbB += b.level * 0.02;
+                  if (b.id === 13110) lfbB += b.level * 0.02;
+                  if (b.id === 11108) lfbB += b.level * 0.01;
+                }
+              });
+              const techB = prodData.globalBonuses[resKey];
+              const classB = state.account.playerClass === 1 ? 0.25 : 0;
+              breakdownStr = `
+                            - Multiplier Breakdown (${resKey}): ${(m2 * 100).toFixed(1)}% 
+                                [100% Base + ${(plasmaB * 100).toFixed(1)}% Plasma + ${(lfbB * 100).toFixed(1)}% LF Buildings + ${(techB * 100).toFixed(1)}% LF Techs + ${(classB * 100).toFixed(0)}% Class]`;
+            } else if (entry.type === 4 || entry.type === 5) {
+              const effect2 = entry.effect;
+              const techMult = getPlanetTechMultiplier(p2, state.account);
+              const effectiveValue = effect2.value * techMult;
+              let details = [];
+              if (effect2.type === "expo_res" || effect2.type === "expo_si" || effect2.type === "kaelesh_discovery_adv") {
+                const isKaeleshAdv = effect2.type === "kaelesh_discovery_adv";
+                const isRes = effect2.type === "expo_res" || isKaeleshAdv;
+                effect2.type === "expo_si" || isKaeleshAdv;
+                if (isKaeleshAdv) {
+                  const computerLevel = ((_t = (_s = state.account.researches) == null ? void 0 : _s.find((r2) => r2.id === 108)) == null ? void 0 : _t.level) || 10;
+                  const slts = computerLevel + 3;
+                  details.push(`Aggregated Discovery Boost (incl. Slots: +${(4e-3 * techMult / slts * 100).toFixed(4)}% yield and Fewer Enemies: +${(16e-5 * techMult * 100).toFixed(4)}% yield)`);
+                  details.push(`Total Gain across both Res & Ships: +${prodIncrease.toFixed(2)} MSU/h`);
+                } else {
+                  const currentGlobalBonus = isRes ? currentResBonus : currentSiBonus;
+                  const baseline = isRes ? ((_u = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _u.metal) || ((_v = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _v.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 } : ((_w = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _w.metal) || ((_x = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _x.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
+                  const trueM = baseline.metal / (1 + currentGlobalBonus);
+                  const trueC = baseline.crystal / (1 + currentGlobalBonus);
+                  const trueD = baseline.deuterium / (1 + currentGlobalBonus);
+                  const dM = trueM * effectiveValue;
+                  const dC = trueC * effectiveValue;
+                  const dD = trueD * effectiveValue;
+                  details.push(`Expedition ${isRes ? "Res" : "Ships"} Gain: +${calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates).toFixed(2)} MSU/h (normalized from ${(currentGlobalBonus * 100).toFixed(1)}% LF bonus)`);
+                }
+              } else {
+                const targetName = effect2.target === "global" ? "Empire" : `Planet (${p2.coords})`;
+                const baseM = effect2.target === "global" ? prodData.empireBase.metal : prodData.planets[p2.id].base.metal;
+                const baseC = effect2.target === "global" ? prodData.empireBase.crystal : prodData.planets[p2.id].base.crystal;
+                const baseD = effect2.target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium;
+                if (effect2.type === "metal" || effect2.type === "all")
+                  details.push(`${targetName} Metal: +${calculateMSU({ metal: baseM * effectiveValue, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
+                if (effect2.type === "crystal" || effect2.type === "all" || effect2.type === "crystal_deuterium")
+                  details.push(`${targetName} Crystal: +${calculateMSU({ metal: 0, crystal: baseC * effectiveValue, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
+                if (effect2.type === "deuterium" || effect2.type === "all" || effect2.type === "crystal_deuterium")
+                  details.push(`${targetName} Deuterium: +${calculateMSU({ metal: 0, crystal: 0, deuterium: baseD * effectiveValue }, rates).toFixed(2)} MSU/h`);
+              }
+              breakdownStr = `
+                            - Research Bonus: +${(effectiveValue * 100).toFixed(4)}% (incl. ${techMult > 1 ? "+" + ((techMult - 1) * 100).toFixed(1) + "% building bonus" : "no building bonus"})
+                            - Production Boost Breakdown:${details.map((d) => "\n                                * " + d).join("")}`;
+            } else if (entry.type === 6) {
+              const dM = prodData.empireBase.metal * 0.01;
+              const dC = prodData.empireBase.crystal * (0.66 / 100);
+              const dD = prodData.empireBase.deuterium * (0.33 / 100);
+              const reduction2 = getReduction("improvedStellarator", {}, state);
+              breakdownStr = `
+                            - Research Bonus: +1% Metal, +0.66% Crystal, +0.33% Deuterium
+                            - Cost Reduction: -${(reduction2 * 100).toFixed(2)}% (from Improved Stellarator)
+                            - Empire-wide Base Production:
+                                * Metal Basis: ${prodData.empireBase.metal.toLocaleString()} /h
+                                * Crystal Basis: ${prodData.empireBase.crystal.toLocaleString()} /h
+                                * Deuterium Basis: ${prodData.empireBase.deuterium.toLocaleString()} /h
+                            - Incremental Production Boost (Lvl ${nextLevel}):
+                                * Metal: +${calculateMSU({ metal: dM, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dM.toLocaleString()} Metal)
+                                * Crystal: +${calculateMSU({ metal: 0, crystal: dC, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dC.toLocaleString()} Crystal)
+                                * Deuterium: +${calculateMSU({ metal: 0, crystal: 0, deuterium: dD }, rates).toFixed(2)} MSU/h (+${dD.toLocaleString()} Deut)`;
+            } else if (entry.effect && entry.effect.type === "tech_bonus") {
+              const factor = entry.effect.value;
+              let techDetails = [];
+              (_y = p2.lifeformSetup) == null ? void 0 : _y.forEach((t2) => {
+                var _a3, _b3, _c3, _d3;
+                const level = t2.level || 0;
+                const tEntry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
+                if (tEntry && tEntry.effect && level > 0) {
+                  const tEffect = tEntry.effect;
+                  const tVal = tEffect.value * level * factor;
+                  let deltaMSU = 0;
+                  if (tEffect.target === "global") {
+                    const dM = prodData.empireBase.metal * tVal;
+                    const dC = prodData.empireBase.crystal * tVal;
+                    const dD = prodData.empireBase.deuterium * tVal;
+                    deltaMSU = calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates);
+                  } else if (tEffect.target === "mine") {
+                    const dM = prodData.planets[p2.id].base.metal * tVal;
+                    const dC = prodData.planets[p2.id].base.crystal * tVal;
+                    const dD = prodData.planets[p2.id].base.deuterium * tVal;
+                    deltaMSU = calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates);
+                  } else if (tEffect.type === "expo_res") {
+                    const baseline = ((_a3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _a3.metal) || ((_b3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _b3.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
+                    const trueM = baseline.metal / (1 + currentResBonus);
+                    const trueC = baseline.crystal / (1 + currentResBonus);
+                    const trueD = baseline.deuterium / (1 + currentResBonus);
+                    deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
+                  } else if (tEffect.type === "expo_si") {
+                    const baseline = ((_c3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _c3.metal) || ((_d3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _d3.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
+                    const trueM = baseline.metal / (1 + currentSiBonus);
+                    const trueC = baseline.crystal / (1 + currentSiBonus);
+                    const trueD = baseline.deuterium / (1 + currentSiBonus);
+                    deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
+                  }
+                  if (deltaMSU > 0.01) {
+                    techDetails.push(`${tEntry.name} (Lvl ${level}): +${deltaMSU.toFixed(2)} MSU/h`);
+                  }
+                }
+              });
+              breakdownStr = `
+                            - Tech Multiplier Bonus: +${(factor * 100).toFixed(2)}% per level
+                            - Bonus Breakdown Across Selected Techs:${techDetails.length > 0 ? techDetails.map((d) => "\n                                * " + d).join("") : "\n                                (No production techs active)"}`;
+            }
+            console.log(`[Amortization Debug] Candidate: ${entry.name} Lvl:${nextLevel} (${p2.coords})
+                            - Cost: M:${cost.metal.toLocaleString()} C:${cost.crystal.toLocaleString()} D:${cost.deuterium.toLocaleString()}
+                            - Prod Increase: M:${prodDelta.metal.toFixed(2)} C:${prodDelta.crystal.toFixed(2)} D:${prodDelta.deuterium.toFixed(2)}
+                            - Prod Increase (MSU): ${prodIncrease.toFixed(2)}${breakdownStr}
+                            - ROI: ${roiHours.toFixed(2)}h`);
+            if (entry.type === 5 && expoAverages) {
+              const effect2 = entry.effect;
+              const isRes = effect2.type === "expo_res" || effect2.type === "kaelesh_discovery_adv";
+              const isShips = effect2.type === "expo_si" || effect2.type === "kaelesh_discovery_adv";
+              if (isRes) {
+                const base = expoAverages.resources;
+                console.log(`[Amortization Debug] -> ${entry.name} Res Baseline (Best 7/60d Hourly): M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()}`);
+                if ((_z = expoAverages.totals) == null ? void 0 : _z.resources) {
+                  const t2 = expoAverages.totals.resources;
+                  console.log(`[Amortization Debug] -> ${entry.name} Res Context (30d Totals): M:${t2.metal.toLocaleString()} C:${t2.crystal.toLocaleString()} D:${t2.deuterium.toLocaleString()}`);
+                }
+              }
+              if (isShips) {
+                const base = expoAverages.ships;
+                const msu = calculateMSU(base, rates);
+                console.log(`[Amortization Debug] -> ${entry.name} Ship Baseline (Best 7/60d Hourly): ${msu.toFixed(2)} MSU (M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()})`);
+                if ((_A = expoAverages.totals) == null ? void 0 : _A.ships) {
+                  const t2 = expoAverages.totals.ships;
+                  const tMsu = calculateMSU(t2, rates);
+                  console.log(`[Amortization Debug] -> ${entry.name} Ship Context (30d Totals): ${tMsu.toLocaleString(void 0, { maximumFractionDigits: 0 })} MSU (M:${t2.metal.toLocaleString()} C:${t2.crystal.toLocaleString()} D:${t2.deuterium.toLocaleString()})`);
+                }
+              }
+            }
+          }
+          candidates.push({
+            name: entry.name,
+            type: entry.type,
+            cost,
+            msuCost,
+            productionIncrease: prodIncrease,
+            prodDelta,
+            roiHours,
+            planetId: entry.type === 6 ? void 0 : p2.id,
+            currentLevel
+          });
+        } else if (i === 0 && filters[entry.type]) ;
+      });
+      if (i === 0) console.groupEnd();
+    });
+    const uniqueCandidates = candidates.filter(
+      (item, index, self2) => item.type !== 6 || index === self2.findIndex(
+        (t2) => t2.type === 6
+        /* PlasmaTechnology */
+      )
+    );
+    if (uniqueCandidates.length === 0) break;
+    uniqueCandidates.sort((a2, b) => a2.roiHours - b.roiHours);
+    const best = uniqueCandidates[0];
+    if (i === 0) {
+      console.log(`[Amortization Debug] STEP 1 WINNER: ${best.name} (ROI: ${best.roiHours.toFixed(2)}h) at ${best.planetId ? (_a = planets.find((p2) => p2.id === best.planetId)) == null ? void 0 : _a.coords : "GLOBAL"}`);
+    }
+    if (best.type === 1) {
+      const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
+      if (best.name === "Metal Mine") state.planets[pIdx].metalMine = (state.planets[pIdx].metalMine || 0) + 1;
+      else if (best.name === "Crystal Mine") state.planets[pIdx].crystalMine = (state.planets[pIdx].crystalMine || 0) + 1;
+      else if (best.name === "Deuterium Mine") state.planets[pIdx].deuteriumMine = (state.planets[pIdx].deuteriumMine || 0) + 1;
+    } else if (best.type === 6) {
+      const tech = (_b = state.account.researches) == null ? void 0 : _b.find((r2) => r2.id === 122);
+      if (tech) tech.level++;
+      else state.account.researches.push({ id: 122, level: 1 });
+    } else if (best.type === 2 || best.type === 3) {
+      const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
+      const bIdx = (_c = state.planets[pIdx].lifeformBuildings) == null ? void 0 : _c.findIndex((b) => b.name === best.name);
+      if (bIdx !== -1) state.planets[pIdx].lifeformBuildings[bIdx].level++;
+    } else if (best.type === 4 || best.type === 5) {
+      const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
+      const tech = (_d = state.planets[pIdx].lifeformSetup) == null ? void 0 : _d.find((t2) => {
+        var _a2;
+        return ((_a2 = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId)) == null ? void 0 : _a2.name) === best.name;
+      });
+      if (tech) tech.level++;
+    }
+    resultItems.push(best);
+  }
+  try {
+    window.amortizationFullEmpire = state;
+  } catch (e) {
+  }
+  return resultItems;
+}
 function r(e) {
   var t2, f2, n2 = "";
   if ("string" == typeof e || "number" == typeof e) n2 += e;
@@ -49543,19 +50258,27 @@ const Overview = ({ onSelect }) => {
   ) || [];
   const settings = useLiveQuery(() => db.settings.get("conversion_rates"));
   const rates = settings || { metal: 3, crystal: 2, deuterium: 1 };
+  const calcResults = reactExports.useMemo(() => {
+    if (!activeAccount || planets.length === 0) return null;
+    return calculateEmpireProduction({ account: activeAccount, planets });
+  }, [activeAccount, planets]);
   const totals = reactExports.useMemo(() => {
-    return planets.reduce((acc, p2) => {
-      if (p2.production) {
-        acc.metal += p2.production.metal;
-        acc.crystal += p2.production.crystal;
-        acc.deuterium += p2.production.deuterium;
-        if (acc.lastUpdated === 0 || p2.production.lastUpdated < acc.lastUpdated) {
-          acc.lastUpdated = p2.production.lastUpdated;
+    const result = { metal: 0, crystal: 0, deuterium: 0, lastUpdated: 0 };
+    if (!calcResults) return result;
+    planets.forEach((p2) => {
+      var _a;
+      const prod = (_a = calcResults.planets[p2.id]) == null ? void 0 : _a.total;
+      if (prod) {
+        result.metal += prod.metal;
+        result.crystal += prod.crystal;
+        result.deuterium += prod.deuterium;
+        if (result.lastUpdated === 0 || p2.lastUpdated < result.lastUpdated) {
+          result.lastUpdated = p2.lastUpdated;
         }
       }
-      return acc;
-    }, { metal: 0, crystal: 0, deuterium: 0, lastUpdated: 0 });
-  }, [planets]);
+    });
+    return result;
+  }, [planets, calcResults]);
   const mMultiplier = 1;
   const cMultiplier = rates.metal / rates.crystal;
   const dMultiplier = rates.metal / rates.deuterium;
@@ -50262,7 +50985,7 @@ const Overview = ({ onSelect }) => {
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 800, color: "rgba(255,255,255,0.3)", marginBottom: "24px", letterSpacing: "0.1em" }, children: "DISTRIBUTION BY PLANET (MSU)" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(ResponsiveContainer, { width: "100%", height: "85%", minWidth: 0, minHeight: 0, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BarChart, { data: planets.filter((p2) => p2.type === "planet").map((p2) => ({
               name: p2.name,
-              msu: p2.production ? p2.production.metal * mMultiplier + p2.production.crystal * cMultiplier + p2.production.deuterium * dMultiplier : 0
+              msu: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? calcResults.planets[p2.id].total.metal * mMultiplier + calcResults.planets[p2.id].total.crystal * cMultiplier + calcResults.planets[p2.id].total.deuterium * dMultiplier : 0
             })), children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "rgba(255,255,255,0.05)", vertical: false }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(XAxis, { dataKey: "name", stroke: "rgba(255,255,255,0.3)", fontSize: 10, axisLine: false, tickLine: false }),
@@ -50292,21 +51015,21 @@ const Overview = ({ onSelect }) => {
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/metal_mine_medium.jpg", alt: "M", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.metalMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.metal }, children: p2.production ? `${formatNumber$2(p2.production.metal)}/h` : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.metal }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.metal)}/h` : "N/A" })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/crystal_mine_medium.jpg", alt: "C", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.crystalMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.crystal }, children: p2.production ? `${formatNumber$2(p2.production.crystal)}/h` : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.crystal }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.crystal)}/h` : "N/A" })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/deuterium_mine_medium.jpg", alt: "D", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.deuteriumMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.deuterium }, children: p2.production ? `${formatNumber$2(p2.production.deuterium)}/h` : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.deuterium }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.deuterium)}/h` : "N/A" })
               ] })
             ] })
           ] }, p2.id)) })
@@ -50846,8 +51569,9 @@ const GenericExpeditionTable = ({ expeditions, rows, footer, showPerDay = true, 
   const today = getStartOfDay(now2);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+  const day = today.getDay() || 7;
   const weekStart = new Date(today);
-  weekStart.setDate(weekStart.getDate() - today.getDay());
+  weekStart.setDate(weekStart.getDate() - (day - 1));
   const lastWeekStart = new Date(weekStart);
   lastWeekStart.setDate(lastWeekStart.getDate() - 7);
   const monthStart = new Date(today);
@@ -56878,6 +57602,767 @@ const Testing = () => {
     )) })
   ] });
 };
+const formatLargeNumber = (num) => {
+  return Math.floor(num).toLocaleString("en-US");
+};
+const formatBonusDetail = (percent2, baseVal) => {
+  if (percent2 === 0) return "0.00% (+0/hr)";
+  const rawVal = baseVal * percent2;
+  return `${(percent2 * 100).toFixed(2)}% (+${Math.floor(rawVal).toLocaleString("en-US")}/hr)`;
+};
+const BreakdownRow = ({ label, metal, crystal, deuterium, highlight = false, isHeader = false }) => {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+    display: "grid",
+    gridTemplateColumns: "2fr 1fr 1fr 1fr",
+    padding: "10px 14px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
+    background: highlight ? "rgba(0, 242, 255, 0.05)" : "transparent",
+    fontSize: isHeader ? "0.72rem" : "0.8rem",
+    fontWeight: isHeader || highlight ? 700 : 400,
+    color: isHeader ? "var(--text-muted)" : "#fff",
+    letterSpacing: isHeader ? "0.5px" : "normal",
+    textTransform: isHeader ? "uppercase" : "none"
+  }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: isHeader ? "var(--text-muted)" : highlight ? "var(--primary)" : "rgba(255, 255, 255, 0.7)" }, children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: isHeader ? "var(--text-muted)" : "var(--color-metal)" }, children: metal }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: isHeader ? "var(--text-muted)" : "var(--color-crystal)" }, children: crystal }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: isHeader ? "var(--text-muted)" : "var(--color-deuterium)" }, children: deuterium })
+  ] });
+};
+const PlanetDebugCard = ({ planet, account, calcData }) => {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w;
+  const [isExpanded, setIsExpanded] = reactExports.useState(false);
+  const scrapedM = ((_a = planet.production) == null ? void 0 : _a.metal) ?? 0;
+  const scrapedC = ((_b = planet.production) == null ? void 0 : _b.crystal) ?? 0;
+  const scrapedD = ((_c = planet.production) == null ? void 0 : _c.deuterium) ?? 0;
+  const pCalc = (_d = calcData == null ? void 0 : calcData.planets) == null ? void 0 : _d[planet.id];
+  const calcM = ((_e = pCalc == null ? void 0 : pCalc.total) == null ? void 0 : _e.metal) ?? 0;
+  const calcC = ((_f = pCalc == null ? void 0 : pCalc.total) == null ? void 0 : _f.crystal) ?? 0;
+  const calcD = ((_g = pCalc == null ? void 0 : pCalc.total) == null ? void 0 : _g.deuterium) ?? 0;
+  const baseM = ((_h = pCalc == null ? void 0 : pCalc.base) == null ? void 0 : _h.metal) ?? 0;
+  const baseC = ((_i = pCalc == null ? void 0 : pCalc.base) == null ? void 0 : _i.crystal) ?? 0;
+  const baseD = ((_j = pCalc == null ? void 0 : pCalc.base) == null ? void 0 : _j.deuterium) ?? 0;
+  const multM = ((_k = pCalc == null ? void 0 : pCalc.mult) == null ? void 0 : _k.metal) ?? 1;
+  const multC = ((_l = pCalc == null ? void 0 : pCalc.mult) == null ? void 0 : _l.crystal) ?? 1;
+  const multD = ((_m = pCalc == null ? void 0 : pCalc.mult) == null ? void 0 : _m.deuterium) ?? 1;
+  const diffM = Math.abs(calcM - scrapedM);
+  const diffC = Math.abs(calcC - scrapedC);
+  const diffD = Math.abs(calcD - scrapedD);
+  const matchM = diffM <= 2;
+  const matchC = diffC <= 2;
+  const matchD = diffD <= 2;
+  const allMatch = matchM && matchC && matchD;
+  const plasmaLevel = ((_o = (_n = account == null ? void 0 : account.researches) == null ? void 0 : _n.find((r2) => r2.id === 122)) == null ? void 0 : _o.level) || 0;
+  const plasmaM = plasmaLevel * 0.01;
+  const plasmaC = plasmaLevel * 66e-4;
+  const plasmaD = plasmaLevel * 33e-4;
+  let lfbM = 0, lfbC = 0, lfbD = 0;
+  (_p = planet.lifeformBuildings) == null ? void 0 : _p.forEach((b) => {
+    if (b.id === 12106) lfbM += b.level * 0.02;
+    if (b.id === 12109) lfbC += b.level * 0.02;
+    if (b.id === 12110) lfbD += b.level * 0.02;
+    if (b.id === 13110) lfbD += b.level * 0.02;
+    if (b.id === 11106) lfbM += b.level * 0.015;
+    if (b.id === 11108) {
+      lfbC += b.level * 0.015;
+      lfbD += b.level * 0.01;
+    }
+  });
+  const classM = (account == null ? void 0 : account.playerClass) === 1 ? 0.25 : 0;
+  const classC = (account == null ? void 0 : account.playerClass) === 1 ? 0.25 : 0;
+  const classD = (account == null ? void 0 : account.playerClass) === 1 ? 0.25 : 0;
+  const geologistM = (account == null ? void 0 : account.hasGeologist) ? 0.1 : 0;
+  const geologistC = (account == null ? void 0 : account.hasGeologist) ? 0.1 : 0;
+  const geologistD = (account == null ? void 0 : account.hasGeologist) ? 0.1 : 0;
+  const hasStaff = !!((account == null ? void 0 : account.hasCommander) && (account == null ? void 0 : account.hasAdmiral) && (account == null ? void 0 : account.hasEngineer) && (account == null ? void 0 : account.hasGeologist) && (account == null ? void 0 : account.hasTechnocrat));
+  const staffM = hasStaff ? 0.02 : 0;
+  const staffC = hasStaff ? 0.02 : 0;
+  const staffD = hasStaff ? 0.02 : 0;
+  const allyTraderM = (account == null ? void 0 : account.allianceClass) === 1 ? 0.05 : 0;
+  const allyTraderC = (account == null ? void 0 : account.allianceClass) === 1 ? 0.05 : 0;
+  const allyTraderD = (account == null ? void 0 : account.allianceClass) === 1 ? 0.05 : 0;
+  const boostM = ((_q = planet.boosters) == null ? void 0 : _q.metal) || 0;
+  const boostC = ((_r = planet.boosters) == null ? void 0 : _r.crystal) || 0;
+  const boostD = ((_s = planet.boosters) == null ? void 0 : _s.deuterium) || 0;
+  const globalM = ((_t = calcData == null ? void 0 : calcData.globalBonuses) == null ? void 0 : _t.metal) ?? 0;
+  const globalC = ((_u = calcData == null ? void 0 : calcData.globalBonuses) == null ? void 0 : _u.crystal) ?? 0;
+  const globalD = ((_v = calcData == null ? void 0 : calcData.globalBonuses) == null ? void 0 : _v.deuterium) ?? 0;
+  const universeSpeed = (account == null ? void 0 : account.universeSpeed) || 1;
+  let slot = 0;
+  try {
+    slot = parseInt(planet.coords.split(":")[2]);
+  } catch (e) {
+  }
+  let metalPosFactor = 1;
+  if (slot === 6 || slot === 10) metalPosFactor = 1.17;
+  else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
+  else if (slot === 8) metalPosFactor = 1.35;
+  let crystalPosFactor = 1;
+  if (slot === 1) crystalPosFactor = 1.4;
+  else if (slot === 2) crystalPosFactor = 1.3;
+  else if (slot === 3) crystalPosFactor = 1.2;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    motion.div,
+    {
+      layout: true,
+      style: {
+        background: "rgba(8, 16, 28, 0.65)",
+        backdropFilter: "blur(12px)",
+        border: allMatch ? "1px solid rgba(34, 197, 94, 0.15)" : "1px solid rgba(239, 68, 68, 0.25)",
+        borderRadius: "16px",
+        padding: "20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "14px",
+        boxShadow: allMatch ? "0 8px 30px rgba(0, 0, 0, 0.4), inset 0 0 15px rgba(34, 197, 94, 0.02)" : "0 8px 30px rgba(0, 0, 0, 0.4), inset 0 0 15px rgba(239, 68, 68, 0.05)",
+        transition: "border-color 0.3s ease, box-shadow 0.3s ease",
+        width: "100%",
+        boxSizing: "border-box"
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "12px",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+          paddingBottom: "12px"
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "14px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+              width: "44px",
+              height: "44px",
+              borderRadius: "12px",
+              overflow: "hidden",
+              border: "1px solid rgba(255, 255, 255, 0.1)"
+            }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "img",
+              {
+                src: planet.imgUrl || "https://via.placeholder.com/44",
+                alt: planet.name,
+                style: { width: "100%", height: "100%", objectFit: "cover" }
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { style: { margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "#fff" }, children: planet.name }),
+                allMatch ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  background: "rgba(34, 197, 94, 0.15)",
+                  color: "#4ade80",
+                  fontSize: "0.65rem",
+                  fontWeight: 800,
+                  padding: "2px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(34, 197, 94, 0.3)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(CheckCircle, { size: 10 }),
+                  " Verified"
+                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  background: "rgba(239, 68, 68, 0.15)",
+                  color: "#f87171",
+                  fontSize: "0.65rem",
+                  fontWeight: 800,
+                  padding: "2px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTriangle, { size: 10 }),
+                  " Discrepancy"
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", marginTop: "4px", fontSize: "0.75rem", color: "var(--text-muted)" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { display: "flex", alignItems: "center", gap: "4px" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(MapPin, { size: 12, color: "var(--primary)" }),
+                  " ",
+                  planet.coords
+                ] }),
+                planet.tempMax !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { display: "flex", alignItems: "center", gap: "4px" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Thermometer, { size: 12, color: "#f59e0b" }),
+                  " Max Temp: ",
+                  planet.tempMax,
+                  "°C"
+                ] })
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setIsExpanded(!isExpanded),
+              style: {
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(255,255,255,0.05)",
+                borderRadius: "8px",
+                color: "rgba(255,255,255,0.6)",
+                cursor: "pointer",
+                padding: "6px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                transition: "all 0.2s"
+              },
+              children: isExpanded ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                "Collapse Analysis ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronUp, { size: 14 })
+              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                "Expand Detailed Breakdown ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronDown, { size: 14 })
+              ] })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "12px"
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+            background: "rgba(255,255,255,0.02)",
+            borderRadius: "12px",
+            padding: "12px 16px",
+            border: "1px solid rgba(255,255,255,0.04)"
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.65rem", color: "var(--color-metal)", textTransform: "uppercase", fontWeight: 800 }, children: [
+              "Metal (Mine Level ",
+              planet.metalMine || 0,
+              ")"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "6px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1rem", fontWeight: 800 }, children: [
+                formatLargeNumber(calcM),
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.65rem", color: "var(--text-muted)" }, children: "/hr" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: matchM ? "#4ade80" : "#f87171", fontWeight: 700 }, children: matchM ? "Verified" : `Scraped: ${formatLargeNumber(scrapedM)}` })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+            background: "rgba(255,255,255,0.02)",
+            borderRadius: "12px",
+            padding: "12px 16px",
+            border: "1px solid rgba(255,255,255,0.04)"
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.65rem", color: "var(--color-crystal)", textTransform: "uppercase", fontWeight: 800 }, children: [
+              "Crystal (Mine Level ",
+              planet.crystalMine || 0,
+              ")"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "6px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1rem", fontWeight: 800 }, children: [
+                formatLargeNumber(calcC),
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.65rem", color: "var(--text-muted)" }, children: "/hr" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: matchC ? "#4ade80" : "#f87171", fontWeight: 700 }, children: matchC ? "Verified" : `Scraped: ${formatLargeNumber(scrapedC)}` })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+            background: "rgba(255,255,255,0.02)",
+            borderRadius: "12px",
+            padding: "12px 16px",
+            border: "1px solid rgba(255,255,255,0.04)"
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.65rem", color: "var(--color-deuterium)", textTransform: "uppercase", fontWeight: 800 }, children: [
+              "Deuterium (Mine Level ",
+              planet.deuteriumMine || 0,
+              ")"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "6px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1rem", fontWeight: 800 }, children: [
+                formatLargeNumber(calcD),
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.65rem", color: "var(--text-muted)" }, children: "/hr" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: matchD ? "#4ade80" : "#f87171", fontWeight: 700 }, children: matchD ? "Verified" : `Scraped: ${formatLargeNumber(scrapedD)}` })
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: isExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          motion.div,
+          {
+            initial: { opacity: 0, height: 0 },
+            animate: { opacity: 1, height: "auto" },
+            exit: { opacity: 0, height: 0 },
+            transition: { duration: 0.2 },
+            style: { overflow: "hidden" },
+            children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+              paddingTop: "10px",
+              borderTop: "1px solid rgba(255,255,255,0.05)"
+            }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+                background: "rgba(0, 0, 0, 0.25)",
+                borderRadius: "12px",
+                border: "1px solid rgba(255,255,255,0.03)",
+                overflow: "hidden"
+              }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownRow, { label: "Calculation Element", metal: "Metal", crystal: "Crystal", deuterium: "Deut", isHeader: true }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Mine Level",
+                    metal: `Lvl ${planet.metalMine || 0}`,
+                    crystal: `Lvl ${planet.crystalMine || 0}`,
+                    deuterium: `Lvl ${planet.deuteriumMine || 0}`
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Position Multiplier",
+                    metal: `${metalPosFactor}x`,
+                    crystal: `${crystalPosFactor}x`,
+                    deuterium: "1.00x"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Base Mine Production",
+                    metal: formatLargeNumber(baseM),
+                    crystal: formatLargeNumber(baseC),
+                    deuterium: formatLargeNumber(baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "1px", background: "rgba(255, 255, 255, 0.08)" } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Plasma Tech Multiplier",
+                    metal: formatBonusDetail(plasmaM, baseM),
+                    crystal: formatBonusDetail(plasmaC, baseC),
+                    deuterium: formatBonusDetail(plasmaD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Lifeform Buildings",
+                    metal: formatBonusDetail(lfbM, baseM),
+                    crystal: formatBonusDetail(lfbC, baseC),
+                    deuterium: formatBonusDetail(lfbD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Global Lifeform Techs",
+                    metal: formatBonusDetail(globalM, baseM),
+                    crystal: formatBonusDetail(globalC, baseC),
+                    deuterium: formatBonusDetail(globalD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Collector Class Bonus",
+                    metal: formatBonusDetail(classM, baseM),
+                    crystal: formatBonusDetail(classC, baseC),
+                    deuterium: formatBonusDetail(classD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Geologist Bonus (Premium)",
+                    metal: formatBonusDetail(geologistM, baseM),
+                    crystal: formatBonusDetail(geologistC, baseC),
+                    deuterium: formatBonusDetail(geologistD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Commanding Staff Bonus",
+                    metal: formatBonusDetail(staffM, baseM),
+                    crystal: formatBonusDetail(staffC, baseC),
+                    deuterium: formatBonusDetail(staffD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Alliance Class (Trader)",
+                    metal: formatBonusDetail(allyTraderM, baseM),
+                    crystal: formatBonusDetail(allyTraderC, baseC),
+                    deuterium: formatBonusDetail(allyTraderD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Active Item Boosters",
+                    metal: formatBonusDetail(boostM, baseM),
+                    crystal: formatBonusDetail(boostC, baseC),
+                    deuterium: formatBonusDetail(boostD, baseD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Combined Multiplier (Sum + 1)",
+                    metal: `${multM.toFixed(4)}x`,
+                    crystal: `${multC.toFixed(4)}x`,
+                    deuterium: `${multD.toFixed(4)}x`
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "1px", background: "rgba(255, 255, 255, 0.08)" } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Organic Base (per hour)",
+                    metal: 30 * universeSpeed,
+                    crystal: 15 * universeSpeed,
+                    deuterium: 0
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Calculated Value",
+                    metal: formatLargeNumber(calcM),
+                    crystal: formatLargeNumber(calcC),
+                    deuterium: formatLargeNumber(calcD),
+                    highlight: true
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  BreakdownRow,
+                  {
+                    label: "Scraped Value (Settings)",
+                    metal: formatLargeNumber(scrapedM),
+                    crystal: formatLargeNumber(scrapedC),
+                    deuterium: formatLargeNumber(scrapedD)
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+                  display: "grid",
+                  gridTemplateColumns: "2fr 1fr 1fr 1fr",
+                  padding: "10px 14px",
+                  borderBottom: "none",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  background: "rgba(255, 255, 255, 0.01)"
+                }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "rgba(255, 255, 255, 0.5)" }, children: "Difference / Status" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: matchM ? "#4ade80" : "#f87171" }, children: matchM ? "✓ 0" : `⚠ ${formatLargeNumber(calcM - scrapedM)}` }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: matchC ? "#4ade80" : "#f87171" }, children: matchC ? "✓ 0" : `⚠ ${formatLargeNumber(calcC - scrapedC)}` }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: matchD ? "#4ade80" : "#f87171" }, children: matchD ? "✓ 0" : `⚠ ${formatLargeNumber(calcD - scrapedD)}` })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+                background: "rgba(255, 255, 255, 0.01)",
+                border: "1px solid rgba(255, 255, 255, 0.03)",
+                borderRadius: "12px",
+                padding: "12px 16px"
+              }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.72rem", fontWeight: 800, color: "var(--primary)", letterSpacing: "0.5px", textTransform: "uppercase", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Package, { size: 14 }),
+                  " Active Scraping Boosters Items Log (",
+                  ((_w = planet.activeItems) == null ? void 0 : _w.length) || 0,
+                  ")"
+                ] }),
+                planet.activeItems && planet.activeItems.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "8px" }, children: planet.activeItems.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "div",
+                  {
+                    style: {
+                      background: "rgba(0, 0, 0, 0.2)",
+                      border: "1px solid rgba(255, 255, 255, 0.04)",
+                      borderRadius: "8px",
+                      padding: "8px 12px",
+                      fontSize: "0.75rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "2px"
+                    },
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontWeight: 700, color: "#fff", display: "flex", justifyContent: "space-between" }, children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: item.title || item.name }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+                          color: item.type === "metal" ? "var(--color-metal)" : item.type === "crystal" ? "var(--color-crystal)" : item.type === "deuterium" ? "var(--color-deuterium)" : "var(--primary)",
+                          fontWeight: 800
+                        }, children: [
+                          "+",
+                          ((item.bonus ?? 0) * 100).toFixed(0),
+                          "%"
+                        ] })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-muted)" }, children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                          "Type: ",
+                          item.type
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                          "Remaining: ",
+                          item.timeRemaining || (item.isPermanent ? "Permanent" : "Unknown")
+                        ] })
+                      ] })
+                    ]
+                  },
+                  idx
+                )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontStyle: "italic", padding: "4px 0" }, children: "No active resource booster items found for this planet. Items are scraped automatically when visiting the Empire overview page." })
+              ] })
+            ] })
+          }
+        ) })
+      ]
+    }
+  );
+};
+const TestingProduction = () => {
+  var _a, _b;
+  const activeAccount = useLiveQuery(() => db.accounts.orderBy("lastSeen").reverse().first());
+  const planetsData = useLiveQuery(
+    () => activeAccount ? db.planets.where("playerId").equals(activeAccount.playerId).toArray() : [],
+    [activeAccount]
+  );
+  if (!activeAccount || !planetsData) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view", style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", gap: "16px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Activity, { size: 48, className: "spin", color: "var(--primary)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "var(--text-muted)", fontWeight: 600 }, children: "Loading production diagnostic data..." })
+    ] });
+  }
+  const planets = planetsData.filter((p2) => p2.type === "planet");
+  const empireState = { account: activeAccount, planets: planetsData };
+  const calcResults = calculateEmpireProduction(empireState);
+  let totalScrapedM = 0, totalScrapedC = 0, totalScrapedD = 0;
+  let totalCalcM = 0, totalCalcC = 0, totalCalcD = 0;
+  let discrepancies = 0;
+  planets.forEach((p2) => {
+    var _a2, _b2, _c, _d, _e, _f, _g;
+    const scrapedM = ((_a2 = p2.production) == null ? void 0 : _a2.metal) ?? 0;
+    const scrapedC = ((_b2 = p2.production) == null ? void 0 : _b2.crystal) ?? 0;
+    const scrapedD = ((_c = p2.production) == null ? void 0 : _c.deuterium) ?? 0;
+    const pCalc = (_d = calcResults == null ? void 0 : calcResults.planets) == null ? void 0 : _d[p2.id];
+    const calcM = ((_e = pCalc == null ? void 0 : pCalc.total) == null ? void 0 : _e.metal) ?? 0;
+    const calcC = ((_f = pCalc == null ? void 0 : pCalc.total) == null ? void 0 : _f.crystal) ?? 0;
+    const calcD = ((_g = pCalc == null ? void 0 : pCalc.total) == null ? void 0 : _g.deuterium) ?? 0;
+    totalScrapedM += scrapedM;
+    totalScrapedC += scrapedC;
+    totalScrapedD += scrapedD;
+    totalCalcM += calcM;
+    totalCalcC += calcC;
+    totalCalcD += calcD;
+    const matchM = Math.abs(calcM - scrapedM) <= 2;
+    const matchC = Math.abs(calcC - scrapedC) <= 2;
+    const matchD = Math.abs(calcD - scrapedD) <= 2;
+    if (!matchM || !matchC || !matchD) {
+      discrepancies++;
+    }
+  });
+  const isCollector = activeAccount.playerClass === 1;
+  const hasStaff = !!(activeAccount.hasCommander && activeAccount.hasAdmiral && activeAccount.hasEngineer && activeAccount.hasGeologist && activeAccount.hasTechnocrat);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view", style: { padding: "0 20px 40px" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      motion.h1,
+      {
+        initial: { x: -20, opacity: 0 },
+        animate: { x: 0, opacity: 1 },
+        className: "view-title",
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          fontSize: "2.2rem",
+          fontWeight: 800,
+          color: "#fff",
+          textShadow: "0 0 15px rgba(0, 242, 255, 0.15)",
+          marginBottom: "8px"
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Activity, { size: 32, color: "var(--primary)" }),
+          " Diagnostic Production Lab"
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { color: "var(--text-muted)", fontSize: "0.9rem", margin: "0 0 24px 0", maxWidth: "800px" }, children: "Compare calculated hourly mine production against scraped values in real-time. Use this console to verify Plasma technology, lifeform infrastructure, collector class levels, and empire booster items." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      motion.div,
+      {
+        initial: { opacity: 0, y: 10 },
+        animate: { opacity: 1, y: 0 },
+        style: {
+          background: discrepancies === 0 ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)",
+          border: discrepancies === 0 ? "1px solid rgba(34, 197, 94, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)",
+          borderRadius: "16px",
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "16px",
+          marginBottom: "24px",
+          flexWrap: "wrap"
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px" }, children: [
+            discrepancies === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "50%", background: "rgba(34, 197, 94, 0.2)", color: "#4ade80" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(CheckCircle, { size: 20 }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "50%", background: "rgba(239, 68, 68, 0.2)", color: "#f87171" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTriangle, { size: 20 }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700, color: "#fff", fontSize: "1rem" }, children: discrepancies === 0 ? "Production Engine: Operational" : `Production Engine Alert: Mismatch Found` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }, children: discrepancies === 0 ? "Calculated formula matching values scraped from OGame Resource settings perfectly." : `Production calculations on ${discrepancies} out of ${planets.length} planets do not match game settings.` })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+            display: "flex",
+            gap: "12px"
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+              background: "rgba(255, 255, 255, 0.03)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              color: "rgba(255, 255, 255, 0.8)",
+              padding: "6px 12px",
+              borderRadius: "8px"
+            }, children: [
+              "Class: ",
+              isCollector ? "Collector (+25%)" : "None"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+              background: activeAccount.hasGeologist ? "rgba(34, 197, 94, 0.1)" : "rgba(255, 255, 255, 0.03)",
+              border: activeAccount.hasGeologist ? "1px solid rgba(34, 197, 94, 0.25)" : "1px solid rgba(255, 255, 255, 0.05)",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              color: activeAccount.hasGeologist ? "#4ade80" : "rgba(255, 255, 255, 0.5)",
+              padding: "6px 12px",
+              borderRadius: "8px"
+            }, children: [
+              "Geologist: ",
+              activeAccount.hasGeologist ? "Active (+10%)" : "Inactive"
+            ] }),
+            hasStaff && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+              background: "rgba(168, 85, 247, 0.1)",
+              border: "1px solid rgba(168, 85, 247, 0.25)",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              color: "#a855f7",
+              padding: "6px 12px",
+              borderRadius: "8px"
+            }, children: "Commanding Staff: Active (+2%)" }),
+            activeAccount.allianceClass !== void 0 && activeAccount.allianceClass > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+              background: activeAccount.allianceClass === 1 ? "rgba(234, 179, 8, 0.1)" : "rgba(255, 255, 255, 0.03)",
+              border: activeAccount.allianceClass === 1 ? "1px solid rgba(234, 179, 8, 0.25)" : "1px solid rgba(255, 255, 255, 0.05)",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              color: activeAccount.allianceClass === 1 ? "#eab308" : "rgba(255, 255, 255, 0.5)",
+              padding: "6px 12px",
+              borderRadius: "8px"
+            }, children: [
+              "Ally Class: ",
+              activeAccount.allianceClass === 1 ? "Trader (+5%)" : activeAccount.allianceClass === 2 ? "Researcher" : "Warrior"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+              background: "rgba(255, 255, 255, 0.03)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              color: "rgba(255, 255, 255, 0.8)",
+              padding: "6px 12px",
+              borderRadius: "8px"
+            }, children: [
+              "Plasma Tech: Level ",
+              ((_b = (_a = activeAccount.researches) == null ? void 0 : _a.find((r2) => r2.id === 122)) == null ? void 0 : _b.level) || 0
+            ] })
+          ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+      background: "linear-gradient(135deg, rgba(0, 242, 255, 0.05) 0%, rgba(168, 85, 247, 0.02) 100%)",
+      border: "1px solid rgba(0, 242, 255, 0.15)",
+      borderRadius: "20px",
+      padding: "24px",
+      marginBottom: "32px",
+      boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+      boxSizing: "border-box"
+    }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { style: { margin: "0 0 16px 0", fontSize: "1.25rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Database, { size: 18, color: "var(--primary)" }),
+        " Empire Production Summaries (Combined hourly)"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+        gap: "20px"
+      }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, color: "var(--color-metal)", textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Total Metal Production" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1.6rem", fontWeight: 900, color: "#fff" }, children: [
+              formatLargeNumber(totalCalcM),
+              " ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", color: "var(--text-muted)" }, children: "/hr (Calculated)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }, children: [
+              "Scraped total: ",
+              formatLargeNumber(totalScrapedM),
+              " /hr"
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, color: "var(--color-crystal)", textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Total Crystal Production" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1.6rem", fontWeight: 900, color: "#fff" }, children: [
+              formatLargeNumber(totalCalcC),
+              " ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", color: "var(--text-muted)" }, children: "/hr (Calculated)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }, children: [
+              "Scraped total: ",
+              formatLargeNumber(totalScrapedC),
+              " /hr"
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, color: "var(--color-deuterium)", textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Total Deuterium Production" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "1.6rem", fontWeight: 900, color: "#fff" }, children: [
+              formatLargeNumber(totalCalcD),
+              " ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", color: "var(--text-muted)" }, children: "/hr (Calculated)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }, children: [
+              "Scraped total: ",
+              formatLargeNumber(totalScrapedD),
+              " /hr"
+            ] })
+          ] })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { style: { fontSize: "1.3rem", fontWeight: 800, color: "#fff", margin: "0 0 16px 0", display: "flex", alignItems: "center", gap: "8px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 20, color: "var(--primary)" }),
+      " Planet-by-Planet Calculation Audit (",
+      planets.length,
+      ")"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", gap: "20px" }, children: planets.map((planet) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PlanetDebugCard,
+      {
+        planet,
+        account: activeAccount,
+        calcData: calcResults
+      },
+      planet.id
+    )) })
+  ] });
+};
 const DataManagement = () => {
   const activeAccount = useLiveQuery(() => db.accounts.orderBy("lastSeen").reverse().first());
   const nexusStatsSummary = useLiveQuery(async () => {
@@ -58538,710 +60023,6 @@ const DataManagement = () => {
     ] }) })
   ] });
 };
-var AmortizationType = /* @__PURE__ */ ((AmortizationType2) => {
-  AmortizationType2[AmortizationType2["Mines"] = 1] = "Mines";
-  AmortizationType2[AmortizationType2["LifeformProductionBuildings"] = 2] = "LifeformProductionBuildings";
-  AmortizationType2[AmortizationType2["LifeformResearchBuildings"] = 3] = "LifeformResearchBuildings";
-  AmortizationType2[AmortizationType2["LifeformProductionResearches"] = 4] = "LifeformProductionResearches";
-  AmortizationType2[AmortizationType2["LifeformExpeditionResearches"] = 5] = "LifeformExpeditionResearches";
-  AmortizationType2[AmortizationType2["PlasmaTechnology"] = 6] = "PlasmaTechnology";
-  return AmortizationType2;
-})(AmortizationType || {});
-const DEFAULT_RATES = {
-  metal: 3,
-  crystal: 2,
-  deuterium: 1
-};
-const AMORTIZATION_TABLE = [
-  // Mines
-  {
-    name: "Metal Mine",
-    id: null,
-    type: 1,
-    baseCost: { metal: 60, crystal: 15, deuterium: 0 },
-    costFormula: (level) => ({
-      metal: Math.floor(60 * Math.pow(1.5, level - 1)),
-      crystal: Math.floor(15 * Math.pow(1.5, level - 1)),
-      deuterium: 0
-    }),
-    reduction: "mineralResearchCenter",
-    effect: { type: "metal", value: "mine_formula" }
-  },
-  {
-    name: "Crystal Mine",
-    id: null,
-    type: 1,
-    baseCost: { metal: 48, crystal: 24, deuterium: 0 },
-    costFormula: (level) => ({
-      metal: Math.floor(48 * Math.pow(1.6, level - 1)),
-      crystal: Math.floor(24 * Math.pow(1.6, level - 1)),
-      deuterium: 0
-    }),
-    reduction: "mineralResearchCenter",
-    effect: { type: "crystal", value: "mine_formula" }
-  },
-  {
-    name: "Deuterium Mine",
-    id: null,
-    type: 1,
-    baseCost: { metal: 225, crystal: 75, deuterium: 0 },
-    costFormula: (level) => ({
-      metal: Math.floor(225 * Math.pow(1.5, level - 1)),
-      crystal: Math.floor(75 * Math.pow(1.5, level - 1)),
-      deuterium: 0
-    }),
-    reduction: "mineralResearchCenter",
-    effect: { type: "deuterium", value: "mine_formula" }
-  },
-  // LF Buildings
-  { name: "High-Performance Transformer", id: 13107, type: 3, baseCost: { metal: 35e3, crystal: 15e3, deuterium: 1e4 }, multiplier: 1.5, lifeformId: 3, effect: { type: "tech_bonus", value: 3e-3 } },
-  { name: "Chip Mass Production", id: 13111, type: 3, baseCost: { metal: 55e3, crystal: 5e4, deuterium: 3e4 }, multiplier: 1.5, lifeformId: 3, effect: { type: "tech_bonus", value: 4e-3 } },
-  { name: "High-Performance Synthesiser", id: 13110, type: 2, baseCost: { metal: 1e5, crystal: 4e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 3, effect: { type: "deuterium", value: 0.02, target: "mine" } },
-  { name: "High Energy Smelting", id: 11106, type: 2, baseCost: { metal: 9e3, crystal: 6e3, deuterium: 3e3 }, multiplier: 1.5, lifeformId: 1, effect: { type: "metal", value: 0.015, target: "mine" } },
-  { name: "Fusion-Powered Production", id: 11108, type: 2, baseCost: { metal: 5e4, crystal: 25e3, deuterium: 15e3 }, multiplier: 1.5, lifeformId: 1, effect: { type: "multiple", values: { metal: 0, crystal: 0.015, deuterium: 0.01 }, target: "mine" } },
-  { name: "Metropolis", id: 11111, type: 3, baseCost: { metal: 8e4, crystal: 35e3, deuterium: 6e4 }, multiplier: 1.5, lifeformId: 1, effect: { type: "tech_bonus", value: 5e-3 } },
-  { name: "Magma Forge", id: 12106, type: 2, baseCost: { metal: 1e4, crystal: 8e3, deuterium: 1e3 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "metal", value: 0.02, target: "mine" } },
-  { name: "Crystal Refinery", id: 12109, type: 2, baseCost: { metal: 85e3, crystal: 44e3, deuterium: 25e3 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "crystal", value: 0.02, target: "mine" } },
-  { name: "Deuterium Synthesiser", id: 12110, type: 2, baseCost: { metal: 12e4, crystal: 5e4, deuterium: 2e4 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "deuterium", value: 0.02, target: "mine" } },
-  // LF Techs
-  { name: "Catalyser Technology", id: 3, type: 4, baseCost: { metal: 1e4, crystal: 6e3, deuterium: 1e3 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
-  { name: "High-Performance Extractors", id: 5, type: 4, baseCost: { metal: 7e3, crystal: 1e4, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 1, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
-  { name: "Acoustic Scanning", id: 6, type: 4, baseCost: { metal: 7500, crystal: 12500, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "crystal", value: 8e-4, target: "global" } },
-  { name: "Sulphide Process", id: 8, type: 4, baseCost: { metal: 7500, crystal: 12500, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
-  { name: "High Energy Pump Systems", id: 10, type: 4, baseCost: { metal: 15e3, crystal: 1e4, deuterium: 5e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
-  { name: "Telekinetic Tractor Beam", id: 16, type: 5, baseCost: { metal: 2e4, crystal: 15e3, deuterium: 7500 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "expo_si", value: 2e-3 } },
-  { name: "Magma-Powered Production", id: 18, type: 4, baseCost: { metal: 25e3, crystal: 2e4, deuterium: 1e4 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
-  { name: "Enhanced Sensor Technology", id: 20, type: 5, baseCost: { metal: 25e3, crystal: 2e4, deuterium: 1e4 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "expo_res", value: 2e-3 } },
-  { name: "Automated Transport Lines", id: 23, type: 4, baseCost: { metal: 5e4, crystal: 5e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
-  { name: "Depth Sounding", id: 26, type: 4, baseCost: { metal: 7e4, crystal: 4e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "metal", value: 8e-4, target: "global" } },
-  { name: "Enhanced Production Technologies", id: 29, type: 4, baseCost: { metal: 8e4, crystal: 5e4, deuterium: 2e4 }, multiplier: 1.5, lifeformId: 1, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
-  { name: "Hardened Diamond Drill Heads", id: 38, type: 4, baseCost: { metal: 85e3, crystal: 4e4, deuterium: 35e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "metal", value: 8e-4, target: "global" } },
-  { name: "Seismic Mining Technology", id: 42, type: 4, baseCost: { metal: 12e4, crystal: 3e4, deuterium: 25e3 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "crystal", value: 8e-4, target: "global" } },
-  { name: "Sixth Sense", id: 44, type: 5, baseCost: { metal: 12e4, crystal: 3e4, deuterium: 25e3 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "expo_res", value: 2e-3 } },
-  { name: "Magma-Powered Pump Systems", id: 46, type: 4, baseCost: { metal: 1e5, crystal: 4e4, deuterium: 3e4 }, multiplier: 1.5, lifeformId: 2, reduction: "research_centers", effect: { type: "deuterium", value: 8e-4, target: "global" } },
-  { name: "Psychoharmoniser", id: 48, type: 4, baseCost: { metal: 1e5, crystal: 4e4, deuterium: 3e4 }, multiplier: 1.5, lifeformId: 4, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
-  { name: "Artificial Swarm Intelligence", id: 51, type: 4, baseCost: { metal: 2e5, crystal: 1e5, deuterium: 1e5 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "all", value: 6e-4, target: "global" } },
-  // Level * 1.7 scale
-  { name: "Rock’tal Collector Enhancement", id: 70, type: 4, baseCost: { metal: 3e5, crystal: 18e4, deuterium: 12e4 }, multiplier: 1.7, lifeformId: 2, reduction: "research_centers", effect: { type: "all", value: 2e-3, target: "global" } },
-  { name: "Kaelesh Discoverer Enhancement", id: 72, type: 5, baseCost: { metal: 3e5, crystal: 18e4, deuterium: 12e4 }, multiplier: 1.7, lifeformId: 4, reduction: "research_centers", effect: { type: "kaelesh_discovery_adv", value: 2e-3 } },
-  // Plasma
-  {
-    name: "Plasma Technology",
-    id: 122,
-    type: 6,
-    baseCost: { metal: 2e3, crystal: 4e3, deuterium: 1e3 },
-    costFormula: (level) => ({
-      metal: Math.floor(2e3 * Math.pow(2, level - 1)),
-      crystal: Math.floor(4e3 * Math.pow(2, level - 1)),
-      deuterium: Math.floor(1e3 * Math.pow(2, level - 1))
-    }),
-    reduction: "improvedStellarator",
-    effect: { type: "plasma", value: 1 }
-  }
-];
-function calculateMSU(cost, rates = DEFAULT_RATES) {
-  const mMultiplier = 1;
-  const cMultiplier = rates.metal / rates.crystal;
-  const dMultiplier = rates.metal / rates.deuterium;
-  return cost.metal * mMultiplier + cost.crystal * cMultiplier + cost.deuterium * dMultiplier;
-}
-function formatROI(hours) {
-  if (hours === Infinity || isNaN(hours)) return "∞";
-  const years = Math.floor(hours / (24 * 365));
-  const weeks = Math.floor(hours % (24 * 365) / (24 * 7));
-  const days = Math.floor(hours % (24 * 7) / 24);
-  const h = Math.floor(hours % 24);
-  const m2 = Math.floor(hours * 60 % 60);
-  const parts = [];
-  if (years > 0) parts.push(`${years}y`);
-  if (weeks > 0) parts.push(`${weeks}w`);
-  if (days > 0) parts.push(`${days}d`);
-  if (h > 0) parts.push(`${h}h`);
-  if (m2 > 0 || parts.length === 0) parts.push(`${m2}m`);
-  return parts.join(" ");
-}
-function getPlanetTechMultiplier(planet, account) {
-  var _a, _b, _c;
-  const lfLevel = ((_b = (_a = account.lifeformExperience) == null ? void 0 : _a.find((e) => e.id === planet.lifeformId || e.lifeformId === planet.lifeformId)) == null ? void 0 : _b.level) || 0;
-  const lfLevelBonus = lfLevel * 1e-3;
-  let buildingBonus = 0;
-  (_c = planet.lifeformBuildings) == null ? void 0 : _c.forEach((b) => {
-    const entry = AMORTIZATION_TABLE.find((e) => e.id === b.id);
-    if (entry && entry.effect && entry.effect.type === "tech_bonus") {
-      buildingBonus += b.level * entry.effect.value;
-    }
-  });
-  return 1 + lfLevelBonus + buildingBonus;
-}
-function calculateTotalExpeditionBonus(state, type) {
-  let totalBonus = 0;
-  state.planets.forEach((p2) => {
-    var _a;
-    const techMult = getPlanetTechMultiplier(p2, state.account);
-    (_a = p2.lifeformSetup) == null ? void 0 : _a.forEach((t2) => {
-      const level = t2.level || 0;
-      const entry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
-      if (entry && entry.effect && level > 0) {
-        const effect = entry.effect;
-        if (effect.type === type || effect.type === "kaelesh_discovery_adv") {
-          totalBonus += effect.value * level * techMult;
-        }
-      }
-    });
-  });
-  return totalBonus;
-}
-function calculateEmpireProduction(state) {
-  const { account, planets } = state;
-  const universeSpeed = account.universeSpeed || 1;
-  const playerClass = account.playerClass || 0;
-  let globalEuroMetal = 0;
-  let globalEuroCrystal = 0;
-  let globalEuroDeut = 0;
-  planets.forEach((p2) => {
-    var _a;
-    const techMult = getPlanetTechMultiplier(p2, account);
-    (_a = p2.lifeformSetup) == null ? void 0 : _a.forEach((t2) => {
-      const level = t2.level || 0;
-      const entry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
-      if (entry && entry.effect && entry.effect.target === "global") {
-        const val = entry.effect.value * level * techMult;
-        if (entry.effect.type === "metal") globalEuroMetal += val;
-        if (entry.effect.type === "crystal") globalEuroCrystal += val;
-        if (entry.effect.type === "deuterium") globalEuroDeut += val;
-        if (entry.effect.type === "all") {
-          globalEuroMetal += val;
-          globalEuroCrystal += val;
-          globalEuroDeut += val;
-        }
-      }
-    });
-  });
-  const results = {
-    empireBase: { metal: 0, crystal: 0, deuterium: 0 },
-    planets: {},
-    globalBonuses: { metal: globalEuroMetal, crystal: globalEuroCrystal, deuterium: globalEuroDeut }
-  };
-  planets.forEach((p2) => {
-    var _a, _b, _c;
-    const m2 = p2.metalMine || 0;
-    const c2 = p2.crystalMine || 0;
-    const d = p2.deuteriumMine || 0;
-    const temp = p2.tempMax || 20;
-    let slot = 0;
-    try {
-      slot = parseInt(p2.coords.split(":")[2]);
-    } catch (e) {
-    }
-    let metalPosFactor = 1;
-    if (slot === 6 || slot === 10) metalPosFactor = 1.17;
-    else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
-    else if (slot === 8) metalPosFactor = 1.35;
-    let crystalPosFactor = 1;
-    if (slot === 1) crystalPosFactor = 1.4;
-    else if (slot === 2) crystalPosFactor = 1.3;
-    else if (slot === 3) crystalPosFactor = 1.2;
-    const baseMetal = 30 * m2 * Math.pow(1.1, m2) * universeSpeed * metalPosFactor;
-    const baseCrystal = 20 * c2 * Math.pow(1.1, c2) * universeSpeed * crystalPosFactor;
-    const baseDeut = 10 * d * Math.pow(1.1, d) * (1.44 - 4e-3 * temp) * universeSpeed;
-    results.empireBase.metal += baseMetal;
-    results.empireBase.crystal += baseCrystal;
-    results.empireBase.deuterium += baseDeut;
-    const plasmaLevel = ((_b = (_a = account.researches) == null ? void 0 : _a.find((r2) => r2.id === 122)) == null ? void 0 : _b.level) || 0;
-    const plasmaMetal = plasmaLevel * 0.01;
-    const plasmaCrystal = plasmaLevel * (0.66 / 100);
-    const plasmaDeut = plasmaLevel * (0.33 / 100);
-    let lfbMetal = 0, lfbCrystal = 0, lfbDeut = 0;
-    (_c = p2.lifeformBuildings) == null ? void 0 : _c.forEach((b) => {
-      if (b.id === 12106) lfbMetal += b.level * 0.02;
-      if (b.id === 12109) lfbCrystal += b.level * 0.02;
-      if (b.id === 12110) lfbDeut += b.level * 0.02;
-      if (b.id === 13110) lfbDeut += b.level * 0.02;
-      if (b.id === 11106) lfbMetal += b.level * 0.015;
-      if (b.id === 11108) {
-        lfbCrystal += b.level * 0.015;
-        lfbDeut += b.level * 0.01;
-      }
-    });
-    let classMetal = 0, classCrystal = 0, classDeut = 0;
-    if (playerClass === 1) {
-      classMetal = 0.25;
-      classCrystal = 0.25;
-      classDeut = 0.25;
-    }
-    const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal;
-    const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal;
-    const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut;
-    results.planets[p2.id] = {
-      base: { metal: baseMetal, crystal: baseCrystal, deuterium: baseDeut },
-      mult: { metal: multMetal, crystal: multCrystal, deuterium: multDeut },
-      total: { metal: baseMetal * multMetal, crystal: baseCrystal * multCrystal, deuterium: baseDeut * multDeut }
-    };
-  });
-  return results;
-}
-function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES, limit = 25, expoAverages, selectedPlanetIds) {
-  var _a, _b, _c, _d;
-  const state = JSON.parse(JSON.stringify({ planets, account }));
-  const resultItems = [];
-  const REDUCTION_IDS = {
-    mineralResearchCenter: 12111,
-    megalith: 12108,
-    researchCentre: 11103,
-    runeTechnologium: 12103,
-    roboticsResearchCentre: 13103,
-    vortexChamber: 14103,
-    improvedStellarator: 34
-  };
-  const getReduction = (type, planet, state2) => {
-    var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l;
-    if (!type) return 0;
-    if (type === "mineralResearchCenter") {
-      const level = ((_b2 = (_a2 = planet.lifeformBuildings) == null ? void 0 : _a2.find((b) => b.id === REDUCTION_IDS.mineralResearchCenter)) == null ? void 0 : _b2.level) || 0;
-      return level * 5e-3;
-    }
-    if (type === "megalith") {
-      const level = ((_d2 = (_c2 = planet.lifeformBuildings) == null ? void 0 : _c2.find((b) => b.id === REDUCTION_IDS.megalith)) == null ? void 0 : _d2.level) || 0;
-      return level * 0.01;
-    }
-    if (type === "research_centers") {
-      const l1 = ((_f = (_e = planet.lifeformBuildings) == null ? void 0 : _e.find((b) => b.id === REDUCTION_IDS.researchCentre)) == null ? void 0 : _f.level) || 0;
-      const l2 = ((_h = (_g = planet.lifeformBuildings) == null ? void 0 : _g.find((b) => b.id === REDUCTION_IDS.runeTechnologium)) == null ? void 0 : _h.level) || 0;
-      const l3 = ((_j = (_i = planet.lifeformBuildings) == null ? void 0 : _i.find((b) => b.id === REDUCTION_IDS.roboticsResearchCentre)) == null ? void 0 : _j.level) || 0;
-      const l4 = ((_l = (_k = planet.lifeformBuildings) == null ? void 0 : _k.find((b) => b.id === REDUCTION_IDS.vortexChamber)) == null ? void 0 : _l.level) || 0;
-      return (l1 + l2 + l3 + l4) * 25e-4;
-    }
-    if (type === "improvedStellarator") {
-      let totalBoostedLevel = 0;
-      state2.planets.forEach((pl2) => {
-        var _a3;
-        const tech = (_a3 = pl2.lifeformSetup) == null ? void 0 : _a3.find((t2) => t2.selectedTechId === REDUCTION_IDS.improvedStellarator);
-        if (tech && tech.level > 0) {
-          const techMult = getPlanetTechMultiplier(pl2, state2.account);
-          totalBoostedLevel += tech.level * techMult;
-        }
-      });
-      const reduction = totalBoostedLevel * 15e-4;
-      return Math.min(0.5, reduction);
-    }
-    return 0;
-  };
-  for (let i = 0; i < limit; i++) {
-    const prodData = calculateEmpireProduction(state);
-    const candidates = [];
-    const currentResBonus = calculateTotalExpeditionBonus(state, "expo_res");
-    const currentSiBonus = calculateTotalExpeditionBonus(state, "expo_si");
-    state.planets.forEach((p2) => {
-      const isSelected = !selectedPlanetIds || selectedPlanetIds.includes(p2.id);
-      if (i === 0) console.groupCollapsed(`[Amortization Debug] Evaluating Planet: ${p2.coords} (${p2.name}) [Selected: ${isSelected}]`);
-      AMORTIZATION_TABLE.forEach((entry) => {
-        var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
-        if (!filters[entry.type]) return;
-        if (!isSelected && entry.type !== 6) return;
-        const isBuilding = entry.type === 2 || entry.type === 3;
-        if (entry.lifeformId && entry.lifeformId !== p2.lifeformId && isBuilding) return;
-        let currentLevel = 0;
-        if (entry.type === 1) {
-          if (entry.name === "Metal Mine") currentLevel = p2.metalMine || 0;
-          if (entry.name === "Crystal Mine") currentLevel = p2.crystalMine || 0;
-          if (entry.name === "Deuterium Mine") currentLevel = p2.deuteriumMine || 0;
-        } else if (entry.type === 6) {
-          currentLevel = ((_b2 = (_a2 = state.account.researches) == null ? void 0 : _a2.find((r2) => r2.id === 122)) == null ? void 0 : _b2.level) || 0;
-        } else if (entry.id && (entry.type === 2 || entry.type === 3)) {
-          currentLevel = ((_d2 = (_c2 = p2.lifeformBuildings) == null ? void 0 : _c2.find((b) => b.id === entry.id)) == null ? void 0 : _d2.level) || 0;
-        } else if (entry.id && (entry.type === 4 || entry.type === 5)) {
-          const tech = (_e = p2.lifeformSetup) == null ? void 0 : _e.find((t2) => t2.selectedTechId === entry.id);
-          if (!tech) return;
-          currentLevel = tech.level;
-        }
-        const nextLevel = currentLevel + 1;
-        const reduction = getReduction(entry.reduction || "", p2, state);
-        const discountFactor = Math.max(0.01, 1 - reduction);
-        let cost;
-        if (entry.costFormula) {
-          cost = entry.costFormula(nextLevel);
-        } else {
-          const factor = nextLevel * Math.pow(entry.multiplier, nextLevel - 1);
-          cost = {
-            metal: Math.floor(entry.baseCost.metal * factor),
-            crystal: Math.floor(entry.baseCost.crystal * factor),
-            deuterium: Math.floor(entry.baseCost.deuterium * factor)
-          };
-        }
-        cost.metal = Math.floor(cost.metal * discountFactor);
-        cost.crystal = Math.floor(cost.crystal * discountFactor);
-        cost.deuterium = Math.floor(cost.deuterium * discountFactor);
-        let prodIncrease = 0;
-        let prodDelta = { metal: 0, crystal: 0, deuterium: 0 };
-        const effect = entry.effect;
-        const universeSpeed = state.account.universeSpeed || 1;
-        if (entry.type === 1) {
-          const temp = p2.tempMax || 20;
-          let slot = 0;
-          try {
-            slot = parseInt(p2.coords.split(":")[2]);
-          } catch (e) {
-          }
-          let metalPosFactor = 1;
-          if (slot === 6 || slot === 10) metalPosFactor = 1.17;
-          else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
-          else if (slot === 8) metalPosFactor = 1.35;
-          let crystalPosFactor = 1;
-          if (slot === 1) crystalPosFactor = 1.4;
-          else if (slot === 2) crystalPosFactor = 1.3;
-          else if (slot === 3) crystalPosFactor = 1.2;
-          const mNext = entry.name === "Metal Mine" ? nextLevel : p2.metalMine || 0;
-          const cNext = entry.name === "Crystal Mine" ? nextLevel : p2.crystalMine || 0;
-          const dNext = entry.name === "Deuterium Mine" ? nextLevel : p2.deuteriumMine || 0;
-          const bM_next = 30 * mNext * Math.pow(1.1, mNext) * universeSpeed * metalPosFactor;
-          const bC_next = 20 * cNext * Math.pow(1.1, cNext) * universeSpeed * crystalPosFactor;
-          const bD_next = 10 * dNext * Math.pow(1.1, dNext) * (1.44 - 4e-3 * temp) * universeSpeed;
-          const pData = prodData.planets[p2.id];
-          prodDelta = {
-            metal: (bM_next - pData.base.metal) * pData.mult.metal,
-            crystal: (bC_next - pData.base.crystal) * pData.mult.crystal,
-            deuterium: (bD_next - pData.base.deuterium) * pData.mult.deuterium
-          };
-          prodIncrease = calculateMSU(prodDelta, rates);
-        } else if (effect) {
-          if (effect.type === "plasma") {
-            prodDelta = {
-              metal: prodData.empireBase.metal * 0.01,
-              crystal: prodData.empireBase.crystal * 66e-4,
-              deuterium: prodData.empireBase.deuterium * 33e-4
-            };
-            prodIncrease = calculateMSU(prodDelta, rates);
-          } else if (effect.type === "tech_bonus") {
-            const factor = effect.value;
-            let deltaM = 0, deltaC = 0, deltaD = 0;
-            (_f = p2.lifeformSetup) == null ? void 0 : _f.forEach((t2) => {
-              var _a3, _b3, _c3, _d3, _e2, _f2, _g2, _h2;
-              const level = t2.level || 0;
-              const tEntry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
-              if (tEntry && tEntry.effect) {
-                const tEffect = tEntry.effect;
-                const tVal = tEffect.value * level * factor;
-                if (tEffect.target === "global") {
-                  if (tEffect.type === "metal" || tEffect.type === "all") deltaM += prodData.empireBase.metal * tVal;
-                  if (tEffect.type === "crystal" || tEffect.type === "all") deltaC += prodData.empireBase.crystal * tVal;
-                  if (tEffect.type === "deuterium" || tEffect.type === "all") deltaD += prodData.empireBase.deuterium * tVal;
-                } else if (tEffect.target === "mine") {
-                  if (tEffect.type === "metal") deltaM += prodData.planets[p2.id].base.metal * tVal;
-                  if (tEffect.type === "crystal") deltaC += prodData.planets[p2.id].base.crystal * tVal;
-                  if (tEffect.type === "deuterium") deltaD += prodData.planets[p2.id].base.deuterium * tVal;
-                } else if (tEffect.type === "expo_res" || tEffect.type === "kaelesh_discovery_adv") {
-                  const baseline = ((_a3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _a3.metal) || ((_b3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _b3.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
-                  const trueM = baseline.metal / (1 + currentResBonus);
-                  const trueC = baseline.crystal / (1 + currentResBonus);
-                  const trueD = baseline.deuterium / (1 + currentResBonus);
-                  deltaM += trueM * tVal;
-                  deltaC += trueC * tVal;
-                  deltaD += trueD * tVal;
-                  if (tEffect.type === "kaelesh_discovery_adv") {
-                    const computerLevel = ((_d3 = (_c3 = state.account.researches) == null ? void 0 : _c3.find((r2) => r2.id === 108)) == null ? void 0 : _d3.level) || 10;
-                    const slts = computerLevel + 3;
-                    const indirectBasePerLevel = 4e-3 / slts + 45e-5;
-                    const indirectGainFactor = indirectBasePerLevel * level * factor;
-                    const baselineSi = ((_e2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _e2.metal) || ((_f2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _f2.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
-                    const totalM = trueM * (1 + currentResBonus) + baselineSi.metal / (1 + currentSiBonus) * (1 + currentSiBonus);
-                    const totalC = trueC * (1 + currentResBonus) + baselineSi.crystal / (1 + currentSiBonus) * (1 + currentSiBonus);
-                    const totalD = trueD * (1 + currentResBonus) + baselineSi.deuterium / (1 + currentSiBonus) * (1 + currentSiBonus);
-                    deltaM += totalM * indirectGainFactor;
-                    deltaC += totalC * indirectGainFactor;
-                    deltaD += totalD * indirectGainFactor;
-                  }
-                } else if (tEffect.type === "expo_si") {
-                  const baseline = ((_g2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _g2.metal) || ((_h2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _h2.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
-                  const trueM = baseline.metal / (1 + currentSiBonus);
-                  const trueC = baseline.crystal / (1 + currentSiBonus);
-                  const trueD = baseline.deuterium / (1 + currentSiBonus);
-                  deltaM += trueM * tVal;
-                  deltaC += trueC * tVal;
-                  deltaD += trueD * tVal;
-                }
-              }
-            });
-            prodDelta = { metal: deltaM, crystal: deltaC, deuterium: deltaD };
-            prodIncrease = calculateMSU(prodDelta, rates);
-          } else if (effect.type === "expo_res" || effect.type === "expo_si" || effect.type === "kaelesh_discovery_adv") {
-            const isKaeleshAdv = effect.type === "kaelesh_discovery_adv";
-            const techMult = getPlanetTechMultiplier(p2, state.account);
-            const effectiveValue = effect.value * techMult;
-            const baselineRes = ((_g = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _g.metal) || ((_h = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _h.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
-            const baselineSi = ((_i = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _i.metal) || ((_j = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _j.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
-            const trueM_res = baselineRes.metal / (1 + currentResBonus);
-            const trueC_res = baselineRes.crystal / (1 + currentResBonus);
-            const trueD_res = baselineRes.deuterium / (1 + currentResBonus);
-            const trueM_si = baselineSi.metal / (1 + currentSiBonus);
-            const trueC_si = baselineSi.crystal / (1 + currentSiBonus);
-            const trueD_si = baselineSi.deuterium / (1 + currentSiBonus);
-            if (isKaeleshAdv) {
-              const computerLevel = ((_l = (_k = state.account.researches) == null ? void 0 : _k.find((r2) => r2.id === 108)) == null ? void 0 : _l.level) || 10;
-              const estimatedSlots = computerLevel + 3;
-              const directM = trueM_res * effectiveValue;
-              const directC = trueC_res * effectiveValue;
-              const directD = trueD_res * effectiveValue;
-              const totalMSUYield = calculateMSU({
-                metal: trueM_res * (1 + currentResBonus) + trueM_si * (1 + currentSiBonus),
-                crystal: trueC_res * (1 + currentResBonus) + trueC_si * (1 + currentSiBonus),
-                deuterium: trueD_res * (1 + currentResBonus) + trueD_si * (1 + currentSiBonus)
-              }, rates);
-              const slotMSU = 4e-3 * techMult / estimatedSlots * totalMSUYield;
-              const enemyMSU = 45e-5 * techMult * totalMSUYield;
-              const extraMSU = slotMSU + enemyMSU;
-              const weightM = (trueM_res * (1 + currentResBonus) + trueM_si * (1 + currentSiBonus)) * rates.metal / (totalMSUYield || 1);
-              const weightC = (trueC_res * (1 + currentResBonus) + trueC_si * (1 + currentSiBonus)) * rates.crystal / (totalMSUYield || 1);
-              const weightD = (trueD_res * (1 + currentResBonus) + trueD_si * (1 + currentSiBonus)) * rates.deuterium / (totalMSUYield || 1);
-              prodDelta = {
-                metal: directM + extraMSU * weightM / (rates.metal || 1),
-                crystal: directC + extraMSU * weightC / (rates.crystal || 1),
-                deuterium: directD + extraMSU * weightD / (rates.deuterium || 1)
-              };
-              prodIncrease = calculateMSU(prodDelta, rates);
-            } else {
-              const isRes = effect.type === "expo_res";
-              const trueM = isRes ? trueM_res : trueM_si;
-              const trueC = isRes ? trueC_res : trueC_si;
-              const trueD = isRes ? trueD_res : trueD_si;
-              prodDelta = {
-                metal: trueM * effectiveValue,
-                crystal: trueC * effectiveValue,
-                deuterium: trueD * effectiveValue
-              };
-              prodIncrease = calculateMSU(prodDelta, rates);
-            }
-          } else {
-            const target = effect.target;
-            const techMult = entry.type === 4 || entry.type === 5 ? getPlanetTechMultiplier(p2, state.account) : 1;
-            if (effect.type === "multiple") {
-              const mInc = (target === "global" ? prodData.empireBase.metal : prodData.planets[p2.id].base.metal) * (effect.values.metal * techMult);
-              const cInc = (target === "global" ? prodData.empireBase.crystal : prodData.planets[p2.id].base.crystal) * (effect.values.crystal * techMult);
-              const dInc = (target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium) * (effect.values.deuterium * techMult);
-              prodDelta = { metal: mInc, crystal: cInc, deuterium: dInc };
-            } else {
-              const effectiveValue = effect.value * techMult;
-              const mInc = (target === "global" ? prodData.empireBase.metal : prodData.planets[p2.id].base.metal) * (effect.type === "metal" || effect.type === "all" ? effectiveValue : 0);
-              const cInc = (target === "global" ? prodData.empireBase.crystal : prodData.planets[p2.id].base.crystal) * (effect.type === "crystal" || effect.type === "all" || effect.type === "crystal_deuterium" ? effectiveValue : 0);
-              const dInc = (target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium) * (effect.type === "deuterium" || effect.type === "all" || effect.type === "crystal_deuterium" ? effectiveValue : 0);
-              prodDelta = { metal: mInc, crystal: cInc, deuterium: dInc };
-            }
-            prodIncrease = calculateMSU(prodDelta, rates);
-          }
-        }
-        if (prodIncrease > 0) {
-          const msuCost = calculateMSU(cost, rates);
-          const roiHours = msuCost / prodIncrease;
-          if (i === 0) {
-            let breakdownStr = "";
-            if (entry.type === 1) {
-              const pData = prodData.planets[p2.id];
-              const resKey = entry.name === "Metal Mine" ? "metal" : entry.name === "Crystal Mine" ? "crystal" : "deuterium";
-              const m2 = pData.mult[resKey];
-              const plasmaLevel = ((_n = (_m = state.account.researches) == null ? void 0 : _m.find((r2) => r2.id === 122)) == null ? void 0 : _n.level) || 0;
-              const plasmaB = resKey === "metal" ? plasmaLevel * 0.01 : resKey === "crystal" ? plasmaLevel * (0.66 / 100) : plasmaLevel * (0.33 / 100);
-              let lfbB = 0;
-              (_o = p2.lifeformBuildings) == null ? void 0 : _o.forEach((b) => {
-                if (resKey === "metal") {
-                  if (b.id === 12106) lfbB += b.level * 0.02;
-                  if (b.id === 11106) lfbB += b.level * 0.015;
-                } else if (resKey === "crystal") {
-                  if (b.id === 12109) lfbB += b.level * 0.02;
-                  if (b.id === 11108) lfbB += b.level * 0.015;
-                } else if (resKey === "deuterium") {
-                  if (b.id === 12110) lfbB += b.level * 0.02;
-                  if (b.id === 13110) lfbB += b.level * 0.02;
-                  if (b.id === 11108) lfbB += b.level * 0.01;
-                }
-              });
-              const techB = prodData.globalBonuses[resKey];
-              const classB = state.account.playerClass === 1 ? 0.25 : 0;
-              breakdownStr = `
-                            - Multiplier Breakdown (${resKey}): ${(m2 * 100).toFixed(1)}% 
-                                [100% Base + ${(plasmaB * 100).toFixed(1)}% Plasma + ${(lfbB * 100).toFixed(1)}% LF Buildings + ${(techB * 100).toFixed(1)}% LF Techs + ${(classB * 100).toFixed(0)}% Class]`;
-            } else if (entry.type === 4 || entry.type === 5) {
-              const effect2 = entry.effect;
-              const techMult = getPlanetTechMultiplier(p2, state.account);
-              const effectiveValue = effect2.value * techMult;
-              let details = [];
-              if (effect2.type === "expo_res" || effect2.type === "expo_si" || effect2.type === "kaelesh_discovery_adv") {
-                const isKaeleshAdv = effect2.type === "kaelesh_discovery_adv";
-                const isRes = effect2.type === "expo_res" || isKaeleshAdv;
-                effect2.type === "expo_si" || isKaeleshAdv;
-                if (isKaeleshAdv) {
-                  const computerLevel = ((_q = (_p = state.account.researches) == null ? void 0 : _p.find((r2) => r2.id === 108)) == null ? void 0 : _q.level) || 10;
-                  const slts = computerLevel + 3;
-                  details.push(`Aggregated Discovery Boost (incl. Slots: +${(4e-3 * techMult / slts * 100).toFixed(4)}% yield and Fewer Enemies: +${(16e-5 * techMult * 100).toFixed(4)}% yield)`);
-                  details.push(`Total Gain across both Res & Ships: +${prodIncrease.toFixed(2)} MSU/h`);
-                } else {
-                  const currentGlobalBonus = isRes ? currentResBonus : currentSiBonus;
-                  const baseline = isRes ? ((_r = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _r.metal) || ((_s = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _s.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 } : ((_t = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _t.metal) || ((_u = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _u.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
-                  const trueM = baseline.metal / (1 + currentGlobalBonus);
-                  const trueC = baseline.crystal / (1 + currentGlobalBonus);
-                  const trueD = baseline.deuterium / (1 + currentGlobalBonus);
-                  const dM = trueM * effectiveValue;
-                  const dC = trueC * effectiveValue;
-                  const dD = trueD * effectiveValue;
-                  details.push(`Expedition ${isRes ? "Res" : "Ships"} Gain: +${calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates).toFixed(2)} MSU/h (normalized from ${(currentGlobalBonus * 100).toFixed(1)}% LF bonus)`);
-                }
-              } else {
-                const targetName = effect2.target === "global" ? "Empire" : `Planet (${p2.coords})`;
-                const baseM = effect2.target === "global" ? prodData.empireBase.metal : prodData.planets[p2.id].base.metal;
-                const baseC = effect2.target === "global" ? prodData.empireBase.crystal : prodData.planets[p2.id].base.crystal;
-                const baseD = effect2.target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium;
-                if (effect2.type === "metal" || effect2.type === "all")
-                  details.push(`${targetName} Metal: +${calculateMSU({ metal: baseM * effectiveValue, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
-                if (effect2.type === "crystal" || effect2.type === "all" || effect2.type === "crystal_deuterium")
-                  details.push(`${targetName} Crystal: +${calculateMSU({ metal: 0, crystal: baseC * effectiveValue, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
-                if (effect2.type === "deuterium" || effect2.type === "all" || effect2.type === "crystal_deuterium")
-                  details.push(`${targetName} Deuterium: +${calculateMSU({ metal: 0, crystal: 0, deuterium: baseD * effectiveValue }, rates).toFixed(2)} MSU/h`);
-              }
-              breakdownStr = `
-                            - Research Bonus: +${(effectiveValue * 100).toFixed(4)}% (incl. ${techMult > 1 ? "+" + ((techMult - 1) * 100).toFixed(1) + "% building bonus" : "no building bonus"})
-                            - Production Boost Breakdown:${details.map((d) => "\n                                * " + d).join("")}`;
-            } else if (entry.type === 6) {
-              const dM = prodData.empireBase.metal * 0.01;
-              const dC = prodData.empireBase.crystal * (0.66 / 100);
-              const dD = prodData.empireBase.deuterium * (0.33 / 100);
-              const reduction2 = getReduction("improvedStellarator", {}, state);
-              breakdownStr = `
-                            - Research Bonus: +1% Metal, +0.66% Crystal, +0.33% Deuterium
-                            - Cost Reduction: -${(reduction2 * 100).toFixed(2)}% (from Improved Stellarator)
-                            - Empire-wide Base Production:
-                                * Metal Basis: ${prodData.empireBase.metal.toLocaleString()} /h
-                                * Crystal Basis: ${prodData.empireBase.crystal.toLocaleString()} /h
-                                * Deuterium Basis: ${prodData.empireBase.deuterium.toLocaleString()} /h
-                            - Incremental Production Boost (Lvl ${nextLevel}):
-                                * Metal: +${calculateMSU({ metal: dM, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dM.toLocaleString()} Metal)
-                                * Crystal: +${calculateMSU({ metal: 0, crystal: dC, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dC.toLocaleString()} Crystal)
-                                * Deuterium: +${calculateMSU({ metal: 0, crystal: 0, deuterium: dD }, rates).toFixed(2)} MSU/h (+${dD.toLocaleString()} Deut)`;
-            } else if (entry.effect && entry.effect.type === "tech_bonus") {
-              const factor = entry.effect.value;
-              let techDetails = [];
-              (_v = p2.lifeformSetup) == null ? void 0 : _v.forEach((t2) => {
-                var _a3, _b3, _c3, _d3;
-                const level = t2.level || 0;
-                const tEntry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
-                if (tEntry && tEntry.effect && level > 0) {
-                  const tEffect = tEntry.effect;
-                  const tVal = tEffect.value * level * factor;
-                  let deltaMSU = 0;
-                  if (tEffect.target === "global") {
-                    const dM = prodData.empireBase.metal * tVal;
-                    const dC = prodData.empireBase.crystal * tVal;
-                    const dD = prodData.empireBase.deuterium * tVal;
-                    deltaMSU = calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates);
-                  } else if (tEffect.target === "mine") {
-                    const dM = prodData.planets[p2.id].base.metal * tVal;
-                    const dC = prodData.planets[p2.id].base.crystal * tVal;
-                    const dD = prodData.planets[p2.id].base.deuterium * tVal;
-                    deltaMSU = calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates);
-                  } else if (tEffect.type === "expo_res") {
-                    const baseline = ((_a3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _a3.metal) || ((_b3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _b3.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
-                    const trueM = baseline.metal / (1 + currentResBonus);
-                    const trueC = baseline.crystal / (1 + currentResBonus);
-                    const trueD = baseline.deuterium / (1 + currentResBonus);
-                    deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
-                  } else if (tEffect.type === "expo_si") {
-                    const baseline = ((_c3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _c3.metal) || ((_d3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _d3.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
-                    const trueM = baseline.metal / (1 + currentSiBonus);
-                    const trueC = baseline.crystal / (1 + currentSiBonus);
-                    const trueD = baseline.deuterium / (1 + currentSiBonus);
-                    deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
-                  }
-                  if (deltaMSU > 0.01) {
-                    techDetails.push(`${tEntry.name} (Lvl ${level}): +${deltaMSU.toFixed(2)} MSU/h`);
-                  }
-                }
-              });
-              breakdownStr = `
-                            - Tech Multiplier Bonus: +${(factor * 100).toFixed(2)}% per level
-                            - Bonus Breakdown Across Selected Techs:${techDetails.length > 0 ? techDetails.map((d) => "\n                                * " + d).join("") : "\n                                (No production techs active)"}`;
-            }
-            console.log(`[Amortization Debug] Candidate: ${entry.name} Lvl:${nextLevel} (${p2.coords})
-                            - Cost: M:${cost.metal.toLocaleString()} C:${cost.crystal.toLocaleString()} D:${cost.deuterium.toLocaleString()}
-                            - Prod Increase: M:${prodDelta.metal.toFixed(2)} C:${prodDelta.crystal.toFixed(2)} D:${prodDelta.deuterium.toFixed(2)}
-                            - Prod Increase (MSU): ${prodIncrease.toFixed(2)}${breakdownStr}
-                            - ROI: ${roiHours.toFixed(2)}h`);
-            if (entry.type === 5 && expoAverages) {
-              const effect2 = entry.effect;
-              const isRes = effect2.type === "expo_res" || effect2.type === "kaelesh_discovery_adv";
-              const isShips = effect2.type === "expo_si" || effect2.type === "kaelesh_discovery_adv";
-              if (isRes) {
-                const base = expoAverages.resources;
-                console.log(`[Amortization Debug] -> ${entry.name} Res Baseline (Best 7/60d Hourly): M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()}`);
-                if ((_w = expoAverages.totals) == null ? void 0 : _w.resources) {
-                  const t2 = expoAverages.totals.resources;
-                  console.log(`[Amortization Debug] -> ${entry.name} Res Context (30d Totals): M:${t2.metal.toLocaleString()} C:${t2.crystal.toLocaleString()} D:${t2.deuterium.toLocaleString()}`);
-                }
-              }
-              if (isShips) {
-                const base = expoAverages.ships;
-                const msu = calculateMSU(base, rates);
-                console.log(`[Amortization Debug] -> ${entry.name} Ship Baseline (Best 7/60d Hourly): ${msu.toFixed(2)} MSU (M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()})`);
-                if ((_x = expoAverages.totals) == null ? void 0 : _x.ships) {
-                  const t2 = expoAverages.totals.ships;
-                  const tMsu = calculateMSU(t2, rates);
-                  console.log(`[Amortization Debug] -> ${entry.name} Ship Context (30d Totals): ${tMsu.toLocaleString(void 0, { maximumFractionDigits: 0 })} MSU (M:${t2.metal.toLocaleString()} C:${t2.crystal.toLocaleString()} D:${t2.deuterium.toLocaleString()})`);
-                }
-              }
-            }
-          }
-          candidates.push({
-            name: entry.name,
-            type: entry.type,
-            cost,
-            msuCost,
-            productionIncrease: prodIncrease,
-            prodDelta,
-            roiHours,
-            planetId: entry.type === 6 ? void 0 : p2.id,
-            currentLevel
-          });
-        } else if (i === 0 && filters[entry.type]) ;
-      });
-      if (i === 0) console.groupEnd();
-    });
-    const uniqueCandidates = candidates.filter(
-      (item, index, self2) => item.type !== 6 || index === self2.findIndex(
-        (t2) => t2.type === 6
-        /* PlasmaTechnology */
-      )
-    );
-    if (uniqueCandidates.length === 0) break;
-    uniqueCandidates.sort((a2, b) => a2.roiHours - b.roiHours);
-    const best = uniqueCandidates[0];
-    if (i === 0) {
-      console.log(`[Amortization Debug] STEP 1 WINNER: ${best.name} (ROI: ${best.roiHours.toFixed(2)}h) at ${best.planetId ? (_a = planets.find((p2) => p2.id === best.planetId)) == null ? void 0 : _a.coords : "GLOBAL"}`);
-    }
-    if (best.type === 1) {
-      const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
-      if (best.name === "Metal Mine") state.planets[pIdx].metalMine = (state.planets[pIdx].metalMine || 0) + 1;
-      else if (best.name === "Crystal Mine") state.planets[pIdx].crystalMine = (state.planets[pIdx].crystalMine || 0) + 1;
-      else if (best.name === "Deuterium Mine") state.planets[pIdx].deuteriumMine = (state.planets[pIdx].deuteriumMine || 0) + 1;
-    } else if (best.type === 6) {
-      const tech = (_b = state.account.researches) == null ? void 0 : _b.find((r2) => r2.id === 122);
-      if (tech) tech.level++;
-      else state.account.researches.push({ id: 122, level: 1 });
-    } else if (best.type === 2 || best.type === 3) {
-      const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
-      const bIdx = (_c = state.planets[pIdx].lifeformBuildings) == null ? void 0 : _c.findIndex((b) => b.name === best.name);
-      if (bIdx !== -1) state.planets[pIdx].lifeformBuildings[bIdx].level++;
-    } else if (best.type === 4 || best.type === 5) {
-      const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
-      const tech = (_d = state.planets[pIdx].lifeformSetup) == null ? void 0 : _d.find((t2) => {
-        var _a2;
-        return ((_a2 = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId)) == null ? void 0 : _a2.name) === best.name;
-      });
-      if (tech) tech.level++;
-    }
-    resultItems.push(best);
-  }
-  try {
-    window.amortizationFullEmpire = state;
-  } catch (e) {
-  }
-  return resultItems;
-}
 const THEME_CYAN$2 = "#00f2ff";
 const THEME_PURPLE = "#a855f7";
 const AmortizationView = ({ planets, account }) => {
@@ -65583,6 +66364,7 @@ const Tools = () => {
     }
   ];
   const [activeToolId, setActiveToolId] = reactExports.useState("scrap-optimizer");
+  const [isSyncModalOpen, setIsSyncModalOpen] = reactExports.useState(false);
   reactExports.useEffect(() => {
     const checkPending = () => {
       const pending = sessionStorage.getItem("ognexus_target_subview");
@@ -65692,29 +66474,117 @@ const Tools = () => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "tool-content", children: activeTool && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginBottom: "32px", borderBottom: "1px solid var(--border)", paddingBottom: "20px" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "var(--primary)", filter: "drop-shadow(0 0 8px var(--primary-glow))" }, children: activeTool.icon }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { style: { margin: 0, fontSize: "1.5rem", fontWeight: 700, fontFamily: "var(--font-title)", display: "flex", alignItems: "center", gap: "8px" }, children: [
-              activeTool.name,
-              activeTool.isBeta && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
-                fontSize: "10px",
-                fontWeight: 800,
-                background: "rgba(0, 242, 255, 0.15)",
-                color: "#00f2ff",
-                border: "1px solid rgba(0, 242, 255, 0.3)",
-                borderRadius: "4px",
-                padding: "2px 6px",
-                letterSpacing: "0.5px",
-                textTransform: "uppercase",
-                lineHeight: 1
-              }, children: "Beta" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "var(--primary)", filter: "drop-shadow(0 0 8px var(--primary-glow))" }, children: activeTool.icon }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { style: { margin: 0, fontSize: "1.5rem", fontWeight: 700, fontFamily: "var(--font-title)", display: "flex", alignItems: "center", gap: "8px" }, children: [
+                activeTool.name,
+                activeTool.isBeta && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                  fontSize: "10px",
+                  fontWeight: 800,
+                  background: "rgba(0, 242, 255, 0.15)",
+                  color: "#00f2ff",
+                  border: "1px solid rgba(0, 242, 255, 0.3)",
+                  borderRadius: "4px",
+                  padding: "2px 6px",
+                  letterSpacing: "0.5px",
+                  textTransform: "uppercase",
+                  lineHeight: 1
+                }, children: "Beta" })
+              ] })
+            ] }),
+            activeTool.id === "scrap-optimizer" && /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "re-sync-btn", onClick: () => setIsSyncModalOpen(true), children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(RefreshCw, { size: 14 }),
+              "Re-sync Game Data"
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { margin: 0, color: "var(--text-muted)", fontSize: "0.9rem" }, children: activeTool.description })
         ] }),
         activeTool.component
       ] }) })
-    ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: isSyncModalOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "picker-overlay", onClick: () => setIsSyncModalOpen(false), children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      motion.div,
+      {
+        initial: { scale: 0.9, opacity: 0, y: 30 },
+        animate: { scale: 1, opacity: 1, y: 0 },
+        exit: { scale: 0.9, opacity: 0, y: 30 },
+        className: "tech-picker-modal sync-modal-v2",
+        onClick: (e) => e.stopPropagation(),
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "picker-header", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sync-header-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(RefreshCw, { size: 24, className: "spinning" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.25rem", fontWeight: 800, color: "var(--primary)", fontFamily: "var(--font-title)" }, children: "Sync Fleet & Logistics Intelligence" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: "Choose your synchronization method for Scrap Merchant Optimizer" })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "picker-close", onClick: () => setIsSyncModalOpen(false), children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 20 }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sync-paths-container", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sync-path-card empire-path", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-glow" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-icon-wrapper zap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 24, fill: "currentColor" }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-title-group", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-label", children: "METHOD A" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-name font-title", children: "Fast Empire Sync" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-description", children: "Sync all ships and logistics across your entire empire at once in seconds." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-steps vertical", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-step", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-circle", children: "1" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "step-content", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-action", children: "Visit Empire View" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-hint", children: "Open the in-game Empire overview screen" })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-step", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-circle", children: "2" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "step-content", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-action", children: "Scan Planets & Moons" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-hint", children: "Visit both Planet and Moon menu views from the page tab buttons" })
+                  ] })
+                ] })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sync-path-card manual-path", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-glow" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-icon-wrapper target", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Target, { size: 24 }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-title-group", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-label", children: "METHOD B" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-name font-title", children: "Individual Fleet Sync" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "path-description", children: "Synchronize your fleets individually on all locations as you browse your empire." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-steps vertical", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-step", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-circle", children: "1" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "step-content", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-action", children: "Visit Planet Fleet Menus" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-hint", children: "Open the Fleet menu page on every planet in your empire" })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "path-step", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-circle", children: "2" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "step-content", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-action", children: "Visit Moon Fleet Menus" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-hint", children: "Open the Fleet menu page on every moon in your empire" })
+                  ] })
+                ] })
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sync-footer", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "select-tech-confirm-btn", onClick: () => setIsSyncModalOpen(false), children: [
+            "I Understand, Sync Now ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 18, style: { marginLeft: "12px" } })
+          ] }) })
+        ]
+      }
+    ) }) })
   ] });
 };
 const BACKGROUNDS = [
@@ -65780,19 +66650,27 @@ const SignatureMaker = ({ onBack }) => {
     () => activeAccount ? db.debrisHarvests.where("playerId").equals(activeAccount.playerId).count() : 0,
     [activeAccount]
   ) ?? 0;
+  const calcResults = reactExports.useMemo(() => {
+    if (!activeAccount || planets.length === 0) return null;
+    return calculateEmpireProduction({ account: activeAccount, planets });
+  }, [activeAccount, planets]);
   const dailyProduction = reactExports.useMemo(() => {
     let metal = 0;
     let crystal = 0;
     let deuterium = 0;
-    planets.forEach((p2) => {
-      if (p2.production) {
-        metal += (p2.production.metal || 0) * 24;
-        crystal += (p2.production.crystal || 0) * 24;
-        deuterium += (p2.production.deuterium || 0) * 24;
-      }
-    });
+    if (calcResults) {
+      planets.forEach((p2) => {
+        var _a;
+        const prod = (_a = calcResults.planets[p2.id]) == null ? void 0 : _a.total;
+        if (prod) {
+          metal += (prod.metal || 0) * 24;
+          crystal += (prod.crystal || 0) * 24;
+          deuterium += (prod.deuterium || 0) * 24;
+        }
+      });
+    }
     return { metal, crystal, deuterium };
-  }, [planets]);
+  }, [planets, calcResults]);
   const lifeformDistribution = reactExports.useMemo(() => {
     const counts = { humans: 0, rocktal: 0, mechas: 0, kaelesh: 0, none: 0 };
     planets.forEach((p2) => {
@@ -68111,7 +68989,7 @@ const Tutorials = ({ onNavigate }) => {
       steps: [
         {
           title: "Lifeforms Menu",
-          text: 'Inside the **Empire Overview** area of the **Lifeforms Menu** you are greeted by the overall bonuses and power-ups your account has.<br /><br />Also, by clicking on any planet, you will be able to play-around with the lifeform setup on that planet.<br /><br />Here, we can see a clear differentiation between the **LIVE** setup of the OGame account and the **Sandbox** technologies; meaning that any changes, on any planet, made to the Lifeform Setup will be marked as **"Sandbox"** / different than LIVE. Whenever you are done theorycrafting and want to go back to LIVE version, you can click the **Revert** button.',
+          text: 'Inside the **Empire Overview** area of the **Lifeforms Menu** you are greeted by the overall bonuses and power-ups your account has.<br /><br />Also, by clicking on any planet, you will be able to play-around with the lifeform setup on that planet.<br /><br />Here, we can see a clear differentiation between the **LIVE** setup of the OGame account and the **Sandbox** technologies; meaning that any changes, on any planet, made to the Lifeform Setup will be marked as **"Sandbox"** / different than LIVE. Whenever you are done theorycrafting and want to go back to LIVE version, you can click the **Update to Live versions** button.',
           images: ["icons/tutorials/T4/LifeformsTut1.jpg", "icons/tutorials/T4/LifeformsTut2.jpg"]
         },
         {
@@ -68979,6 +69857,7 @@ const App = () => {
           currentView === "debris" && /* @__PURE__ */ jsxRuntimeExports.jsx(DebrisFields, {}),
           currentView === "settings" && /* @__PURE__ */ jsxRuntimeExports.jsx(Settings, {}),
           currentView === "testing" && /* @__PURE__ */ jsxRuntimeExports.jsx(Testing, {}),
+          currentView === "testingProduction" && /* @__PURE__ */ jsxRuntimeExports.jsx(TestingProduction, {}),
           currentView === "dataManagement" && /* @__PURE__ */ jsxRuntimeExports.jsx(DataManagement, {}),
           currentView === "empire" && /* @__PURE__ */ jsxRuntimeExports.jsx(Empire, {}),
           currentView === "tools" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tools, {}),

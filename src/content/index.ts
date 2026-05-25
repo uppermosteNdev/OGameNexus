@@ -2,7 +2,7 @@ console.log("OGame Nexus: Content script loaded.");
 
 import { trackExpeditions, injectTodaySummaryCard } from './expeditions';
 import { trackLifeformDiscoveries } from './lifeforms';
-import { scrapeEmpireData } from './empire';
+import { scrapeEmpireData, parseOgameTime } from './empire';
 import { trackDebrisHarvests } from './harvests';
 import { trackCombatReports } from './combats';
 import { renderAnalyticsTab } from './analytics';
@@ -44,6 +44,58 @@ function scrapePlayerClass() {
   if (tooltipTitle.includes("Discoverer")) return 3;
 
   return undefined;
+}
+
+function scrapeOfficers() {
+  const officers = {
+    hasCommander: false,
+    hasAdmiral: false,
+    hasEngineer: false,
+    hasGeologist: false,
+    hasTechnocrat: false
+  };
+
+  const officersEl = document.querySelector("#officers");
+  if (officersEl) {
+    const checkActive = (selector: string) => {
+      const el = officersEl.querySelector(selector);
+      if (!el) return false;
+      
+      if (el.classList.contains("on")) return true;
+      
+      const title = el.getAttribute("data-tooltip-title") || "";
+      const lowerTitle = title.toLowerCase();
+      if (lowerTitle.includes("active") || lowerTitle.includes("still active")) {
+        return true;
+      }
+      return false;
+    };
+
+    officers.hasCommander = checkActive("a.commander");
+    officers.hasAdmiral = checkActive("a.admiral");
+    officers.hasEngineer = checkActive("a.engineer");
+    officers.hasGeologist = checkActive("a.geologist");
+    officers.hasTechnocrat = checkActive("a.technocrat");
+  }
+
+  return officers;
+}
+
+function scrapeAllianceClass() {
+  const url = window.location.href;
+  if (!url.includes("page=ingame") || !url.includes("component=resourcesettings")) return undefined;
+
+  const allyRow = document.querySelector('tr[data-techid="1005"]');
+  if (!allyRow) return undefined;
+
+  const classEl = allyRow.querySelector('.allianceclass');
+  if (!classEl) return 0; // No class active
+
+  if (classEl.classList.contains('trader')) return 1; // Trader
+  if (classEl.classList.contains('researcher')) return 2; // Researcher
+  if (classEl.classList.contains('warrior')) return 3; // Warrior
+
+  return 0;
 }
 
 function scrapePlanetList() {
@@ -183,13 +235,129 @@ function scrapeOverviewData() {
     }
   }
 
+  // 5. Active Items & Boosters
+  const activeItems: any[] = [];
+  const boosters = { metal: 0, crystal: 0, deuterium: 0 };
+  
+  const activeItemsEl = document.querySelector('.active_items');
+  if (activeItemsEl) {
+    const itemContainers = activeItemsEl.querySelectorAll('div[data-uuid]');
+    itemContainers.forEach(container => {
+      const itemEl = container.querySelector('a.active_item');
+      if (!itemEl) return;
+      
+      const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || '';
+      const titleParts = tooltipTitle.split('|');
+      const title = titleParts[0].trim();
+      const bodyHtml = titleParts.slice(1).join('|');
+      
+      const lowerTitle = title.toLowerCase();
+      let type: any = 'other';
+      let bonus = 0;
+      
+      if (lowerTitle.includes('metal booster')) {
+          type = 'metal';
+          if (lowerTitle.includes('platinum')) bonus = 0.40;
+          else if (lowerTitle.includes('gold')) bonus = 0.30;
+          else if (lowerTitle.includes('silver')) bonus = 0.20;
+          else if (lowerTitle.includes('bronze')) bonus = 0.10;
+      } else if (lowerTitle.includes('crystal booster')) {
+          type = 'crystal';
+          if (lowerTitle.includes('platinum')) bonus = 0.40;
+          else if (lowerTitle.includes('gold')) bonus = 0.30;
+          else if (lowerTitle.includes('silver')) bonus = 0.20;
+          else if (lowerTitle.includes('bronze')) bonus = 0.10;
+      } else if (lowerTitle.includes('deuterium booster')) {
+          type = 'deuterium';
+          if (lowerTitle.includes('platinum')) bonus = 0.40;
+          else if (lowerTitle.includes('gold')) bonus = 0.30;
+          else if (lowerTitle.includes('silver')) bonus = 0.20;
+          else if (lowerTitle.includes('bronze')) bonus = 0.10;
+      } else if (lowerTitle.includes('expedition resource booster')) {
+          type = 'expedition_res';
+      } else if (lowerTitle.includes('resource booster')) {
+          type = 'resource';
+      } else if (lowerTitle.includes('expedition slots')) {
+          type = 'expedition_slots';
+      } else if (lowerTitle.includes('fleet slots')) {
+          type = 'fleet_slots';
+      } else if (lowerTitle.includes('planet fields')) {
+          type = 'fields';
+      }
+      
+      const titlePercentMatch = title.match(/\((\d+)%\)/);
+      if (titlePercentMatch) {
+          bonus = parseInt(titlePercentMatch[1], 10) / 100;
+      }
+      
+      let rarity = '';
+      const elClass = itemEl.className || '';
+      const parentClass = container.className || '';
+      const rarityMatch = elClass.match(/r_(\w+)/) || parentClass.match(/r_(\w+)/);
+      if (rarityMatch) rarity = rarityMatch[1];
+      
+      let timeRemaining = '';
+      let expiryTimestamp: number | undefined;
+      let duration = '';
+      let isPermanent = false;
+      
+      const decodedHtml = bodyHtml
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#43;/g, '+');
+      
+      const restTimeMatch = decodedHtml.match(/class="restTime"[^>]*>Time remaining:\s*([^<]+)/i) || 
+                            decodedHtml.match(/Time remaining:\s*([^<]+)/i);
+      if (restTimeMatch) {
+          timeRemaining = restTimeMatch[1].trim();
+          const secondsRemaining = parseOgameTime(timeRemaining);
+          if (secondsRemaining > 0) {
+              expiryTimestamp = Date.now() + (secondsRemaining * 1000);
+          }
+      }
+      
+      const durationMatch = decodedHtml.match(/Duration:\s*([^<]+)/i);
+      if (durationMatch) {
+          duration = durationMatch[1].trim();
+          if (duration.toLowerCase().includes('permanent')) {
+              isPermanent = true;
+          }
+      }
+      
+      activeItems.push({
+          name: title,
+          title,
+          rarity,
+          timeRemaining,
+          expiryTimestamp,
+          duration,
+          isPermanent,
+          bonus,
+          type
+      });
+      
+      if (bonus > 0) {
+          if (type === 'metal') boosters.metal += bonus;
+          else if (type === 'crystal') boosters.crystal += bonus;
+          else if (type === 'deuterium') boosters.deuterium += bonus;
+          else if (type === 'resource') {
+              boosters.metal += bonus;
+              boosters.crystal += bonus;
+              boosters.deuterium += bonus;
+          }
+      }
+    });
+  }
+
   return {
     planetData: {
       diameter,
       fieldsUsed,
       fieldsTotal,
       tempMin,
-      tempMax
+      tempMax,
+      ...(activeItemsEl ? { activeItems, boosters } : {})
     },
     accountData: {
       score,
@@ -669,7 +837,9 @@ function scrapeAndSync() {
       allianceTag: getMetaContent("ogame-alliance-tag") || undefined,
       avatarUrl: avatarUrl || undefined,
       serverUrl: window.location.origin,
-      playerClass: scrapePlayerClass()
+      playerClass: scrapePlayerClass(),
+      allianceClass: scrapeAllianceClass(),
+      ...scrapeOfficers()
     },
     planets,
     activePlanetId: getActivePlanetId(),

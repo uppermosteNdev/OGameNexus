@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
+import { calculateEmpireProduction } from '../../utils/amortizationCalc';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, 
@@ -101,22 +102,31 @@ const SignatureMaker: React.FC<SignatureMakerProps> = ({ onBack }) => {
         [activeAccount]
     ) ?? 0;
 
+    // Calculate dynamic production on-the-fly using standard engine
+    const calcResults = useMemo(() => {
+        if (!activeAccount || planets.length === 0) return null;
+        return calculateEmpireProduction({ account: activeAccount, planets });
+    }, [activeAccount, planets]);
+
     // Daily Production Summarizer
     const dailyProduction = useMemo(() => {
         let metal = 0;
         let crystal = 0;
         let deuterium = 0;
         
-        planets.forEach(p => {
-            if (p.production) {
-                metal += (p.production.metal || 0) * 24;
-                crystal += (p.production.crystal || 0) * 24;
-                deuterium += (p.production.deuterium || 0) * 24;
-            }
-        });
+        if (calcResults) {
+            planets.forEach(p => {
+                const prod = calcResults.planets[p.id]?.total;
+                if (prod) {
+                    metal += (prod.metal || 0) * 24;
+                    crystal += (prod.crystal || 0) * 24;
+                    deuterium += (prod.deuterium || 0) * 24;
+                }
+            });
+        }
         
         return { metal, crystal, deuterium };
-    }, [planets]);
+    }, [planets, calcResults]);
 
     // Lifeform species distribution
     const lifeformDistribution = useMemo(() => {

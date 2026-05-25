@@ -9,6 +9,7 @@ import Combat from './views/Combat';
 import DebrisFields from './views/DebrisFields';
 import Settings from './views/Settings';
 import Testing from './views/Testing';
+import TestingProduction from './views/TestingProduction';
 import DataManagement from './views/DataManagement';
 import Empire from './views/Empire';
 import Tools from './views/Tools';
@@ -100,6 +101,7 @@ const App: React.FC = () => {
                     {currentView === 'debris' && <DebrisFields />}
                     {currentView === 'settings' && <Settings />}
                     {currentView === 'testing' && <Testing />}
+                    {currentView === 'testingProduction' && <TestingProduction />}
                     {currentView === 'dataManagement' && <DataManagement />}
                     {currentView === 'empire' && <Empire />}
                     {currentView === 'tools' && <Tools />}
