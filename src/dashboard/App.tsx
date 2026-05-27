@@ -13,6 +13,7 @@ import TestingProduction from './views/TestingProduction';
 import DataManagement from './views/DataManagement';
 import Empire from './views/Empire';
 import Tools from './views/Tools';
+import CostsPlanner from './views/CostsPlanner';
 import SignatureMaker from './views/SignatureMaker';
 import Hotbar from './components/Hotbar';
 import WelcomeModal from './components/WelcomeModal';
@@ -104,6 +105,7 @@ const App: React.FC = () => {
                     {currentView === 'testingProduction' && <TestingProduction />}
                     {currentView === 'dataManagement' && <DataManagement />}
                     {currentView === 'empire' && <Empire />}
+                    {currentView === 'costsPlanner' && <CostsPlanner />}
                     {currentView === 'tools' && <Tools />}
                     {currentView === 'signature' && <SignatureMaker onBack={() => setCurrentView('overview')} />}
                     {currentView === 'tutorials' && <Tutorials onNavigate={setCurrentView} />}

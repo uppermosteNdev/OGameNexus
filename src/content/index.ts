@@ -1046,6 +1046,9 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
   container.innerHTML = '';
   container.style.animation = 'nexus-fade-in 0.2s ease-out';
 
+  const metaElement = document.querySelector('meta[name="ogame-player-id"]');
+  const playerId = metaElement ? metaElement.getAttribute('content') : "";
+
   if (tabId === 'analytics') {
     // Basic loading state
     container.innerHTML = `
@@ -1053,9 +1056,6 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         <div class="og-nexus-loading-spinner" style="border: 4px solid rgba(255,255,255,0.1); border-top-color: #38bdf8; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
       </div>
     `;
-
-    const metaElement = document.querySelector('meta[name="ogame-player-id"]');
-    const playerId = metaElement ? metaElement.getAttribute('content') : "";
 
     chrome.runtime.sendMessage({ type: "GET_ALL_ANALYTICS", playerId }, (response) => {
       if (response && response.success) {
@@ -1076,7 +1076,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
     container.appendChild(sub);
 
     // Fetch from background/DB
-    chrome.runtime.sendMessage({ type: "GET_AMORTIZATION_TODOS" }, (response) => {
+    chrome.runtime.sendMessage({ type: "GET_AMORTIZATION_TODOS", playerId }, (response) => {
       const todos = response?.todos || [];
 
       if (todos.length === 0) {

@@ -8146,14 +8146,14 @@
   async function renderTabContent(tabId, container) {
     container.innerHTML = "";
     container.style.animation = "nexus-fade-in 0.2s ease-out";
+    const metaElement = document.querySelector('meta[name="ogame-player-id"]');
+    const playerId = metaElement ? metaElement.getAttribute("content") : "";
     if (tabId === "analytics") {
       container.innerHTML = `
       <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
         <div class="og-nexus-loading-spinner" style="border: 4px solid rgba(255,255,255,0.1); border-top-color: #38bdf8; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
       </div>
     `;
-      const metaElement = document.querySelector('meta[name="ogame-player-id"]');
-      const playerId = metaElement ? metaElement.getAttribute("content") : "";
       chrome.runtime.sendMessage({ type: "GET_ALL_ANALYTICS", playerId }, (response) => {
         if (response && response.success) {
           renderAnalyticsTab(container, response.expeditions, response.lifeforms || [], response.combats || [], response.debrisHarvests || []);
@@ -8170,7 +8170,7 @@
       sub.textContent = "List of your personal, saved, to-do amortization projects.";
       sub.style.cssText = `color: #64748b; font-size: 14px; margin-bottom: 30px;`;
       container.appendChild(sub);
-      chrome.runtime.sendMessage({ type: "GET_AMORTIZATION_TODOS" }, (response) => {
+      chrome.runtime.sendMessage({ type: "GET_AMORTIZATION_TODOS", playerId }, (response) => {
         const todos = (response == null ? void 0 : response.todos) || [];
         if (todos.length === 0) {
           const empty = document.createElement("div");

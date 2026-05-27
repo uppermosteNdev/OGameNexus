@@ -46,7 +46,10 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     const [animatedRow, setAnimatedRow] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ key: string, text: string, type: 'add' | 'remove' } | null>(null);
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
-    const todoList = useLiveQuery(() => db.todoProjects.toArray());
+    const todoList = useLiveQuery(
+        () => account ? db.todoProjects.where('playerId').equals(account.playerId).toArray() : [],
+        [account]
+    );
 
     const expoAverages = useLiveQuery(async () => {
         const now = Date.now();
@@ -200,6 +203,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
 
         const newTodo: TodoProject = {
             projectKey: key,
+            playerId: account?.playerId || "",
             name: item.name,
             type: AmortizationType[item.type],
             icon: getItemIcon(item),

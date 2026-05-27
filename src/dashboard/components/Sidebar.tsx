@@ -15,7 +15,8 @@ import {
     Sparkles,
     BookOpen,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    ShoppingCart
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -71,6 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
         { id: 'combat', label: 'Combats', icon: <Swords size={22} /> },
         { id: 'debris', label: 'Debris Fields', icon: <Orbit size={22} /> },
         { id: 'empire', label: 'Empire', icon: <Rocket size={22} /> },
+        { id: 'costsPlanner', label: 'Costs Planner', icon: <ShoppingCart size={22} /> },
         { id: 'tools', label: 'Tools', icon: <Wrench size={22} /> },
         { id: 'signature', label: 'Signature Forge', icon: <Sparkles size={22} /> },
         { id: 'dataManagement', label: 'Data Management', icon: <Database size={22} /> },

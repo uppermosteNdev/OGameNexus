@@ -15247,6 +15247,15 @@ const Cpu = createLucideIcon("Cpu", [
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
+const Crown = createLucideIcon("Crown", [
+  ["path", { d: "m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14", key: "zkxr6b" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
 const Database = createLucideIcon("Database", [
   ["ellipse", { cx: "12", cy: "5", rx: "9", ry: "3", key: "msslwz" }],
   ["path", { d: "M3 5V19A9 3 0 0 0 21 19V5", key: "1wlel7" }],
@@ -15582,6 +15591,13 @@ const Maximize2 = createLucideIcon("Maximize2", [
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
+const Minus = createLucideIcon("Minus", [["path", { d: "M5 12h14", key: "1ays0h" }]]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
 const Moon = createLucideIcon("Moon", [
   ["path", { d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z", key: "a7tn18" }]
 ]);
@@ -15625,6 +15641,16 @@ const Package = createLucideIcon("Package", [
 const PieChart$1 = createLucideIcon("PieChart", [
   ["path", { d: "M21.21 15.89A10 10 0 1 1 8 2.83", key: "k2fpak" }],
   ["path", { d: "M22 12A10 10 0 0 0 12 2v10z", key: "1rfc4y" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const Plus = createLucideIcon("Plus", [
+  ["path", { d: "M5 12h14", key: "1ays0h" }],
+  ["path", { d: "M12 5v14", key: "s699le" }]
 ]);
 /**
  * @license lucide-react v0.344.0 - ISC
@@ -15803,6 +15829,23 @@ const Ship = createLucideIcon("Ship", [
   ["path", { d: "M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6", key: "qpkstq" }],
   ["path", { d: "M12 10v4", key: "1kjpxc" }],
   ["path", { d: "M12 2v3", key: "qbqxhf" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const ShoppingCart = createLucideIcon("ShoppingCart", [
+  ["circle", { cx: "8", cy: "21", r: "1", key: "jimo8o" }],
+  ["circle", { cx: "19", cy: "21", r: "1", key: "13723u" }],
+  [
+    "path",
+    {
+      d: "M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12",
+      key: "9zh506"
+    }
+  ]
 ]);
 /**
  * @license lucide-react v0.344.0 - ISC
@@ -16051,6 +16094,7 @@ const Sidebar = ({ activeView, onSelect }) => {
     { id: "combat", label: "Combats", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Swords, { size: 22 }) },
     { id: "debris", label: "Debris Fields", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Orbit, { size: 22 }) },
     { id: "empire", label: "Empire", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Rocket, { size: 22 }) },
+    { id: "costsPlanner", label: "Costs Planner", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(ShoppingCart, { size: 22 }) },
     { id: "tools", label: "Tools", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Wrench, { size: 22 }) },
     { id: "signature", label: "Signature Forge", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Sparkles, { size: 22 }) },
     { id: "dataManagement", label: "Data Management", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Database, { size: 22 }) },
@@ -22876,7 +22920,7 @@ class OGNexusDB extends Dexie {
     __publicField(this, "todoProjects");
     __publicField(this, "debrisHarvests");
     __publicField(this, "combatReports");
-    this.version(32).stores({
+    this.version(33).stores({
       accounts: "playerId, playerName, universe, lastSeen",
       planets: "id, playerId, coords, lifeformId",
       expeditions: "messageId, playerId, timestamp, coords, result",
@@ -22886,8 +22930,8 @@ class OGNexusDB extends Dexie {
       settings: "id",
       lifeformTechnologies: "id, lifeformId, name",
       lifeformBonusBreakdown: "id, bonusName",
-      lifeformSavedSetups: "++id, name",
-      todoProjects: "++id, projectKey, planetId, type",
+      lifeformSavedSetups: "++id, playerId, name",
+      todoProjects: "++id, projectKey, playerId, planetId, type",
       debrisHarvests: "messageId, playerId, timestamp, coords",
       combatReports: "messageId, playerId, timestamp, coords, winner"
     });
@@ -23721,7 +23765,7 @@ const AMORTIZATION_TABLE = [
     effect: { type: "plasma", value: 1 }
   }
 ];
-function calculateMSU(cost, rates = DEFAULT_RATES) {
+function calculateMSU$1(cost, rates = DEFAULT_RATES) {
   const mMultiplier = 1;
   const cMultiplier = rates.metal / rates.crystal;
   const dMultiplier = rates.metal / rates.deuterium;
@@ -23995,7 +24039,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
             crystal: (bC_next - pData.base.crystal) * pData.mult.crystal,
             deuterium: (bD_next - pData.base.deuterium) * pData.mult.deuterium
           };
-          prodIncrease = calculateMSU(prodDelta, rates);
+          prodIncrease = calculateMSU$1(prodDelta, rates);
         } else if (effect) {
           if (effect.type === "plasma") {
             prodDelta = {
@@ -24003,7 +24047,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               crystal: prodData.empireBase.crystal * 66e-4,
               deuterium: prodData.empireBase.deuterium * 33e-4
             };
-            prodIncrease = calculateMSU(prodDelta, rates);
+            prodIncrease = calculateMSU$1(prodDelta, rates);
           } else if (effect.type === "tech_bonus") {
             const factor = effect.value;
             let deltaM = 0, deltaC = 0, deltaD = 0;
@@ -24055,7 +24099,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               }
             });
             prodDelta = { metal: deltaM, crystal: deltaC, deuterium: deltaD };
-            prodIncrease = calculateMSU(prodDelta, rates);
+            prodIncrease = calculateMSU$1(prodDelta, rates);
           } else if (effect.type === "expo_res" || effect.type === "expo_si" || effect.type === "kaelesh_discovery_adv") {
             const isKaeleshAdv = effect.type === "kaelesh_discovery_adv";
             const techMult = getPlanetTechMultiplier(p2, state.account);
@@ -24074,7 +24118,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               const directM = trueM_res * effectiveValue;
               const directC = trueC_res * effectiveValue;
               const directD = trueD_res * effectiveValue;
-              const totalMSUYield = calculateMSU({
+              const totalMSUYield = calculateMSU$1({
                 metal: trueM_res * (1 + currentResBonus) + trueM_si * (1 + currentSiBonus),
                 crystal: trueC_res * (1 + currentResBonus) + trueC_si * (1 + currentSiBonus),
                 deuterium: trueD_res * (1 + currentResBonus) + trueD_si * (1 + currentSiBonus)
@@ -24090,7 +24134,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                 crystal: directC + extraMSU * weightC / (rates.crystal || 1),
                 deuterium: directD + extraMSU * weightD / (rates.deuterium || 1)
               };
-              prodIncrease = calculateMSU(prodDelta, rates);
+              prodIncrease = calculateMSU$1(prodDelta, rates);
             } else {
               const isRes = effect.type === "expo_res";
               const trueM = isRes ? trueM_res : trueM_si;
@@ -24101,7 +24145,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                 crystal: trueC * effectiveValue,
                 deuterium: trueD * effectiveValue
               };
-              prodIncrease = calculateMSU(prodDelta, rates);
+              prodIncrease = calculateMSU$1(prodDelta, rates);
             }
           } else {
             const target = effect.target;
@@ -24118,11 +24162,11 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               const dInc = (target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium) * (effect.type === "deuterium" || effect.type === "all" || effect.type === "crystal_deuterium" ? effectiveValue : 0);
               prodDelta = { metal: mInc, crystal: cInc, deuterium: dInc };
             }
-            prodIncrease = calculateMSU(prodDelta, rates);
+            prodIncrease = calculateMSU$1(prodDelta, rates);
           }
         }
         if (prodIncrease > 0) {
-          const msuCost = calculateMSU(cost, rates);
+          const msuCost = calculateMSU$1(cost, rates);
           const roiHours = msuCost / prodIncrease;
           if (i === 0) {
             let breakdownStr = "";
@@ -24174,7 +24218,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                   const dM = trueM * effectiveValue;
                   const dC = trueC * effectiveValue;
                   const dD = trueD * effectiveValue;
-                  details.push(`Expedition ${isRes ? "Res" : "Ships"} Gain: +${calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates).toFixed(2)} MSU/h (normalized from ${(currentGlobalBonus * 100).toFixed(1)}% LF bonus)`);
+                  details.push(`Expedition ${isRes ? "Res" : "Ships"} Gain: +${calculateMSU$1({ metal: dM, crystal: dC, deuterium: dD }, rates).toFixed(2)} MSU/h (normalized from ${(currentGlobalBonus * 100).toFixed(1)}% LF bonus)`);
                 }
               } else {
                 const targetName = effect2.target === "global" ? "Empire" : `Planet (${p2.coords})`;
@@ -24182,11 +24226,11 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                 const baseC = effect2.target === "global" ? prodData.empireBase.crystal : prodData.planets[p2.id].base.crystal;
                 const baseD = effect2.target === "global" ? prodData.empireBase.deuterium : prodData.planets[p2.id].base.deuterium;
                 if (effect2.type === "metal" || effect2.type === "all")
-                  details.push(`${targetName} Metal: +${calculateMSU({ metal: baseM * effectiveValue, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
+                  details.push(`${targetName} Metal: +${calculateMSU$1({ metal: baseM * effectiveValue, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
                 if (effect2.type === "crystal" || effect2.type === "all" || effect2.type === "crystal_deuterium")
-                  details.push(`${targetName} Crystal: +${calculateMSU({ metal: 0, crystal: baseC * effectiveValue, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
+                  details.push(`${targetName} Crystal: +${calculateMSU$1({ metal: 0, crystal: baseC * effectiveValue, deuterium: 0 }, rates).toFixed(2)} MSU/h`);
                 if (effect2.type === "deuterium" || effect2.type === "all" || effect2.type === "crystal_deuterium")
-                  details.push(`${targetName} Deuterium: +${calculateMSU({ metal: 0, crystal: 0, deuterium: baseD * effectiveValue }, rates).toFixed(2)} MSU/h`);
+                  details.push(`${targetName} Deuterium: +${calculateMSU$1({ metal: 0, crystal: 0, deuterium: baseD * effectiveValue }, rates).toFixed(2)} MSU/h`);
               }
               breakdownStr = `
                             - Research Bonus: +${(effectiveValue * 100).toFixed(4)}% (incl. ${techMult > 1 ? "+" + ((techMult - 1) * 100).toFixed(1) + "% building bonus" : "no building bonus"})
@@ -24204,9 +24248,9 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                                 * Crystal Basis: ${prodData.empireBase.crystal.toLocaleString()} /h
                                 * Deuterium Basis: ${prodData.empireBase.deuterium.toLocaleString()} /h
                             - Incremental Production Boost (Lvl ${nextLevel}):
-                                * Metal: +${calculateMSU({ metal: dM, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dM.toLocaleString()} Metal)
-                                * Crystal: +${calculateMSU({ metal: 0, crystal: dC, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dC.toLocaleString()} Crystal)
-                                * Deuterium: +${calculateMSU({ metal: 0, crystal: 0, deuterium: dD }, rates).toFixed(2)} MSU/h (+${dD.toLocaleString()} Deut)`;
+                                * Metal: +${calculateMSU$1({ metal: dM, crystal: 0, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dM.toLocaleString()} Metal)
+                                * Crystal: +${calculateMSU$1({ metal: 0, crystal: dC, deuterium: 0 }, rates).toFixed(2)} MSU/h (+${dC.toLocaleString()} Crystal)
+                                * Deuterium: +${calculateMSU$1({ metal: 0, crystal: 0, deuterium: dD }, rates).toFixed(2)} MSU/h (+${dD.toLocaleString()} Deut)`;
             } else if (entry.effect && entry.effect.type === "tech_bonus") {
               const factor = entry.effect.value;
               let techDetails = [];
@@ -24222,24 +24266,24 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                     const dM = prodData.empireBase.metal * tVal;
                     const dC = prodData.empireBase.crystal * tVal;
                     const dD = prodData.empireBase.deuterium * tVal;
-                    deltaMSU = calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates);
+                    deltaMSU = calculateMSU$1({ metal: dM, crystal: dC, deuterium: dD }, rates);
                   } else if (tEffect.target === "mine") {
                     const dM = prodData.planets[p2.id].base.metal * tVal;
                     const dC = prodData.planets[p2.id].base.crystal * tVal;
                     const dD = prodData.planets[p2.id].base.deuterium * tVal;
-                    deltaMSU = calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates);
+                    deltaMSU = calculateMSU$1({ metal: dM, crystal: dC, deuterium: dD }, rates);
                   } else if (tEffect.type === "expo_res") {
                     const baseline = ((_a3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _a3.metal) || ((_b3 = expoAverages == null ? void 0 : expoAverages.resources) == null ? void 0 : _b3.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
                     const trueM = baseline.metal / (1 + currentResBonus);
                     const trueC = baseline.crystal / (1 + currentResBonus);
                     const trueD = baseline.deuterium / (1 + currentResBonus);
-                    deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
+                    deltaMSU = calculateMSU$1({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
                   } else if (tEffect.type === "expo_si") {
                     const baseline = ((_c3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _c3.metal) || ((_d3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _d3.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
                     const trueM = baseline.metal / (1 + currentSiBonus);
                     const trueC = baseline.crystal / (1 + currentSiBonus);
                     const trueD = baseline.deuterium / (1 + currentSiBonus);
-                    deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
+                    deltaMSU = calculateMSU$1({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
                   }
                   if (deltaMSU > 0.01) {
                     techDetails.push(`${tEntry.name} (Lvl ${level}): +${deltaMSU.toFixed(2)} MSU/h`);
@@ -24269,11 +24313,11 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               }
               if (isShips) {
                 const base = expoAverages.ships;
-                const msu = calculateMSU(base, rates);
+                const msu = calculateMSU$1(base, rates);
                 console.log(`[Amortization Debug] -> ${entry.name} Ship Baseline (Best 7/60d Hourly): ${msu.toFixed(2)} MSU (M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()})`);
                 if ((_A = expoAverages.totals) == null ? void 0 : _A.ships) {
                   const t2 = expoAverages.totals.ships;
-                  const tMsu = calculateMSU(t2, rates);
+                  const tMsu = calculateMSU$1(t2, rates);
                   console.log(`[Amortization Debug] -> ${entry.name} Ship Context (30d Totals): ${tMsu.toLocaleString(void 0, { maximumFractionDigits: 0 })} MSU (M:${t2.metal.toLocaleString()} C:${t2.crystal.toLocaleString()} D:${t2.deuterium.toLocaleString()})`);
                 }
               }
@@ -51676,7 +51720,19 @@ const SHIP_ITEMS$1 = [
   { id: 214, label: "Deathstar", color: "#fffb00" }
 ];
 const Expeditions = () => {
-  const expeditions = useLiveQuery(() => db.expeditions.toArray()) || [];
+  const activeAccount = useLiveQuery(
+    async () => {
+      try {
+        return await db.accounts.orderBy("lastSeen").reverse().first();
+      } catch (e) {
+        return await db.accounts.toCollection().last();
+      }
+    }
+  );
+  const expeditions = useLiveQuery(
+    () => activeAccount ? db.expeditions.where("playerId").equals(activeAccount.playerId).toArray() : [],
+    [activeAccount]
+  ) || [];
   const settings = useLiveQuery(() => db.settings.get("conversion_rates"));
   useLiveQuery(() => db.gameKnowledge.where("category").equals("ships").toArray()) || [];
   const rates = settings || { metal: 3, crystal: 2, deuterium: 1 };
@@ -51749,16 +51805,10 @@ const Expeditions = () => {
       setTimeout(() => setBackupStatus("idle"), 3e3);
     }
   };
-  const activeAccount = useLiveQuery(
-    async () => {
-      try {
-        return await db.accounts.orderBy("lastSeen").reverse().first();
-      } catch (e) {
-        return await db.accounts.toCollection().last();
-      }
-    }
-  );
-  const planets = useLiveQuery(() => db.planets.toArray()) || [];
+  const planets = useLiveQuery(
+    () => activeAccount ? db.planets.where("playerId").equals(activeAccount.playerId).toArray() : [],
+    [activeAccount]
+  ) || [];
   reactExports.useMemo(() => {
     var _a;
     return (_a = planets[0]) == null ? void 0 : _a.id;
@@ -53265,8 +53315,11 @@ const calculateBoostedValue = (defaultValueStr, boostPercentage) => {
 };
 const Lifeforms = () => {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
-  const planets = useLiveQuery(() => db.planets.filter((p2) => p2.type === "planet").toArray());
   const activeAccount = useLiveQuery(() => db.accounts.orderBy("lastSeen").reverse().first());
+  const planets = useLiveQuery(
+    () => activeAccount ? db.planets.where("playerId").equals(activeAccount.playerId).filter((p2) => p2.type === "planet").toArray() : [],
+    [activeAccount]
+  ) || [];
   const gameKnowledge = useLiveQuery(() => db.gameKnowledge.toArray());
   useLiveQuery(() => db.lifeformSpecies.toArray());
   const { knowledgeMap, knowledgeIconMap } = reactExports.useMemo(() => {
@@ -53318,7 +53371,10 @@ const Lifeforms = () => {
   const [calcRange, setCalcRange] = reactExports.useState({ start: "", end: "" });
   const [overwriteTarget, setOverwriteTarget] = reactExports.useState(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = reactExports.useState(false);
-  const savedSetups = useLiveQuery(() => db.lifeformSavedSetups.toArray());
+  const savedSetups = useLiveQuery(
+    () => activeAccount ? db.lifeformSavedSetups.where("playerId").equals(activeAccount.playerId).toArray() : [],
+    [activeAccount]
+  );
   const activeTech = reactExports.useMemo(() => {
     if (!slots || slots.length === 0 || !slots[activeSlotIndex] || slots[activeSlotIndex].selectedTechId === null) return null;
     return LIFEFORM_TECH_DATA.find((t2) => t2.id === slots[activeSlotIndex].selectedTechId);
@@ -53449,6 +53505,7 @@ const Lifeforms = () => {
       return;
     }
     await db.lifeformSavedSetups.add({
+      playerId: (activeAccount == null ? void 0 : activeAccount.playerId) || "",
       name: targetName,
       setup: slots,
       lastUpdated: Date.now()
@@ -53459,6 +53516,7 @@ const Lifeforms = () => {
   const confirmOverwrite = async () => {
     if (!overwriteTarget) return;
     await db.lifeformSavedSetups.update(overwriteTarget.id, {
+      playerId: (activeAccount == null ? void 0 : activeAccount.playerId) || overwriteTarget.playerId || "",
       setup: slots,
       lastUpdated: Date.now()
     });
@@ -60048,7 +60106,10 @@ const AmortizationView = ({ planets, account }) => {
   const [animatedRow, setAnimatedRow] = reactExports.useState(null);
   const [notification, setNotification] = reactExports.useState(null);
   const settings = useLiveQuery(() => db.settings.get("conversion_rates"));
-  const todoList = useLiveQuery(() => db.todoProjects.toArray());
+  const todoList = useLiveQuery(
+    () => account ? db.todoProjects.where("playerId").equals(account.playerId).toArray() : [],
+    [account]
+  );
   const expoAverages = useLiveQuery(async () => {
     const now2 = Date.now();
     const startTS = Math.floor((now2 - 60 * 24 * 60 * 60 * 1e3) / 1e3);
@@ -60092,10 +60153,10 @@ const AmortizationView = ({ planets, account }) => {
     });
     const allDays = Object.values(dailyYields);
     const sortedResDays = [...allDays].sort(
-      (a2, b) => calculateMSU(b.res, rates) - calculateMSU(a2.res, rates)
+      (a2, b) => calculateMSU$1(b.res, rates) - calculateMSU$1(a2.res, rates)
     ).slice(0, 7);
     const sortedShipDays = [...allDays].sort(
-      (a2, b) => calculateMSU(b.ships, rates) - calculateMSU(a2.ships, rates)
+      (a2, b) => calculateMSU$1(b.ships, rates) - calculateMSU$1(a2.ships, rates)
     ).slice(0, 7);
     let resM = 0, resC = 0, resD = 0;
     sortedResDays.forEach((day) => {
@@ -60172,6 +60233,7 @@ const AmortizationView = ({ planets, account }) => {
     const planet = planets.find((p2) => p2.id === item.planetId);
     const newTodo = {
       projectKey: key,
+      playerId: (account == null ? void 0 : account.playerId) || "",
       name: item.name,
       type: AmortizationType[item.type],
       icon: getItemIcon(item),
@@ -61892,7 +61954,10 @@ const ExpeditionCalculator = () => {
       }
     }
   );
-  const planets = useLiveQuery(() => db.planets.toArray()) || [];
+  const planets = useLiveQuery(
+    () => activeAccount ? db.planets.where("playerId").equals(activeAccount.playerId).toArray() : [],
+    [activeAccount]
+  ) || [];
   const [selectedPreset, setSelectedPreset] = reactExports.useState("");
   const [calcConfig, setCalcConfig] = reactExports.useState({
     universeSpeed: 1,
@@ -65413,7 +65478,7 @@ const PlasmaTechOptimizer = () => {
     if (targetLevel <= currentPlasmaLevel) return null;
     let totalBasePlasmaMSU = 0;
     for (let l2 = currentPlasmaLevel + 1; l2 <= targetLevel; l2++) {
-      totalBasePlasmaMSU += calculateMSU(getPlasmaCost(l2), rates);
+      totalBasePlasmaMSU += calculateMSU$1(getPlasmaCost(l2), rates);
     }
     const planetStats = planets.map((p2) => {
       var _a, _b, _c, _d, _e;
@@ -65453,7 +65518,7 @@ const PlasmaTechOptimizer = () => {
       while (true) {
         const nextLevel = level + 1;
         const nextLevelCost = getStellaratorCost(nextLevel, p2.labReduction);
-        const nextLevelMSU = calculateMSU(nextLevelCost, rates);
+        const nextLevelMSU = calculateMSU$1(nextLevelCost, rates);
         if (nextLevelMSU < savingPerLevelOnPlanet) {
           level = nextLevel;
           totalCostMSU += nextLevelMSU;
@@ -65940,7 +66005,7 @@ const DiscovererOptimizer = () => {
           initialCost += unlockCosts[newColonyRace] || 72e8;
         }
         astroLevelsAdded = nextAstro - currentAstro;
-        initialCost += calculateMSU({ metal: mSum, crystal: cSum, deuterium: dSum }, rates);
+        initialCost += calculateMSU$1({ metal: mSum, crystal: cSum, deuterium: dSum }, rates);
         for (let i = 0; i < vc2; i++) {
           const currentRaceNum = Number(newColonyRace);
           let upgradeableIds = [];
@@ -65982,7 +66047,7 @@ const DiscovererOptimizer = () => {
           const labReduction = Math.min(0.5, p22.targetLabLevel * 25e-4);
           const discount = 1 - labReduction;
           const costObj = getBuildingCost(TECH_72_BASE, nextTech72Level, TECH_72_BASE.factor);
-          const tech72CostMSU = calculateMSU({
+          const tech72CostMSU = calculateMSU$1({
             metal: costObj.metal * discount,
             crystal: costObj.crystal * discount,
             deuterium: costObj.deuterium * discount
@@ -66002,7 +66067,7 @@ const DiscovererOptimizer = () => {
             if (tbDef) {
               const nextTbLevel = tbState.targetLevel + 1;
               const tbCostObj = getBuildingCost(tbDef.base, nextTbLevel, tbDef.factor);
-              const tbCostMSU = calculateMSU(tbCostObj, rates);
+              const tbCostMSU = calculateMSU$1(tbCostObj, rates);
               const newBonusTb = calcCurrentBonusForPlanet(p22, p22.targetTech72Level, p22.upgradeableTechBuildings.map((inner, i) => i === tbIndex ? nextTbLevel : inner.targetLevel));
               const gainTb = newBonusTb - oldBonusT72;
               if (gainTb > 0) {
@@ -66020,16 +66085,16 @@ const DiscovererOptimizer = () => {
               const nextLabLevel = p22.targetLabLevel + 1;
               if (nextLabLevel * 25e-4 <= 0.5) {
                 const labCostObj = getBuildingCost(labDef.base, nextLabLevel, labDef.factor);
-                const labCostMSU = calculateMSU(labCostObj, rates);
+                const labCostMSU = calculateMSU$1(labCostObj, rates);
                 p22.targetTech72Level + 1;
                 const currentLabReduction = p22.targetLabLevel * 25e-4;
                 const nextLabReduction = nextLabLevel * 25e-4;
-                const costT72WithoutLab = calculateMSU({
+                const costT72WithoutLab = calculateMSU$1({
                   metal: costObj.metal * (1 - currentLabReduction),
                   crystal: costObj.crystal * (1 - currentLabReduction),
                   deuterium: costObj.deuterium * (1 - currentLabReduction)
                 }, rates);
-                const costT72WithLab = calculateMSU({
+                const costT72WithLab = calculateMSU$1({
                   metal: costObj.metal * (1 - nextLabReduction),
                   crystal: costObj.crystal * (1 - nextLabReduction),
                   deuterium: costObj.deuterium * (1 - nextLabReduction)
@@ -66585,6 +66650,2092 @@ const Tools = () => {
         ]
       }
     ) }) })
+  ] });
+};
+const MINES_BASE_COSTS = {
+  "Metal Mine": { base: { metal: 60, crystal: 15, deuterium: 0 }, factor: 1.5 },
+  "Crystal Mine": { base: { metal: 48, crystal: 24, deuterium: 0 }, factor: 1.6 },
+  "Deuterium Mine": { base: { metal: 225, crystal: 75, deuterium: 0 }, factor: 1.5 },
+  // maps to deuteriumMine/deuteriumSynthesizer
+  "Fusion Reactor": { base: { metal: 900, crystal: 360, deuterium: 180 }, factor: 1.8 }
+};
+const FACILITIES_BASE_COSTS = {
+  "Robotics Factory": { base: { metal: 400, crystal: 120, deuterium: 200 }, factor: 2 },
+  "Shipyard": { base: { metal: 400, crystal: 200, deuterium: 100 }, factor: 2 },
+  "Research Lab": { base: { metal: 200, crystal: 400, deuterium: 200 }, factor: 2 },
+  "Nanite Factory": { base: { metal: 1e6, crystal: 5e5, deuterium: 1e5 }, factor: 2 }
+};
+const RESEARCH_BASE_COSTS = {
+  "Energy Technology": { base: { metal: 0, crystal: 800, deuterium: 400 }, factor: 2 },
+  "Laser Technology": { base: { metal: 200, crystal: 100, deuterium: 0 }, factor: 2 },
+  "Ion Technology": { base: { metal: 1e3, crystal: 300, deuterium: 100 }, factor: 2 },
+  "Hyperspace Technology": { base: { metal: 0, crystal: 4e3, deuterium: 2e3 }, factor: 2 },
+  "Plasma Technology": { base: { metal: 2e3, crystal: 4e3, deuterium: 1e3 }, factor: 2 },
+  "Combustion Drive": { base: { metal: 400, crystal: 0, deuterium: 600 }, factor: 2 },
+  "Impulse Drive": { base: { metal: 2e3, crystal: 4e3, deuterium: 600 }, factor: 2 },
+  "Hyperspace Drive": { base: { metal: 1e4, crystal: 2e4, deuterium: 6e3 }, factor: 2 },
+  "Espionage Technology": { base: { metal: 200, crystal: 1e3, deuterium: 200 }, factor: 2 },
+  "Computer Technology": { base: { metal: 0, crystal: 400, deuterium: 600 }, factor: 2 },
+  "Astrophysics": { base: { metal: 4e3, crystal: 8e3, deuterium: 4e3 }, factor: 1.75 },
+  "Intergalactic Research Network": { base: { metal: 24e4, crystal: 4e5, deuterium: 16e4 }, factor: 2 },
+  "Graviton Technology": { base: { metal: 0, crystal: 0, deuterium: 0 }, factor: 3 },
+  // energy: 300,000
+  "Weapons Technology": { base: { metal: 800, crystal: 200, deuterium: 0 }, factor: 2 },
+  "Shielding Technology": { base: { metal: 200, crystal: 600, deuterium: 0 }, factor: 2 },
+  "Armour Technology": { base: { metal: 1e3, crystal: 0, deuterium: 0 }, factor: 2 }
+};
+const LIFEFORM_BUILDINGS_COSTS = {
+  // Humans
+  11101: { base: { metal: 75, crystal: 30, deuterium: 0 }, factor: 1.15 },
+  11102: { base: { metal: 100, crystal: 50, deuterium: 20 }, factor: 1.15 },
+  11103: { base: { metal: 2e4, crystal: 25e3, deuterium: 1e4 }, factor: 1.3 },
+  11104: { base: { metal: 4e4, crystal: 35e3, deuterium: 15e3 }, factor: 1.3 },
+  11105: { base: { metal: 5e4, crystal: 4e4, deuterium: 2e4 }, factor: 1.3 },
+  11106: { base: { metal: 9e3, crystal: 6e3, deuterium: 3e3 }, factor: 1.5 },
+  11107: { base: { metal: 25e3, crystal: 2e4, deuterium: 1e4 }, factor: 1.15 },
+  11108: { base: { metal: 5e4, crystal: 25e3, deuterium: 15e3 }, factor: 1.5 },
+  11109: { base: { metal: 1e5, crystal: 8e4, deuterium: 3e4 }, factor: 1.15 },
+  11110: { base: { metal: 15e4, crystal: 12e4, deuterium: 5e4 }, factor: 1.3 },
+  11111: { base: { metal: 8e4, crystal: 35e3, deuterium: 6e4 }, factor: 1.5 },
+  11112: { base: { metal: 5e5, crystal: 4e5, deuterium: 2e5 }, factor: 1.3 },
+  // Rock'tal
+  12101: { base: { metal: 100, crystal: 40, deuterium: 0 }, factor: 1.15 },
+  12102: { base: { metal: 150, crystal: 75, deuterium: 30 }, factor: 1.15 },
+  12103: { base: { metal: 4e4, crystal: 1e4, deuterium: 15e3 }, factor: 1.3 },
+  12104: { base: { metal: 5e4, crystal: 15e3, deuterium: 2e4 }, factor: 1.3 },
+  12105: { base: { metal: 6e4, crystal: 2e4, deuterium: 25e3 }, factor: 1.3 },
+  12106: { base: { metal: 1e4, crystal: 8e3, deuterium: 1e3 }, factor: 1.4 },
+  12107: { base: { metal: 35e3, crystal: 25e3, deuterium: 15e3 }, factor: 1.15 },
+  12108: { base: { metal: 75e3, crystal: 35e3, deuterium: 2e4 }, factor: 1.4 },
+  12109: { base: { metal: 85e3, crystal: 44e3, deuterium: 25e3 }, factor: 1.4 },
+  12110: { base: { metal: 12e4, crystal: 5e4, deuterium: 2e4 }, factor: 1.4 },
+  12111: { base: { metal: 15e4, crystal: 6e4, deuterium: 3e4 }, factor: 1.4 },
+  12112: { base: { metal: 6e5, crystal: 45e4, deuterium: 25e4 }, factor: 1.3 },
+  // Mechas
+  13101: { base: { metal: 80, crystal: 35, deuterium: 0 }, factor: 1.15 },
+  13102: { base: { metal: 120, crystal: 60, deuterium: 25 }, factor: 1.15 },
+  13103: { base: { metal: 3e4, crystal: 2e4, deuterium: 1e4 }, factor: 1.3 },
+  13104: { base: { metal: 5e4, crystal: 3e4, deuterium: 15e3 }, factor: 1.3 },
+  13105: { base: { metal: 8e4, crystal: 5e4, deuterium: 25e3 }, factor: 1.3 },
+  13106: { base: { metal: 15e3, crystal: 1e4, deuterium: 5e3 }, factor: 1.5 },
+  13107: { base: { metal: 35e3, crystal: 15e3, deuterium: 1e4 }, factor: 1.5 },
+  13108: { base: { metal: 6e4, crystal: 45e3, deuterium: 2e4 }, factor: 1.15 },
+  13109: { base: { metal: 12e4, crystal: 9e4, deuterium: 4e4 }, factor: 1.15 },
+  13110: { base: { metal: 1e5, crystal: 4e4, deuterium: 2e4 }, factor: 1.5 },
+  13111: { base: { metal: 55e3, crystal: 5e4, deuterium: 3e4 }, factor: 1.5 },
+  13112: { base: { metal: 75e4, crystal: 5e5, deuterium: 3e5 }, factor: 1.3 },
+  // Kaelesh
+  14101: { base: { metal: 90, crystal: 35, deuterium: 0 }, factor: 1.15 },
+  14102: { base: { metal: 130, crystal: 65, deuterium: 25 }, factor: 1.15 },
+  14103: { base: { metal: 2e4, crystal: 2e4, deuterium: 3e4 }, factor: 1.3 },
+  14104: { base: { metal: 45e3, crystal: 3e4, deuterium: 2e4 }, factor: 1.3 },
+  14105: { base: { metal: 7e4, crystal: 5e4, deuterium: 35e3 }, factor: 1.3 },
+  14106: { base: { metal: 12e3, crystal: 9e3, deuterium: 3e3 }, factor: 1.5 },
+  14107: { base: { metal: 3e4, crystal: 2e4, deuterium: 15e3 }, factor: 1.15 },
+  14108: { base: { metal: 6e4, crystal: 5e4, deuterium: 25e3 }, factor: 1.15 },
+  14109: { base: { metal: 11e4, crystal: 8e4, deuterium: 5e4 }, factor: 1.15 },
+  14110: { base: { metal: 13e4, crystal: 9e4, deuterium: 6e4 }, factor: 1.5 },
+  14111: { base: { metal: 7e4, crystal: 6e4, deuterium: 4e4 }, factor: 1.5 },
+  14112: { base: { metal: 1e6, crystal: 75e4, deuterium: 5e5 }, factor: 1.3 }
+};
+const DEFENCES_BASE_COSTS = {
+  401: { metal: 2e3, crystal: 0, deuterium: 0 },
+  402: { metal: 1500, crystal: 500, deuterium: 0 },
+  403: { metal: 6e3, crystal: 2e3, deuterium: 0 },
+  404: { metal: 2e4, crystal: 15e3, deuterium: 2e3 },
+  405: { metal: 2e3, crystal: 6e3, deuterium: 0 },
+  406: { metal: 5e4, crystal: 5e4, deuterium: 3e4 },
+  407: { metal: 1e4, crystal: 1e4, deuterium: 0 },
+  408: { metal: 5e4, crystal: 5e4, deuterium: 0 },
+  502: { metal: 8e3, crystal: 0, deuterium: 2e3 },
+  503: { metal: 12500, crystal: 2500, deuterium: 1e4 }
+};
+const calculateMSU = (cost, rates) => {
+  const mMultiplier = 1;
+  const cMultiplier = rates.metal / rates.crystal;
+  const dMultiplier = rates.metal / rates.deuterium;
+  return cost.metal * mMultiplier + cost.crystal * cMultiplier + cost.deuterium * dMultiplier;
+};
+const calculateStandardCost = (base, multiplier, start, end) => {
+  let metal = 0;
+  let crystal = 0;
+  let deuterium = 0;
+  for (let level = start + 1; level <= end; level++) {
+    metal += Math.floor(base.metal * Math.pow(multiplier, level - 1));
+    crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1));
+    deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1));
+  }
+  return { metal, crystal, deuterium };
+};
+const calculateCumulativeTechCost = (baseCost, increaseFactor, start, end) => {
+  let metal = 0;
+  let crystal = 0;
+  let deuterium = 0;
+  for (let level = start + 1; level <= end; level++) {
+    metal += Math.floor(baseCost.metal * Math.pow(increaseFactor.metal, level - 1) * level);
+    crystal += Math.floor(baseCost.crystal * Math.pow(increaseFactor.crystal, level - 1) * level);
+    deuterium += Math.floor(baseCost.deuterium * Math.pow(increaseFactor.deuterium, level - 1) * level);
+  }
+  return { metal, crystal, deuterium };
+};
+const getResearchIconPath = (name) => {
+  const resMap = {
+    "Energy Technology": "icons/research/energy-research-large.jpg",
+    "Laser Technology": "icons/research/laser-tech-research-large.jpg",
+    "Ion Technology": "icons/research/ion-tech-research-large.jpg",
+    "Hyperspace Technology": "icons/research/hyperspace-tech-research-large.jpg",
+    "Plasma Technology": "icons/research/plasma-tech-research-large.jpg",
+    "Combustion Drive": "icons/research/combustion-drive-research-large.jpg",
+    "Impulse Drive": "icons/research/impulse-drive-research-large.jpg",
+    "Hyperspace Drive": "icons/research/hyperspace-drive-research-large.jpg",
+    "Espionage Technology": "icons/research/espionage-tech-research-large.jpg",
+    "Computer Technology": "icons/research/computer-tech-research-large.jpg",
+    "Astrophysics": "icons/research/expedition-tech-research-large.jpg",
+    "Intergalactic Research Network": "icons/research/integalagtic-research-tech-research-large.jpg",
+    "Graviton Technology": "icons/research/graviton-tech-research-large.jpg",
+    "Weapons Technology": "icons/research/weapons-tech-research-large.jpg",
+    "Shielding Technology": "icons/research/shield-tech-research-large.jpg",
+    "Armour Technology": "icons/research/armor-tech-research-large.jpg"
+  };
+  return resMap[name] || "";
+};
+const getLifeformResearchCostMultiplier = (planet) => {
+  if (!planet || !planet.lifeformBuildings) return 1;
+  let totalLevels = 0;
+  planet.lifeformBuildings.forEach((b) => {
+    if (b.id === 11103 || b.id === 12103 || b.id === 13103 || b.id === 14103 || b.id === 14106) {
+      totalLevels += b.level || 0;
+    }
+  });
+  const discount = totalLevels * 25e-4;
+  return Math.max(0, 1 - discount);
+};
+const getMineCostMultiplier = (planet) => {
+  if (!planet || !planet.lifeformBuildings) return 1;
+  const found = planet.lifeformBuildings.find((b) => b.id === 12111);
+  const level = found ? found.level || 0 : 0;
+  const discount = level * 5e-3;
+  return Math.max(0, 1 - discount);
+};
+const getLifeformBuildingCostMultiplier = (planet) => {
+  if (!planet || !planet.lifeformBuildings) return 1;
+  const found = planet.lifeformBuildings.find((b) => b.id === 12108);
+  const level = found ? found.level || 0 : 0;
+  const discount = level * 0.01;
+  return Math.max(0, 1 - discount);
+};
+const applyDiscount = (cost, multiplier) => {
+  return {
+    metal: Math.floor(cost.metal * multiplier),
+    crystal: Math.floor(cost.crystal * multiplier),
+    deuterium: Math.floor(cost.deuterium * multiplier)
+  };
+};
+const getLifeformResearchDiscountPercentageVal = (planet) => {
+  var _a, _b, _c, _d, _e;
+  if (!planet) return 0;
+  const lfId = planet.lifeformId || 1;
+  const buildings = planet.lifeformBuildings || [];
+  if (lfId === 1) {
+    return (((_a = buildings.find((b) => b.id === 11103)) == null ? void 0 : _a.level) || 0) * 0.25;
+  } else if (lfId === 2) {
+    return (((_b = buildings.find((b) => b.id === 12103)) == null ? void 0 : _b.level) || 0) * 0.25;
+  } else if (lfId === 3) {
+    return (((_c = buildings.find((b) => b.id === 13103)) == null ? void 0 : _c.level) || 0) * 0.25;
+  } else if (lfId === 4) {
+    const lvl1 = ((_d = buildings.find((b) => b.id === 14103)) == null ? void 0 : _d.level) || 0;
+    const lvl2 = ((_e = buildings.find((b) => b.id === 14106)) == null ? void 0 : _e.level) || 0;
+    return (lvl1 + lvl2) * 0.25;
+  }
+  return 0;
+};
+const getEmpireResearchDiscount = (techName, planets, account) => {
+  const mappings = {
+    "Espionage Technology": [
+      { name: "Stealth Field Generator", id: 11204, normId: 15 },
+      { name: "Improved Drone AI", id: 13207, normId: 27 },
+      { name: "Low-Temperature Drives", id: 11213, normId: 24 }
+    ],
+    "Energy Technology": [
+      { name: "High-Temperature Superconductors", id: 13211, normId: 31 },
+      { name: "Diamond Energy Transmitter", id: 12215, normId: 35 }
+    ],
+    "Weapons Technology": [
+      { name: "Experimental Weapons Technology", id: 13217, normId: 37 }
+    ],
+    "Shielding Technology": [
+      { name: "Psionic Shield Matrix", id: 14217, normId: 41 }
+    ],
+    "Armour Technology": [
+      { name: "Rune Shields", id: 12217, normId: 42 }
+    ],
+    "Plasma Technology": [
+      { name: "Improved Stellarator", id: 12209, normId: 34 }
+    ]
+  };
+  let totalLevel = 0;
+  let totalBoostedLevel = 0;
+  const techSources = [];
+  const targetTechs = mappings[techName] || [];
+  if (targetTechs.length === 0) {
+    return { discount: 0, totalLevel: 0, totalBoostedLevel: 0, techSources: [] };
+  }
+  const sourceLevels = {};
+  targetTechs.forEach((t2) => {
+    sourceLevels[t2.name] = { level: 0, boostedLevel: 0 };
+  });
+  planets.forEach((pl2) => {
+    const setup = pl2.lifeformSetup || [];
+    targetTechs.forEach((t2) => {
+      var _a, _b, _c;
+      const foundTech = setup.find((tech) => tech.selectedTechId === t2.id || tech.selectedTechId === t2.normId);
+      if (foundTech && foundTech.level > 0) {
+        const lvl = foundTech.level;
+        const lfLevel = ((_b = (_a = account == null ? void 0 : account.lifeformExperience) == null ? void 0 : _a.find((e) => e.id === pl2.lifeformId || e.lifeformId === pl2.lifeformId)) == null ? void 0 : _b.level) || 0;
+        const lfLevelBonus = lfLevel * 1e-3;
+        let buildingBonus = 0;
+        (_c = pl2.lifeformBuildings) == null ? void 0 : _c.forEach((b) => {
+          if (b.id === 11111) buildingBonus += b.level * 5e-3;
+          if (b.id === 13107) buildingBonus += b.level * 3e-3;
+          if (b.id === 13111) buildingBonus += b.level * 4e-3;
+        });
+        const techMult = 1 + lfLevelBonus + buildingBonus;
+        const boosted = lvl * techMult;
+        sourceLevels[t2.name].level += lvl;
+        sourceLevels[t2.name].boostedLevel += boosted;
+        totalLevel += lvl;
+        totalBoostedLevel += boosted;
+      }
+    });
+  });
+  const discount = Math.min(0.5, totalBoostedLevel * 15e-4);
+  Object.keys(sourceLevels).forEach((name) => {
+    if (sourceLevels[name].level > 0) {
+      techSources.push({
+        name,
+        level: sourceLevels[name].level,
+        boostedLevel: sourceLevels[name].boostedLevel
+      });
+    }
+  });
+  return {
+    discount,
+    totalLevel,
+    totalBoostedLevel,
+    techSources
+  };
+};
+const CostsPlanner = () => {
+  var _a, _b;
+  const activeAccount = useLiveQuery(() => db.accounts.orderBy("lastSeen").reverse().first());
+  const planets = useLiveQuery(
+    () => activeAccount ? db.planets.where("playerId").equals(activeAccount.playerId).filter((p2) => p2.type === "planet").toArray() : [],
+    [activeAccount]
+  ) || [];
+  const settings = useLiveQuery(() => db.settings.get("conversion_rates"));
+  const rates = reactExports.useMemo(() => {
+    return settings || { metal: 3, crystal: 2, deuterium: 1 };
+  }, [settings]);
+  const calcResults = reactExports.useMemo(() => {
+    if (!activeAccount || planets.length === 0) return null;
+    return calculateEmpireProduction({ account: activeAccount, planets });
+  }, [activeAccount, planets]);
+  const dailyProduction = reactExports.useMemo(() => {
+    let metal = 0;
+    let crystal = 0;
+    let deuterium = 0;
+    if (calcResults) {
+      planets.forEach((p2) => {
+        var _a2;
+        const prod = (_a2 = calcResults.planets[p2.id]) == null ? void 0 : _a2.total;
+        if (prod) {
+          metal += (prod.metal || 0) * 24;
+          crystal += (prod.crystal || 0) * 24;
+          deuterium += (prod.deuterium || 0) * 24;
+        }
+      });
+    }
+    return { metal, crystal, deuterium };
+  }, [planets, calcResults]);
+  const [selectedCategory, setSelectedCategory] = reactExports.useState("");
+  const [selectedPlanetId, setSelectedPlanetId] = reactExports.useState("");
+  const [plannerStep, setPlannerStep] = reactExports.useState(1);
+  const cardTransition = reactExports.useMemo(() => ({
+    type: "spring",
+    stiffness: 260,
+    damping: 26,
+    mass: 1
+  }), []);
+  const categoriesMap = {
+    mines: { label: "Mines", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Box, { size: 18 }), color: "#ff8d33" },
+    facilities: { label: "Facilities", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Wrench, { size: 18 }), color: "#a855f7" },
+    empireResearch: { label: "Research", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(FlaskConical, { size: 18 }), color: "#00f2ff" },
+    lifeformBuildings: { label: "LF Buildings", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 18 }), color: "#22c55e" },
+    lifeformResearch: { label: "LF Research", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Dna, { size: 18 }), color: "#ec4899" },
+    shipsDefences: { label: "Ships / Defenses", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Ship, { size: 18 }), color: "#3b82f6" }
+  };
+  const [cart, setCart] = reactExports.useState([]);
+  const [cartInitialized, setCartInitialized] = reactExports.useState(false);
+  const isFirstLoad = reactExports.useRef(true);
+  reactExports.useEffect(() => {
+    setCartInitialized(false);
+    isFirstLoad.current = true;
+  }, [activeAccount == null ? void 0 : activeAccount.playerId]);
+  reactExports.useEffect(() => {
+    if (!activeAccount || !planets || planets.length === 0 || cartInitialized) return;
+    let active = true;
+    db.settings.get("costs_planner_cart_" + activeAccount.playerId).then((data) => {
+      if (!active) return;
+      const initialCart = (data == null ? void 0 : data.cartItems) || [];
+      let needsSave = false;
+      const syncedCart = initialCart.map((item) => {
+        let realCurrent = 0;
+        let realPlanet = planets.find((p2) => p2.id === item.planetId);
+        if (item.category === "Mines" && realPlanet) {
+          if (item.itemName === "Metal Mine") realCurrent = realPlanet.metalMine || 0;
+          if (item.itemName === "Crystal Mine") realCurrent = realPlanet.crystalMine || 0;
+          if (item.itemName === "Deuterium Mine") realCurrent = realPlanet.deuteriumMine || 0;
+          if (item.itemName === "Fusion Reactor") realCurrent = realPlanet.fusionReactor || 0;
+        } else if (item.category === "Facilities" && realPlanet) {
+          if (item.itemName === "Robotics Factory") realCurrent = realPlanet.roboticsFactory || 0;
+          if (item.itemName === "Shipyard") realCurrent = realPlanet.shipyard || 0;
+          if (item.itemName === "Research Lab") realCurrent = realPlanet.researchLab || 0;
+          if (item.itemName === "Nanite Factory") realCurrent = realPlanet.naniteFactory || 0;
+        } else if (item.category === "Research" && activeAccount.researches) {
+          const found = activeAccount.researches.find((r2) => r2.id === item.itemId);
+          realCurrent = found ? found.level : 0;
+        } else if (item.category === "LF Building" && (realPlanet == null ? void 0 : realPlanet.lifeformBuildings)) {
+          const found = realPlanet.lifeformBuildings.find((b) => b.id === item.itemId);
+          realCurrent = found ? found.level : 0;
+        } else if (item.category === "LF Research" && realPlanet) {
+          const rawSetup = realPlanet.sandboxSetup || realPlanet.lifeformSetup || [];
+          const found = rawSetup.find((s2) => {
+            let tid = s2.selectedTechId;
+            if (tid && tid > 1e4) {
+              const species = Math.floor(tid / 1e3) % 10;
+              const slot = tid % 100;
+              tid = (slot - 1) * 4 + species;
+            }
+            return tid === item.itemId;
+          });
+          realCurrent = found ? found.level : 0;
+        } else {
+          return item;
+        }
+        if (realCurrent === item.currentLevel) {
+          return item;
+        }
+        if (realCurrent >= item.targetLevel) {
+          needsSave = true;
+          return null;
+        }
+        needsSave = true;
+        let cost = { metal: 0, crystal: 0, deuterium: 0 };
+        if (item.category === "Mines" && realPlanet) {
+          const specName = item.itemName === "Deuterium Mine" ? "Deuterium Mine" : item.itemName;
+          const costConfig = MINES_BASE_COSTS[specName];
+          if (costConfig) {
+            cost = calculateStandardCost(costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
+            if (item.itemName !== "Fusion Reactor") {
+              const multiplier = getMineCostMultiplier(realPlanet);
+              cost = applyDiscount(cost, multiplier);
+            }
+          }
+        } else if (item.category === "Facilities") {
+          const costConfig = FACILITIES_BASE_COSTS[item.itemName];
+          if (costConfig) {
+            cost = calculateStandardCost(costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
+          }
+        } else if (item.category === "Research") {
+          const costConfig = RESEARCH_BASE_COSTS[item.itemName];
+          if (costConfig) {
+            cost = calculateStandardCost(costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
+            const { discount } = getEmpireResearchDiscount(item.itemName, planets, activeAccount);
+            if (discount > 0) {
+              cost = applyDiscount(cost, 1 - discount);
+            }
+          }
+        } else if (item.category === "LF Building" && realPlanet) {
+          const costConfig = LIFEFORM_BUILDINGS_COSTS[item.itemId];
+          if (costConfig) {
+            cost = calculateStandardCost(costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
+            const multiplier = getLifeformBuildingCostMultiplier(realPlanet);
+            cost = applyDiscount(cost, multiplier);
+          }
+        } else if (item.category === "LF Research" && realPlanet) {
+          const tech = LIFEFORM_TECH_DATA.find((t2) => t2.id === item.itemId);
+          if (tech) {
+            cost = calculateCumulativeTechCost(
+              { metal: tech.metalBaseCost, crystal: tech.crystalBaseCost, deuterium: tech.deutBaseCost },
+              { metal: tech.metalIncreaseFactor, crystal: tech.crystalIncreaseFactor, deuterium: tech.deutIncreaseFactor },
+              realCurrent,
+              item.targetLevel
+            );
+            const multiplier = getLifeformResearchCostMultiplier(realPlanet);
+            cost = applyDiscount(cost, multiplier);
+          }
+        }
+        return {
+          ...item,
+          currentLevel: realCurrent,
+          cost
+        };
+      }).filter((item) => item !== null);
+      setCart(syncedCart);
+      setCartInitialized(true);
+      if (needsSave && activeAccount) {
+        db.settings.put({
+          id: "costs_planner_cart_" + activeAccount.playerId,
+          cartItems: syncedCart
+        }).catch((e) => console.error("Failed to sync cart to DB:", e));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [activeAccount, planets, cartInitialized]);
+  reactExports.useEffect(() => {
+    if (!activeAccount || !cartInitialized) return;
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false;
+      return;
+    }
+    db.settings.put({
+      id: "costs_planner_cart_" + activeAccount.playerId,
+      cartItems: cart
+    }).catch((e) => console.error("Failed to save cart to DB:", e));
+  }, [cart, activeAccount, cartInitialized]);
+  const [targetLevels, setTargetLevels] = reactExports.useState({});
+  const [batchQuantities, setBatchQuantities] = reactExports.useState({});
+  const [lfResearchTargetLevels, setLfResearchTargetLevels] = reactExports.useState({});
+  const [notification, setNotification] = reactExports.useState(null);
+  const activePlanet = reactExports.useMemo(() => {
+    return planets.find((p2) => p2.id === selectedPlanetId) || null;
+  }, [planets, selectedPlanetId]);
+  const getStoredCurrentLevel = (category, itemName, itemId) => {
+    if (category === "mines" && activePlanet) {
+      if (itemName === "Metal Mine") return activePlanet.metalMine || 0;
+      if (itemName === "Crystal Mine") return activePlanet.crystalMine || 0;
+      if (itemName === "Deuterium Mine") return activePlanet.deuteriumMine || 0;
+      if (itemName === "Fusion Reactor") return activePlanet.fusionReactor || 0;
+    }
+    if (category === "facilities" && activePlanet) {
+      if (itemName === "Robotics Factory") return activePlanet.roboticsFactory || 0;
+      if (itemName === "Shipyard") return activePlanet.shipyard || 0;
+      if (itemName === "Research Lab") return activePlanet.researchLab || 0;
+      if (itemName === "Nanite Factory") return activePlanet.naniteFactory || 0;
+    }
+    if (category === "empireResearch" && (activeAccount == null ? void 0 : activeAccount.researches)) {
+      const found = activeAccount.researches.find((r2) => r2.id === itemId);
+      return found ? found.level : 0;
+    }
+    if (category === "lifeformBuildings" && (activePlanet == null ? void 0 : activePlanet.lifeformBuildings)) {
+      const found = activePlanet.lifeformBuildings.find((b) => b.id === itemId);
+      return found ? found.level : 0;
+    }
+    return 0;
+  };
+  const handleLevelChange = (key, value, maxDown) => {
+    setTargetLevels((prev) => ({
+      ...prev,
+      [key]: Math.max(maxDown, value)
+    }));
+  };
+  const handleQuantityChange = (key, value) => {
+    setBatchQuantities((prev) => ({
+      ...prev,
+      [key]: Math.max(1, value)
+    }));
+  };
+  const getLfTechIconPath = (techId) => {
+    if (techId === null) return "";
+    const tech = LIFEFORM_TECH_DATA.find((t2) => t2.id === techId);
+    if (!tech) return "";
+    const lfNames = ["humans", "rocktal", "mechas", "kaelesh"];
+    const lfName = lfNames[tech.lifeformId - 1];
+    const slotNum = Math.floor((tech.id - 1) / 4) + 1;
+    return `icons/lifeforms/${lfName}-tech-t${slotNum}-large.jpg`;
+  };
+  const triggerNotification = (text) => {
+    setNotification(text);
+    setTimeout(() => setNotification(null), 1200);
+  };
+  const handleAddMineToCart = (itemName) => {
+    if (!activePlanet) return;
+    const current2 = getStoredCurrentLevel("mines", itemName);
+    const inputKey = `mines_${selectedPlanetId}_${itemName}`;
+    const target = targetLevels[inputKey] ?? current2 + 1;
+    if (target <= current2) return;
+    const existing = cart.find(
+      (item) => item.category === "Mines" && item.planetId === selectedPlanetId && item.itemName === itemName
+    );
+    if (existing && existing.targetLevel === target) {
+      triggerNotification(`Lvl ${target} ${itemName} is already in the list!`);
+      return;
+    }
+    const specName = itemName === "Deuterium Mine" ? "Deuterium Mine" : itemName;
+    const costConfig = MINES_BASE_COSTS[specName];
+    if (!costConfig) return;
+    let cost = calculateStandardCost(costConfig.base, costConfig.factor, current2, target);
+    if (itemName !== "Fusion Reactor") {
+      const multiplier = getMineCostMultiplier(activePlanet);
+      cost = applyDiscount(cost, multiplier);
+    }
+    const icon = itemName === "Metal Mine" ? "icons/resources/metal_mine_large.jpg" : itemName === "Crystal Mine" ? "icons/resources/crystal_mine_large.jpg" : itemName === "Deuterium Mine" ? "icons/resources/deuterium_mine_large.jpg" : "icons/resources/fusion-reactor-large.jpg";
+    const newItem = {
+      id: `${selectedPlanetId}_mines_${itemName}_${Date.now()}`,
+      planetId: selectedPlanetId,
+      planetName: activePlanet.name,
+      coords: activePlanet.coords,
+      category: "Mines",
+      itemId: 0,
+      itemName,
+      currentLevel: current2,
+      targetLevel: target,
+      cost,
+      icon
+    };
+    setCart((prev) => {
+      const filtered = prev.filter(
+        (item) => !(item.category === "Mines" && item.planetId === selectedPlanetId && item.itemName === itemName)
+      );
+      return [...filtered, newItem];
+    });
+    if (existing) {
+      triggerNotification(`Updated ${itemName} to Lvl ${target} in list!`);
+    } else {
+      triggerNotification(`Added ${itemName} to list!`);
+    }
+  };
+  const handleAddFacilityToCart = (itemName) => {
+    if (!activePlanet) return;
+    const current2 = getStoredCurrentLevel("facilities", itemName);
+    const inputKey = `facilities_${selectedPlanetId}_${itemName}`;
+    const target = targetLevels[inputKey] ?? current2 + 1;
+    if (target <= current2) return;
+    const existing = cart.find(
+      (item) => item.category === "Facilities" && item.planetId === selectedPlanetId && item.itemName === itemName
+    );
+    if (existing && existing.targetLevel === target) {
+      triggerNotification(`Lvl ${target} ${itemName} is already in the list!`);
+      return;
+    }
+    const costConfig = FACILITIES_BASE_COSTS[itemName];
+    if (!costConfig) return;
+    const cost = calculateStandardCost(costConfig.base, costConfig.factor, current2, target);
+    const icon = itemName === "Robotics Factory" ? "icons/facilities/robotics_factory_large.jpg" : itemName === "Shipyard" ? "icons/facilities/shipyard_large.jpg" : itemName === "Research Lab" ? "icons/facilities/research_lab_large.jpg" : "icons/facilities/nanite_factory_large.jpg";
+    const newItem = {
+      id: `${selectedPlanetId}_facilities_${itemName}_${Date.now()}`,
+      planetId: selectedPlanetId,
+      planetName: activePlanet.name,
+      coords: activePlanet.coords,
+      category: "Facilities",
+      itemId: 0,
+      itemName,
+      currentLevel: current2,
+      targetLevel: target,
+      cost,
+      icon
+    };
+    setCart((prev) => {
+      const filtered = prev.filter(
+        (item) => !(item.category === "Facilities" && item.planetId === selectedPlanetId && item.itemName === itemName)
+      );
+      return [...filtered, newItem];
+    });
+    if (existing) {
+      triggerNotification(`Updated ${itemName} to Lvl ${target} in list!`);
+    } else {
+      triggerNotification(`Added ${itemName} to list!`);
+    }
+  };
+  const handleAddAllResearchToCart = () => {
+    const itemsToAdd = [];
+    RESEARCH_DATA.forEach((tech) => {
+      const current2 = getStoredCurrentLevel("empireResearch", tech.name, tech.id);
+      const inputKey = `research_${tech.id}`;
+      const target = targetLevels[inputKey] ?? current2;
+      if (target > current2) {
+        const existing = cart.find(
+          (item) => item.category === "Research" && item.planetId === "empire" && item.itemName === tech.name
+        );
+        if (existing && existing.targetLevel === target) {
+          return;
+        }
+        const costConfig = RESEARCH_BASE_COSTS[tech.name];
+        if (costConfig) {
+          let cost = calculateStandardCost(costConfig.base, costConfig.factor, current2, target);
+          const { discount } = getEmpireResearchDiscount(tech.name, planets, activeAccount);
+          if (discount > 0) {
+            cost = applyDiscount(cost, 1 - discount);
+          }
+          const icon = getResearchIconPath(tech.name);
+          itemsToAdd.push({
+            id: `empire_research_${tech.id}_${Date.now()}`,
+            planetId: "empire",
+            planetName: "Empire",
+            coords: "Global",
+            category: "Research",
+            itemId: tech.id,
+            itemName: tech.name,
+            currentLevel: current2,
+            targetLevel: target,
+            cost,
+            icon
+          });
+        }
+      }
+    });
+    if (itemsToAdd.length === 0) {
+      triggerNotification("No research technology level increases have been adjusted in the grid yet!");
+      return;
+    }
+    const techsToAdd = itemsToAdd.map((i) => i.itemName);
+    let addedCount = 0;
+    let updatedCount = 0;
+    itemsToAdd.forEach((item) => {
+      const exists = cart.some((c2) => c2.category === "Research" && c2.planetId === "empire" && c2.itemName === item.itemName);
+      if (exists) {
+        updatedCount++;
+      } else {
+        addedCount++;
+      }
+    });
+    setCart((prev) => {
+      const filtered = prev.filter(
+        (item) => !(item.category === "Research" && item.planetId === "empire" && techsToAdd.includes(item.itemName))
+      );
+      return [...filtered, ...itemsToAdd];
+    });
+    let msg = "";
+    if (addedCount > 0 && updatedCount > 0) {
+      msg = `Added ${addedCount} & updated ${updatedCount} Researches in list!`;
+    } else if (updatedCount > 0) {
+      msg = `Updated ${updatedCount} Researches in list!`;
+    } else {
+      msg = `Added ${addedCount} Researches to list!`;
+    }
+    triggerNotification(msg);
+    setTargetLevels((prev) => {
+      const next = { ...prev };
+      RESEARCH_DATA.forEach((tech) => {
+        delete next[`research_${tech.id}`];
+      });
+      return next;
+    });
+  };
+  const handleAddLifeformBuildingToCart = (bld) => {
+    if (!activePlanet) return;
+    const current2 = getStoredCurrentLevel("lifeformBuildings", bld.name, bld.id);
+    const inputKey = `lfBuildings_${selectedPlanetId}_${bld.id}`;
+    const target = targetLevels[inputKey] ?? current2 + 1;
+    if (target <= current2) return;
+    const existing = cart.find(
+      (item) => item.category === "LF Building" && item.planetId === selectedPlanetId && item.itemName === bld.name
+    );
+    if (existing && existing.targetLevel === target) {
+      triggerNotification(`Lvl ${target} ${bld.name} is already in the list!`);
+      return;
+    }
+    const costConfig = LIFEFORM_BUILDINGS_COSTS[bld.id];
+    if (!costConfig) return;
+    let cost = calculateStandardCost(costConfig.base, costConfig.factor, current2, target);
+    const multiplier = getLifeformBuildingCostMultiplier(activePlanet);
+    cost = applyDiscount(cost, multiplier);
+    const lfId = activePlanet.lifeformId || 1;
+    const raceFolders = ["humans", "rocktal", "mechas", "kaelesh"];
+    const raceFolder = raceFolders[lfId - 1];
+    const slotIndex = bld.id % 100;
+    const icon = `icons/lifeforms/${raceFolder}-building-${slotIndex}-large.jpg`;
+    const newItem = {
+      id: `${selectedPlanetId}_lfBuildings_${bld.id}_${Date.now()}`,
+      planetId: selectedPlanetId,
+      planetName: activePlanet.name,
+      coords: activePlanet.coords,
+      category: "LF Building",
+      itemId: bld.id,
+      itemName: bld.name,
+      currentLevel: current2,
+      targetLevel: target,
+      cost,
+      icon
+    };
+    setCart((prev) => {
+      const filtered = prev.filter(
+        (item) => !(item.category === "LF Building" && item.planetId === selectedPlanetId && item.itemName === bld.name)
+      );
+      return [...filtered, newItem];
+    });
+    if (existing) {
+      triggerNotification(`Updated ${bld.name} to Lvl ${target} in list!`);
+    } else {
+      triggerNotification(`Added ${bld.name} to list!`);
+    }
+  };
+  const handleAddLifeformResearchToCart = () => {
+    if (!activePlanet) return;
+    const rawSetup = activePlanet.sandboxSetup || activePlanet.lifeformSetup || [];
+    const activeSetup = Array.from({ length: 18 }, (_, i) => ({
+      slotNumber: i + 1,
+      selectedTechId: null,
+      level: 0
+    }));
+    rawSetup.forEach((s2) => {
+      let tid = s2.selectedTechId;
+      let slotNum = s2.slotNumber;
+      if (tid && tid > 1e4) {
+        const species = Math.floor(tid / 1e3) % 10;
+        const slot = tid % 100;
+        tid = (slot - 1) * 4 + species;
+        if (!slotNum || slotNum === 0) slotNum = slot;
+      }
+      if (slotNum >= 1 && slotNum <= 18) {
+        activeSetup[slotNum - 1] = {
+          slotNumber: slotNum,
+          selectedTechId: tid,
+          level: s2.level
+        };
+      }
+    });
+    const itemsToAdd = [];
+    activeSetup.forEach((slot) => {
+      if (slot.selectedTechId === null || slot.selectedTechId === void 0) return;
+      const tech = LIFEFORM_TECH_DATA.find((t2) => t2.id === slot.selectedTechId);
+      if (!tech) return;
+      const current2 = slot.level || 0;
+      const target = lfResearchTargetLevels[slot.selectedTechId] ?? current2;
+      if (target > current2) {
+        const existing = cart.find(
+          (item) => item.category === "LF Research" && item.planetId === selectedPlanetId && item.itemName === tech.name
+        );
+        if (existing && existing.targetLevel === target) {
+          return;
+        }
+        let cost = calculateCumulativeTechCost(
+          { metal: tech.metalBaseCost, crystal: tech.crystalBaseCost, deuterium: tech.deutBaseCost },
+          { metal: tech.metalIncreaseFactor, crystal: tech.crystalIncreaseFactor, deuterium: tech.deutIncreaseFactor },
+          current2,
+          target
+        );
+        const multiplier = getLifeformResearchCostMultiplier(activePlanet);
+        cost = applyDiscount(cost, multiplier);
+        const icon = getLfTechIconPath(slot.selectedTechId);
+        itemsToAdd.push({
+          id: `${selectedPlanetId}_lfResearch_${tech.id}_${Date.now()}`,
+          planetId: selectedPlanetId,
+          planetName: activePlanet.name,
+          coords: activePlanet.coords,
+          category: "LF Research",
+          itemId: tech.id,
+          itemName: tech.name,
+          currentLevel: current2,
+          targetLevel: target,
+          cost,
+          icon
+        });
+      }
+    });
+    if (itemsToAdd.length === 0) {
+      triggerNotification("No technology level increases have been adjusted in the grid yet!");
+      return;
+    }
+    const techsToAdd = itemsToAdd.map((i) => i.itemName);
+    let addedCount = 0;
+    let updatedCount = 0;
+    itemsToAdd.forEach((item) => {
+      const exists = cart.some((c2) => c2.category === "LF Research" && c2.planetId === selectedPlanetId && c2.itemName === item.itemName);
+      if (exists) {
+        updatedCount++;
+      } else {
+        addedCount++;
+      }
+    });
+    setCart((prev) => {
+      const filtered = prev.filter(
+        (item) => !(item.category === "LF Research" && item.planetId === selectedPlanetId && techsToAdd.includes(item.itemName))
+      );
+      return [...filtered, ...itemsToAdd];
+    });
+    let msg = "";
+    if (addedCount > 0 && updatedCount > 0) {
+      msg = `Added ${addedCount} & updated ${updatedCount} Techs in list!`;
+    } else if (updatedCount > 0) {
+      msg = `Updated ${updatedCount} Techs in list!`;
+    } else {
+      msg = `Added ${addedCount} Techs to shopping list!`;
+    }
+    triggerNotification(msg);
+    setLfResearchTargetLevels({});
+  };
+  const handleAddShipOrDefenseToCart = (item, type) => {
+    var _a2;
+    const inputKey = `batch_${selectedPlanetId}_${item.id}`;
+    const qty = batchQuantities[inputKey] ?? (type === "ship" ? 10 : 25);
+    let cost = { metal: 0, crystal: 0, deuterium: 0 };
+    let icon = "";
+    if (type === "ship") {
+      const shipCost = (_a2 = item.metadata) == null ? void 0 : _a2.cost;
+      if (shipCost) {
+        cost = {
+          metal: (shipCost.metal || 0) * qty,
+          crystal: (shipCost.crystal || 0) * qty,
+          deuterium: (shipCost.deuterium || 0) * qty
+        };
+      }
+      icon = item.icon || "";
+    } else {
+      const defenceCost = DEFENCES_BASE_COSTS[item.id];
+      if (defenceCost) {
+        cost = {
+          metal: (defenceCost.metal || 0) * qty,
+          crystal: (defenceCost.crystal || 0) * qty,
+          deuterium: (defenceCost.deuterium || 0) * qty
+        };
+      }
+      const defMap = {
+        401: "icons/defense/rocket-launcher-large.jpg",
+        402: "icons/defense/light-laser-large.jpg",
+        403: "icons/defense/heavy-laser-large.jpg",
+        404: "icons/defense/gauss-cannon-large.jpg",
+        405: "icons/defense/ion-cannon-large.jpg",
+        406: "icons/defense/plasma-turret-large.jpg",
+        407: "icons/defense/small-shield-dome-large.jpg",
+        408: "icons/defense/large-shield-dome-large.jpg",
+        502: "icons/defense/anti-ballistic-missile-large.jpg",
+        503: "icons/defense/interplanetary-missile-large.jpg"
+      };
+      icon = defMap[item.id] || "";
+    }
+    const newItem = {
+      id: `${selectedPlanetId}_${type}_${item.id}_${Date.now()}`,
+      planetId: selectedPlanetId,
+      planetName: activePlanet ? activePlanet.name : "Empire",
+      coords: activePlanet ? activePlanet.coords : "Global",
+      category: type === "ship" ? "Ships" : "Defenses",
+      itemId: item.id,
+      itemName: item.name,
+      currentLevel: 0,
+      targetLevel: 0,
+      quantity: qty,
+      cost,
+      icon
+    };
+    const existing = cart.find(
+      (c2) => c2.category === (type === "ship" ? "Ships" : "Defenses") && c2.planetId === selectedPlanetId && c2.itemId === item.id
+    );
+    if (existing) {
+      const newQty = (existing.quantity || 0) + qty;
+      triggerNotification(`Updated ${item.name} to ${newQty}x in list!`);
+    } else {
+      triggerNotification(`Added ${qty}x ${item.name} to list!`);
+    }
+    setCart((prev) => {
+      const existingIdx = prev.findIndex(
+        (c2) => c2.category === (type === "ship" ? "Ships" : "Defenses") && c2.planetId === selectedPlanetId && c2.itemId === item.id
+      );
+      if (existingIdx > -1) {
+        const ext = prev[existingIdx];
+        const next = [...prev];
+        next[existingIdx] = {
+          ...ext,
+          quantity: (ext.quantity || 0) + qty,
+          cost: {
+            metal: ext.cost.metal + cost.metal,
+            crystal: ext.cost.crystal + cost.crystal,
+            deuterium: ext.cost.deuterium + cost.deuterium
+          }
+        };
+        return next;
+      } else {
+        return [...prev, newItem];
+      }
+    });
+  };
+  const handleDeleteCartItem = (itemId) => {
+    setCart((prev) => prev.filter((item) => item.id !== itemId));
+  };
+  const cartSummary = reactExports.useMemo(() => {
+    let metal = 0;
+    let crystal = 0;
+    let deuterium = 0;
+    cart.forEach((item) => {
+      metal += item.cost.metal;
+      crystal += item.cost.crystal;
+      deuterium += item.cost.deuterium;
+    });
+    const totalCost = { metal, crystal, deuterium };
+    const totalMSU = calculateMSU(totalCost, rates);
+    return {
+      cost: totalCost,
+      msu: totalMSU
+    };
+  }, [cart, rates]);
+  const packageMetrics = reactExports.useMemo(() => {
+    const metalPackageMSU = dailyProduction.metal;
+    const crystalPackageMSU = dailyProduction.crystal * (rates.metal / rates.crystal);
+    const deuteriumPackageMSU = dailyProduction.deuterium * (rates.metal / rates.deuterium);
+    const metalPacksNeeded = metalPackageMSU > 0 ? cartSummary.msu / metalPackageMSU : 0;
+    const crystalPacksNeeded = crystalPackageMSU > 0 ? cartSummary.msu / crystalPackageMSU : 0;
+    const deuteriumPacksNeeded = deuteriumPackageMSU > 0 ? cartSummary.msu / deuteriumPackageMSU : 0;
+    return {
+      metalPacksNeeded,
+      crystalPacksNeeded,
+      deuteriumPacksNeeded
+    };
+  }, [dailyProduction, cartSummary.msu, rates]);
+  const groupedCart = reactExports.useMemo(() => {
+    const groups = {};
+    cart.forEach((item) => {
+      const isEmpireItem = item.planetId === "empire" || item.category === "Research" || item.category === "Ships" || item.category === "Defenses";
+      const groupKey = isEmpireItem ? "empire" : item.planetId;
+      if (!groups[groupKey]) {
+        const targetPlanet = planets.find((p2) => p2.id === item.planetId);
+        groups[groupKey] = {
+          name: isEmpireItem ? "Global Empire" : item.planetName,
+          coords: isEmpireItem ? "Global" : item.coords,
+          isEmpire: isEmpireItem,
+          planetImg: targetPlanet ? targetPlanet.imgUrl : "",
+          items: []
+        };
+      }
+      groups[groupKey].items.push(item);
+    });
+    return Object.entries(groups).sort(([aKey], [bKey]) => {
+      if (aKey === "empire") return -1;
+      if (bKey === "empire") return 1;
+      return aKey.localeCompare(bKey);
+    });
+  }, [cart, planets]);
+  const formatNumber2 = (num) => {
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
+    if (num >= 1e3) return (num / 1e3).toFixed(2) + "K";
+    return Math.floor(num).toLocaleString();
+  };
+  const formatFullNumber = (num) => {
+    return Math.floor(num).toLocaleString();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view-container costs-planner-view", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "view-header relative", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { padding: "10px", borderRadius: "16px", background: "rgba(0, 242, 255, 0.1)", color: "var(--primary)", filter: "drop-shadow(0 0 10px rgba(0, 242, 255, 0.3))" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ShoppingCart, { size: 28 }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "view-title", children: "Costs Planner" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "view-subtitle", children: "Simulate building upgrades, technologies, and fleet costs in a cohesive queue" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: notification && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        motion.div,
+        {
+          initial: { opacity: 0, y: -20, scale: 0.95 },
+          animate: { opacity: 1, y: 0, scale: 1 },
+          exit: { opacity: 0, y: -20, scale: 0.95 },
+          className: "cart-alert",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CheckCircle2, { size: 16, color: "#00f2ff" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: notification })
+          ]
+        }
+      ) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "planner-split-layout", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "planner-workspace-col", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(AnimatePresence, { mode: "wait", children: [
+        plannerStep === 1 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          motion.div,
+          {
+            initial: { opacity: 0 },
+            animate: { opacity: 1 },
+            exit: { opacity: 0 },
+            transition: { duration: 0.2 },
+            className: "category-selection-shelf",
+            children: [
+              { id: "mines", label: "Mines", desc: "Colony mines & fusion power plants", ogIcon: "icons/resources/metal_mine_large.jpg", color: "#ff8d33" },
+              { id: "facilities", label: "Facilities", desc: "Advanced nanites & shipyards", ogIcon: "icons/facilities/nanite_factory_large.jpg", color: "#a855f7" },
+              { id: "empireResearch", label: "Research", desc: "Drive & astrophysical sciences", ogIcon: "icons/research/expedition-tech-research-large.jpg", color: "#00f2ff" },
+              { id: "lifeformBuildings", label: "LF Buildings", desc: "Species-specific colony structures", ogIcon: "icons/lifeforms/mechas-building-7-large.jpg", color: "#22c55e" },
+              { id: "lifeformResearch", label: "LF Research", desc: "Intergalactic envoys & slots matrix", ogIcon: "icons/lifeforms/humans-tech-t1-large.jpg", color: "#ec4899" },
+              { id: "shipsDefences", label: "Ships / Defenses", desc: "Starships, fleets & defense grids", ogIcon: "icons/ships/battlecruiser-large.jpg", color: "#3b82f6" }
+            ].map((cat) => {
+              var _a2;
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                motion.div,
+                {
+                  transition: cardTransition,
+                  whileHover: { scale: 1.02, y: -4 },
+                  whileTap: { scale: 0.98 },
+                  className: `category-card-btn bento-${cat.id}`,
+                  role: "button",
+                  tabIndex: 0,
+                  onClick: () => {
+                    setSelectedCategory(cat.id);
+                    setPlannerStep(2);
+                  },
+                  onKeyDown: (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      setSelectedCategory(cat.id);
+                      setPlannerStep(2);
+                    }
+                  },
+                  style: {
+                    // @ts-ignore
+                    "--accent-color": cat.color
+                  },
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-bg-icon-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cat.ogIcon, alt: "" }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-bg-gradient-fade" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-content-wrapper", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-top-row", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-og-icon-wrapper", style: { borderColor: cat.color }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cat.ogIcon, alt: "" }) }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-small-indicator-icon", style: { color: cat.color }, children: (_a2 = categoriesMap[cat.id]) == null ? void 0 : _a2.icon })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-text-group", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bento-card-label", children: cat.label }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bento-card-description", children: cat.desc })
+                      ] })
+                    ] })
+                  ]
+                },
+                cat.id
+              );
+            })
+          },
+          "step-1-categories"
+        ),
+        plannerStep === 2 && selectedCategory && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          motion.div,
+          {
+            initial: { opacity: 0 },
+            animate: { opacity: 1 },
+            exit: { opacity: 0 },
+            transition: { duration: 0.2 },
+            className: "planet-selector-shelf-sequential",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "step-navigation-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "step-back-btn", onClick: () => setPlannerStep(1), children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(RotateCcw, { size: 13 }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Back to Categories" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "step-instruction-badge", children: "Step 2: Select Operational Scope" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "step-2-horizontal-flow", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "selected-category-centered", children: (() => {
+                  var _a2;
+                  const cat = [
+                    { id: "mines", label: "Mines", desc: "Colony mines & fusion power plants", ogIcon: "icons/resources/metal_mine_large.jpg", color: "#ff8d33" },
+                    { id: "facilities", label: "Facilities", desc: "Advanced nanites & shipyards", ogIcon: "icons/facilities/nanite_factory_large.jpg", color: "#a855f7" },
+                    { id: "empireResearch", label: "Research", desc: "Drive & astrophysical sciences", ogIcon: "icons/research/expedition-tech-research-large.jpg", color: "#00f2ff" },
+                    { id: "lifeformBuildings", label: "LF Buildings", desc: "Species-specific colony structures", ogIcon: "icons/lifeforms/mechas-building-7-large.jpg", color: "#22c55e" },
+                    { id: "lifeformResearch", label: "LF Research", desc: "Intergalactic envoys & slots matrix", ogIcon: "icons/lifeforms/humans-tech-t1-large.jpg", color: "#ec4899" },
+                    { id: "shipsDefences", label: "Ships / Defenses", desc: "Starships, fleets & defense grids", ogIcon: "icons/ships/battlecruiser-large.jpg", color: "#3b82f6" }
+                  ].find((c2) => c2.id === selectedCategory);
+                  if (!cat) return null;
+                  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                    motion.div,
+                    {
+                      transition: cardTransition,
+                      className: `category-card-btn active centered-active-btn bento-${cat.id}`,
+                      style: {
+                        // @ts-ignore
+                        "--accent-color": cat.color
+                      },
+                      children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-bg-icon-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cat.ogIcon, alt: "" }) }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-bg-gradient-fade" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-content-wrapper", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-top-row", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-og-icon-wrapper", style: { borderColor: cat.color }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cat.ogIcon, alt: "" }) }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-small-indicator-icon", style: { color: cat.color }, children: (_a2 = categoriesMap[cat.id]) == null ? void 0 : _a2.icon })
+                          ] }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-text-group", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bento-card-label", children: cat.label }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bento-card-description", children: cat.desc })
+                          ] })
+                        ] })
+                      ]
+                    }
+                  );
+                })() }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "connector-path-horizontal" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rotary-sphere-container", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "planets-orbit", children: planets.map((p2, idx) => {
+                    const angle = idx / planets.length * 360;
+                    const isSelected = selectedPlanetId === p2.id && plannerStep === 3;
+                    const isCategoryColonyScoped = ["mines", "facilities", "lifeformBuildings", "lifeformResearch"].includes(selectedCategory);
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "div",
+                      {
+                        className: `planet-rotary-item ${isSelected ? "active" : ""} ${isCategoryColonyScoped ? "enabled" : "disabled"}`,
+                        style: {
+                          // @ts-ignore
+                          "--angle": `${angle}deg`,
+                          animationDelay: `${idx * 0.08}s`
+                        },
+                        onClick: () => {
+                          if (isCategoryColonyScoped) {
+                            setSelectedPlanetId(p2.id);
+                            setPlannerStep(3);
+                          }
+                        },
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "planet-rotary-img-wrapper", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: p2.imgUrl || "icons/planets/dry-large.jpg", alt: "" }) }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(
+                            "div",
+                            {
+                              className: "planet-mini-label-tooltip",
+                              style: {
+                                // @ts-ignore
+                                "--angle": `${angle}deg`
+                              },
+                              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tooltip-upright-content", children: [
+                                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "p-coords-badge", children: p2.coords }),
+                                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "p-name-badge", children: p2.name })
+                              ] })
+                            }
+                          )
+                        ]
+                      },
+                      p2.id
+                    );
+                  }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "center-empire-wrapper", children: (() => {
+                    const isEmpireActive = ["empireResearch", "shipsDefences"].includes(selectedCategory);
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "button",
+                      {
+                        className: `empire-center-btn ${isEmpireActive ? "enabled" : "disabled"}`,
+                        onClick: () => {
+                          if (isEmpireActive) {
+                            setSelectedPlanetId("empire");
+                            setPlannerStep(3);
+                          }
+                        },
+                        title: isEmpireActive ? "Empire scope selected" : "Empire scope not applicable",
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empire-glow-ring" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 26 }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "empire-label", children: "EMPIRE" })
+                        ]
+                      }
+                    );
+                  })() })
+                ] })
+              ] })
+            ]
+          },
+          "step-2-orbit"
+        ),
+        plannerStep === 3 && selectedCategory && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          motion.div,
+          {
+            initial: { opacity: 0, y: 20 },
+            animate: { opacity: 1, y: 0 },
+            exit: { opacity: 0, y: 20 },
+            transition: { duration: 0.3 },
+            className: "workspace-options-panel-sequential",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "workspace-breadcrumb-navbar", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "step-back-btn", onClick: () => {
+                  setPlannerStep(1);
+                  setSelectedCategory("");
+                }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(RotateCcw, { size: 13 }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Back to Categories" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "breadcrumb-pathway", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "path-node", onClick: () => setPlannerStep(2), children: [
+                    (_a = categoriesMap[selectedCategory]) == null ? void 0 : _a.icon,
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: (_b = categoriesMap[selectedCategory]) == null ? void 0 : _b.label })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "path-separator", children: ">" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "path-node current", onClick: () => setPlannerStep(2), children: selectedPlanetId === "empire" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 14 }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Global Empire" })
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: (activePlanet == null ? void 0 : activePlanet.imgUrl) || "icons/planets/dry-large.jpg", className: "path-planet-thumb", alt: "" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                      activePlanet == null ? void 0 : activePlanet.name,
+                      " [",
+                      activePlanet == null ? void 0 : activePlanet.coords,
+                      "]"
+                    ] })
+                  ] }) })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sequential-config-workspace-inner", children: [
+                selectedCategory === "mines" && activePlanet && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "builder-options-list", children: [
+                  { name: "Metal Mine", dbKey: "metalMine", desc: "Primary source of structural metals" },
+                  { name: "Crystal Mine", dbKey: "crystalMine", desc: "Crucial resource for computers and high-end materials" },
+                  { name: "Deuterium Mine", dbKey: "deuteriumMine", desc: "Fuel Synthesizer extracted from surface oceans" },
+                  { name: "Fusion Reactor", dbKey: "fusionReactor", desc: "Consumes deuterium to yield high baseline power" }
+                ].map((mine) => {
+                  const current2 = getStoredCurrentLevel("mines", mine.name);
+                  const inputKey = `mines_${selectedPlanetId}_${mine.name}`;
+                  const target = targetLevels[inputKey] ?? current2 + 1;
+                  const costKey = mine.name === "Deuterium Mine" ? "Deuterium Mine" : mine.name;
+                  const costConfig = MINES_BASE_COSTS[costKey];
+                  let calculatedCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, current2, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                  if (mine.name !== "Fusion Reactor") {
+                    const multiplier = getMineCostMultiplier(activePlanet);
+                    calculatedCost = applyDiscount(calculatedCost, multiplier);
+                  }
+                  const hasUpgrade = target > current2;
+                  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "builder-option-row", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-info-group flex-row-item", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "img",
+                        {
+                          src: mine.name === "Metal Mine" ? "icons/resources/metal_mine_large.jpg" : mine.name === "Crystal Mine" ? "icons/resources/crystal_mine_large.jpg" : mine.name === "Deuterium Mine" ? "icons/resources/deuterium_mine_large.jpg" : "icons/resources/fusion-reactor-large.jpg",
+                          style: { width: "32px", height: "32px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.1)" },
+                          alt: ""
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "option-title", children: mine.name }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-description", children: [
+                          mine.desc,
+                          activePlanet.lifeformId === 2 && mine.name !== "Fusion Reactor" && (() => {
+                            var _a2, _b2;
+                            const mrcLvl = ((_b2 = (_a2 = activePlanet.lifeformBuildings) == null ? void 0 : _a2.find((b) => b.id === 12111)) == null ? void 0 : _b2.level) || 0;
+                            const mrcDiscount = mrcLvl * 0.5;
+                            if (mrcLvl > 0) {
+                              return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "discount-pill", style: { marginLeft: "8px", color: "#33ff8d", fontSize: "0.7rem", background: "rgba(51, 255, 141, 0.1)", padding: "2px 6px", borderRadius: "4px", border: "1px solid rgba(51, 255, 141, 0.2)", fontWeight: 600 }, children: [
+                                "-",
+                                mrcDiscount,
+                                "% (Mineral Research Centre lvl ",
+                                mrcLvl,
+                                ")"
+                              ] });
+                            }
+                            return null;
+                          })()
+                        ] })
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-controls-group", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "level-adjuster-shelf", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "level-label", children: [
+                          "Lvl ",
+                          current2
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 14, style: { opacity: 0.3 } }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slider-input-wrapper", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleLevelChange(inputKey, target - 1, current2 + 1), disabled: target <= current2 + 1, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 12 }) }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(
+                            "input",
+                            {
+                              type: "number",
+                              value: target,
+                              onChange: (e) => handleLevelChange(inputKey, parseInt(e.target.value) || current2 + 1, current2 + 1),
+                              min: current2 + 1,
+                              className: "level-val-input"
+                            }
+                          ),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleLevelChange(inputKey, target + 1, current2 + 1), children: /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 12 }) })
+                        ] })
+                      ] }),
+                      hasUpgrade && (() => {
+                        let singleCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, target - 1, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                        if (mine.name !== "Fusion Reactor") {
+                          const multiplier = getMineCostMultiplier(activePlanet);
+                          singleCost = applyDiscount(singleCost, multiplier);
+                        }
+                        return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost-container", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cost-column-header", children: [
+                              "Lvl ",
+                              target,
+                              " Cost"
+                            ] }),
+                            singleCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                              "M: ",
+                              formatNumber2(singleCost.metal)
+                            ] }),
+                            singleCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                              "C: ",
+                              formatNumber2(singleCost.crystal)
+                            ] }),
+                            singleCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                              "D: ",
+                              formatNumber2(singleCost.deuterium)
+                            ] })
+                          ] }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cost-column-header highlighted", children: "Total Cost" }),
+                            calculatedCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                              "M: ",
+                              formatNumber2(calculatedCost.metal)
+                            ] }),
+                            calculatedCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                              "C: ",
+                              formatNumber2(calculatedCost.crystal)
+                            ] }),
+                            calculatedCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                              "D: ",
+                              formatNumber2(calculatedCost.deuterium)
+                            ] })
+                          ] })
+                        ] });
+                      })(),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "add-to-cart-btn", onClick: () => handleAddMineToCart(mine.name), disabled: !hasUpgrade, children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 16 }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Add to List" })
+                      ] })
+                    ] })
+                  ] }, mine.name);
+                }) }),
+                selectedCategory === "facilities" && activePlanet && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "builder-options-list", children: [
+                  { name: "Robotics Factory", desc: "Speeds up construction time of all planetary buildings" },
+                  { name: "Shipyard", desc: "Builds fleets, transporters, and planetary defense turrets" },
+                  { name: "Research Lab", desc: "Conducts vital technological advancements for the empire" },
+                  { name: "Nanite Factory", desc: "State of the art nano-robots that slash build times of structures/ships" }
+                ].map((fac) => {
+                  const current2 = getStoredCurrentLevel("facilities", fac.name);
+                  const inputKey = `facilities_${selectedPlanetId}_${fac.name}`;
+                  const target = targetLevels[inputKey] ?? current2 + 1;
+                  const costConfig = FACILITIES_BASE_COSTS[fac.name];
+                  const calculatedCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, current2, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                  const hasUpgrade = target > current2;
+                  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "builder-option-row", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-info-group flex-row-item", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "img",
+                        {
+                          src: fac.name === "Robotics Factory" ? "icons/facilities/robotics_factory_large.jpg" : fac.name === "Shipyard" ? "icons/facilities/shipyard_large.jpg" : fac.name === "Research Lab" ? "icons/facilities/research_lab_large.jpg" : "icons/facilities/nanite_factory_large.jpg",
+                          style: { width: "32px", height: "32px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.1)" },
+                          alt: ""
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "option-title", children: fac.name }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "option-description", children: fac.desc })
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-controls-group", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "level-adjuster-shelf", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "level-label", children: [
+                          "Lvl ",
+                          current2
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 14, style: { opacity: 0.3 } }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slider-input-wrapper", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleLevelChange(inputKey, target - 1, current2 + 1), disabled: target <= current2 + 1, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 12 }) }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(
+                            "input",
+                            {
+                              type: "number",
+                              value: target,
+                              onChange: (e) => handleLevelChange(inputKey, parseInt(e.target.value) || current2 + 1, current2 + 1),
+                              min: current2 + 1,
+                              className: "level-val-input"
+                            }
+                          ),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleLevelChange(inputKey, target + 1, current2 + 1), children: /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 12 }) })
+                        ] })
+                      ] }),
+                      hasUpgrade && (() => {
+                        const singleCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, target - 1, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                        return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost-container", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cost-column-header", children: [
+                              "Lvl ",
+                              target,
+                              " Cost"
+                            ] }),
+                            singleCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                              "M: ",
+                              formatNumber2(singleCost.metal)
+                            ] }),
+                            singleCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                              "C: ",
+                              formatNumber2(singleCost.crystal)
+                            ] }),
+                            singleCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                              "D: ",
+                              formatNumber2(singleCost.deuterium)
+                            ] })
+                          ] }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cost-column-header highlighted", children: "Total Cost" }),
+                            calculatedCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                              "M: ",
+                              formatNumber2(calculatedCost.metal)
+                            ] }),
+                            calculatedCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                              "C: ",
+                              formatNumber2(calculatedCost.crystal)
+                            ] }),
+                            calculatedCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                              "D: ",
+                              formatNumber2(calculatedCost.deuterium)
+                            ] })
+                          ] })
+                        ] });
+                      })(),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "add-to-cart-btn", onClick: () => handleAddFacilityToCart(fac.name), disabled: !hasUpgrade, children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 16 }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Add to List" })
+                      ] })
+                    ] })
+                  ] }, fac.name);
+                }) }),
+                selectedCategory === "empireResearch" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "research-designer-container", style: { width: "100%" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "research-bento-grid", children: RESEARCH_DATA.map((tech) => {
+                    var _a2;
+                    const current2 = getStoredCurrentLevel("empireResearch", tech.name, tech.id);
+                    const inputKey = `research_${tech.id}`;
+                    const target = targetLevels[inputKey] ?? current2;
+                    const hasUpgrade = target > current2;
+                    const techIcon = getResearchIconPath(tech.name);
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "div",
+                      {
+                        className: "research-grid-card",
+                        title: (() => {
+                          const { discount, techSources } = getEmpireResearchDiscount(tech.name, planets, activeAccount);
+                          if (discount > 0) {
+                            const sourceDetails = techSources.map((s2) => `${s2.name} lvl ${s2.level} (boosted to ${s2.boostedLevel.toFixed(2)})`).join(", ");
+                            return `${tech.name} Cost Discount:
+${sourceDetails}: -${(discount * 100).toFixed(2)}% discount (0.15% per level)`;
+                          }
+                          return "";
+                        })(),
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-bg-icon-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: techIcon, alt: "" }) }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-bg-gradient-fade" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "research-card-content-wrapper", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-top-row", children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-og-icon-wrapper", style: { borderColor: "#00f2ff", width: "44px", height: "44px", borderRadius: "12px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: techIcon, alt: "" }) }),
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bento-small-indicator-icon", style: { color: "#00f2ff" }, children: (_a2 = categoriesMap.empireResearch) == null ? void 0 : _a2.icon })
+                            ] }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bento-card-text-group", style: { margin: "4px 0 8px 0" }, children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bento-card-label", style: { fontSize: "0.92rem" }, children: tech.name }),
+                              (() => {
+                                const { discount, techSources } = getEmpireResearchDiscount(tech.name, planets, activeAccount);
+                                if (discount > 0) {
+                                  const pillLabel = techSources.map((s2) => s2.name).join(" + ");
+                                  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d", fontSize: "0.68rem", display: "block", marginTop: "2px", fontWeight: 600 }, children: [
+                                    "-",
+                                    (discount * 100).toFixed(2),
+                                    "% (",
+                                    pillLabel,
+                                    ")"
+                                  ] });
+                                }
+                                return null;
+                              })()
+                            ] }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "research-card-controls-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slot-level-wrapper", style: { position: "relative", bottom: "auto", right: "auto", left: "auto", width: "100%", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "rgba(0,0,0,0.4)", borderRadius: "10px", border: "1px solid rgba(0, 242, 255, 0.25)" }, children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                ChevronDown,
+                                {
+                                  size: 14,
+                                  className: "level-arrow",
+                                  onClick: () => handleLevelChange(inputKey, Math.max(current2, target - 1), current2),
+                                  style: {
+                                    opacity: target <= current2 ? 0.3 : 1,
+                                    cursor: target <= current2 ? "not-allowed" : "pointer"
+                                  }
+                                }
+                              ),
+                              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slot-level-input", style: { width: "auto", minWidth: "40px", padding: "0 4px", textAlign: "center", fontSize: "0.72rem", color: hasUpgrade ? "#22c55e" : "#ff9d00", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900 }, children: [
+                                current2,
+                                "→",
+                                target
+                              ] }),
+                              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                ChevronUp,
+                                {
+                                  size: 14,
+                                  className: "level-arrow",
+                                  onClick: () => handleLevelChange(inputKey, target + 1, current2),
+                                  style: { cursor: "pointer" }
+                                }
+                              )
+                            ] }) })
+                          ] })
+                        ]
+                      },
+                      tech.id
+                    );
+                  }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", justifyContent: "flex-end", marginTop: "24px", width: "100%" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "add-all-techs-btn research-accent-btn", onClick: handleAddAllResearchToCart, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(FlaskConical, { size: 18 }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Add Additional Levels to Shopping List" })
+                  ] }) })
+                ] }),
+                selectedCategory === "lifeformBuildings" && activePlanet && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "builder-options-list", children: (() => {
+                  const lfId = activePlanet.lifeformId;
+                  if (!lfId || lfId === 0) {
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "empty-state-notice", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTriangle, { size: 32, color: "#ffaa00" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empty-title", children: "NO ACTIVE LIFEFORM SPECIES" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empty-desc", children: "This planet has no active lifeform species synced in the database. Go to the Lifeforms tab to establish a colony." })
+                    ] });
+                  }
+                  const minId = 1e4 + lfId * 1e3 + 100;
+                  const maxId = minId + 12;
+                  const currentRaceBuildings = LIFEFORM_BUILDING_DATA.filter((b) => b.id >= minId && b.id <= maxId);
+                  return currentRaceBuildings.map((bld) => {
+                    const current2 = getStoredCurrentLevel("lifeformBuildings", bld.name, bld.id);
+                    const inputKey = `lfBuildings_${selectedPlanetId}_${bld.id}`;
+                    const target = targetLevels[inputKey] ?? current2 + 1;
+                    const costConfig = LIFEFORM_BUILDINGS_COSTS[bld.id];
+                    let calculatedCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, current2, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                    const multiplier = getLifeformBuildingCostMultiplier(activePlanet);
+                    calculatedCost = applyDiscount(calculatedCost, multiplier);
+                    const hasUpgrade = target > current2;
+                    const lfId2 = activePlanet.lifeformId || 1;
+                    const raceFolders = ["humans", "rocktal", "mechas", "kaelesh"];
+                    const raceFolder = raceFolders[lfId2 - 1];
+                    const slotIndex = bld.id % 100;
+                    const bldIcon = `icons/lifeforms/${raceFolder}-building-${slotIndex}-large.jpg`;
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "builder-option-row", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-info-group flex-row-item", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(
+                          "img",
+                          {
+                            src: bldIcon,
+                            style: { width: "32px", height: "32px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.1)" },
+                            alt: ""
+                          }
+                        ),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "option-title", children: bld.name }),
+                          activePlanet.lifeformId === 2 && (() => {
+                            var _a2, _b2;
+                            const megalithLvl = ((_b2 = (_a2 = activePlanet.lifeformBuildings) == null ? void 0 : _a2.find((b) => b.id === 12108)) == null ? void 0 : _b2.level) || 0;
+                            if (megalithLvl > 0) {
+                              return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "#33ff8d", fontSize: "0.7rem", marginTop: "2px", display: "flex", alignItems: "center", gap: "4px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { background: "rgba(51, 255, 141, 0.1)", padding: "1px 6px", borderRadius: "4px", border: "1px solid rgba(51, 255, 141, 0.2)", fontWeight: 600 }, children: [
+                                "-",
+                                megalithLvl * 1,
+                                "% discount (Megalith lvl ",
+                                megalithLvl,
+                                ")"
+                              ] }) });
+                            }
+                            return null;
+                          })()
+                        ] })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-controls-group", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "level-adjuster-shelf", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "level-label", children: [
+                            "Lvl ",
+                            current2
+                          ] }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 14, style: { opacity: 0.3 } }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slider-input-wrapper", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleLevelChange(inputKey, target - 1, current2 + 1), disabled: target <= current2 + 1, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 12 }) }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx(
+                              "input",
+                              {
+                                type: "number",
+                                value: target,
+                                onChange: (e) => handleLevelChange(inputKey, parseInt(e.target.value) || current2 + 1, current2 + 1),
+                                min: current2 + 1,
+                                className: "level-val-input"
+                              }
+                            ),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleLevelChange(inputKey, target + 1, current2 + 1), children: /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 12 }) })
+                          ] })
+                        ] }),
+                        hasUpgrade && (() => {
+                          let singleCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, target - 1, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                          const multiplier2 = getLifeformBuildingCostMultiplier(activePlanet);
+                          singleCost = applyDiscount(singleCost, multiplier2);
+                          return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost-container", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cost-column-header", children: [
+                                "Lvl ",
+                                target,
+                                " Cost"
+                              ] }),
+                              singleCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                                "M: ",
+                                formatNumber2(singleCost.metal)
+                              ] }),
+                              singleCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                                "C: ",
+                                formatNumber2(singleCost.crystal)
+                              ] }),
+                              singleCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                                "D: ",
+                                formatNumber2(singleCost.deuterium)
+                              ] })
+                            ] }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cost-column-header highlighted", children: "Total Cost" }),
+                              calculatedCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                                "M: ",
+                                formatNumber2(calculatedCost.metal)
+                              ] }),
+                              calculatedCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                                "C: ",
+                                formatNumber2(calculatedCost.crystal)
+                              ] }),
+                              calculatedCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                                "D: ",
+                                formatNumber2(calculatedCost.deuterium)
+                              ] })
+                            ] })
+                          ] });
+                        })(),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "add-to-cart-btn", onClick: () => handleAddLifeformBuildingToCart(bld), disabled: !hasUpgrade, children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 16 }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Add to List" })
+                        ] })
+                      ] })
+                    ] }, bld.id);
+                  });
+                })() }),
+                selectedCategory === "lifeformResearch" && activePlanet && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lf-research-matrix-planner", children: (() => {
+                  const rawSetup = activePlanet.sandboxSetup || activePlanet.lifeformSetup || [];
+                  const activeSetup = Array.from({ length: 18 }, (_, i) => ({
+                    slotNumber: i + 1,
+                    selectedTechId: null,
+                    level: 0
+                  }));
+                  rawSetup.forEach((s2) => {
+                    let tid = s2.selectedTechId;
+                    let slotNum = s2.slotNumber;
+                    if (tid && tid > 1e4) {
+                      const species = Math.floor(tid / 1e3) % 10;
+                      const slot = tid % 100;
+                      tid = (slot - 1) * 4 + species;
+                      if (!slotNum || slotNum === 0) slotNum = slot;
+                    }
+                    if (slotNum >= 1 && slotNum <= 18) {
+                      activeSetup[slotNum - 1] = {
+                        slotNumber: slotNum,
+                        selectedTechId: tid,
+                        level: s2.level
+                      };
+                    }
+                  });
+                  if (rawSetup.length === 0) {
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "empty-state-notice", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTriangle, { size: 32, color: "#ffaa00" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empty-title", children: "NO TECHNOLOGY SETUP SYNCED" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empty-desc", children: "This planet has no active Lifeform Technology setup recorded. Please scan your Lifeform technology menu in-game to build optimization matrix profiles." })
+                    ] });
+                  }
+                  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "matrix-designer-container", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "designer-instruction", style: { marginBottom: "16px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(Info, { size: 14, color: "var(--primary)" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Recreated active planet technology array. Increment target levels inside matrix slots, then add all to cart at once." })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tech-grid-layout", children: [1, 2, 3].map((tier) => {
+                      const startIndex = (tier - 1) * 6;
+                      const tierSlotsIndices = [0, 1, 2, 3, 4, 5].map((i) => startIndex + i);
+                      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tier-column-group", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tier-header", children: [
+                          "Tier ",
+                          tier,
+                          " Research"
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tier-slots-grid", children: tierSlotsIndices.map((idx) => {
+                          const slot = activeSetup[idx];
+                          if (!slot) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tech-slot empty" }, idx);
+                          const tech = slot.selectedTechId !== null ? LIFEFORM_TECH_DATA.find((t2) => t2.id === slot.selectedTechId) : null;
+                          const targetLvl = lfResearchTargetLevels[slot.selectedTechId || 0] ?? (slot.level || 0);
+                          const hasIncrease = targetLvl > (slot.level || 0);
+                          const speciesBorderColor = tech ? ["#22c55e", "#ef4444", "#3b82f6", "#a855f7"][tech.lifeformId - 1] : "rgba(255, 255, 255, 0.1)";
+                          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                            "div",
+                            {
+                              className: `tech-slot ${!tech ? "empty" : ""} ${tech && slot.level === 0 ? "level-zero" : ""} ${hasIncrease ? "has-boost" : ""}`,
+                              style: { borderColor: speciesBorderColor, cursor: "default" },
+                              children: [
+                                tech ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                  "img",
+                                  {
+                                    src: getLfTechIconPath(slot.selectedTechId),
+                                    className: "tech-slot-img",
+                                    alt: ""
+                                  }
+                                ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tech-slot-placeholder", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empty-slot-cross" }) }),
+                                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tech-name-overlay", children: [
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tech-overlay-text", children: tech ? tech.name : "Empty Slot" }),
+                                  tech && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "tech-overlay-discount", children: [
+                                    "-",
+                                    getLifeformResearchDiscountPercentageVal(activePlanet).toFixed(2),
+                                    "% Discount"
+                                  ] })
+                                ] }),
+                                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "slot-tier-banner", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "slot-tier-text", children: [
+                                  "T",
+                                  slot.slotNumber
+                                ] }) }),
+                                tech && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slot-level-wrapper", onClick: (e) => e.stopPropagation(), children: [
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                    ChevronDown,
+                                    {
+                                      size: 14,
+                                      className: "level-arrow",
+                                      onClick: () => setLfResearchTargetLevels((prev) => ({
+                                        ...prev,
+                                        [tech.id]: Math.max(slot.level || 0, targetLvl - 1)
+                                      })),
+                                      style: {
+                                        opacity: targetLvl <= (slot.level || 0) ? 0.3 : 1,
+                                        cursor: targetLvl <= (slot.level || 0) ? "not-allowed" : "pointer"
+                                      }
+                                    }
+                                  ),
+                                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slot-level-input", style: { width: "auto", minWidth: "40px", padding: "0 4px", textAlign: "center", fontSize: "0.72rem", color: hasIncrease ? "#22c55e" : "#ff9d00", display: "flex", alignItems: "center", justifyContent: "center" }, children: [
+                                    slot.level || 0,
+                                    "→",
+                                    targetLvl
+                                  ] }),
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                    ChevronUp,
+                                    {
+                                      size: 14,
+                                      className: "level-arrow",
+                                      onClick: () => setLfResearchTargetLevels((prev) => ({ ...prev, [tech.id]: targetLvl + 1 })),
+                                      style: { cursor: "pointer" }
+                                    }
+                                  )
+                                ] })
+                              ]
+                            },
+                            idx
+                          );
+                        }) })
+                      ] }, tier);
+                    }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", justifyContent: "flex-end", marginTop: "24px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "add-all-techs-btn", onClick: handleAddLifeformResearchToCart, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(Dna, { size: 18 }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Add Additional Levels to Shopping List" })
+                    ] }) })
+                  ] });
+                })() }),
+                selectedCategory === "shipsDefences" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "builder-options-list", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 800, color: "var(--primary)", letterSpacing: "0.5px", marginBottom: "16px", paddingBottom: "8px", borderBottom: "1px solid var(--border)" }, children: "PLANETARY SHIPS (FLEETS)" }),
+                  SHIP_DATA.map((ship) => {
+                    var _a2;
+                    const inputKey = `batch_${selectedPlanetId}_${ship.id}`;
+                    const qty = batchQuantities[inputKey] ?? 10;
+                    const shipCost = (_a2 = ship.metadata) == null ? void 0 : _a2.cost;
+                    const totalCost = shipCost ? {
+                      metal: (shipCost.metal || 0) * qty,
+                      crystal: (shipCost.crystal || 0) * qty,
+                      deuterium: (shipCost.deuterium || 0) * qty
+                    } : { metal: 0, crystal: 0, deuterium: 0 };
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "builder-option-row", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-info-group flex-row-item", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: ship.icon, style: { width: "32px", height: "32px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.1)" }, alt: "" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "option-title", children: ship.name }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-description", children: [
+                            "Basic Hull ID ",
+                            ship.id
+                          ] })
+                        ] })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-controls-group", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "level-adjuster-shelf", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "level-label", children: "Qty" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slider-input-wrapper", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleQuantityChange(inputKey, qty - 10), disabled: qty <= 1, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 12 }) }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx(
+                              "input",
+                              {
+                                type: "number",
+                                value: qty,
+                                onChange: (e) => handleQuantityChange(inputKey, parseInt(e.target.value) || 1),
+                                min: "1",
+                                className: "level-val-input"
+                              }
+                            ),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleQuantityChange(inputKey, qty + 10), children: /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 12 }) })
+                          ] })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                          totalCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                            "M: ",
+                            formatNumber2(totalCost.metal)
+                          ] }),
+                          totalCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                            "C: ",
+                            formatNumber2(totalCost.crystal)
+                          ] }),
+                          totalCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                            "D: ",
+                            formatNumber2(totalCost.deuterium)
+                          ] })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "add-to-cart-btn", onClick: () => handleAddShipOrDefenseToCart(ship, "ship"), children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 16 }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Add to List" })
+                        ] })
+                      ] })
+                    ] }, ship.id);
+                  }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 800, color: "var(--primary)", letterSpacing: "0.5px", marginTop: "32px", marginBottom: "16px", paddingBottom: "8px", borderBottom: "1px solid var(--border)" }, children: "PLANETARY DEFENSES" }),
+                  DEFENCE_DATA.map((def) => {
+                    const inputKey = `batch_${selectedPlanetId}_${def.id}`;
+                    const qty = batchQuantities[inputKey] ?? 25;
+                    const defCost = DEFENCES_BASE_COSTS[def.id];
+                    const totalCost = defCost ? {
+                      metal: (defCost.metal || 0) * qty,
+                      crystal: (defCost.crystal || 0) * qty,
+                      deuterium: (defCost.deuterium || 0) * qty
+                    } : { metal: 0, crystal: 0, deuterium: 0 };
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "builder-option-row", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-info-group", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "option-title", children: def.name }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-description", children: [
+                          "Defense Grid Unit ID ",
+                          def.id
+                        ] })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-controls-group", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "level-adjuster-shelf", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "level-label", children: "Qty" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "slider-input-wrapper", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleQuantityChange(inputKey, qty - 10), disabled: qty <= 1, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 12 }) }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx(
+                              "input",
+                              {
+                                type: "number",
+                                value: qty,
+                                onChange: (e) => handleQuantityChange(inputKey, parseInt(e.target.value) || 1),
+                                min: "1",
+                                className: "level-val-input"
+                              }
+                            ),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "qty-arrow", onClick: () => handleQuantityChange(inputKey, qty + 10), children: /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 12 }) })
+                          ] })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost", children: [
+                          totalCost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#ff8d33" }, children: [
+                            "M: ",
+                            formatNumber2(totalCost.metal)
+                          ] }),
+                          totalCost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33b2ff" }, children: [
+                            "C: ",
+                            formatNumber2(totalCost.crystal)
+                          ] }),
+                          totalCost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#33ff8d" }, children: [
+                            "D: ",
+                            formatNumber2(totalCost.deuterium)
+                          ] })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "add-to-cart-btn", onClick: () => handleAddShipOrDefenseToCart(def, "defence"), children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 16 }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Add to List" })
+                        ] })
+                      ] })
+                    ] }, def.id);
+                  })
+                ] })
+              ] })
+            ]
+          },
+          "step-3-config"
+        )
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "planner-cart-col", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-header", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ShoppingCart, { size: 18, color: "var(--primary)" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-title", children: "SHOPPING CART" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cart-count-badge", children: [
+            cart.length,
+            " ITEMS"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-items-list custom-scrollbar", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { initial: false, children: groupedCart.map(([groupKey, group]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-group-section", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-group-header", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "group-title-wrapper", children: [
+                group.isEmpire ? /* @__PURE__ */ jsxRuntimeExports.jsx(Crown, { size: 14, color: "var(--primary)" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "img",
+                  {
+                    src: group.planetImg || "icons/planets/dry-large.jpg",
+                    alt: "",
+                    className: "cart-group-planet-thumb"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "group-name", children: group.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "group-coords", children: group.coords !== "Global" ? `[${group.coords}]` : "Global" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "group-count-tag", children: [
+                group.items.length,
+                " ",
+                group.items.length === 1 ? "item" : "items"
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cart-group-items", children: group.items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              motion.div,
+              {
+                initial: { opacity: 0, x: 20, scale: 0.95 },
+                animate: { opacity: 1, x: 0, scale: 1 },
+                exit: { opacity: 0, x: -20, scale: 0.95 },
+                className: "cart-item-row glass",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-item-header", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "item-badge-category", children: item.category }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "delete-item-btn", onClick: () => handleDeleteCartItem(item.id), children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 13 }) })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-item-body", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "item-visual-block", children: item.icon ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: item.icon, className: "item-thumbnail-pic", alt: "" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "placeholder-pic", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Database, { size: 16 }) }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "item-details-block", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "item-name-heading", children: item.itemName }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "item-coords-sub", children: item.planetId === "empire" ? "Global Empire Research" : `[${item.coords}] • ${item.planetName}` }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "item-level-transition", children: item.quantity ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "qty-tag", children: [
+                        "Batch Qty: ",
+                        item.quantity
+                      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lvl-prev", children: [
+                          "Lvl ",
+                          item.currentLevel
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 10, style: { opacity: 0.4 } }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lvl-next", children: [
+                          "Lvl ",
+                          item.targetLevel
+                        ] })
+                      ] }) }),
+                      (() => {
+                        let discountPct = 0;
+                        let discountLabel = "";
+                        if (item.category === "Mines" && item.itemName !== "Fusion Reactor") {
+                          const planet = planets.find((p2) => p2.id === item.planetId);
+                          if (planet) {
+                            const mult = getMineCostMultiplier(planet);
+                            if (mult < 1) {
+                              discountPct = (1 - mult) * 100;
+                              discountLabel = `Mineral Research Centre: -${discountPct.toFixed(1)}%`;
+                            }
+                          }
+                        } else if (item.category === "LF Building") {
+                          const planet = planets.find((p2) => p2.id === item.planetId);
+                          if (planet) {
+                            const mult = getLifeformBuildingCostMultiplier(planet);
+                            if (mult < 1) {
+                              discountPct = (1 - mult) * 100;
+                              discountLabel = `Megalith: -${discountPct.toFixed(1)}%`;
+                            }
+                          }
+                        } else if (item.category === "LF Research") {
+                          const planet = planets.find((p2) => p2.id === item.planetId);
+                          if (planet) {
+                            const mult = getLifeformResearchCostMultiplier(planet);
+                            if (mult < 1) {
+                              discountPct = (1 - mult) * 100;
+                              discountLabel = `LF Buildings Discount: -${discountPct.toFixed(2)}%`;
+                            }
+                          }
+                        } else if (item.category === "Research") {
+                          const { discount } = getEmpireResearchDiscount(item.itemName, planets, activeAccount);
+                          if (discount > 0) {
+                            discountPct = discount * 100;
+                            discountLabel = `Lifeform Research: -${discountPct.toFixed(2)}%`;
+                          }
+                        }
+                        if (discountLabel) {
+                          return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cart-item-discount-badge", children: discountLabel });
+                        }
+                        return null;
+                      })()
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-item-cost-bar", children: [
+                    item.cost.metal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mini-res", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/metal-icon-medium.jpg", alt: "" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#ff8d33" }, children: formatFullNumber(item.cost.metal) })
+                    ] }),
+                    item.cost.crystal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mini-res", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/crystal-icon-medium.jpg", alt: "" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#33b2ff" }, children: formatFullNumber(item.cost.crystal) })
+                    ] }),
+                    item.cost.deuterium > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mini-res", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/deuterium-icon-medium.jpg", alt: "" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#33ff8d" }, children: formatFullNumber(item.cost.deuterium) })
+                    ] })
+                  ] })
+                ]
+              },
+              item.id
+            )) })
+          ] }, groupKey)) }),
+          cart.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "empty-cart-state", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ShoppingCart, { size: 40, style: { opacity: 0.05, marginBottom: "16px" } }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "title", children: "LEDGER IS EMPTY" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "desc", children: "Stack building queues, technologies, and fleet projects from the left workspace to begin logistical calculations." })
+          ] })
+        ] }),
+        cart.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cart-summary-block glass", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-title", children: "ESTIMATED INVESTMENT REQUIRED" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-resources-grid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-res-pod", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pod-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/metal-icon-medium.jpg", alt: "" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "METAL" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pod-value", style: { color: "#ff8d33" }, children: formatFullNumber(cartSummary.cost.metal) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-res-pod", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pod-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/crystal-icon-medium.jpg", alt: "" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "CRYSTAL" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pod-value", style: { color: "#33b2ff" }, children: formatFullNumber(cartSummary.cost.crystal) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-res-pod", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pod-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/deuterium-icon-medium.jpg", alt: "" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "DEUTERIUM" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pod-value", style: { color: "#33ff8d" }, children: formatFullNumber(cartSummary.cost.deuterium) })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-msu-pod", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "msu-label-group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Coins, { size: 16, color: "var(--primary)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "TOTAL METAL STRUCTURE UNITS (MSU)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "msu-val-text", children: formatFullNumber(cartSummary.msu) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-packages-grid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-package-pod", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/misc/metal_package_large.png", className: "package-icon", alt: "" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "package-name", children: "Metal Packages" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "package-val", children: packageMetrics.metalPacksNeeded > 0 ? `${packageMetrics.metalPacksNeeded.toFixed(2)} Packs` : "0.00 Packs" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "package-yield", children: [
+                "Yield: ",
+                formatNumber2(dailyProduction.metal)
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-package-pod", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/misc/crystal_package_large.png", className: "package-icon", alt: "" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "package-name", children: "Crystal Packages" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "package-val", children: packageMetrics.crystalPacksNeeded > 0 ? `${packageMetrics.crystalPacksNeeded.toFixed(2)} Packs` : "0.00 Packs" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "package-yield", children: [
+                "Yield: ",
+                formatNumber2(dailyProduction.crystal)
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-package-pod", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/misc/deuterium_package_large.png", className: "package-icon", alt: "" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "package-name", children: "Deut Packages" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "package-val", children: packageMetrics.deuteriumPacksNeeded > 0 ? `${packageMetrics.deuteriumPacksNeeded.toFixed(2)} Packs` : "0.00 Packs" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "package-yield", children: [
+                "Yield: ",
+                formatNumber2(dailyProduction.deuterium)
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "clear-cart-btn", onClick: () => setCart([]), children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(RotateCcw, { size: 14 }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Empty Shopping Cart" })
+          ] })
+        ] })
+      ] })
+    ] })
   ] });
 };
 const BACKGROUNDS = [
@@ -69860,6 +72011,7 @@ const App = () => {
           currentView === "testingProduction" && /* @__PURE__ */ jsxRuntimeExports.jsx(TestingProduction, {}),
           currentView === "dataManagement" && /* @__PURE__ */ jsxRuntimeExports.jsx(DataManagement, {}),
           currentView === "empire" && /* @__PURE__ */ jsxRuntimeExports.jsx(Empire, {}),
+          currentView === "costsPlanner" && /* @__PURE__ */ jsxRuntimeExports.jsx(CostsPlanner, {}),
           currentView === "tools" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tools, {}),
           currentView === "signature" && /* @__PURE__ */ jsxRuntimeExports.jsx(SignatureMaker, { onBack: () => setCurrentView("overview") }),
           currentView === "tutorials" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tutorials, { onNavigate: setCurrentView })

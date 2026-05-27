@@ -650,9 +650,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "GET_AMORTIZATION_TODOS") {
         (async () => {
             try {
-                const todos = await db.todoProjects.toArray();
-                const account = await db.accounts.toCollection().last();
-                const planets = await db.planets.toArray();
+                let playerId = String(message.playerId || '').trim();
+                if (!playerId) {
+                    const lastAccount = await db.accounts.orderBy('lastSeen').reverse().first();
+                    playerId = lastAccount?.playerId || "";
+                }
+
+                const planets = await db.planets.where('playerId').equals(playerId).toArray();
+                const planetIds = planets.map(p => p.id);
+                const account = await db.accounts.get(playerId);
+
+                const todos = await db.todoProjects
+                    .filter(t => t.playerId === playerId || !!(t.planetId && planetIds.includes(t.planetId)))
+                    .toArray();
 
                 const toDelete: number[] = [];
                 for (const todo of todos) {
@@ -702,7 +712,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     await db.todoProjects.bulkDelete(toDelete);
                 }
 
-                const finalTodos = await db.todoProjects.toArray();
+                const finalTodos = await db.todoProjects
+                    .filter(t => (t.playerId === playerId || !!(t.planetId && planetIds.includes(t.planetId))) && !toDelete.includes(t.id!))
+                    .toArray();
                 finalTodos.sort((a, b) => (a.roiHours || 0) - (b.roiHours || 0));
 
                 const formatted = finalTodos.map(t => {

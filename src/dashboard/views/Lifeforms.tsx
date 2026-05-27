@@ -88,8 +88,11 @@ const calculateBoostedValue = (defaultValueStr: string, boostPercentage: number)
 };
 
 const Lifeforms: React.FC = () => {
-    const planets = useLiveQuery(() => db.planets.filter(p => p.type === 'planet').toArray());
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const planets = useLiveQuery(
+        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).filter(p => p.type === 'planet').toArray() : [],
+        [activeAccount]
+    ) || [];
     const gameKnowledge = useLiveQuery(() => db.gameKnowledge.toArray());
     const species = useLiveQuery(() => db.lifeformSpecies.toArray());
 
@@ -145,7 +148,10 @@ const Lifeforms: React.FC = () => {
     const [calcRange, setCalcRange] = useState<{ start: number | string, end: number | string }>({ start: '', end: '' });
     const [overwriteTarget, setOverwriteTarget] = useState<LifeformSavedSetup | null>(null);
     const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-    const savedSetups = useLiveQuery(() => db.lifeformSavedSetups.toArray());
+    const savedSetups = useLiveQuery(
+        () => activeAccount ? db.lifeformSavedSetups.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    );
 
     const activeTech = useMemo(() => {
         if (!slots || slots.length === 0 || !slots[activeSlotIndex] || slots[activeSlotIndex].selectedTechId === null) return null;
@@ -298,6 +304,7 @@ const Lifeforms: React.FC = () => {
         }
 
         await db.lifeformSavedSetups.add({
+            playerId: activeAccount?.playerId || "",
             name: targetName,
             setup: slots,
             lastUpdated: Date.now()
@@ -310,6 +317,7 @@ const Lifeforms: React.FC = () => {
     const confirmOverwrite = async () => {
         if (!overwriteTarget) return;
         await db.lifeformSavedSetups.update(overwriteTarget.id!, {
+            playerId: activeAccount?.playerId || overwriteTarget.playerId || "",
             setup: slots,
             lastUpdated: Date.now()
         });

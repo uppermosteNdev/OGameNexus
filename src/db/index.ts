@@ -288,6 +288,7 @@ export interface LifeformBonusBreakdown {
 export interface TodoProject {
     id?: number;
     projectKey: string; // identifier: planetId_type_name_targetLevel
+    playerId?: string;  // Add playerId for multi-universe isolation
     name: string;
     type: string;
     icon?: string;
@@ -313,6 +314,7 @@ export interface TodoProject {
 
 export interface LifeformSavedSetup {
     id?: number;
+    playerId?: string;  // Add playerId for multi-universe isolation
     name: string;
     setup: { slotNumber: number, selectedTechId: number | null, level: number }[];
     lastUpdated: number;
@@ -335,7 +337,7 @@ export class OGNexusDB extends Dexie {
 
     constructor() {
         super('OGNexusDB');
-        this.version(32).stores({
+        this.version(33).stores({
             accounts: 'playerId, playerName, universe, lastSeen',
             planets: 'id, playerId, coords, lifeformId',
             expeditions: 'messageId, playerId, timestamp, coords, result',
@@ -345,8 +347,8 @@ export class OGNexusDB extends Dexie {
             settings: 'id',
             lifeformTechnologies: 'id, lifeformId, name',
             lifeformBonusBreakdown: 'id, bonusName',
-            lifeformSavedSetups: '++id, name',
-            todoProjects: '++id, projectKey, planetId, type',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
             debrisHarvests: 'messageId, playerId, timestamp, coords',
             combatReports: 'messageId, playerId, timestamp, coords, winner'
         });

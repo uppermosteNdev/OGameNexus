@@ -102,7 +102,10 @@ const ExpeditionCalculator: React.FC = () => {
         }
     );
 
-    const planets = useLiveQuery(() => db.planets.toArray()) || [];
+    const planets = useLiveQuery(
+        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    ) || [];
 
     const [selectedPreset, setSelectedPreset] = useState<string>('');
 

@@ -345,7 +345,21 @@ const TOP_SCORE_THRESHOLD_OPTIONS = [
 // --- Main Component ---
 
 const Expeditions: React.FC = () => {
-    const expeditions = useLiveQuery(() => db.expeditions.toArray()) || [];
+    const activeAccount = useLiveQuery(
+        async () => {
+            try {
+                return await db.accounts.orderBy('lastSeen').reverse().first();
+            } catch (e) {
+                return await db.accounts.toCollection().last();
+            }
+        }
+    );
+
+    const expeditions = useLiveQuery(
+        () => activeAccount ? db.expeditions.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    ) || [];
+
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
     const knowledge = useLiveQuery(() => db.gameKnowledge.where('category').equals('ships').toArray()) || [];
     const rates = settings || { metal: 3, crystal: 2, deuterium: 1 };
@@ -430,17 +444,10 @@ const Expeditions: React.FC = () => {
         }
     };
 
-    const activeAccount = useLiveQuery(
-        async () => {
-            try {
-                return await db.accounts.orderBy('lastSeen').reverse().first();
-            } catch (e) {
-                return await db.accounts.toCollection().last();
-            }
-        }
-    );
-
-    const planets = useLiveQuery(() => db.planets.toArray()) || [];
+    const planets = useLiveQuery(
+        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    ) || [];
     const activePlanetId = useMemo(() => planets[0]?.id, [planets]);
 
     const theoreticalMax = useMemo(() => {

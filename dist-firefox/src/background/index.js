@@ -6490,7 +6490,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       __publicField(this, "todoProjects");
       __publicField(this, "debrisHarvests");
       __publicField(this, "combatReports");
-      this.version(32).stores({
+      this.version(33).stores({
         accounts: "playerId, playerName, universe, lastSeen",
         planets: "id, playerId, coords, lifeformId",
         expeditions: "messageId, playerId, timestamp, coords, result",
@@ -6500,8 +6500,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         settings: "id",
         lifeformTechnologies: "id, lifeformId, name",
         lifeformBonusBreakdown: "id, bonusName",
-        lifeformSavedSetups: "++id, name",
-        todoProjects: "++id, projectKey, planetId, type",
+        lifeformSavedSetups: "++id, playerId, name",
+        todoProjects: "++id, projectKey, playerId, planetId, type",
         debrisHarvests: "messageId, playerId, timestamp, coords",
         combatReports: "messageId, playerId, timestamp, coords, winner"
       });
@@ -7328,9 +7328,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       (async () => {
         var _a2, _b2, _c;
         try {
-          const todos = await db.todoProjects.toArray();
-          const account = await db.accounts.toCollection().last();
-          const planets = await db.planets.toArray();
+          let playerId = String(message.playerId || "").trim();
+          if (!playerId) {
+            const lastAccount = await db.accounts.orderBy("lastSeen").reverse().first();
+            playerId = (lastAccount == null ? void 0 : lastAccount.playerId) || "";
+          }
+          const planets = await db.planets.where("playerId").equals(playerId).toArray();
+          const planetIds = planets.map((p) => p.id);
+          const account = await db.accounts.get(playerId);
+          const todos = await db.todoProjects.filter((t) => t.playerId === playerId || !!(t.planetId && planetIds.includes(t.planetId))).toArray();
           const toDelete = [];
           for (const todo of todos) {
             let currentLevel = 0;
@@ -7375,7 +7381,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           if (toDelete.length > 0) {
             await db.todoProjects.bulkDelete(toDelete);
           }
-          const finalTodos = await db.todoProjects.toArray();
+          const finalTodos = await db.todoProjects.filter((t) => (t.playerId === playerId || !!(t.planetId && planetIds.includes(t.planetId))) && !toDelete.includes(t.id)).toArray();
           finalTodos.sort((a, b) => (a.roiHours || 0) - (b.roiHours || 0));
           const formatted = finalTodos.map((t) => {
             const planet = planets.find((p) => p.id === t.planetId);
