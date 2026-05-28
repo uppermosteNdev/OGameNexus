@@ -727,15 +727,15 @@ body.og-nexus-modal-open {
 /* Ships Grid and list */
 .og-nexus-ships-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
   gap: 8px;
   margin-bottom: 4px;
 }
 
 .og-nexus-ship-mini-card {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 45px;
+  height: 45px;
   background-size: cover;
   background-position: center;
   border-radius: 4px;
@@ -750,10 +750,10 @@ body.og-nexus-modal-open {
   right: 0;
   background: rgba(10, 15, 20, 0.85);
   color: #fff;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   text-align: center;
-  padding: 1px 0;
+  padding: 2px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -856,3 +856,31 @@ body.og-nexus-modal-open {
   gap: 6px;
   font-weight: 700;
 }
+
+/* Low Animation Mode overrides for in-game content */
+body.low-animation .rarity-pill-rare-animate,
+body.low-animation .rarity-pill-epic-animate {
+  animation: none !important;
+  background-image: linear-gradient(rgba(10, 15, 20, 0.85), rgba(10, 15, 20, 0.85)) !important;
+  border-style: solid !important;
+}
+
+body.low-animation .rarity-pill-rare-animate {
+  border-color: #06b6d4 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+body.low-animation .rarity-pill-epic-animate {
+  border-color: #ec4899 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+body.low-animation .rarity-sparkle-rare,
+body.low-animation .rarity-sparkle-epic {
+  animation: none !important;
+  filter: none !important;
+}
+
+body.low-animation .og-nexus-epic-pulse {
+  animation: none !important;
+}

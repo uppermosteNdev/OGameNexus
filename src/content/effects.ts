@@ -1,4 +1,8 @@
 export function flyToNexusButton(startElement: Element, imageUrls: string[]) {
+    if (document.body.classList.contains('low-animation')) {
+        return;
+    }
+
     const targetBtn = document.querySelector("#og-nexus-icon-modal-btn");
     if (!targetBtn) return;
 

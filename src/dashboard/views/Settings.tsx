@@ -19,6 +19,7 @@ const Settings: React.FC = () => {
     // Tools Preferences State
     const [scrapPercent, setScrapPercent] = useState(35);
     const [removeOGLight, setRemoveOGLight] = useState(true);
+    const [lowAnimationMode, setLowAnimationMode] = useState(false);
 
     useEffect(() => {
         const fetchAccount = async () => {
@@ -38,6 +39,9 @@ const Settings: React.FC = () => {
                     if (settings.removeOGLightDuplicates !== undefined) {
                         setRemoveOGLight(settings.removeOGLightDuplicates);
                     }
+                    if (settings.lowAnimationMode !== undefined) {
+                        setLowAnimationMode(settings.lowAnimationMode);
+                    }
                 } else {
                     const globalSettings = localStorage.getItem('og-nexus-global-settings');
                     if (globalSettings) {
@@ -45,6 +49,9 @@ const Settings: React.FC = () => {
                         if (parsed.defaultScrapPercent !== undefined) setScrapPercent(parsed.defaultScrapPercent);
                         if (parsed.removeOGLightDuplicates !== undefined) {
                             setRemoveOGLight(parsed.removeOGLightDuplicates);
+                        }
+                        if (parsed.lowAnimationMode !== undefined) {
+                            setLowAnimationMode(parsed.lowAnimationMode);
                         }
                     }
                 }
@@ -126,6 +133,20 @@ const Settings: React.FC = () => {
         }
     };
 
+    const saveLowAnimationMode = async (val: boolean) => {
+        setLowAnimationMode(val);
+        try {
+            const current = JSON.parse(localStorage.getItem('og-nexus-global-settings') || '{}');
+            current.lowAnimationMode = val;
+            localStorage.setItem('og-nexus-global-settings', JSON.stringify(current));
+
+            // Sync to chrome.storage.local
+            await chrome.storage.local.set({ globalSettings: current });
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     const clearTableData = async (tableName: 'expeditions' | 'combatReports' | 'debrisHarvests', alertName: string) => {
         if (window.confirm(`Are you sure you want to delete ALL ${alertName}? This action cannot be undone.`)) {
             try {
@@ -153,6 +174,24 @@ const Settings: React.FC = () => {
             console.error(e);
             localStorage.removeItem('og-nexus-welcome-dismissed');
             alert("Welcome modal state has been reset! Refresh the dashboard to see it.");
+        }
+    };
+
+    const resetChangelogModal = () => {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.remove('changelogDismissedVersion', () => {
+                    if (chrome.runtime.lastError) {
+                        console.error(chrome.runtime.lastError);
+                    }
+                });
+            }
+            localStorage.removeItem('og-nexus-changelog-dismissed-version');
+            alert("Update Changelog modal state has been reset! Refresh the dashboard to see it.");
+        } catch (e) {
+            console.error(e);
+            localStorage.removeItem('og-nexus-changelog-dismissed-version');
+            alert("Update Changelog modal state has been reset! Refresh the dashboard to see it.");
         }
     };
 
@@ -264,7 +303,7 @@ const Settings: React.FC = () => {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <div style={{ marginRight: '16px' }}>
                             <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Clean OGLight Duplicate Visuals</span>
                             <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Automatically removes OGLight injected markup from processed expedition and lifeform messages.</span>
@@ -285,6 +324,34 @@ const Settings: React.FC = () => {
                                 }}>
                                     <span style={{
                                         position: 'absolute', content: '""', height: '18px', width: '18px', left: removeOGLight ? '24px' : '4px', bottom: '3px',
+                                        backgroundColor: '#0f172a', transition: '.3s', borderRadius: '50%'
+                                    }} />
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ marginRight: '16px' }}>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Low Animation Mode</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Disables all page and transition animations, twinkling starfield, and heavy CSS effects to maximize performance.</span>
+                        </div>
+                        <div>
+                            <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={lowAnimationMode} 
+                                    onChange={(e) => saveLowAnimationMode(e.target.checked)}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span className="slider" style={{
+                                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                                    backgroundColor: lowAnimationMode ? 'var(--primary)' : '#334155',
+                                    transition: '.3s', borderRadius: '24px',
+                                    boxShadow: lowAnimationMode ? '0 0 10px rgba(56, 189, 248, 0.4)' : 'none'
+                                }}>
+                                    <span style={{
+                                        position: 'absolute', content: '""', height: '18px', width: '18px', left: lowAnimationMode ? '24px' : '4px', bottom: '3px',
                                         backgroundColor: '#0f172a', transition: '.3s', borderRadius: '50%'
                                     }} />
                                 </span>
@@ -331,6 +398,13 @@ const Settings: React.FC = () => {
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)', color: 'var(--primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                         >
                             <span>Reset Welcome Modal State</span>
+                            <Sparkles size={16} />
+                        </button>
+                        <button 
+                            onClick={resetChangelogModal}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)', color: 'var(--primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                            <span>Reset Update Modal State</span>
                             <Sparkles size={16} />
                         </button>
                     </div>

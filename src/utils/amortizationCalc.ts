@@ -1,4 +1,6 @@
 
+const DEBUG_AMORTIZATION = false;
+
 export interface Cost {
     metal: number;
     crystal: number;
@@ -368,7 +370,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
 
         state.planets.forEach(p => {
             const isSelected = !selectedPlanetIds || selectedPlanetIds.includes(p.id);
-            if (i === 0) console.groupCollapsed(`[Amortization Debug] Evaluating Planet: ${p.coords} (${p.name}) [Selected: ${isSelected}]`);
+            if (DEBUG_AMORTIZATION && i === 0) console.groupCollapsed(`[Amortization Debug] Evaluating Planet: ${p.coords} (${p.name}) [Selected: ${isSelected}]`);
             AMORTIZATION_TABLE.forEach(entry => {
                 if (!filters[entry.type]) return;
 
@@ -761,34 +763,36 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             - Bonus Breakdown Across Selected Techs:${techDetails.length > 0 ? techDetails.map(d => '\n                                * ' + d).join('') : '\n                                (No production techs active)'}`;
                         }
 
-                        console.log(`[Amortization Debug] Candidate: ${entry.name} Lvl:${nextLevel} (${p.coords})
-                            - Cost: M:${cost.metal.toLocaleString()} C:${cost.crystal.toLocaleString()} D:${cost.deuterium.toLocaleString()}
-                            - Prod Increase: M:${prodDelta.metal.toFixed(2)} C:${prodDelta.crystal.toFixed(2)} D:${prodDelta.deuterium.toFixed(2)}
-                            - Prod Increase (MSU): ${prodIncrease.toFixed(2)}${breakdownStr}
-                            - ROI: ${roiHours.toFixed(2)}h`);
+                        if (DEBUG_AMORTIZATION) {
+                            console.log(`[Amortization Debug] Candidate: ${entry.name} Lvl:${nextLevel} (${p.coords})
+                                - Cost: M:${cost.metal.toLocaleString()} C:${cost.crystal.toLocaleString()} D:${cost.deuterium.toLocaleString()}
+                                - Prod Increase: M:${prodDelta.metal.toFixed(2)} C:${prodDelta.crystal.toFixed(2)} D:${prodDelta.deuterium.toFixed(2)}
+                                - Prod Increase (MSU): ${prodIncrease.toFixed(2)}${breakdownStr}
+                                - ROI: ${roiHours.toFixed(2)}h`);
 
-                        // Log totals for expedition researches to help user verify
-                        if (entry.type === AmortizationType.LifeformExpeditionResearches && expoAverages) {
-                            const effect = entry.effect as any;
-                            const isRes = effect.type === 'expo_res' || effect.type === 'kaelesh_discovery_adv';
-                            const isShips = effect.type === 'expo_si' || effect.type === 'kaelesh_discovery_adv';
+                            // Log totals for expedition researches to help user verify
+                            if (entry.type === AmortizationType.LifeformExpeditionResearches && expoAverages) {
+                                const effect = entry.effect as any;
+                                const isRes = effect.type === 'expo_res' || effect.type === 'kaelesh_discovery_adv';
+                                const isShips = effect.type === 'expo_si' || effect.type === 'kaelesh_discovery_adv';
 
-                            if (isRes) {
-                                const base = expoAverages.resources;
-                                console.log(`[Amortization Debug] -> ${entry.name} Res Baseline (Best 7/60d Hourly): M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()}`);
-                                if (expoAverages.totals?.resources) {
-                                    const t = expoAverages.totals.resources;
-                                    console.log(`[Amortization Debug] -> ${entry.name} Res Context (30d Totals): M:${t.metal.toLocaleString()} C:${t.crystal.toLocaleString()} D:${t.deuterium.toLocaleString()}`);
+                                if (isRes) {
+                                    const base = expoAverages.resources;
+                                    console.log(`[Amortization Debug] -> ${entry.name} Res Baseline (Best 7/60d Hourly): M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()}`);
+                                    if (expoAverages.totals?.resources) {
+                                        const t = expoAverages.totals.resources;
+                                        console.log(`[Amortization Debug] -> ${entry.name} Res Context (30d Totals): M:${t.metal.toLocaleString()} C:${t.crystal.toLocaleString()} D:${t.deuterium.toLocaleString()}`);
+                                    }
                                 }
-                            }
-                            if (isShips) {
-                                const base = expoAverages.ships;
-                                const msu = calculateMSU(base, rates);
-                                console.log(`[Amortization Debug] -> ${entry.name} Ship Baseline (Best 7/60d Hourly): ${msu.toFixed(2)} MSU (M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()})`);
-                                if (expoAverages.totals?.ships) {
-                                    const t = expoAverages.totals.ships;
-                                    const tMsu = calculateMSU(t, rates);
-                                    console.log(`[Amortization Debug] -> ${entry.name} Ship Context (30d Totals): ${tMsu.toLocaleString(undefined, { maximumFractionDigits: 0 })} MSU (M:${t.metal.toLocaleString()} C:${t.crystal.toLocaleString()} D:${t.deuterium.toLocaleString()})`);
+                                if (isShips) {
+                                    const base = expoAverages.ships;
+                                    const msu = calculateMSU(base, rates);
+                                    console.log(`[Amortization Debug] -> ${entry.name} Ship Baseline (Best 7/60d Hourly): ${msu.toFixed(2)} MSU (M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()})`);
+                                    if (expoAverages.totals?.ships) {
+                                        const t = expoAverages.totals.ships;
+                                        const tMsu = calculateMSU(t, rates);
+                                        console.log(`[Amortization Debug] -> ${entry.name} Ship Context (30d Totals): ${tMsu.toLocaleString(undefined, { maximumFractionDigits: 0 })} MSU (M:${t.metal.toLocaleString()} C:${t.crystal.toLocaleString()} D:${t.deuterium.toLocaleString()})`);
+                                    }
                                 }
                             }
                         }
@@ -809,7 +813,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                     // console.log(`[Amortization Debug] Skipped ${entry.name} (${p.coords}) - Prod Increase: ${prodIncrease}`);
                 }
             });
-            if (i === 0) console.groupEnd();
+            if (DEBUG_AMORTIZATION && i === 0) console.groupEnd();
         });
 
         // Deduplicate Plasma in candidates
@@ -822,7 +826,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
         uniqueCandidates.sort((a, b) => a.roiHours - b.roiHours);
         const best = uniqueCandidates[0];
 
-        if (i === 0) {
+        if (DEBUG_AMORTIZATION && i === 0) {
             console.log(`[Amortization Debug] STEP 1 WINNER: ${best.name} (ROI: ${best.roiHours.toFixed(2)}h) at ${best.planetId ? planets.find(p => p.id === best.planetId)?.coords : 'GLOBAL'}`);
         }
 

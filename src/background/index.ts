@@ -155,7 +155,7 @@ async function fetchPlanetLifeformBonuses(serverUrl: string, planetId: string) {
 async function fetchServerData(universe: string) {
     const domain = universe.includes('.') ? universe : `${universe}.ogame.gameforge.com`;
     const url = `https://${domain}/api/serverData.xml`;
-    console.log(`Background: Fetching Server Data from ${url}`);
+    // console.log(`Background: Fetching Server Data from ${url}`);
     try {
         const response = await fetch(url);
         const xml = await response.text();
@@ -310,9 +310,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             });
 
                             if (existing) {
-                                // Important: We use update() to only change the fields we extracted on this page
-                                // This preserves fields like sandboxSetup which are never scraped
-                                await db.planets.update(p.id, updateData);
+                                // Dirty checking to prevent duplicate planet writes
+                                let isDirty = false;
+                                for (const key of Object.keys(updateData)) {
+                                    const val1 = updateData[key];
+                                    const val2 = (existing as any)[key];
+                                    if (typeof val1 === 'object' && val1 !== null && typeof val2 === 'object' && val2 !== null) {
+                                        if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+                                            isDirty = true;
+                                            break;
+                                        }
+                                    } else if (val1 !== val2) {
+                                        isDirty = true;
+                                        break;
+                                    }
+                                }
+                                if (isDirty) {
+                                    await db.planets.update(p.id, updateData);
+                                }
                             } else {
                                 await db.planets.put({
                                     ...updateData,
@@ -365,14 +380,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             for (const pl of updatedPlanets) {
                                 const prod = productionResults.planets[pl.id]?.total;
                                 if (prod) {
-                                    await db.planets.update(pl.id, {
-                                        production: {
-                                            metal: Math.floor(prod.metal),
-                                            crystal: Math.floor(prod.crystal),
-                                            deuterium: Math.floor(prod.deuterium),
-                                            lastUpdated: Date.now()
-                                        }
-                                    });
+                                    const newMetal = Math.floor(prod.metal);
+                                    const newCrystal = Math.floor(prod.crystal);
+                                    const newDeuterium = Math.floor(prod.deuterium);
+                                    const existingProd = pl.production;
+
+                                    if (!existingProd ||
+                                        existingProd.metal !== newMetal ||
+                                        existingProd.crystal !== newCrystal ||
+                                        existingProd.deuterium !== newDeuterium) {
+                                        await db.planets.update(pl.id, {
+                                            production: {
+                                                metal: newMetal,
+                                                crystal: newCrystal,
+                                                deuterium: newDeuterium,
+                                                lastUpdated: Date.now()
+                                            }
+                                        });
+                                    }
                                 }
                             }
                         }

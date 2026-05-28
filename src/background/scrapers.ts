@@ -79,7 +79,7 @@ export function parseProduction(html: string): ScrapedProduction | null {
     }
 
     if (storageRow) {
-        console.log('Background: Found potential storage row');
+        // console.log('Background: Found potential storage row');
         // Look for td elements - being generous with classes
         const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
         const tdMatches = [...storageRow.matchAll(tdPattern)];
@@ -96,7 +96,7 @@ export function parseProduction(html: string): ScrapedProduction | null {
                     if (i === 1) data.metalCapacity = val;
                     else if (i === 2) data.crystalCapacity = val;
                     else if (i === 3) data.deuteriumCapacity = val;
-                    console.log(`Background: Extracted capacity ${i}: ${val}`);
+                    // console.log(`Background: Extracted capacity ${i}: ${val}`);
                 } else {
                     // Fallback: parse text content (remove tags and non-numeric chars)
                     const text = tdContent.replace(/<[^>]*>/g, '').trim();

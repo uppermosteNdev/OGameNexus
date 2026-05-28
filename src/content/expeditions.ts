@@ -1799,8 +1799,8 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
             shipItem.setAttribute('data-nexus-tooltip', tooltipTitle);
             shipItem.style.cssText = `
             position: relative;
-            width: 36px;
-            height: 36px;
+            width: 45px;
+            height: 45px;
             cursor: default;
             `;
 
@@ -1828,9 +1828,9 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
             background: rgba(10, 15, 20, 0.85);
             backdrop-filter: blur(2px);
             color: #fff;
-            padding: 0px 0;
+            padding: 2px 0;
             text-align: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: bold;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);

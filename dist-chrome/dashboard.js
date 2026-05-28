@@ -13333,6 +13333,20 @@ function filterProps(props, isDom, forwardMotionProps) {
   }
   return filteredProps;
 }
+function MotionConfig({ children, isValidProp, ...config2 }) {
+  isValidProp && loadExternalIsValidProp(isValidProp);
+  const parentConfig = reactExports.useContext(MotionConfigContext);
+  config2 = { ...parentConfig, ...config2 };
+  config2.transition = resolveTransition(config2.transition, parentConfig.transition);
+  config2.isStatic = useConstant(() => config2.isStatic);
+  const context = reactExports.useMemo(() => config2, [
+    JSON.stringify(config2.transition),
+    config2.transformPagePoint,
+    config2.reducedMotion,
+    config2.skipAnimations
+  ]);
+  return jsxRuntimeExports.jsx(MotionConfigContext.Provider, { value: context, children });
+}
 const MotionContext = /* @__PURE__ */ reactExports.createContext({});
 function getCurrentTreeVariants(props, context) {
   if (isControllingVariants(props)) {
@@ -16025,6 +16039,17 @@ const Users = createLucideIcon("Users", [
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
+const VolumeX = createLucideIcon("VolumeX", [
+  ["polygon", { points: "11 5 6 9 2 9 2 15 6 15 11 19 11 5", key: "16drj5" }],
+  ["line", { x1: "22", x2: "16", y1: "9", y2: "15", key: "1ewh16" }],
+  ["line", { x1: "16", x2: "22", y1: "9", y2: "15", key: "5ykzw1" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
 const Wrench = createLucideIcon("Wrench", [
   [
     "path",
@@ -16300,7 +16325,8 @@ const Sidebar = ({ activeView, onSelect }) => {
     }
   );
 };
-const StarField = () => {
+const StarField = ({ hidden = false }) => {
+  if (hidden) return null;
   const stars = reactExports.useMemo(() => {
     return Array.from({ length: 150 }).map((_, i) => {
       const type = Math.random();
@@ -22954,14 +22980,12 @@ class OGNexusDB extends Dexie {
           crystal: 2,
           deuterium: 1
         });
-        console.log("OGame Nexus: Successfully seeded default conversion rates.");
       }
     } catch (error) {
       console.error("OGame Nexus: Failed to seed settings", error);
     }
   }
   async seedKnowledge() {
-    console.log("OGame Nexus: Seeding game knowledge database...");
     try {
       await this.gameKnowledge.bulkPut(SHIP_DATA);
       await this.gameKnowledge.bulkPut(RESEARCH_DATA);
@@ -22972,13 +22996,9 @@ class OGNexusDB extends Dexie {
       const speciesCount = await this.lifeformSpecies.count();
       if (speciesCount === 0) {
         await this.lifeformSpecies.bulkAdd(LIFEFORM_SPECIES_DATA);
-        console.log("OGame Nexus: Successfully seeded initial lifeform species.");
       }
       await this.lifeformTechnologies.bulkPut(LIFEFORM_TECH_DATA);
-      console.log("OGame Nexus: Successfully seeded lifeform technology data.");
       await this.lifeformBonusBreakdown.bulkPut(LIFEFORM_BONUS_BREAKDOWN_DATA);
-      console.log("OGame Nexus: Successfully seeded lifeform bonus breakdown data.");
-      console.log("OGame Nexus: Successfully seeded ship data.");
     } catch (error) {
       console.error("OGame Nexus: Failed to seed knowledge data", error);
     }
@@ -23918,7 +23938,7 @@ function calculateEmpireProduction(state) {
   return results;
 }
 function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES, limit = 25, expoAverages, selectedPlanetIds) {
-  var _a, _b, _c, _d;
+  var _a, _b, _c;
   const state = JSON.parse(JSON.stringify({ planets, account }));
   const resultItems = [];
   const REDUCTION_IDS = {
@@ -23931,14 +23951,14 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
     improvedStellarator: 34
   };
   const getReduction = (type, planet, state2) => {
-    var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l;
+    var _a2, _b2, _c2, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     if (!type) return 0;
     if (type === "mineralResearchCenter") {
       const level = ((_b2 = (_a2 = planet.lifeformBuildings) == null ? void 0 : _a2.find((b) => b.id === REDUCTION_IDS.mineralResearchCenter)) == null ? void 0 : _b2.level) || 0;
       return level * 5e-3;
     }
     if (type === "megalith") {
-      const level = ((_d2 = (_c2 = planet.lifeformBuildings) == null ? void 0 : _c2.find((b) => b.id === REDUCTION_IDS.megalith)) == null ? void 0 : _d2.level) || 0;
+      const level = ((_d = (_c2 = planet.lifeformBuildings) == null ? void 0 : _c2.find((b) => b.id === REDUCTION_IDS.megalith)) == null ? void 0 : _d.level) || 0;
       return level * 0.01;
     }
     if (type === "research_centers") {
@@ -23970,9 +23990,8 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
     const currentSiBonus = calculateTotalExpeditionBonus(state, "expo_si");
     state.planets.forEach((p2) => {
       const isSelected = !selectedPlanetIds || selectedPlanetIds.includes(p2.id);
-      if (i === 0) console.groupCollapsed(`[Amortization Debug] Evaluating Planet: ${p2.coords} (${p2.name}) [Selected: ${isSelected}]`);
       AMORTIZATION_TABLE.forEach((entry) => {
-        var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
+        var _a2, _b2, _c2, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
         if (!filters[entry.type]) return;
         if (!isSelected && entry.type !== 6) return;
         const isBuilding = entry.type === 2 || entry.type === 3;
@@ -23985,7 +24004,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
         } else if (entry.type === 6) {
           currentLevel = ((_c2 = (_b2 = (_a2 = state.account) == null ? void 0 : _a2.researches) == null ? void 0 : _b2.find((r2) => r2.id === 122)) == null ? void 0 : _c2.level) || 0;
         } else if (entry.id && (entry.type === 2 || entry.type === 3)) {
-          currentLevel = ((_e = (_d2 = p2.lifeformBuildings) == null ? void 0 : _d2.find((b) => b.id === entry.id)) == null ? void 0 : _e.level) || 0;
+          currentLevel = ((_e = (_d = p2.lifeformBuildings) == null ? void 0 : _d.find((b) => b.id === entry.id)) == null ? void 0 : _e.level) || 0;
         } else if (entry.id && (entry.type === 4 || entry.type === 5)) {
           const tech = (_f = p2.lifeformSetup) == null ? void 0 : _f.find((t2) => t2.selectedTechId === entry.id);
           if (!tech) return;
@@ -24052,7 +24071,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
             const factor = effect.value;
             let deltaM = 0, deltaC = 0, deltaD = 0;
             (_h = p2.lifeformSetup) == null ? void 0 : _h.forEach((t2) => {
-              var _a3, _b3, _c3, _d3, _e2, _f2, _g2, _h2, _i2;
+              var _a3, _b3, _c3, _d2, _e2, _f2, _g2, _h2, _i2;
               const level = t2.level || 0;
               const tEntry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
               if (tEntry && tEntry.effect) {
@@ -24075,7 +24094,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                   deltaC += trueC * tVal;
                   deltaD += trueD * tVal;
                   if (tEffect.type === "kaelesh_discovery_adv") {
-                    const computerLevel = ((_e2 = (_d3 = (_c3 = state.account) == null ? void 0 : _c3.researches) == null ? void 0 : _d3.find((r2) => r2.id === 108)) == null ? void 0 : _e2.level) || 10;
+                    const computerLevel = ((_e2 = (_d2 = (_c3 = state.account) == null ? void 0 : _c3.researches) == null ? void 0 : _d2.find((r2) => r2.id === 108)) == null ? void 0 : _e2.level) || 10;
                     const slts = computerLevel + 3;
                     const indirectBasePerLevel = 4e-3 / slts + 45e-5;
                     const indirectGainFactor = indirectBasePerLevel * level * factor;
@@ -24169,7 +24188,6 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
           const msuCost = calculateMSU$1(cost, rates);
           const roiHours = msuCost / prodIncrease;
           if (i === 0) {
-            let breakdownStr = "";
             if (entry.type === 1) {
               const pData = prodData.planets[p2.id];
               const resKey = entry.name === "Metal Mine" ? "metal" : entry.name === "Crystal Mine" ? "crystal" : "deuterium";
@@ -24192,7 +24210,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               });
               const techB = prodData.globalBonuses[resKey];
               const classB = state.account.playerClass === 1 ? 0.25 : 0;
-              breakdownStr = `
+              `
                             - Multiplier Breakdown (${resKey}): ${(m2 * 100).toFixed(1)}% 
                                 [100% Base + ${(plasmaB * 100).toFixed(1)}% Plasma + ${(lfbB * 100).toFixed(1)}% LF Buildings + ${(techB * 100).toFixed(1)}% LF Techs + ${(classB * 100).toFixed(0)}% Class]`;
             } else if (entry.type === 4 || entry.type === 5) {
@@ -24232,7 +24250,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                 if (effect2.type === "deuterium" || effect2.type === "all" || effect2.type === "crystal_deuterium")
                   details.push(`${targetName} Deuterium: +${calculateMSU$1({ metal: 0, crystal: 0, deuterium: baseD * effectiveValue }, rates).toFixed(2)} MSU/h`);
               }
-              breakdownStr = `
+              `
                             - Research Bonus: +${(effectiveValue * 100).toFixed(4)}% (incl. ${techMult > 1 ? "+" + ((techMult - 1) * 100).toFixed(1) + "% building bonus" : "no building bonus"})
                             - Production Boost Breakdown:${details.map((d) => "\n                                * " + d).join("")}`;
             } else if (entry.type === 6) {
@@ -24240,7 +24258,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               const dC = prodData.empireBase.crystal * (0.66 / 100);
               const dD = prodData.empireBase.deuterium * (0.33 / 100);
               const reduction2 = getReduction("improvedStellarator", {}, state);
-              breakdownStr = `
+              `
                             - Research Bonus: +1% Metal, +0.66% Crystal, +0.33% Deuterium
                             - Cost Reduction: -${(reduction2 * 100).toFixed(2)}% (from Improved Stellarator)
                             - Empire-wide Base Production:
@@ -24255,7 +24273,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
               const factor = entry.effect.value;
               let techDetails = [];
               (_y = p2.lifeformSetup) == null ? void 0 : _y.forEach((t2) => {
-                var _a3, _b3, _c3, _d3;
+                var _a3, _b3, _c3, _d2;
                 const level = t2.level || 0;
                 const tEntry = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId);
                 if (tEntry && tEntry.effect && level > 0) {
@@ -24279,7 +24297,7 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                     const trueD = baseline.deuterium / (1 + currentResBonus);
                     deltaMSU = calculateMSU$1({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
                   } else if (tEffect.type === "expo_si") {
-                    const baseline = ((_c3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _c3.metal) || ((_d3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _d3.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
+                    const baseline = ((_c3 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _c3.metal) || ((_d2 = expoAverages == null ? void 0 : expoAverages.ships) == null ? void 0 : _d2.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
                     const trueM = baseline.metal / (1 + currentSiBonus);
                     const trueC = baseline.crystal / (1 + currentSiBonus);
                     const trueD = baseline.deuterium / (1 + currentSiBonus);
@@ -24290,37 +24308,9 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
                   }
                 }
               });
-              breakdownStr = `
+              `
                             - Tech Multiplier Bonus: +${(factor * 100).toFixed(2)}% per level
                             - Bonus Breakdown Across Selected Techs:${techDetails.length > 0 ? techDetails.map((d) => "\n                                * " + d).join("") : "\n                                (No production techs active)"}`;
-            }
-            console.log(`[Amortization Debug] Candidate: ${entry.name} Lvl:${nextLevel} (${p2.coords})
-                            - Cost: M:${cost.metal.toLocaleString()} C:${cost.crystal.toLocaleString()} D:${cost.deuterium.toLocaleString()}
-                            - Prod Increase: M:${prodDelta.metal.toFixed(2)} C:${prodDelta.crystal.toFixed(2)} D:${prodDelta.deuterium.toFixed(2)}
-                            - Prod Increase (MSU): ${prodIncrease.toFixed(2)}${breakdownStr}
-                            - ROI: ${roiHours.toFixed(2)}h`);
-            if (entry.type === 5 && expoAverages) {
-              const effect2 = entry.effect;
-              const isRes = effect2.type === "expo_res" || effect2.type === "kaelesh_discovery_adv";
-              const isShips = effect2.type === "expo_si" || effect2.type === "kaelesh_discovery_adv";
-              if (isRes) {
-                const base = expoAverages.resources;
-                console.log(`[Amortization Debug] -> ${entry.name} Res Baseline (Best 7/60d Hourly): M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()}`);
-                if ((_z = expoAverages.totals) == null ? void 0 : _z.resources) {
-                  const t2 = expoAverages.totals.resources;
-                  console.log(`[Amortization Debug] -> ${entry.name} Res Context (30d Totals): M:${t2.metal.toLocaleString()} C:${t2.crystal.toLocaleString()} D:${t2.deuterium.toLocaleString()}`);
-                }
-              }
-              if (isShips) {
-                const base = expoAverages.ships;
-                const msu = calculateMSU$1(base, rates);
-                console.log(`[Amortization Debug] -> ${entry.name} Ship Baseline (Best 7/60d Hourly): ${msu.toFixed(2)} MSU (M:${base.metal.toLocaleString()} C:${base.crystal.toLocaleString()} D:${base.deuterium.toLocaleString()})`);
-                if ((_A = expoAverages.totals) == null ? void 0 : _A.ships) {
-                  const t2 = expoAverages.totals.ships;
-                  const tMsu = calculateMSU$1(t2, rates);
-                  console.log(`[Amortization Debug] -> ${entry.name} Ship Context (30d Totals): ${tMsu.toLocaleString(void 0, { maximumFractionDigits: 0 })} MSU (M:${t2.metal.toLocaleString()} C:${t2.crystal.toLocaleString()} D:${t2.deuterium.toLocaleString()})`);
-                }
-              }
             }
           }
           candidates.push({
@@ -24336,7 +24326,6 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
           });
         } else if (i === 0 && filters[entry.type]) ;
       });
-      if (i === 0) console.groupEnd();
     });
     const uniqueCandidates = candidates.filter(
       (item, index, self2) => item.type !== 6 || index === self2.findIndex(
@@ -24347,25 +24336,22 @@ function rankAmortizationItems(planets, account, filters, rates = DEFAULT_RATES,
     if (uniqueCandidates.length === 0) break;
     uniqueCandidates.sort((a2, b) => a2.roiHours - b.roiHours);
     const best = uniqueCandidates[0];
-    if (i === 0) {
-      console.log(`[Amortization Debug] STEP 1 WINNER: ${best.name} (ROI: ${best.roiHours.toFixed(2)}h) at ${best.planetId ? (_a = planets.find((p2) => p2.id === best.planetId)) == null ? void 0 : _a.coords : "GLOBAL"}`);
-    }
     if (best.type === 1) {
       const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
       if (best.name === "Metal Mine") state.planets[pIdx].metalMine = (state.planets[pIdx].metalMine || 0) + 1;
       else if (best.name === "Crystal Mine") state.planets[pIdx].crystalMine = (state.planets[pIdx].crystalMine || 0) + 1;
       else if (best.name === "Deuterium Mine") state.planets[pIdx].deuteriumMine = (state.planets[pIdx].deuteriumMine || 0) + 1;
     } else if (best.type === 6) {
-      const tech = (_b = state.account.researches) == null ? void 0 : _b.find((r2) => r2.id === 122);
+      const tech = (_a = state.account.researches) == null ? void 0 : _a.find((r2) => r2.id === 122);
       if (tech) tech.level++;
       else state.account.researches.push({ id: 122, level: 1 });
     } else if (best.type === 2 || best.type === 3) {
       const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
-      const bIdx = (_c = state.planets[pIdx].lifeformBuildings) == null ? void 0 : _c.findIndex((b) => b.name === best.name);
+      const bIdx = (_b = state.planets[pIdx].lifeformBuildings) == null ? void 0 : _b.findIndex((b) => b.name === best.name);
       if (bIdx !== -1) state.planets[pIdx].lifeformBuildings[bIdx].level++;
     } else if (best.type === 4 || best.type === 5) {
       const pIdx = state.planets.findIndex((pl2) => pl2.id === best.planetId);
-      const tech = (_d = state.planets[pIdx].lifeformSetup) == null ? void 0 : _d.find((t2) => {
+      const tech = (_c = state.planets[pIdx].lifeformSetup) == null ? void 0 : _c.find((t2) => {
         var _a2;
         return ((_a2 = AMORTIZATION_TABLE.find((e) => e.id === t2.selectedTechId)) == null ? void 0 : _a2.name) === best.name;
       });
@@ -56947,6 +56933,7 @@ const Settings = () => {
   const [isSavingRates, setIsSavingRates] = reactExports.useState(false);
   const [scrapPercent, setScrapPercent] = reactExports.useState(35);
   const [removeOGLight, setRemoveOGLight] = reactExports.useState(true);
+  const [lowAnimationMode, setLowAnimationMode] = reactExports.useState(false);
   reactExports.useEffect(() => {
     const fetchAccount = async () => {
       const acc = await getLinkedAccount();
@@ -56963,6 +56950,9 @@ const Settings = () => {
           if (settings.removeOGLightDuplicates !== void 0) {
             setRemoveOGLight(settings.removeOGLightDuplicates);
           }
+          if (settings.lowAnimationMode !== void 0) {
+            setLowAnimationMode(settings.lowAnimationMode);
+          }
         } else {
           const globalSettings = localStorage.getItem("og-nexus-global-settings");
           if (globalSettings) {
@@ -56970,6 +56960,9 @@ const Settings = () => {
             if (parsed.defaultScrapPercent !== void 0) setScrapPercent(parsed.defaultScrapPercent);
             if (parsed.removeOGLightDuplicates !== void 0) {
               setRemoveOGLight(parsed.removeOGLightDuplicates);
+            }
+            if (parsed.lowAnimationMode !== void 0) {
+              setLowAnimationMode(parsed.lowAnimationMode);
             }
           }
         }
@@ -57037,6 +57030,17 @@ const Settings = () => {
       console.error(e);
     }
   };
+  const saveLowAnimationMode = async (val) => {
+    setLowAnimationMode(val);
+    try {
+      const current2 = JSON.parse(localStorage.getItem("og-nexus-global-settings") || "{}");
+      current2.lowAnimationMode = val;
+      localStorage.setItem("og-nexus-global-settings", JSON.stringify(current2));
+      await chrome.storage.local.set({ globalSettings: current2 });
+    } catch (e) {
+      console.error(e);
+    }
+  };
   const clearTableData = async (tableName, alertName) => {
     if (window.confirm(`Are you sure you want to delete ALL ${alertName}? This action cannot be undone.`)) {
       try {
@@ -57063,6 +57067,23 @@ const Settings = () => {
       console.error(e);
       localStorage.removeItem("og-nexus-welcome-dismissed");
       alert("Welcome modal state has been reset! Refresh the dashboard to see it.");
+    }
+  };
+  const resetChangelogModal = () => {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.remove("changelogDismissedVersion", () => {
+          if (chrome.runtime.lastError) {
+            console.error(chrome.runtime.lastError);
+          }
+        });
+      }
+      localStorage.removeItem("og-nexus-changelog-dismissed-version");
+      alert("Update Changelog modal state has been reset! Refresh the dashboard to see it.");
+    } catch (e) {
+      console.error(e);
+      localStorage.removeItem("og-nexus-changelog-dismissed-version");
+      alert("Update Changelog modal state has been reset! Refresh the dashboard to see it.");
     }
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view", children: [
@@ -57148,7 +57169,7 @@ const Settings = () => {
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 800 }, children: "%" })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginRight: "16px" }, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { display: "block", fontSize: "0.95rem", fontWeight: 600 }, children: "Clean OGLight Duplicate Visuals" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", opacity: 0.6 }, children: "Automatically removes OGLight injected markup from processed expedition and lifeform messages." })
@@ -57180,6 +57201,45 @@ const Settings = () => {
               height: "18px",
               width: "18px",
               left: removeOGLight ? "24px" : "4px",
+              bottom: "3px",
+              backgroundColor: "#0f172a",
+              transition: ".3s",
+              borderRadius: "50%"
+            } }) })
+          ] }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginRight: "16px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { display: "block", fontSize: "0.95rem", fontWeight: 600 }, children: "Low Animation Mode" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", opacity: 0.6 }, children: "Disables all page and transition animations, twinkling starfield, and heavy CSS effects to maximize performance." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "switch", style: { position: "relative", display: "inline-block", width: "46px", height: "24px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: lowAnimationMode,
+                onChange: (e) => saveLowAnimationMode(e.target.checked),
+                style: { opacity: 0, width: 0, height: 0 }
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "slider", style: {
+              position: "absolute",
+              cursor: "pointer",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: lowAnimationMode ? "var(--primary)" : "#334155",
+              transition: ".3s",
+              borderRadius: "24px",
+              boxShadow: lowAnimationMode ? "0 0 10px rgba(56, 189, 248, 0.4)" : "none"
+            }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+              position: "absolute",
+              content: '""',
+              height: "18px",
+              width: "18px",
+              left: lowAnimationMode ? "24px" : "4px",
               bottom: "3px",
               backgroundColor: "#0f172a",
               transition: ".3s",
@@ -57235,6 +57295,17 @@ const Settings = () => {
               style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(0, 242, 255, 0.1)", border: "1px solid rgba(0, 242, 255, 0.2)", color: "var(--primary)", borderRadius: "8px", cursor: "pointer", fontWeight: 600 },
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Reset Welcome Modal State" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Sparkles, { size: 16 })
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onClick: resetChangelogModal,
+              style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(0, 242, 255, 0.1)", border: "1px solid rgba(0, 242, 255, 0.2)", color: "var(--primary)", borderRadius: "8px", cursor: "pointer", fontWeight: 600 },
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Reset Update Modal State" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Sparkles, { size: 16 })
               ]
             }
@@ -71015,6 +71086,266 @@ const WelcomeModal = ({ onLetsGo, onNeverShow, onOpenTutorials }) => {
     }
   ) });
 };
+const ChangelogModal = ({ onAcknowledge, onDismissVersion, onNavigateToSettings }) => {
+  const changes = [
+    {
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 22, color: "var(--primary)" }),
+      title: "Performance Boost: Low Animation Mode",
+      desc: "Introduce a global performance toggle that completely turns off background stars, smooth blurs, and other flashy animations. Highly recommended for players experiencing slow speeds or visual lag.",
+      customElement: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", color: "#00f2ff", fontWeight: 650, letterSpacing: "0.3px" }, children: "This option is now available in the Settings menu." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          motion.button,
+          {
+            onClick: onNavigateToSettings,
+            whileHover: { scale: 1.02, background: "linear-gradient(135deg, rgba(0, 242, 255, 0.22) 0%, rgba(0, 184, 212, 0.08) 100%)", border: "1px solid rgba(0, 242, 255, 0.65)", boxShadow: "0 0 10px rgba(0, 242, 255, 0.15)" },
+            whileTap: { scale: 0.98 },
+            style: {
+              alignSelf: "flex-start",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 14px",
+              background: "linear-gradient(135deg, rgba(0, 242, 255, 0.12) 0%, rgba(0, 184, 212, 0.04) 100%)",
+              border: "1px solid rgba(0, 242, 255, 0.3)",
+              borderRadius: "8px",
+              color: "#00f2ff",
+              fontSize: "0.74rem",
+              fontWeight: 750,
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px"
+            },
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Take me there" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 12 })
+            ]
+          }
+        )
+      ] })
+    },
+    {
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Maximize2, { size: 22, color: "#ff8e3c" }),
+      title: "Enlarge expedition shipwreck",
+      desc: "Ship icons inside deep-space expedition findings are enlarged by 25% (45px) alongside cleaner, larger labels (12px) for improved visibility and scanning."
+    },
+    {
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Cpu, { size: 22, color: "var(--color-deuterium)" }),
+      title: "Optimized Game Sync Engine",
+      desc: "The in-game sync engine has been upgraded to run more efficiently, significantly reducing CPU usage during gameplay and active tab observation."
+    },
+    {
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(VolumeX, { size: 22, color: "#14b8a6" }),
+      title: "Clean Developer Console",
+      desc: "The developer tools console has been completely cleaned up by silencing unnecessary debug logs and background notification printouts."
+    }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(2, 6, 12, 0.85)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    zIndex: 9999,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "24px",
+    overflow: "auto",
+    WebkitOverflowScrolling: "touch"
+  }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    motion.div,
+    {
+      initial: { opacity: 0, scale: 0.95, y: 20 },
+      animate: { opacity: 1, scale: 1, y: 0 },
+      transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
+      style: {
+        width: "100%",
+        maxWidth: "720px",
+        background: "radial-gradient(circle at top left, rgba(13, 22, 38, 0.95), rgba(6, 11, 20, 0.99))",
+        border: "1px solid rgba(0, 242, 255, 0.3)",
+        borderRadius: "24px",
+        padding: "32px 36px",
+        boxShadow: "0 0 50px rgba(0, 242, 255, 0.22), inset 0 0 20px rgba(0, 242, 255, 0.05)",
+        position: "relative",
+        overflow: "hidden",
+        margin: "auto"
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "3px",
+          background: "linear-gradient(90deg, transparent, var(--primary), var(--secondary), transparent)",
+          opacity: 0.85
+        } }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "18px",
+          borderBottom: "1px solid rgba(0, 242, 255, 0.12)",
+          paddingBottom: "18px",
+          marginBottom: "22px"
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+            padding: "10px",
+            borderRadius: "16px",
+            background: "rgba(0, 242, 255, 0.08)",
+            border: "1px solid rgba(0, 242, 255, 0.25)",
+            boxShadow: "0 0 15px rgba(0, 242, 255, 0.1)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--primary)"
+          }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Sparkles, { size: 26, style: { filter: "drop-shadow(0 0 4px var(--primary-glow))" } }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { style: {
+                fontFamily: "var(--font-title)",
+                fontSize: "1.75rem",
+                fontWeight: 800,
+                margin: 0,
+                color: "#fff",
+                letterSpacing: "-0.02em",
+                background: "linear-gradient(135deg, #fff 40%, var(--primary) 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent"
+              }, children: "System Updated" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                fontSize: "0.75rem",
+                fontWeight: 800,
+                color: "#00f2ff",
+                background: "rgba(0, 242, 255, 0.1)",
+                border: "1px solid rgba(0, 242, 255, 0.3)",
+                padding: "2px 8px",
+                borderRadius: "8px",
+                textTransform: "uppercase",
+                letterSpacing: "1px",
+                display: "inline-block"
+              }, children: "v1.0.9" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", color: "var(--text-muted)", letterSpacing: "0.5px", marginTop: "2px" }, children: "OGAME NEXUS COMMAND DECK TELEMETRY REPORT" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px",
+          marginBottom: "26px",
+          maxHeight: "360px",
+          overflowY: "auto",
+          paddingRight: "6px"
+        }, children: changes.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+          display: "flex",
+          gap: "16px",
+          padding: "16px",
+          background: "rgba(13, 22, 38, 0.4)",
+          border: "1px solid rgba(0, 242, 255, 0.06)",
+          borderRadius: "16px",
+          transition: "all 0.2s ease"
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+            width: "40px",
+            height: "40px",
+            background: "rgba(0, 0, 0, 0.3)",
+            borderRadius: "10px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            color: "#fff"
+          }, children: item.icon }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "3px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.92rem", fontWeight: 700, color: "#fff" }, children: item.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.45 }, children: item.desc }),
+            item.customElement
+          ] })
+        ] }, idx)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "10px 16px",
+          background: "rgba(20, 184, 166, 0.04)",
+          border: "1px solid rgba(20, 184, 166, 0.15)",
+          borderRadius: "12px",
+          fontSize: "0.78rem",
+          color: "rgba(20, 184, 166, 0.95)",
+          lineHeight: 1.35,
+          marginBottom: "26px"
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ShieldCheck, { size: 16, style: { flexShrink: 0 } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Your planetary setups, harvested telemetry, and tracking histories have been preserved securely during this update." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          borderTop: "1px solid rgba(255, 255, 255, 0.05)",
+          paddingTop: "20px"
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            motion.button,
+            {
+              onClick: onAcknowledge,
+              whileHover: { scale: 1.005, boxShadow: "0 0 20px rgba(0, 242, 255, 0.35)" },
+              whileTap: { scale: 0.995 },
+              style: {
+                width: "100%",
+                padding: "12px 20px",
+                borderRadius: "12px",
+                background: "linear-gradient(135deg, var(--primary) 0%, #00b8d4 100%)",
+                color: "#02060c",
+                border: "none",
+                fontSize: "0.92rem",
+                fontWeight: 800,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                boxShadow: "0 0 15px rgba(0, 242, 255, 0.15)",
+                transition: "box-shadow 0.2s ease"
+              },
+              children: [
+                "Acknowledge ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 16 })
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            motion.button,
+            {
+              onClick: onDismissVersion,
+              whileHover: { background: "rgba(255, 255, 255, 0.03)", color: "#fff" },
+              whileTap: { scale: 0.995 },
+              style: {
+                width: "100%",
+                padding: "11px 20px",
+                borderRadius: "12px",
+                background: "transparent",
+                color: "var(--text-muted)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              },
+              children: "Dismiss for this version"
+            }
+          )
+        ] })
+      ]
+    }
+  ) });
+};
 const Tutorials = ({ onNavigate }) => {
   const [selectedGuide, setSelectedGuide] = reactExports.useState(null);
   const [currentStep, setCurrentStep] = reactExports.useState(0);
@@ -71935,6 +72266,53 @@ const Tutorials = ({ onNavigate }) => {
 const App = () => {
   const [currentView, setCurrentView] = reactExports.useState("overview");
   const [showWelcome, setShowWelcome] = reactExports.useState(false);
+  const [showChangelog, setShowChangelog] = reactExports.useState(false);
+  const [lowAnimationEnabled, setLowAnimationEnabled] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    const loadLowAnimationSetting = async () => {
+      var _a;
+      try {
+        const localData = await chrome.storage.local.get("globalSettings");
+        if (((_a = localData == null ? void 0 : localData.globalSettings) == null ? void 0 : _a.lowAnimationMode) !== void 0) {
+          setLowAnimationEnabled(localData.globalSettings.lowAnimationMode);
+        } else {
+          const globalSettings = localStorage.getItem("og-nexus-global-settings");
+          if (globalSettings) {
+            const parsed = JSON.parse(globalSettings);
+            if (parsed.lowAnimationMode !== void 0) {
+              setLowAnimationEnabled(parsed.lowAnimationMode);
+            }
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadLowAnimationSetting();
+    const handleStorageChange = (changes, areaName) => {
+      if (areaName === "local" && changes.globalSettings) {
+        const newSettings = changes.globalSettings.newValue;
+        if (newSettings && newSettings.lowAnimationMode !== void 0) {
+          setLowAnimationEnabled(newSettings.lowAnimationMode);
+        }
+      }
+    };
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(handleStorageChange);
+    }
+    return () => {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+        chrome.storage.onChanged.removeListener(handleStorageChange);
+      }
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    if (lowAnimationEnabled) {
+      document.body.classList.add("low-animation");
+    } else {
+      document.body.classList.remove("low-animation");
+    }
+  }, [lowAnimationEnabled]);
   reactExports.useEffect(() => {
     const handleNav = (e) => {
       const detail = e.detail;
@@ -71947,34 +72325,80 @@ const App = () => {
       window.removeEventListener("ognexus_navigated", handleNav);
     };
   }, []);
+  const getCurrentVersion = () => {
+    try {
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getManifest) {
+        return chrome.runtime.getManifest().version;
+      }
+    } catch (e) {
+      console.error("Failed to get manifest version", e);
+    }
+    return "1.0.9";
+  };
+  const autoDismissChangelogForNewInstall = (version) => {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ changelogDismissedVersion: version });
+      }
+      localStorage.setItem("og-nexus-changelog-dismissed-version", version);
+    } catch (e) {
+      localStorage.setItem("og-nexus-changelog-dismissed-version", version);
+    }
+  };
   reactExports.useEffect(() => {
-    const checkWelcomeStatus = () => {
+    const checkWelcomeAndChangelogStatus = async () => {
+      const version = getCurrentVersion();
       try {
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.get("welcomeDismissed", (result) => {
+          chrome.storage.local.get(["welcomeDismissed", "changelogDismissedVersion"], (result) => {
             const err = chrome.runtime.lastError;
             if (err || !result) {
-              const val = localStorage.getItem("og-nexus-welcome-dismissed");
-              if (!val) setShowWelcome(true);
-            } else if (!result.welcomeDismissed) {
+              const localWelcome = localStorage.getItem("og-nexus-welcome-dismissed");
+              if (localWelcome === "true") {
+                const localChangelog = localStorage.getItem("og-nexus-changelog-dismissed-version");
+                if (localChangelog !== version) {
+                  setShowChangelog(true);
+                }
+              } else {
+                setShowWelcome(true);
+                autoDismissChangelogForNewInstall(version);
+              }
+            } else if (result.welcomeDismissed) {
+              if (result.changelogDismissedVersion !== version) {
+                setShowChangelog(true);
+              }
+            } else {
               setShowWelcome(true);
+              autoDismissChangelogForNewInstall(version);
             }
           });
         } else {
-          const val = localStorage.getItem("og-nexus-welcome-dismissed");
-          if (!val) {
+          const localWelcome = localStorage.getItem("og-nexus-welcome-dismissed");
+          if (localWelcome === "true") {
+            const localChangelog = localStorage.getItem("og-nexus-changelog-dismissed-version");
+            if (localChangelog !== version) {
+              setShowChangelog(true);
+            }
+          } else {
             setShowWelcome(true);
+            autoDismissChangelogForNewInstall(version);
           }
         }
       } catch (e) {
-        console.error("Failed to check welcome status", e);
-        const val = localStorage.getItem("og-nexus-welcome-dismissed");
-        if (!val) {
+        console.error("Failed to check welcome/changelog status", e);
+        const localWelcome = localStorage.getItem("og-nexus-welcome-dismissed");
+        if (localWelcome === "true") {
+          const localChangelog = localStorage.getItem("og-nexus-changelog-dismissed-version");
+          if (localChangelog !== version) {
+            setShowChangelog(true);
+          }
+        } else {
           setShowWelcome(true);
+          autoDismissChangelogForNewInstall(version);
         }
       }
     };
-    checkWelcomeStatus();
+    checkWelcomeAndChangelogStatus();
   }, []);
   const handleNeverShow = () => {
     setShowWelcome(false);
@@ -71990,6 +72414,26 @@ const App = () => {
     } catch (e) {
       console.error("Failed to save welcome dismissal", e);
       localStorage.setItem("og-nexus-welcome-dismissed", "true");
+    }
+  };
+  const handleAcknowledgeChangelog = () => {
+    setShowChangelog(false);
+  };
+  const handleDismissChangelog = () => {
+    setShowChangelog(false);
+    const version = getCurrentVersion();
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ changelogDismissedVersion: version }, () => {
+          if (chrome.runtime.lastError) {
+            console.error(chrome.runtime.lastError);
+          }
+        });
+      }
+      localStorage.setItem("og-nexus-changelog-dismissed-version", version);
+    } catch (e) {
+      console.error("Failed to save changelog dismissal version", e);
+      localStorage.setItem("og-nexus-changelog-dismissed-version", version);
     }
   };
   const renderView = () => {
@@ -72020,22 +72464,35 @@ const App = () => {
       currentView
     ) });
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(StarField, {}),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(MotionConfig, { reducedMotion: lowAnimationEnabled ? "always" : "user", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(StarField, { hidden: lowAnimationEnabled }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Sidebar, { activeView: currentView, onSelect: setCurrentView }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "main-content", children: renderView() }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Hotbar, { onSelect: setCurrentView }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: showWelcome && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      WelcomeModal,
-      {
-        onLetsGo: () => setShowWelcome(false),
-        onNeverShow: handleNeverShow,
-        onOpenTutorials: () => {
-          setShowWelcome(false);
-          setCurrentView("tutorials");
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(AnimatePresence, { children: [
+      showWelcome && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        WelcomeModal,
+        {
+          onLetsGo: () => setShowWelcome(false),
+          onNeverShow: handleNeverShow,
+          onOpenTutorials: () => {
+            setShowWelcome(false);
+            setCurrentView("tutorials");
+          }
         }
-      }
-    ) })
+      ),
+      showChangelog && !showWelcome && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ChangelogModal,
+        {
+          onAcknowledge: handleAcknowledgeChangelog,
+          onDismissVersion: handleDismissChangelog,
+          onNavigateToSettings: () => {
+            handleAcknowledgeChangelog();
+            setCurrentView("settings");
+          }
+        }
+      )
+    ] })
   ] });
 };
 const _origWarn = console.warn;

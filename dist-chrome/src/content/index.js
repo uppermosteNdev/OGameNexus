@@ -20,6 +20,9 @@
     { id: 219, category: "ships", name: "Pathfinder", icon: "icons/ships/pathfinder-large.jpg", metadata: { cost: { metal: 8e3, crystal: 15e3, deuterium: 8e3 } } }
   ];
   function flyToNexusButton(startElement, imageUrls) {
+    if (document.body.classList.contains("low-animation")) {
+      return;
+    }
     const targetBtn = document.querySelector("#og-nexus-icon-modal-btn");
     if (!targetBtn) return;
     const startRect = startElement.getBoundingClientRect();
@@ -1698,8 +1701,8 @@
         shipItem.setAttribute("data-nexus-tooltip", tooltipTitle);
         shipItem.style.cssText = `
             position: relative;
-            width: 36px;
-            height: 36px;
+            width: 45px;
+            height: 45px;
             cursor: default;
             `;
         const innerBox = document.createElement("div");
@@ -1725,9 +1728,9 @@
             background: rgba(10, 15, 20, 0.85);
             backdrop-filter: blur(2px);
             color: #fff;
-            padding: 0px 0;
+            padding: 2px 0;
             text-align: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: bold;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
@@ -7977,11 +7980,15 @@
       production: scrapeProductionData(),
       empire
     };
+    const dataStr = JSON.stringify(data);
+    if (window._lastScrapedDataHash === dataStr) {
+      return;
+    }
+    window._lastScrapedDataHash = dataStr;
     safeSendMessage({
       type: "SYNC_SESSION",
       data
     });
-    window._lastScrapedDataHash = JSON.stringify(data);
   }
   function injectButton() {
     const menuTable = document.querySelector("#menuTable");
@@ -8295,10 +8302,17 @@
     `;
     }
   }
-  const observer = new MutationObserver((mutations) => {
-    if (document.querySelector("#menuTable")) {
-      injectButton();
-    }
+  function throttle(func, limit) {
+    let inThrottle = false;
+    return function(...args) {
+      if (!inThrottle) {
+        func.apply(this, args);
+        inThrottle = true;
+        setTimeout(() => inThrottle = false, limit);
+      }
+    };
+  }
+  const throttledObserverLogic = throttle(() => {
     const isObservablePage = window.location.href.includes("component=lfresearch") || window.location.href.includes("component=overview") || window.location.href.includes("component=lfbuildings") || window.location.href.includes("component=lfbonuses") || window.location.href.includes("component=facilities") || window.location.href.includes("component=supplies") || window.location.href.includes("component=empire") || window.location.href.includes("component=resourcesettings");
     const currentUrl = window.location.href;
     const urlChanged = window._lastScrapedUrl !== currentUrl;
@@ -8356,8 +8370,43 @@
         }
       }
     }
+  }, 100);
+  const observer = new MutationObserver((mutations) => {
+    if (document.querySelector("#menuTable")) {
+      injectButton();
+    }
+    throttledObserverLogic();
   });
   observer.observe(document.body, { childList: true, subtree: true });
   scrapeAndSync();
   injectButton();
+  async function initLowAnimationMode() {
+    var _a;
+    try {
+      const localData = await chrome.storage.local.get("globalSettings");
+      const enabled = ((_a = localData == null ? void 0 : localData.globalSettings) == null ? void 0 : _a.lowAnimationMode) || false;
+      if (enabled) {
+        document.body.classList.add("low-animation");
+      } else {
+        document.body.classList.remove("low-animation");
+      }
+    } catch (e) {
+      console.error("OGame Nexus: Error loading low animation setting", e);
+    }
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === "local" && changes.globalSettings) {
+          const newSettings = changes.globalSettings.newValue;
+          if (newSettings && newSettings.lowAnimationMode !== void 0) {
+            if (newSettings.lowAnimationMode) {
+              document.body.classList.add("low-animation");
+            } else {
+              document.body.classList.remove("low-animation");
+            }
+          }
+        }
+      });
+    }
+  }
+  initLowAnimationMode();
 })();

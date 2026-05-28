@@ -1,6 +1,11 @@
 import React, { useMemo } from 'react';
 
-const StarField: React.FC = () => {
+interface StarFieldProps {
+    hidden?: boolean;
+}
+
+const StarField: React.FC<StarFieldProps> = ({ hidden = false }) => {
+    if (hidden) return null;
     // Reduced star count and simplified animations for performance
     const stars = useMemo(() => {
         return Array.from({ length: 150 }).map((_, i) => {

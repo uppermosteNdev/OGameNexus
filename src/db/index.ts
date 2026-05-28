@@ -376,7 +376,6 @@ export class OGNexusDB extends Dexie {
                     crystal: 2,
                     deuterium: 1
                 });
-                console.log('OGame Nexus: Successfully seeded default conversion rates.');
             }
         } catch (error) {
             console.error('OGame Nexus: Failed to seed settings', error);
@@ -384,7 +383,6 @@ export class OGNexusDB extends Dexie {
     }
 
     private async seedKnowledge() {
-        console.log('OGame Nexus: Seeding game knowledge database...');
         try {
             await this.gameKnowledge.bulkPut(SHIP_DATA);
             await this.gameKnowledge.bulkPut(RESEARCH_DATA);
@@ -397,18 +395,13 @@ export class OGNexusDB extends Dexie {
             const speciesCount = await this.lifeformSpecies.count();
             if (speciesCount === 0) {
                 await this.lifeformSpecies.bulkAdd(LIFEFORM_SPECIES_DATA);
-                console.log('OGame Nexus: Successfully seeded initial lifeform species.');
             }
 
             // Seed Static Lifeform Technologies
             await this.lifeformTechnologies.bulkPut(LIFEFORM_TECH_DATA as any);
-            console.log('OGame Nexus: Successfully seeded lifeform technology data.');
 
             // Seed Lifeform Bonus Breakdown
             await this.lifeformBonusBreakdown.bulkPut(LIFEFORM_BONUS_BREAKDOWN_DATA);
-            console.log('OGame Nexus: Successfully seeded lifeform bonus breakdown data.');
-
-            console.log('OGame Nexus: Successfully seeded ship data.');
         } catch (error) {
             console.error('OGame Nexus: Failed to seed knowledge data', error);
         }

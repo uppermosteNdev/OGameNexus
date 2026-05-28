@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import Sidebar from './components/Sidebar';
 import StarField from './components/StarField';
 import Overview from './views/Overview';
@@ -17,6 +17,7 @@ import CostsPlanner from './views/CostsPlanner';
 import SignatureMaker from './views/SignatureMaker';
 import Hotbar from './components/Hotbar';
 import WelcomeModal from './components/WelcomeModal';
+import ChangelogModal from './components/ChangelogModal';
 import Tutorials from './views/Tutorials';
 import './index.css';
 import '../content/styles.css';
@@ -24,6 +25,59 @@ import '../content/styles.css';
 const App: React.FC = () => {
     const [currentView, setCurrentView] = useState('overview');
     const [showWelcome, setShowWelcome] = useState(false);
+    const [showChangelog, setShowChangelog] = useState(false);
+    const [lowAnimationEnabled, setLowAnimationEnabled] = useState(false);
+
+    useEffect(() => {
+        const loadLowAnimationSetting = async () => {
+            try {
+                const localData = await chrome.storage.local.get('globalSettings');
+                if (localData?.globalSettings?.lowAnimationMode !== undefined) {
+                    setLowAnimationEnabled(localData.globalSettings.lowAnimationMode);
+                } else {
+                    const globalSettings = localStorage.getItem('og-nexus-global-settings');
+                    if (globalSettings) {
+                        const parsed = JSON.parse(globalSettings);
+                        if (parsed.lowAnimationMode !== undefined) {
+                            setLowAnimationEnabled(parsed.lowAnimationMode);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+
+        loadLowAnimationSetting();
+
+        // Listen for storage changes to update lowAnimationEnabled immediately!
+        const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+            if (areaName === 'local' && changes.globalSettings) {
+                const newSettings = changes.globalSettings.newValue;
+                if (newSettings && newSettings.lowAnimationMode !== undefined) {
+                    setLowAnimationEnabled(newSettings.lowAnimationMode);
+                }
+            }
+        };
+
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+            chrome.storage.onChanged.addListener(handleStorageChange);
+        }
+
+        return () => {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+                chrome.storage.onChanged.removeListener(handleStorageChange);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (lowAnimationEnabled) {
+            document.body.classList.add('low-animation');
+        } else {
+            document.body.classList.remove('low-animation');
+        }
+    }, [lowAnimationEnabled]);
 
     useEffect(() => {
         const handleNav = (e: Event) => {
@@ -38,34 +92,82 @@ const App: React.FC = () => {
         };
     }, []);
 
+    const getCurrentVersion = (): string => {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
+                return chrome.runtime.getManifest().version;
+            }
+        } catch (e) {
+            console.error("Failed to get manifest version", e);
+        }
+        return "1.0.9";
+    };
+
+    const autoDismissChangelogForNewInstall = (version: string) => {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({ changelogDismissedVersion: version });
+            }
+            localStorage.setItem('og-nexus-changelog-dismissed-version', version);
+        } catch (e) {
+            localStorage.setItem('og-nexus-changelog-dismissed-version', version);
+        }
+    };
+
     useEffect(() => {
-        const checkWelcomeStatus = () => {
+        const checkWelcomeAndChangelogStatus = async () => {
+            const version = getCurrentVersion();
             try {
                 if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-                    chrome.storage.local.get('welcomeDismissed', (result) => {
+                    chrome.storage.local.get(['welcomeDismissed', 'changelogDismissedVersion'], (result) => {
                         const err = chrome.runtime.lastError;
                         if (err || !result) {
-                            const val = localStorage.getItem('og-nexus-welcome-dismissed');
-                            if (!val) setShowWelcome(true);
-                        } else if (!result.welcomeDismissed) {
+                            const localWelcome = localStorage.getItem('og-nexus-welcome-dismissed');
+                            if (localWelcome === 'true') {
+                                const localChangelog = localStorage.getItem('og-nexus-changelog-dismissed-version');
+                                if (localChangelog !== version) {
+                                    setShowChangelog(true);
+                                }
+                            } else {
+                                setShowWelcome(true);
+                                autoDismissChangelogForNewInstall(version);
+                            }
+                        } else if (result.welcomeDismissed) {
+                            if (result.changelogDismissedVersion !== version) {
+                                setShowChangelog(true);
+                            }
+                        } else {
                             setShowWelcome(true);
+                            autoDismissChangelogForNewInstall(version);
                         }
                     });
                 } else {
-                    const val = localStorage.getItem('og-nexus-welcome-dismissed');
-                    if (!val) {
+                    const localWelcome = localStorage.getItem('og-nexus-welcome-dismissed');
+                    if (localWelcome === 'true') {
+                        const localChangelog = localStorage.getItem('og-nexus-changelog-dismissed-version');
+                        if (localChangelog !== version) {
+                            setShowChangelog(true);
+                        }
+                    } else {
                         setShowWelcome(true);
+                        autoDismissChangelogForNewInstall(version);
                     }
                 }
             } catch (e) {
-                console.error("Failed to check welcome status", e);
-                const val = localStorage.getItem('og-nexus-welcome-dismissed');
-                if (!val) {
+                console.error("Failed to check welcome/changelog status", e);
+                const localWelcome = localStorage.getItem('og-nexus-welcome-dismissed');
+                if (localWelcome === 'true') {
+                    const localChangelog = localStorage.getItem('og-nexus-changelog-dismissed-version');
+                    if (localChangelog !== version) {
+                        setShowChangelog(true);
+                    }
+                } else {
                     setShowWelcome(true);
+                    autoDismissChangelogForNewInstall(version);
                 }
             }
         };
-        checkWelcomeStatus();
+        checkWelcomeAndChangelogStatus();
     }, []);
 
     const handleNeverShow = () => {
@@ -82,6 +184,28 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to save welcome dismissal", e);
             localStorage.setItem('og-nexus-welcome-dismissed', 'true');
+        }
+    };
+
+    const handleAcknowledgeChangelog = () => {
+        setShowChangelog(false);
+    };
+
+    const handleDismissChangelog = () => {
+        setShowChangelog(false);
+        const version = getCurrentVersion();
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({ changelogDismissedVersion: version }, () => {
+                    if (chrome.runtime.lastError) {
+                        console.error(chrome.runtime.lastError);
+                    }
+                });
+            }
+            localStorage.setItem('og-nexus-changelog-dismissed-version', version);
+        } catch (e) {
+            console.error("Failed to save changelog dismissal version", e);
+            localStorage.setItem('og-nexus-changelog-dismissed-version', version);
         }
     };
 
@@ -115,8 +239,8 @@ const App: React.FC = () => {
     };
 
     return (
-        <>
-            <StarField />
+        <MotionConfig reducedMotion={lowAnimationEnabled ? "always" : "user"}>
+            <StarField hidden={lowAnimationEnabled} />
             <Sidebar activeView={currentView} onSelect={setCurrentView} />
             <main className="main-content">
                 {renderView()}
@@ -125,17 +249,27 @@ const App: React.FC = () => {
 
             <AnimatePresence>
                 {showWelcome && (
-                    <WelcomeModal 
-                        onLetsGo={() => setShowWelcome(false)}
-                        onNeverShow={handleNeverShow}
-                        onOpenTutorials={() => {
-                            setShowWelcome(false);
-                            setCurrentView('tutorials');
+                     <WelcomeModal 
+                         onLetsGo={() => setShowWelcome(false)}
+                         onNeverShow={handleNeverShow}
+                         onOpenTutorials={() => {
+                             setShowWelcome(false);
+                             setCurrentView('tutorials');
+                         }}
+                     />
+                )}
+                {showChangelog && !showWelcome && (
+                    <ChangelogModal
+                        onAcknowledge={handleAcknowledgeChangelog}
+                        onDismissVersion={handleDismissChangelog}
+                        onNavigateToSettings={() => {
+                            handleAcknowledgeChangelog();
+                            setCurrentView('settings');
                         }}
                     />
                 )}
             </AnimatePresence>
-        </>
+        </MotionConfig>
     );
 };
 

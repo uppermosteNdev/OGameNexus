@@ -855,13 +855,17 @@ function scrapeAndSync() {
     empire: empire
   };
 
+  const dataStr = JSON.stringify(data);
+  if ((window as any)._lastScrapedDataHash === dataStr) {
+    return;
+  }
+  (window as any)._lastScrapedDataHash = dataStr;
+
   safeSendMessage({
     type: "SYNC_SESSION",
     data
   });
 
-  // Track the last successfully scraped data hash to avoid redundant messages
-  (window as any)._lastScrapedDataHash = JSON.stringify(data);
 }
 
 function injectButton() {
@@ -1224,11 +1228,18 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
   }
 }
 
-const observer = new MutationObserver((mutations) => {
-  if (document.querySelector("#menuTable")) {
-    injectButton();
-  }
+function throttle(func: (...args: any[]) => void, limit: number) {
+  let inThrottle = false;
+  return function(this: any, ...args: any[]) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
 
+const throttledObserverLogic = throttle(() => {
   // Trigger scraping if the technology list or overview content changes (AJAX navigation)
   const isObservablePage = window.location.href.includes("component=lfresearch") ||
     window.location.href.includes("component=overview") ||
@@ -1318,9 +1329,49 @@ const observer = new MutationObserver((mutations) => {
       }
     }
   }
+}, 100);
+
+const observer = new MutationObserver((mutations) => {
+  if (document.querySelector("#menuTable")) {
+    injectButton();
+  }
+
+  throttledObserverLogic();
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
 
 scrapeAndSync();
 injectButton();
+
+async function initLowAnimationMode() {
+  try {
+    const localData = await chrome.storage.local.get('globalSettings');
+    const enabled = localData?.globalSettings?.lowAnimationMode || false;
+    if (enabled) {
+      document.body.classList.add('low-animation');
+    } else {
+      document.body.classList.remove('low-animation');
+    }
+  } catch (e) {
+    console.error("OGame Nexus: Error loading low animation setting", e);
+  }
+
+  if (chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'local' && changes.globalSettings) {
+        const newSettings = changes.globalSettings.newValue;
+        if (newSettings && newSettings.lowAnimationMode !== undefined) {
+          if (newSettings.lowAnimationMode) {
+            document.body.classList.add('low-animation');
+          } else {
+            document.body.classList.remove('low-animation');
+          }
+        }
+      }
+    });
+  }
+}
+
+initLowAnimationMode();
+

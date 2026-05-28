@@ -6524,14 +6524,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             crystal: 2,
             deuterium: 1
           });
-          console.log("OGame Nexus: Successfully seeded default conversion rates.");
         }
       } catch (error) {
         console.error("OGame Nexus: Failed to seed settings", error);
       }
     }
     async seedKnowledge() {
-      console.log("OGame Nexus: Seeding game knowledge database...");
       try {
         await this.gameKnowledge.bulkPut(SHIP_DATA);
         await this.gameKnowledge.bulkPut(RESEARCH_DATA);
@@ -6542,13 +6540,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         const speciesCount = await this.lifeformSpecies.count();
         if (speciesCount === 0) {
           await this.lifeformSpecies.bulkAdd(LIFEFORM_SPECIES_DATA);
-          console.log("OGame Nexus: Successfully seeded initial lifeform species.");
         }
         await this.lifeformTechnologies.bulkPut(LIFEFORM_TECH_DATA);
-        console.log("OGame Nexus: Successfully seeded lifeform technology data.");
         await this.lifeformBonusBreakdown.bulkPut(LIFEFORM_BONUS_BREAKDOWN_DATA);
-        console.log("OGame Nexus: Successfully seeded lifeform bonus breakdown data.");
-        console.log("OGame Nexus: Successfully seeded ship data.");
       } catch (error) {
         console.error("OGame Nexus: Failed to seed knowledge data", error);
       }
@@ -6595,7 +6589,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
     }
     if (storageRow) {
-      console.log("Background: Found potential storage row");
       const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
       const tdMatches = [...storageRow.matchAll(tdPattern)];
       if (tdMatches.length >= 4) {
@@ -6607,7 +6600,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             if (i === 1) data.metalCapacity = val;
             else if (i === 2) data.crystalCapacity = val;
             else if (i === 3) data.deuteriumCapacity = val;
-            console.log(`Background: Extracted capacity ${i}: ${val}`);
           } else {
             const text = tdContent.replace(/<[^>]*>/g, "").trim();
             const numMatch = text.match(/[\d,.]+/);
@@ -6915,7 +6907,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   async function fetchServerData(universe) {
     const domain = universe.includes(".") ? universe : `${universe}.ogame.gameforge.com`;
     const url = `https://${domain}/api/serverData.xml`;
-    console.log(`Background: Fetching Server Data from ${url}`);
     try {
       const response = await fetch(url);
       const xml = await response.text();
@@ -7053,7 +7044,23 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   }
                 });
                 if (existing) {
-                  await db.planets.update(p.id, updateData);
+                  let isDirty = false;
+                  for (const key of Object.keys(updateData)) {
+                    const val1 = updateData[key];
+                    const val2 = existing[key];
+                    if (typeof val1 === "object" && val1 !== null && typeof val2 === "object" && val2 !== null) {
+                      if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+                        isDirty = true;
+                        break;
+                      }
+                    } else if (val1 !== val2) {
+                      isDirty = true;
+                      break;
+                    }
+                  }
+                  if (isDirty) {
+                    await db.planets.update(p.id, updateData);
+                  }
                 } else {
                   await db.planets.put({
                     ...updateData,
@@ -7098,14 +7105,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 for (const pl of updatedPlanets) {
                   const prod = (_n = productionResults.planets[pl.id]) == null ? void 0 : _n.total;
                   if (prod) {
-                    await db.planets.update(pl.id, {
-                      production: {
-                        metal: Math.floor(prod.metal),
-                        crystal: Math.floor(prod.crystal),
-                        deuterium: Math.floor(prod.deuterium),
-                        lastUpdated: Date.now()
-                      }
-                    });
+                    const newMetal = Math.floor(prod.metal);
+                    const newCrystal = Math.floor(prod.crystal);
+                    const newDeuterium = Math.floor(prod.deuterium);
+                    const existingProd = pl.production;
+                    if (!existingProd || existingProd.metal !== newMetal || existingProd.crystal !== newCrystal || existingProd.deuterium !== newDeuterium) {
+                      await db.planets.update(pl.id, {
+                        production: {
+                          metal: newMetal,
+                          crystal: newCrystal,
+                          deuterium: newDeuterium,
+                          lastUpdated: Date.now()
+                        }
+                      });
+                    }
                   }
                 }
               }
