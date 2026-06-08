@@ -89,6 +89,8 @@ Thumbs.db
 # Vite build/dist directory
 dist/
 dist-ssr/
+dist-chrome/
+dist-firefox/
 *.local
 
 # Chrome / Web Extension builds & keys (CRITICAL: Do not leak private key .pem files!)
