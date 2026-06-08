@@ -1,6 +1,6 @@
 # OGame Nexus
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.8-cyan.svg)](https://github.com/uppermosten94/OGNexusExtension)
 [![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Firefox%20%7C%20Edge-purple.svg)]()
 [![Built With](https://img.shields.io/badge/built%20with-React%20%7C%20Vite%20%7C%20TypeScript%20%7C%20Three.js-gradient.svg)]()
@@ -67,4 +67,6 @@ OGame Nexus respects your privacy. All empire statistics, coordinates, and data 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+This project is proprietary and confidential. All rights reserved by uppermosteNdev. Unauthorized copying, modification, or distribution of this code or its assets is strictly prohibited. See the [LICENSE](LICENSE) file for details.
+

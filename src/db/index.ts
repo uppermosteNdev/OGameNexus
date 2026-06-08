@@ -320,6 +320,32 @@ export interface LifeformSavedSetup {
     lastUpdated: number;
 }
 
+export interface SpiedPlanet {
+    planetId: string; // Primary key from data-raw-targetplanetid
+    playerId: string;
+    playerName: string;
+    coords: string; // "5:27:5"
+    metalPerHour: number; // Running maximum metal growth rate
+    crystalPerHour: number; // Running maximum crystal growth rate
+    deuteriumPerHour: number; // Running maximum deuterium growth rate
+    lastSpiedMetal: number; // Resources from latest report
+    lastSpiedCrystal: number;
+    lastSpiedDeuterium: number;
+    lastSpiedTimestamp: number; // Unix epoch (seconds)
+    playerStatus: string[]; // e.g. ["longinactive"]
+    lastHashCode: string; // The combat simulator/report API key (starts with "sr-")
+    spyCount: number; // Incrementing counter of spy reports spied
+    confidence: number; // 0 to 100 based on spyCount
+    lootPercentage?: number; // Loot percentage (e.g. 50 or 75)
+    metalStorageLevel?: number;
+    crystalStorageLevel?: number;
+    deuteriumStorageLevel?: number;
+    metalCapacity?: number;
+    crystalCapacity?: number;
+    deuteriumCapacity?: number;
+    hasTraderClass?: boolean;
+}
+
 export class OGNexusDB extends Dexie {
     accounts!: Table<Account>;
     planets!: Table<Planet>;
@@ -334,10 +360,11 @@ export class OGNexusDB extends Dexie {
     todoProjects!: Table<TodoProject>;
     debrisHarvests!: Table<DebrisHarvest>;
     combatReports!: Table<CombatReport>;
+    spiedPlanets!: Table<SpiedPlanet>;
 
     constructor() {
         super('OGNexusDB');
-        this.version(33).stores({
+        this.version(34).stores({
             accounts: 'playerId, playerName, universe, lastSeen',
             planets: 'id, playerId, coords, lifeformId',
             expeditions: 'messageId, playerId, timestamp, coords, result',
@@ -350,7 +377,8 @@ export class OGNexusDB extends Dexie {
             lifeformSavedSetups: '++id, playerId, name',
             todoProjects: '++id, projectKey, playerId, planetId, type',
             debrisHarvests: 'messageId, playerId, timestamp, coords',
-            combatReports: 'messageId, playerId, timestamp, coords, winner'
+            combatReports: 'messageId, playerId, timestamp, coords, winner',
+            spiedPlanets: 'planetId, playerId, coords, lastSpiedTimestamp'
         });
 
         // Seed data for new database installations
@@ -363,6 +391,7 @@ export class OGNexusDB extends Dexie {
         this.on('ready', () => {
             this.seedKnowledge();
             this.seedSettings();
+            this.migrateSpiedPlanets();
         });
     }
 
@@ -404,6 +433,56 @@ export class OGNexusDB extends Dexie {
             await this.lifeformBonusBreakdown.bulkPut(LIFEFORM_BONUS_BREAKDOWN_DATA);
         } catch (error) {
             console.error('OGame Nexus: Failed to seed knowledge data', error);
+        }
+    }
+
+    private calculateStorageCapacity(level: number, hasTraderClass?: boolean): number {
+        const lvl = Math.max(0, level || 0);
+        const baseCapacity = 5000 * Math.floor(2.5 * Math.exp((20 / 33) * lvl));
+        if (hasTraderClass && lvl > 0) {
+            return Math.floor(baseCapacity * 1.10);
+        }
+        return baseCapacity;
+    }
+
+    private async migrateSpiedPlanets() {
+        try {
+            const planets = await this.spiedPlanets.toArray();
+            const updates: any[] = [];
+            for (const p of planets) {
+                const hasTraderClass = p.hasTraderClass ?? false;
+                const metalStorageLevel = p.metalStorageLevel ?? 0;
+                const crystalStorageLevel = p.crystalStorageLevel ?? 0;
+                const deuteriumStorageLevel = p.deuteriumStorageLevel ?? 0;
+
+                const correctMetalCapacity = this.calculateStorageCapacity(metalStorageLevel, hasTraderClass);
+                const correctCrystalCapacity = this.calculateStorageCapacity(crystalStorageLevel, hasTraderClass);
+                const correctDeuteriumCapacity = this.calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass);
+
+                if (
+                    p.metalCapacity !== correctMetalCapacity ||
+                    p.crystalCapacity !== correctCrystalCapacity ||
+                    p.deuteriumCapacity !== correctDeuteriumCapacity ||
+                    p.metalStorageLevel === undefined
+                ) {
+                    updates.push({
+                        ...p,
+                        metalStorageLevel,
+                        crystalStorageLevel,
+                        deuteriumStorageLevel,
+                        metalCapacity: correctMetalCapacity,
+                        crystalCapacity: correctCrystalCapacity,
+                        deuteriumCapacity: correctDeuteriumCapacity,
+                        hasTraderClass
+                    });
+                }
+            }
+            if (updates.length > 0) {
+                console.log(`OGame Nexus: Correcting and migrating capacities for ${updates.length} spied planets.`);
+                await this.spiedPlanets.bulkPut(updates);
+            }
+        } catch (error) {
+            console.error('OGame Nexus: Failed to migrate spied planets capacities', error);
         }
     }
 }

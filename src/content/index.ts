@@ -5,6 +5,7 @@ import { trackLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime } from './empire';
 import { trackDebrisHarvests } from './harvests';
 import { trackCombatReports } from './combats';
+import { trackEspionageReports, trackRawEspionageReports } from './espionage';
 import { renderAnalyticsTab } from './analytics';
 
 /**
@@ -886,6 +887,10 @@ function injectButton() {
     <a id="og-nexus-text-dashboard-btn" class="menubutton ipiHintable" href="javascript:void(0);" target="_self">
         <span class="textlabel">OGame Nexus</span>
     </a>
+    <div id="og-nexus-scraping-status" style="display: none; margin-left: 36px; padding: 2px 0 6px 0; font-size: 10px; color: #a5f3fc; font-family: 'Outfit', sans-serif; align-items: center; gap: 6px; line-height: 1.2;">
+        <span class="status-pulse" style="display: inline-block; width: 6px; height: 6px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 6px #22c55e;"></span>
+        <span>Spy Reports: <strong id="og-nexus-spy-count-badge" style="color: #22d3ee; font-weight: 700;">0</strong> processed</span>
+    </div>
   `;
 
   const modalBtn = li.querySelector("#og-nexus-icon-modal-btn");
@@ -1296,6 +1301,19 @@ const throttledObserverLogic = throttle(() => {
       // 1. Always ensure the summary card is visible if we're on the messages page
       injectTodaySummaryCard(playerId, false);
 
+      // Trigger a request to the page context to get all raw messages from window.ogame.messages.content
+      const now = Date.now();
+      if (!(window as any)._lastRawMessagesRequestTime || now - (window as any)._lastRawMessagesRequestTime > 1000) {
+        (window as any)._lastRawMessagesRequestTime = now;
+        window.dispatchEvent(new CustomEvent('ogame-nexus-request-raw-messages'));
+      }
+
+      // Espionage reports tracking (runs on any tab if elements are loaded)
+      const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]:not([data-og-nexus-processed="true"])');
+      if (espionageMessages.length > 0) {
+        trackEspionageReports(playerId);
+      }
+
       // 2. Ensure we only track if the "Fleets" tab (data-category-id="2") is active
       const isFleetTabActive = !!document.querySelector('div.singleTab.marker[data-category-id="2"]');
 
@@ -1329,7 +1347,7 @@ const throttledObserverLogic = throttle(() => {
       }
     }
   }
-}, 100);
+}, 50);
 
 const observer = new MutationObserver((mutations) => {
   if (document.querySelector("#menuTable")) {
@@ -1374,4 +1392,16 @@ async function initLowAnimationMode() {
 }
 
 initLowAnimationMode();
+
+// Listen for raw messages response from MAIN world pageContext.ts
+window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
+  const content = event.detail?.content;
+  if (Array.isArray(content) && content.length > 0) {
+    const playerId = getMetaContent("ogame-player-id");
+    if (playerId) {
+      trackRawEspionageReports(playerId, content);
+    }
+  }
+});
+
 

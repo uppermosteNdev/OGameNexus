@@ -15662,9 +15662,34 @@ const PieChart$1 = createLucideIcon("PieChart", [
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
+const Play = createLucideIcon("Play", [
+  ["polygon", { points: "5 3 19 12 5 21 5 3", key: "191637" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
 const Plus = createLucideIcon("Plus", [
   ["path", { d: "M5 12h14", key: "1ays0h" }],
   ["path", { d: "M12 5v14", key: "s699le" }]
+]);
+/**
+ * @license lucide-react v0.344.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const Radar = createLucideIcon("Radar", [
+  ["path", { d: "M19.07 4.93A10 10 0 0 0 6.99 3.34", key: "z3du51" }],
+  ["path", { d: "M4 6h.01", key: "oypzma" }],
+  ["path", { d: "M2.29 9.62A10 10 0 1 0 21.31 8.35", key: "qzzz0" }],
+  ["path", { d: "M16.24 7.76A6 6 0 1 0 8.23 16.67", key: "1yjesh" }],
+  ["path", { d: "M12 18h.01", key: "mhygvu" }],
+  ["path", { d: "M17.99 11.66A6 6 0 0 1 15.77 16.67", key: "1u2y91" }],
+  ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }],
+  ["path", { d: "m13.41 10.59 5.66-5.66", key: "mhq4k0" }]
 ]);
 /**
  * @license lucide-react v0.344.0 - ISC
@@ -16117,6 +16142,7 @@ const Sidebar = ({ activeView, onSelect }) => {
     { id: "expeditions", label: "Expeditions", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Compass, { size: 22 }) },
     { id: "lifeforms", label: "Lifeforms", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Dna, { size: 22 }) },
     { id: "combat", label: "Combats", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Swords, { size: 22 }) },
+    { id: "raidRadar", label: "Raid Radar", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Radar, { size: 22 }) },
     { id: "debris", label: "Debris Fields", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Orbit, { size: 22 }) },
     { id: "empire", label: "Empire", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Rocket, { size: 22 }) },
     { id: "costsPlanner", label: "Costs Planner", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(ShoppingCart, { size: 22 }) },
@@ -22946,7 +22972,8 @@ class OGNexusDB extends Dexie {
     __publicField(this, "todoProjects");
     __publicField(this, "debrisHarvests");
     __publicField(this, "combatReports");
-    this.version(33).stores({
+    __publicField(this, "spiedPlanets");
+    this.version(34).stores({
       accounts: "playerId, playerName, universe, lastSeen",
       planets: "id, playerId, coords, lifeformId",
       expeditions: "messageId, playerId, timestamp, coords, result",
@@ -22959,7 +22986,8 @@ class OGNexusDB extends Dexie {
       lifeformSavedSetups: "++id, playerId, name",
       todoProjects: "++id, projectKey, playerId, planetId, type",
       debrisHarvests: "messageId, playerId, timestamp, coords",
-      combatReports: "messageId, playerId, timestamp, coords, winner"
+      combatReports: "messageId, playerId, timestamp, coords, winner",
+      spiedPlanets: "planetId, playerId, coords, lastSpiedTimestamp"
     });
     this.on("populate", () => {
       this.seedKnowledge();
@@ -22968,6 +22996,7 @@ class OGNexusDB extends Dexie {
     this.on("ready", () => {
       this.seedKnowledge();
       this.seedSettings();
+      this.migrateSpiedPlanets();
     });
   }
   async seedSettings() {
@@ -23001,6 +23030,47 @@ class OGNexusDB extends Dexie {
       await this.lifeformBonusBreakdown.bulkPut(LIFEFORM_BONUS_BREAKDOWN_DATA);
     } catch (error) {
       console.error("OGame Nexus: Failed to seed knowledge data", error);
+    }
+  }
+  calculateStorageCapacity(level, hasTraderClass) {
+    const lvl = Math.max(0, level || 0);
+    const baseCapacity = 5e3 * Math.floor(2.5 * Math.exp(20 / 33 * lvl));
+    if (hasTraderClass && lvl > 0) {
+      return Math.floor(baseCapacity * 1.1);
+    }
+    return baseCapacity;
+  }
+  async migrateSpiedPlanets() {
+    try {
+      const planets = await this.spiedPlanets.toArray();
+      const updates = [];
+      for (const p2 of planets) {
+        const hasTraderClass = p2.hasTraderClass ?? false;
+        const metalStorageLevel = p2.metalStorageLevel ?? 0;
+        const crystalStorageLevel = p2.crystalStorageLevel ?? 0;
+        const deuteriumStorageLevel = p2.deuteriumStorageLevel ?? 0;
+        const correctMetalCapacity = this.calculateStorageCapacity(metalStorageLevel, hasTraderClass);
+        const correctCrystalCapacity = this.calculateStorageCapacity(crystalStorageLevel, hasTraderClass);
+        const correctDeuteriumCapacity = this.calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass);
+        if (p2.metalCapacity !== correctMetalCapacity || p2.crystalCapacity !== correctCrystalCapacity || p2.deuteriumCapacity !== correctDeuteriumCapacity || p2.metalStorageLevel === void 0) {
+          updates.push({
+            ...p2,
+            metalStorageLevel,
+            crystalStorageLevel,
+            deuteriumStorageLevel,
+            metalCapacity: correctMetalCapacity,
+            crystalCapacity: correctCrystalCapacity,
+            deuteriumCapacity: correctDeuteriumCapacity,
+            hasTraderClass
+          });
+        }
+      }
+      if (updates.length > 0) {
+        console.log(`OGame Nexus: Correcting and migrating capacities for ${updates.length} spied planets.`);
+        await this.spiedPlanets.bulkPut(updates);
+      }
+    } catch (error) {
+      console.error("OGame Nexus: Failed to migrate spied planets capacities", error);
     }
   }
 }
@@ -50247,7 +50317,7 @@ const GlobalStyles = () => /* @__PURE__ */ jsxRuntimeExports.jsx("style", { chil
             pointer-events: none;
         }
     ` });
-const RESOURCE_COLORS$4 = {
+const RESOURCE_COLORS$5 = {
   metal: "#E6953C",
   crystal: "#4CAEE6",
   deuterium: "#43D159"
@@ -51045,21 +51115,21 @@ const Overview = ({ onSelect }) => {
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/metal_mine_medium.jpg", alt: "M", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.metalMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.metal }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.metal)}/h` : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$5.metal }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.metal)}/h` : "N/A" })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/crystal_mine_medium.jpg", alt: "C", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.crystalMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.crystal }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.crystal)}/h` : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$5.crystal }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.crystal)}/h` : "N/A" })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icons/resources/deuterium_mine_medium.jpg", alt: "D", style: { width: "18px", height: "18px", borderRadius: "3px" } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", fontWeight: 800, opacity: 0.8 }, children: p2.deuteriumMine || 0 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$4.deuterium }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.deuterium)}/h` : "N/A" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", fontWeight: 900, color: RESOURCE_COLORS$5.deuterium }, children: (calcResults == null ? void 0 : calcResults.planets[p2.id]) ? `${formatNumber$2(calcResults.planets[p2.id].total.deuterium)}/h` : "N/A" })
               ] })
             ] })
           ] }, p2.id)) })
@@ -51141,16 +51211,16 @@ const Overview = ({ onSelect }) => {
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "500px", minHeight: "400px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ResponsiveContainer, { width: "100%", height: "100%", minWidth: 0, minHeight: 0, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(AreaChart, { data: historicalData, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("defs", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorSM", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.metal, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.metal, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.metal, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.metal, stopOpacity: 0 })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorSC", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.crystal, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.crystal, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.crystal, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.crystal, stopOpacity: 0 })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorSD", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.deuterium, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.deuterium, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.deuterium, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.deuterium, stopOpacity: 0 })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "rgba(255,255,255,0.05)" }),
@@ -51167,23 +51237,23 @@ const Overview = ({ onSelect }) => {
                 }
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "shipMetal", name: "Metal", stroke: RESOURCE_COLORS$4.metal, fillOpacity: 1, fill: "url(#colorSM)", stackId: "a" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "shipCrystal", name: "Crystal", stroke: RESOURCE_COLORS$4.crystal, fillOpacity: 1, fill: "url(#colorSC)", stackId: "a" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "shipDeuterium", name: "Deuterium", stroke: RESOURCE_COLORS$4.deuterium, fillOpacity: 1, fill: "url(#colorSD)", stackId: "a" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "shipMetal", name: "Metal", stroke: RESOURCE_COLORS$5.metal, fillOpacity: 1, fill: "url(#colorSM)", stackId: "a" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "shipCrystal", name: "Crystal", stroke: RESOURCE_COLORS$5.crystal, fillOpacity: 1, fill: "url(#colorSC)", stackId: "a" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "shipDeuterium", name: "Deuterium", stroke: RESOURCE_COLORS$5.deuterium, fillOpacity: 1, fill: "url(#colorSD)", stackId: "a" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               Legend,
               {
                 content: () => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "center", gap: "24px", marginTop: "20px", fontSize: "0.7rem", fontWeight: 900, letterSpacing: "0.05em" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.metal }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.metal, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.metal }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.metal, borderRadius: "2px" } }),
                     " METAL"
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.crystal }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.crystal, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.crystal }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.crystal, borderRadius: "2px" } }),
                     " CRYSTAL"
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.deuterium }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.deuterium, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.deuterium }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.deuterium, borderRadius: "2px" } }),
                     " DEUTERIUM"
                   ] })
                 ] })
@@ -51205,16 +51275,16 @@ const Overview = ({ onSelect }) => {
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "500px", minHeight: "400px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ResponsiveContainer, { width: "100%", height: "100%", minWidth: 0, minHeight: 0, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(AreaChart, { data: historicalData, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("defs", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorCM", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.metal, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.metal, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.metal, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.metal, stopOpacity: 0 })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorCC", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.crystal, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.crystal, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.crystal, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.crystal, stopOpacity: 0 })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorCD", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.deuterium, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.deuterium, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.deuterium, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.deuterium, stopOpacity: 0 })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "rgba(255,255,255,0.05)" }),
@@ -51231,23 +51301,23 @@ const Overview = ({ onSelect }) => {
                 }
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "combatMetal", name: "Metal", stroke: RESOURCE_COLORS$4.metal, fillOpacity: 1, fill: "url(#colorCM)", stackId: "c" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "combatCrystal", name: "Crystal", stroke: RESOURCE_COLORS$4.crystal, fillOpacity: 1, fill: "url(#colorCC)", stackId: "c" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "combatDeuterium", name: "Deuterium", stroke: RESOURCE_COLORS$4.deuterium, fillOpacity: 1, fill: "url(#colorCD)", stackId: "c" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "combatMetal", name: "Metal", stroke: RESOURCE_COLORS$5.metal, fillOpacity: 1, fill: "url(#colorCM)", stackId: "c" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "combatCrystal", name: "Crystal", stroke: RESOURCE_COLORS$5.crystal, fillOpacity: 1, fill: "url(#colorCC)", stackId: "c" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "combatDeuterium", name: "Deuterium", stroke: RESOURCE_COLORS$5.deuterium, fillOpacity: 1, fill: "url(#colorCD)", stackId: "c" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               Legend,
               {
                 content: () => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "center", gap: "24px", marginTop: "20px", fontSize: "0.7rem", fontWeight: 900, letterSpacing: "0.05em" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.metal }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.metal, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.metal }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.metal, borderRadius: "2px" } }),
                     " METAL"
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.crystal }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.crystal, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.crystal }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.crystal, borderRadius: "2px" } }),
                     " CRYSTAL"
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.deuterium }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.deuterium, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.deuterium }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.deuterium, borderRadius: "2px" } }),
                     " DEUTERIUM"
                   ] })
                 ] })
@@ -51269,16 +51339,16 @@ const Overview = ({ onSelect }) => {
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "500px", minHeight: "400px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ResponsiveContainer, { width: "100%", height: "100%", minWidth: 0, minHeight: 0, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(AreaChart, { data: historicalData, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("defs", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorDM", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.metal, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.metal, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.metal, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.metal, stopOpacity: 0 })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorDC", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.crystal, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.crystal, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.crystal, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.crystal, stopOpacity: 0 })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "colorDD", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$4.deuterium, stopOpacity: 0.3 }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$4.deuterium, stopOpacity: 0 })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "5%", stopColor: RESOURCE_COLORS$5.deuterium, stopOpacity: 0.3 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "95%", stopColor: RESOURCE_COLORS$5.deuterium, stopOpacity: 0 })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "rgba(255,255,255,0.05)" }),
@@ -51295,23 +51365,23 @@ const Overview = ({ onSelect }) => {
                 }
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "debrisMetal", name: "Metal", stroke: RESOURCE_COLORS$4.metal, fillOpacity: 1, fill: "url(#colorDM)", stackId: "d" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "debrisCrystal", name: "Crystal", stroke: RESOURCE_COLORS$4.crystal, fillOpacity: 1, fill: "url(#colorDC)", stackId: "d" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "debrisDeuterium", name: "Deuterium", stroke: RESOURCE_COLORS$4.deuterium, fillOpacity: 1, fill: "url(#colorDD)", stackId: "d" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "debrisMetal", name: "Metal", stroke: RESOURCE_COLORS$5.metal, fillOpacity: 1, fill: "url(#colorDM)", stackId: "d" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "debrisCrystal", name: "Crystal", stroke: RESOURCE_COLORS$5.crystal, fillOpacity: 1, fill: "url(#colorDC)", stackId: "d" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { type: "monotone", dataKey: "debrisDeuterium", name: "Deuterium", stroke: RESOURCE_COLORS$5.deuterium, fillOpacity: 1, fill: "url(#colorDD)", stackId: "d" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               Legend,
               {
                 content: () => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "center", gap: "24px", marginTop: "20px", fontSize: "0.7rem", fontWeight: 900, letterSpacing: "0.05em" }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.metal }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.metal, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.metal }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.metal, borderRadius: "2px" } }),
                     " METAL"
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.crystal }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.crystal, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.crystal }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.crystal, borderRadius: "2px" } }),
                     " CRYSTAL"
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$4.deuterium }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$4.deuterium, borderRadius: "2px" } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: RESOURCE_COLORS$5.deuterium }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "10px", height: "10px", background: RESOURCE_COLORS$5.deuterium, borderRadius: "2px" } }),
                     " DEUTERIUM"
                   ] })
                 ] })
@@ -51501,7 +51571,7 @@ const CATEGORIES = [
   { id: "trader", label: "Trader", color: "#eab308", key: "trader" },
   { id: "lostFleet", label: "Lost Fleet", color: "#dc2626", key: "fleetloss" }
 ];
-const RESOURCE_COLORS$3 = {
+const RESOURCE_COLORS$4 = {
   metal: "#E6953C",
   crystal: "#4CAEE6",
   deuterium: "#43D159"
@@ -52407,15 +52477,15 @@ const Expeditions = () => {
           {
             expeditions,
             rows: [
-              { label: "Metal", color: RESOURCE_COLORS$3.metal, calc: (exp2) => {
+              { label: "Metal", color: RESOURCE_COLORS$4.metal, calc: (exp2) => {
                 var _a;
                 return ((_a = exp2.resultDetails) == null ? void 0 : _a.metal) || 0;
               } },
-              { label: "Crystal", color: RESOURCE_COLORS$3.crystal, calc: (exp2) => {
+              { label: "Crystal", color: RESOURCE_COLORS$4.crystal, calc: (exp2) => {
                 var _a;
                 return ((_a = exp2.resultDetails) == null ? void 0 : _a.crystal) || 0;
               } },
-              { label: "Deuterium", color: RESOURCE_COLORS$3.deuterium, calc: (exp2) => {
+              { label: "Deuterium", color: RESOURCE_COLORS$4.deuterium, calc: (exp2) => {
                 var _a;
                 return ((_a = exp2.resultDetails) == null ? void 0 : _a.deuterium) || 0;
               } }
@@ -52450,15 +52520,15 @@ const Expeditions = () => {
           {
             expeditions,
             rows: [
-              { label: "Metal", color: RESOURCE_COLORS$3.metal, calc: (exp2) => {
+              { label: "Metal", color: RESOURCE_COLORS$4.metal, calc: (exp2) => {
                 var _a;
                 return getExpeditionCategory(exp2) === "resources" && ((_a = exp2.resultDetails) == null ? void 0 : _a.metal) ? 1 : 0;
               } },
-              { label: "Crystal", color: RESOURCE_COLORS$3.crystal, calc: (exp2) => {
+              { label: "Crystal", color: RESOURCE_COLORS$4.crystal, calc: (exp2) => {
                 var _a;
                 return getExpeditionCategory(exp2) === "resources" && ((_a = exp2.resultDetails) == null ? void 0 : _a.crystal) ? 1 : 0;
               } },
-              { label: "Deuterium", color: RESOURCE_COLORS$3.deuterium, calc: (exp2) => {
+              { label: "Deuterium", color: RESOURCE_COLORS$4.deuterium, calc: (exp2) => {
                 var _a;
                 return getExpeditionCategory(exp2) === "resources" && ((_a = exp2.resultDetails) == null ? void 0 : _a.deuterium) ? 1 : 0;
               } }
@@ -52520,7 +52590,7 @@ const Expeditions = () => {
             rows: [
               {
                 label: "Metal",
-                color: RESOURCE_COLORS$3.metal,
+                color: RESOURCE_COLORS$4.metal,
                 calc: (exp2) => {
                   if (getExpeditionCategory(exp2) !== "ships" || !exp2.resultDetails) return 0;
                   let sum = 0;
@@ -52534,7 +52604,7 @@ const Expeditions = () => {
               },
               {
                 label: "Crystal",
-                color: RESOURCE_COLORS$3.crystal,
+                color: RESOURCE_COLORS$4.crystal,
                 calc: (exp2) => {
                   if (getExpeditionCategory(exp2) !== "ships" || !exp2.resultDetails) return 0;
                   let sum = 0;
@@ -52548,7 +52618,7 @@ const Expeditions = () => {
               },
               {
                 label: "Deuterium",
-                color: RESOURCE_COLORS$3.deuterium,
+                color: RESOURCE_COLORS$4.deuterium,
                 calc: (exp2) => {
                   if (getExpeditionCategory(exp2) !== "ships" || !exp2.resultDetails) return 0;
                   let sum = 0;
@@ -52610,7 +52680,7 @@ const Expeditions = () => {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { margin: "4px 0 0", opacity: 0.4, fontSize: "0.75rem", fontWeight: 600 }, children: "Elite findings documented across your empire's sorties." })
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass", style: { gridColumn: "span 4", padding: "24px", borderRadius: "24px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", color: RESOURCE_COLORS$3.metal }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", color: RESOURCE_COLORS$4.metal }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(Trophy, { size: 18 }),
               " ",
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.7rem", fontWeight: 900, textTransform: "uppercase" }, children: "Best Metal Finds" })
@@ -52630,7 +52700,7 @@ const Expeditions = () => {
             })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass", style: { gridColumn: "span 4", padding: "24px", borderRadius: "24px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", color: RESOURCE_COLORS$3.crystal }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", color: RESOURCE_COLORS$4.crystal }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(Trophy, { size: 18 }),
               " ",
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.7rem", fontWeight: 900, textTransform: "uppercase" }, children: "Best Crystal Finds" })
@@ -52650,7 +52720,7 @@ const Expeditions = () => {
             })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass", style: { gridColumn: "span 4", padding: "24px", borderRadius: "24px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", color: RESOURCE_COLORS$3.deuterium }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", color: RESOURCE_COLORS$4.deuterium }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(Trophy, { size: 18 }),
               " ",
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.7rem", fontWeight: 900, textTransform: "uppercase" }, children: "Best Deuterium Finds" })
@@ -52865,16 +52935,16 @@ const Expeditions = () => {
                 /* @__PURE__ */ jsxRuntimeExports.jsx(XAxis, { dataKey: "displayDate", axisLine: false, tickLine: false, tick: { fill: "rgba(255,255,255,0.5)", fontSize: 10 }, dy: 10, minTickGap: 40 }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(YAxis, { axisLine: false, tickLine: false, tick: { fill: "rgba(255,255,255,0.5)", fontSize: 12 }, tickFormatter: formatYAxis$2, width: 60 }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { content: /* @__PURE__ */ jsxRuntimeExports.jsx(CustomTooltip$1, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Metal", type: "monotone", dataKey: "metal", stackId: "1", stroke: RESOURCE_COLORS$3.metal, fill: RESOURCE_COLORS$3.metal, fillOpacity: visibleResources.has("metal") ? 0.6 : 0, strokeOpacity: visibleResources.has("metal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("metal") }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Crystal", type: "monotone", dataKey: "crystal", stackId: "1", stroke: RESOURCE_COLORS$3.crystal, fill: RESOURCE_COLORS$3.crystal, fillOpacity: visibleResources.has("crystal") ? 0.6 : 0, strokeOpacity: visibleResources.has("crystal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("crystal") }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Deuterium", type: "monotone", dataKey: "deuterium", stackId: "1", stroke: RESOURCE_COLORS$3.deuterium, fill: RESOURCE_COLORS$3.deuterium, fillOpacity: visibleResources.has("deuterium") ? 0.6 : 0, strokeOpacity: visibleResources.has("deuterium") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("deuterium") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Metal", type: "monotone", dataKey: "metal", stackId: "1", stroke: RESOURCE_COLORS$4.metal, fill: RESOURCE_COLORS$4.metal, fillOpacity: visibleResources.has("metal") ? 0.6 : 0, strokeOpacity: visibleResources.has("metal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("metal") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Crystal", type: "monotone", dataKey: "crystal", stackId: "1", stroke: RESOURCE_COLORS$4.crystal, fill: RESOURCE_COLORS$4.crystal, fillOpacity: visibleResources.has("crystal") ? 0.6 : 0, strokeOpacity: visibleResources.has("crystal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("crystal") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Deuterium", type: "monotone", dataKey: "deuterium", stackId: "1", stroke: RESOURCE_COLORS$4.deuterium, fill: RESOURCE_COLORS$4.deuterium, fillOpacity: visibleResources.has("deuterium") ? 0.6 : 0, strokeOpacity: visibleResources.has("deuterium") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("deuterium") }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Resource Units (MSU)", type: "monotone", dataKey: "msu", stroke: THEME_CYAN$5, fill: THEME_CYAN$5, fillOpacity: visibleResources.has("msu") ? 0.2 : 0, strokeOpacity: visibleResources.has("msu") ? 0.8 : 0, strokeWidth: 3, strokeDasharray: "5 5", hide: !visibleResources.has("msu") })
               ] }) }) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "180px", display: "flex", flexDirection: "column", gap: "6px" }, children: [
-              { id: "metal", label: "Metal", color: RESOURCE_COLORS$3.metal },
-              { id: "crystal", label: "Crystal", color: RESOURCE_COLORS$3.crystal },
-              { id: "deuterium", label: "Deuterium", color: RESOURCE_COLORS$3.deuterium },
+              { id: "metal", label: "Metal", color: RESOURCE_COLORS$4.metal },
+              { id: "crystal", label: "Crystal", color: RESOURCE_COLORS$4.crystal },
+              { id: "deuterium", label: "Deuterium", color: RESOURCE_COLORS$4.deuterium },
               { id: "msu", label: "Resource Units (MSU)", color: THEME_CYAN$5 }
             ].map((res) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { onClick: () => toggleResource(res.id), className: "glass", style: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", background: visibleResources.has(res.id) ? "rgba(255,255,255,0.05)" : "transparent", border: "1px solid rgba(255,255,255,0.05)", transition: "all 0.2s" }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "12px", height: "12px", borderRadius: "2px", background: res.color, opacity: visibleResources.has(res.id) ? 1 : 0.3 } }),
@@ -52917,15 +52987,15 @@ const Expeditions = () => {
                 /* @__PURE__ */ jsxRuntimeExports.jsx(XAxis, { dataKey: "displayDate", axisLine: false, tickLine: false, tick: { fill: "rgba(255,255,255,0.5)", fontSize: 10 }, dy: 10, minTickGap: 40 }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(YAxis, { axisLine: false, tickLine: false, tick: { fill: "rgba(255,255,255,0.5)", fontSize: 12 }, allowDecimals: false, tickFormatter: formatYAxis$2, width: 60 }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { content: /* @__PURE__ */ jsxRuntimeExports.jsx(CustomTooltip$1, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Metal", type: "monotone", dataKey: "metal", stackId: "1", stroke: RESOURCE_COLORS$3.metal, fill: RESOURCE_COLORS$3.metal, fillOpacity: visibleResources.has("metal") ? 0.6 : 0, strokeOpacity: visibleResources.has("metal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("metal") }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Crystal", type: "monotone", dataKey: "crystal", stackId: "1", stroke: RESOURCE_COLORS$3.crystal, fill: RESOURCE_COLORS$3.crystal, fillOpacity: visibleResources.has("crystal") ? 0.6 : 0, strokeOpacity: visibleResources.has("crystal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("crystal") }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Deuterium", type: "monotone", dataKey: "deuterium", stackId: "1", stroke: RESOURCE_COLORS$3.deuterium, fill: RESOURCE_COLORS$3.deuterium, fillOpacity: visibleResources.has("deuterium") ? 0.6 : 0, strokeOpacity: visibleResources.has("deuterium") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("deuterium") })
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Metal", type: "monotone", dataKey: "metal", stackId: "1", stroke: RESOURCE_COLORS$4.metal, fill: RESOURCE_COLORS$4.metal, fillOpacity: visibleResources.has("metal") ? 0.6 : 0, strokeOpacity: visibleResources.has("metal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("metal") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Crystal", type: "monotone", dataKey: "crystal", stackId: "1", stroke: RESOURCE_COLORS$4.crystal, fill: RESOURCE_COLORS$4.crystal, fillOpacity: visibleResources.has("crystal") ? 0.6 : 0, strokeOpacity: visibleResources.has("crystal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("crystal") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Deuterium", type: "monotone", dataKey: "deuterium", stackId: "1", stroke: RESOURCE_COLORS$4.deuterium, fill: RESOURCE_COLORS$4.deuterium, fillOpacity: visibleResources.has("deuterium") ? 0.6 : 0, strokeOpacity: visibleResources.has("deuterium") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("deuterium") })
               ] }) }) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "180px", display: "flex", flexDirection: "column", gap: "6px" }, children: [
-              { id: "metal", label: "Metal", color: RESOURCE_COLORS$3.metal },
-              { id: "crystal", label: "Crystal", color: RESOURCE_COLORS$3.crystal },
-              { id: "deuterium", label: "Deuterium", color: RESOURCE_COLORS$3.deuterium }
+              { id: "metal", label: "Metal", color: RESOURCE_COLORS$4.metal },
+              { id: "crystal", label: "Crystal", color: RESOURCE_COLORS$4.crystal },
+              { id: "deuterium", label: "Deuterium", color: RESOURCE_COLORS$4.deuterium }
             ].map((res) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { onClick: () => toggleResource(res.id), className: "glass", style: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", background: visibleResources.has(res.id) ? "rgba(255,255,255,0.05)" : "transparent", border: "1px solid rgba(255,255,255,0.05)", transition: "all 0.2s" }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "12px", height: "12px", borderRadius: "2px", background: res.color, opacity: visibleResources.has(res.id) ? 1 : 0.3 } }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: visibleResources.has(res.id) ? "#fff" : "rgba(255,255,255,0.3)" }, children: res.label })
@@ -52988,16 +53058,16 @@ const Expeditions = () => {
                 /* @__PURE__ */ jsxRuntimeExports.jsx(XAxis, { dataKey: "displayDate", axisLine: false, tickLine: false, tick: { fill: "rgba(255,255,255,0.5)", fontSize: 10 }, dy: 10, minTickGap: 40 }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(YAxis, { axisLine: false, tickLine: false, tick: { fill: "rgba(255,255,255,0.5)", fontSize: 12 }, tickFormatter: formatYAxis$2, width: 60 }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { content: /* @__PURE__ */ jsxRuntimeExports.jsx(CustomTooltip$1, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Metal", type: "monotone", dataKey: "metal", stackId: "1", stroke: RESOURCE_COLORS$3.metal, fill: RESOURCE_COLORS$3.metal, fillOpacity: visibleResources.has("metal") ? 0.6 : 0, strokeOpacity: visibleResources.has("metal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("metal") }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Crystal", type: "monotone", dataKey: "crystal", stackId: "1", stroke: RESOURCE_COLORS$3.crystal, fill: RESOURCE_COLORS$3.crystal, fillOpacity: visibleResources.has("crystal") ? 0.6 : 0, strokeOpacity: visibleResources.has("crystal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("crystal") }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Deuterium", type: "monotone", dataKey: "deuterium", stackId: "1", stroke: RESOURCE_COLORS$3.deuterium, fill: RESOURCE_COLORS$3.deuterium, fillOpacity: visibleResources.has("deuterium") ? 0.6 : 0, strokeOpacity: visibleResources.has("deuterium") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("deuterium") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Metal", type: "monotone", dataKey: "metal", stackId: "1", stroke: RESOURCE_COLORS$4.metal, fill: RESOURCE_COLORS$4.metal, fillOpacity: visibleResources.has("metal") ? 0.6 : 0, strokeOpacity: visibleResources.has("metal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("metal") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Crystal", type: "monotone", dataKey: "crystal", stackId: "1", stroke: RESOURCE_COLORS$4.crystal, fill: RESOURCE_COLORS$4.crystal, fillOpacity: visibleResources.has("crystal") ? 0.6 : 0, strokeOpacity: visibleResources.has("crystal") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("crystal") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Deuterium", type: "monotone", dataKey: "deuterium", stackId: "1", stroke: RESOURCE_COLORS$4.deuterium, fill: RESOURCE_COLORS$4.deuterium, fillOpacity: visibleResources.has("deuterium") ? 0.6 : 0, strokeOpacity: visibleResources.has("deuterium") ? 1 : 0, strokeWidth: 2, hide: !visibleResources.has("deuterium") }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Area, { name: "Resource Units (MSU)", type: "monotone", dataKey: "msu", stroke: THEME_CYAN$5, fill: THEME_CYAN$5, fillOpacity: visibleResources.has("msu") ? 0.2 : 0, strokeOpacity: visibleResources.has("msu") ? 0.8 : 0, strokeWidth: 3, strokeDasharray: "5 5", hide: !visibleResources.has("msu") })
               ] }) }) })
             ] }),
             viewMode === "chart" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "180px", display: "flex", flexDirection: "column", gap: "6px" }, children: [
-              { id: "metal", label: "Metal", color: RESOURCE_COLORS$3.metal },
-              { id: "crystal", label: "Crystal", color: RESOURCE_COLORS$3.crystal },
-              { id: "deuterium", label: "Deuterium", color: RESOURCE_COLORS$3.deuterium },
+              { id: "metal", label: "Metal", color: RESOURCE_COLORS$4.metal },
+              { id: "crystal", label: "Crystal", color: RESOURCE_COLORS$4.crystal },
+              { id: "deuterium", label: "Deuterium", color: RESOURCE_COLORS$4.deuterium },
               { id: "msu", label: "Resource Units (MSU)", color: THEME_CYAN$5 }
             ].map((res) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { onClick: () => toggleResource(res.id), className: "glass", style: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", background: visibleResources.has(res.id) ? "rgba(255,255,255,0.05)" : "transparent", border: "1px solid rgba(255,255,255,0.05)", transition: "all 0.2s" }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "12px", height: "12px", borderRadius: "2px", background: res.color, opacity: visibleResources.has(res.id) ? 1 : 0.3 } }),
@@ -53071,21 +53141,21 @@ const Expeditions = () => {
         ] }),
         activeTab === "info" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "100%", height: "100%", overflowY: "auto", paddingBottom: "40px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "24px" }, children: [
           theoreticalMax && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass", style: { padding: "40px", borderRadius: "24px", background: "rgba(5, 10, 20, 0.6)", border: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", gap: "40px", position: "relative", overflow: "hidden" }, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(90deg, ${RESOURCE_COLORS$3.metal}, ${RESOURCE_COLORS$3.crystal}, ${RESOURCE_COLORS$3.deuterium}, ${THEME_CYAN$5})` } }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(90deg, ${RESOURCE_COLORS$4.metal}, ${RESOURCE_COLORS$4.crystal}, ${RESOURCE_COLORS$4.deuterium}, ${THEME_CYAN$5})` } }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-around", alignItems: "center" }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { textAlign: "center" }, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, color: RESOURCE_COLORS$3.metal, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "8px" }, children: "POTENTIAL MAX METAL" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, color: RESOURCE_COLORS$4.metal, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "8px" }, children: "POTENTIAL MAX METAL" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "2.4rem", fontWeight: 900, color: "#fff" }, children: theoreticalMax.maxMetal.toLocaleString() })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { textAlign: "center" }, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, color: RESOURCE_COLORS$3.crystal, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "8px" }, children: "POTENTIAL MAX CRYSTAL" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, color: RESOURCE_COLORS$4.crystal, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "8px" }, children: "POTENTIAL MAX CRYSTAL" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "2.4rem", fontWeight: 900, color: "#fff" }, children: theoreticalMax.maxCrystal.toLocaleString() })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "100%", height: "1px", background: "rgba(255,255,255,0.05)" } }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-around", alignItems: "center" }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { textAlign: "center" }, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, color: RESOURCE_COLORS$3.deuterium, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "8px" }, children: "POTENTIAL MAX DEUTERIUM" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.8rem", fontWeight: 900, color: RESOURCE_COLORS$4.deuterium, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "8px" }, children: "POTENTIAL MAX DEUTERIUM" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "2.4rem", fontWeight: 900, color: "#fff" }, children: theoreticalMax.maxDeuterium.toLocaleString() })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { textAlign: "center" }, children: [
@@ -55409,7 +55479,7 @@ const OUTCOME_COLORS = {
   none: "#eab308"
   // Yellow for Draw
 };
-const RESOURCE_COLORS$2 = {
+const RESOURCE_COLORS$3 = {
   metal: "#E6953C",
   crystal: "#4CAEE6",
   deuterium: "#43D159",
@@ -56017,7 +56087,7 @@ const Combat = () => {
                     return sum + (((_a2 = cr.loot) == null ? void 0 : _a2[r2]) || 0);
                   }, 0);
                   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px" }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "24px", height: "24px", borderRadius: "4px", background: RESOURCE_COLORS$2[r2] } }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "24px", height: "24px", borderRadius: "4px", background: RESOURCE_COLORS$3[r2] } }) }),
                     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flexGrow: 1 }, children: [
                       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "4px" }, children: [
                         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.85rem", fontWeight: 700, textTransform: "capitalize" }, children: r2 }),
@@ -56040,7 +56110,7 @@ const Combat = () => {
                     return sum + (((_a2 = cr.debris) == null ? void 0 : _a2[r2]) || 0);
                   }, 0);
                   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px" }, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "24px", height: "24px", borderRadius: "4px", background: RESOURCE_COLORS$2[r2], opacity: 0.6 } }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "24px", height: "24px", borderRadius: "4px", background: RESOURCE_COLORS$3[r2], opacity: 0.6 } }) }),
                     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flexGrow: 1 }, children: [
                       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "4px" }, children: [
                         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.85rem", fontWeight: 700, textTransform: "capitalize" }, children: r2 }),
@@ -56356,7 +56426,7 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
                   var _a2;
                   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "12px", height: "12px", borderRadius: "2px", background: RESOURCE_COLORS$2[res] } }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "12px", height: "12px", borderRadius: "2px", background: RESOURCE_COLORS$3[res] } }),
                       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 700, textTransform: "capitalize" }, children: res })
                     ] }),
                     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.1rem", fontWeight: 900 }, children: formatYAxis$1(((_a2 = report.loot) == null ? void 0 : _a2[res]) || 0) })
@@ -56423,7 +56493,7 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
   ] });
 };
 const THEME_CYAN$3 = "#0062ff";
-const RESOURCE_COLORS$1 = {
+const RESOURCE_COLORS$2 = {
   metal: "#E6953C",
   crystal: "#4CAEE6",
   deuterium: "#43D159"
@@ -56554,9 +56624,9 @@ const DebrisTable = ({ harvests, title }) => {
         return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { style: { borderBottom: "1px solid rgba(255,255,255,0.05)" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px" }, children: new Date(h.timestamp * 1e3).toLocaleString() }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px" }, children: h.coords === "0:0:0" ? "Unknown" : h.coords }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px", textAlign: "right", color: RESOURCE_COLORS$1.metal }, children: metal.toLocaleString() }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px", textAlign: "right", color: RESOURCE_COLORS$1.crystal }, children: crystal.toLocaleString() }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px", textAlign: "right", color: RESOURCE_COLORS$1.deuterium }, children: deut.toLocaleString() }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px", textAlign: "right", color: RESOURCE_COLORS$2.metal }, children: metal.toLocaleString() }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px", textAlign: "right", color: RESOURCE_COLORS$2.crystal }, children: crystal.toLocaleString() }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px", textAlign: "right", color: RESOURCE_COLORS$2.deuterium }, children: deut.toLocaleString() }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "12px", textAlign: "right", fontWeight: 600 }, children: total.toLocaleString() })
         ] }, h.messageId);
       }) })
@@ -56657,9 +56727,9 @@ const DebrisFields = () => {
   }, [filteredHarvests, mMultiplier, cMultiplier, dMultiplier]);
   const pieData = reactExports.useMemo(() => {
     return [
-      { name: "Metal", value: stats.totalMetal, color: RESOURCE_COLORS$1.metal },
-      { name: "Crystal", value: stats.totalCrystal, color: RESOURCE_COLORS$1.crystal },
-      { name: "Deuterium", value: stats.totalDeuterium, color: RESOURCE_COLORS$1.deuterium }
+      { name: "Metal", value: stats.totalMetal, color: RESOURCE_COLORS$2.metal },
+      { name: "Crystal", value: stats.totalCrystal, color: RESOURCE_COLORS$2.crystal },
+      { name: "Deuterium", value: stats.totalDeuterium, color: RESOURCE_COLORS$2.deuterium }
     ].filter((d) => d.value > 0);
   }, [stats]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view", children: [
@@ -56724,24 +56794,24 @@ const DebrisFields = () => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.2 }, className: "glass", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", color: "var(--text-muted)" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "8px", height: "8px", borderRadius: "50%", background: RESOURCE_COLORS$1.metal } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "8px", height: "8px", borderRadius: "50%", background: RESOURCE_COLORS$2.metal } }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 600 }, children: "Total Metal" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: RESOURCE_COLORS$1.metal }, children: Math.floor(stats.totalMetal).toLocaleString() })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: RESOURCE_COLORS$2.metal }, children: Math.floor(stats.totalMetal).toLocaleString() })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.3 }, className: "glass", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", color: "var(--text-muted)" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "8px", height: "8px", borderRadius: "50%", background: RESOURCE_COLORS$1.crystal } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "8px", height: "8px", borderRadius: "50%", background: RESOURCE_COLORS$2.crystal } }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 600 }, children: "Total Crystal" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: RESOURCE_COLORS$1.crystal }, children: Math.floor(stats.totalCrystal).toLocaleString() })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: RESOURCE_COLORS$2.crystal }, children: Math.floor(stats.totalCrystal).toLocaleString() })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.4 }, className: "glass", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", color: "var(--text-muted)" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "8px", height: "8px", borderRadius: "50%", background: RESOURCE_COLORS$1.deuterium } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "8px", height: "8px", borderRadius: "50%", background: RESOURCE_COLORS$2.deuterium } }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 600 }, children: "Total Deuterium" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: RESOURCE_COLORS$1.deuterium }, children: Math.floor(stats.totalDeuterium).toLocaleString() })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: RESOURCE_COLORS$2.deuterium }, children: Math.floor(stats.totalDeuterium).toLocaleString() })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px", marginBottom: "32px" }, children: [
@@ -56782,8 +56852,8 @@ const DebrisFields = () => {
               type: "monotone",
               dataKey: "metal",
               stackId: "1",
-              stroke: RESOURCE_COLORS$1.metal,
-              fill: RESOURCE_COLORS$1.metal,
+              stroke: RESOURCE_COLORS$2.metal,
+              fill: RESOURCE_COLORS$2.metal,
               fillOpacity: 0.1,
               name: "Metal"
             }
@@ -56794,8 +56864,8 @@ const DebrisFields = () => {
               type: "monotone",
               dataKey: "crystal",
               stackId: "1",
-              stroke: RESOURCE_COLORS$1.crystal,
-              fill: RESOURCE_COLORS$1.crystal,
+              stroke: RESOURCE_COLORS$2.crystal,
+              fill: RESOURCE_COLORS$2.crystal,
               fillOpacity: 0.1,
               name: "Crystal"
             }
@@ -56806,8 +56876,8 @@ const DebrisFields = () => {
               type: "monotone",
               dataKey: "deuterium",
               stackId: "1",
-              stroke: RESOURCE_COLORS$1.deuterium,
-              fill: RESOURCE_COLORS$1.deuterium,
+              stroke: RESOURCE_COLORS$2.deuterium,
+              fill: RESOURCE_COLORS$2.deuterium,
               fillOpacity: 0.1,
               name: "Deuterium"
             }
@@ -61957,7 +62027,7 @@ function shipFindsScale(shipId, isDiscoverer) {
   return 1;
 }
 const THEME_CYAN = "#0062ff";
-const RESOURCE_COLORS = {
+const RESOURCE_COLORS$1 = {
   metal: "#E6953C",
   crystal: "#4CAEE6",
   deuterium: "#43D159"
@@ -62249,19 +62319,19 @@ const ExpeditionCalculator = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: "24px" }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { gridColumn: "span 4", display: "flex", flexDirection: "column", gap: "16px" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass bento-funky", style: { padding: "20px", borderRadius: "24px", background: "rgba(5, 10, 20, 0.4)", border: "1px solid rgba(255,255,255,0.05)", position: "relative", overflow: "hidden" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: `linear-gradient(90deg, ${RESOURCE_COLORS.metal}, ${RESOURCE_COLORS.crystal}, ${RESOURCE_COLORS.deuterium})` } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: `linear-gradient(90deg, ${RESOURCE_COLORS$1.metal}, ${RESOURCE_COLORS$1.crystal}, ${RESOURCE_COLORS$1.deuterium})` } }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { style: { margin: "0 0 16px", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255,255,255,0.4)" }, children: "Potential Max Yields" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "16px" }, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.6rem", fontWeight: 900, color: RESOURCE_COLORS.metal, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "2px" }, children: "Max Metal" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.6rem", fontWeight: 900, color: RESOURCE_COLORS$1.metal, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "2px" }, children: "Max Metal" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.2rem", fontWeight: 900, color: "#fff" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatedNumber, { value: calcResults.maxMetal }) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.6rem", fontWeight: 900, color: RESOURCE_COLORS.crystal, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "2px" }, children: "Max Crystal" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.6rem", fontWeight: 900, color: RESOURCE_COLORS$1.crystal, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "2px" }, children: "Max Crystal" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.2rem", fontWeight: 900, color: "#fff" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatedNumber, { value: calcResults.maxCrystal }) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.6rem", fontWeight: 900, color: RESOURCE_COLORS.deuterium, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "2px" }, children: "Max Deuterium" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.6rem", fontWeight: 900, color: RESOURCE_COLORS$1.deuterium, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "2px" }, children: "Max Deuterium" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.2rem", fontWeight: 900, color: "#fff" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatedNumber, { value: calcResults.maxDeuterium }) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -62317,28 +62387,28 @@ const ExpeditionCalculator = () => {
           gap: "20px"
         }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(User, { size: 16, color: RESOURCE_COLORS.crystal, style: { filter: "drop-shadow(0 0 5px " + RESOURCE_COLORS.crystal + "88)" } }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(User, { size: 16, color: RESOURCE_COLORS$1.crystal, style: { filter: "drop-shadow(0 0 5px " + RESOURCE_COLORS$1.crystal + "88)" } }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { style: { margin: 0, fontSize: "0.7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1.5px", color: "rgba(255,255,255,0.6)" }, children: "Player Bonuses" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "16px" }, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "param-field", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("label", { children: "Research Bonus (%)" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "input-wrapper", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Sparkles, { size: 14, className: "input-icon", style: { color: RESOURCE_COLORS.metal } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Sparkles, { size: 14, className: "input-icon", style: { color: RESOURCE_COLORS$1.metal } }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "number", step: "0.1", value: calcConfig.resBonusPercent, onChange: (e) => setCalcConfig({ ...calcConfig, resBonusPercent: Number(e.target.value) }) })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "param-field", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("label", { children: "Ship Found Bonus (%)" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "input-wrapper", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Ship, { size: 14, className: "input-icon", style: { color: RESOURCE_COLORS.crystal } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Ship, { size: 14, className: "input-icon", style: { color: RESOURCE_COLORS$1.crystal } }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "number", step: "0.1", value: calcConfig.shipBonusPercent, onChange: (e) => setCalcConfig({ ...calcConfig, shipBonusPercent: Number(e.target.value) }) })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "param-field", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("label", { children: "Discoverer T18 Tech (%)" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "input-wrapper", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 14, className: "input-icon", style: { color: RESOURCE_COLORS.deuterium } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Shield, { size: 14, className: "input-icon", style: { color: RESOURCE_COLORS$1.deuterium } }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "number", step: "0.1", value: calcConfig.lifeformDiscovererBonusPercent, onChange: (e) => setCalcConfig({ ...calcConfig, lifeformDiscovererBonusPercent: Number(e.target.value) }) })
               ] })
             ] }),
@@ -66757,8 +66827,8 @@ const RESEARCH_BASE_COSTS = {
 };
 const LIFEFORM_BUILDINGS_COSTS = {
   // Humans
-  11101: { base: { metal: 75, crystal: 30, deuterium: 0 }, factor: 1.15 },
-  11102: { base: { metal: 100, crystal: 50, deuterium: 20 }, factor: 1.15 },
+  11101: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.2 },
+  11102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.23 },
   11103: { base: { metal: 2e4, crystal: 25e3, deuterium: 1e4 }, factor: 1.3 },
   11104: { base: { metal: 4e4, crystal: 35e3, deuterium: 15e3 }, factor: 1.3 },
   11105: { base: { metal: 5e4, crystal: 4e4, deuterium: 2e4 }, factor: 1.3 },
@@ -66770,8 +66840,8 @@ const LIFEFORM_BUILDINGS_COSTS = {
   11111: { base: { metal: 8e4, crystal: 35e3, deuterium: 6e4 }, factor: 1.5 },
   11112: { base: { metal: 5e5, crystal: 4e5, deuterium: 2e5 }, factor: 1.3 },
   // Rock'tal
-  12101: { base: { metal: 100, crystal: 40, deuterium: 0 }, factor: 1.15 },
-  12102: { base: { metal: 150, crystal: 75, deuterium: 30 }, factor: 1.15 },
+  12101: { base: { metal: 9, crystal: 3, deuterium: 0 }, factor: 1.2 },
+  12102: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.2 },
   12103: { base: { metal: 4e4, crystal: 1e4, deuterium: 15e3 }, factor: 1.3 },
   12104: { base: { metal: 5e4, crystal: 15e3, deuterium: 2e4 }, factor: 1.3 },
   12105: { base: { metal: 6e4, crystal: 2e4, deuterium: 25e3 }, factor: 1.3 },
@@ -66783,8 +66853,8 @@ const LIFEFORM_BUILDINGS_COSTS = {
   12111: { base: { metal: 15e4, crystal: 6e4, deuterium: 3e4 }, factor: 1.4 },
   12112: { base: { metal: 6e5, crystal: 45e4, deuterium: 25e4 }, factor: 1.3 },
   // Mechas
-  13101: { base: { metal: 80, crystal: 35, deuterium: 0 }, factor: 1.15 },
-  13102: { base: { metal: 120, crystal: 60, deuterium: 25 }, factor: 1.15 },
+  13101: { base: { metal: 6, crystal: 2, deuterium: 0 }, factor: 1.21 },
+  13102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.18 },
   13103: { base: { metal: 3e4, crystal: 2e4, deuterium: 1e4 }, factor: 1.3 },
   13104: { base: { metal: 5e4, crystal: 3e4, deuterium: 15e3 }, factor: 1.3 },
   13105: { base: { metal: 8e4, crystal: 5e4, deuterium: 25e3 }, factor: 1.3 },
@@ -66796,8 +66866,8 @@ const LIFEFORM_BUILDINGS_COSTS = {
   13111: { base: { metal: 55e3, crystal: 5e4, deuterium: 3e4 }, factor: 1.5 },
   13112: { base: { metal: 75e4, crystal: 5e5, deuterium: 3e5 }, factor: 1.3 },
   // Kaelesh
-  14101: { base: { metal: 90, crystal: 35, deuterium: 0 }, factor: 1.15 },
-  14102: { base: { metal: 130, crystal: 65, deuterium: 25 }, factor: 1.15 },
+  14101: { base: { metal: 4, crystal: 3, deuterium: 0 }, factor: 1.21 },
+  14102: { base: { metal: 6, crystal: 3, deuterium: 0 }, factor: 1.21 },
   14103: { base: { metal: 2e4, crystal: 2e4, deuterium: 3e4 }, factor: 1.3 },
   14104: { base: { metal: 45e3, crystal: 3e4, deuterium: 2e4 }, factor: 1.3 },
   14105: { base: { metal: 7e4, crystal: 5e4, deuterium: 35e3 }, factor: 1.3 },
@@ -66835,6 +66905,24 @@ const calculateStandardCost = (base, multiplier, start, end) => {
     metal += Math.floor(base.metal * Math.pow(multiplier, level - 1));
     crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1));
     deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1));
+  }
+  return { metal, crystal, deuterium };
+};
+const calculateLifeformBuildingCost = (itemId, base, multiplier, start, end) => {
+  const isTechScaled = [11101, 11102, 12101, 12102, 13101, 13102, 14101, 14102].includes(itemId);
+  let metal = 0;
+  let crystal = 0;
+  let deuterium = 0;
+  for (let level = start + 1; level <= end; level++) {
+    if (isTechScaled) {
+      metal += Math.floor(base.metal * Math.pow(multiplier, level - 1) * level);
+      crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1) * level);
+      deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1) * level);
+    } else {
+      metal += Math.floor(base.metal * Math.pow(multiplier, level - 1));
+      crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1));
+      deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1));
+    }
   }
   return { metal, crystal, deuterium };
 };
@@ -67129,7 +67217,7 @@ const CostsPlanner = () => {
         } else if (item.category === "LF Building" && realPlanet) {
           const costConfig = LIFEFORM_BUILDINGS_COSTS[item.itemId];
           if (costConfig) {
-            cost = calculateStandardCost(costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
+            cost = calculateLifeformBuildingCost(item.itemId, costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
             const multiplier = getLifeformBuildingCostMultiplier(realPlanet);
             cost = applyDiscount(cost, multiplier);
           }
@@ -67410,7 +67498,7 @@ const CostsPlanner = () => {
     }
     const costConfig = LIFEFORM_BUILDINGS_COSTS[bld.id];
     if (!costConfig) return;
-    let cost = calculateStandardCost(costConfig.base, costConfig.factor, current2, target);
+    let cost = calculateLifeformBuildingCost(bld.id, costConfig.base, costConfig.factor, current2, target);
     const multiplier = getLifeformBuildingCostMultiplier(activePlanet);
     cost = applyDiscount(cost, multiplier);
     const lfId = activePlanet.lifeformId || 1;
@@ -68251,7 +68339,7 @@ ${sourceDetails}: -${(discount * 100).toFixed(2)}% discount (0.15% per level)`;
                     const inputKey = `lfBuildings_${selectedPlanetId}_${bld.id}`;
                     const target = targetLevels[inputKey] ?? current2 + 1;
                     const costConfig = LIFEFORM_BUILDINGS_COSTS[bld.id];
-                    let calculatedCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, current2, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                    let calculatedCost = costConfig ? calculateLifeformBuildingCost(bld.id, costConfig.base, costConfig.factor, current2, target) : { metal: 0, crystal: 0, deuterium: 0 };
                     const multiplier = getLifeformBuildingCostMultiplier(activePlanet);
                     calculatedCost = applyDiscount(calculatedCost, multiplier);
                     const hasUpgrade = target > current2;
@@ -68311,7 +68399,7 @@ ${sourceDetails}: -${(discount * 100).toFixed(2)}% discount (0.15% per level)`;
                           ] })
                         ] }),
                         hasUpgrade && (() => {
-                          let singleCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, target - 1, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                          let singleCost = costConfig ? calculateLifeformBuildingCost(bld.id, costConfig.base, costConfig.factor, target - 1, target) : { metal: 0, crystal: 0, deuterium: 0 };
                           const multiplier2 = getLifeformBuildingCostMultiplier(activePlanet);
                           singleCost = applyDiscount(singleCost, multiplier2);
                           return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "option-mini-cost-container", children: [
@@ -71391,6 +71479,11 @@ const Tutorials = ({ onNavigate }) => {
           title: "Import Mine Production",
           text: "Visit your in-game Resource Settings tab on every planet and then the Lifeform Player Bonuses. This allows the extension to map information about your empire production and lifeform levels.",
           images: ["icons/tutorials/T1/ResourceSettings1.jpg", "icons/tutorials/T1/ResourceSettings2.jpg"]
+        },
+        {
+          title: "Lifeform Synchronization",
+          text: "Go to the in-game **Lifeform Research** page on all of your planets for the first time. Doing so enables OGame Nexus to scan, identify, and catalog your active technology Tiers for each planet.",
+          images: ["icons/tutorials/T1/Lifeforms1.jpg"]
         }
       ]
     },
@@ -72263,6 +72356,1445 @@ const Tutorials = ({ onNavigate }) => {
     } })
   ] });
 };
+const RESOURCE_COLORS = {
+  metal: "#E6953C",
+  crystal: "#4CAEE6",
+  deuterium: "#43D159"
+};
+const parseCoords = (coordsStr) => {
+  try {
+    const parts = coordsStr.replace(/[\[\]]/g, "").split(":").map(Number);
+    return {
+      galaxy: parts[0] || 0,
+      system: parts[1] || 0,
+      position: parts[2] || 0
+    };
+  } catch (e) {
+    return { galaxy: 0, system: 0, position: 0 };
+  }
+};
+const RaidRadar = () => {
+  const activeAccount = useLiveQuery(() => db.accounts.orderBy("lastSeen").reverse().first());
+  const spiedPlanets = useLiveQuery(() => db.spiedPlanets.toArray()) || [];
+  const ownPlanets = useLiveQuery(() => {
+    if (!activeAccount) return [];
+    return db.planets.where("playerId").equals(activeAccount.playerId).filter((p2) => p2.type === "planet").toArray();
+  }, [activeAccount]) || [];
+  const [searchQuery, setSearchQuery] = reactExports.useState("");
+  const [statusFilter, setStatusFilter] = reactExports.useState("all");
+  const [confidenceFilter, setConfidenceFilter] = reactExports.useState("all");
+  const [sortBy2, setSortBy] = reactExports.useState("loot");
+  const [sortOrder, setSortOrder] = reactExports.useState("desc");
+  const [activeTab, setActiveTab] = reactExports.useState("all");
+  const [selectedGalaxies, setSelectedGalaxies] = reactExports.useState([]);
+  const [proximityPlanetId, setProximityPlanetId] = reactExports.useState("");
+  const [selectedSingleGalaxy, setSelectedSingleGalaxy] = reactExports.useState(1);
+  const [vicinityRange, setVicinityRange] = reactExports.useState(50);
+  const [productivityRange, setProductivityRange] = reactExports.useState(30);
+  const [currentPage, setCurrentPage] = reactExports.useState(1);
+  const ITEMS_PER_PAGE = 20;
+  reactExports.useEffect(() => {
+    if (ownPlanets.length > 0 && !proximityPlanetId) {
+      setProximityPlanetId(ownPlanets[0].id);
+    }
+  }, [ownPlanets, proximityPlanetId]);
+  reactExports.useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, statusFilter, confidenceFilter, selectedGalaxies, proximityPlanetId, selectedSingleGalaxy, vicinityRange, productivityRange]);
+  const [tick, setTick] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((t2) => t2 + 1);
+    }, 1e3);
+    return () => clearInterval(timer);
+  }, []);
+  const processedPlanets = reactExports.useMemo(() => {
+    const now2 = Date.now() / 1e3;
+    const isDiscoverer = (activeAccount == null ? void 0 : activeAccount.playerClass) === 3;
+    const lootPercentageValue = isDiscoverer ? 75 : 50;
+    const lootFactor = lootPercentageValue / 100;
+    const twoDaysInSeconds = 2 * 24 * 60 * 60;
+    const spiedPlanetsWithCap = spiedPlanets.filter(
+      (planet) => planet.metalCapacity !== void 0 && planet.crystalCapacity !== void 0 && planet.deuteriumCapacity !== void 0 && now2 - planet.lastSpiedTimestamp <= twoDaysInSeconds
+    );
+    return spiedPlanetsWithCap.map((planet) => {
+      const dT = Math.max(0, now2 - planet.lastSpiedTimestamp) / 3600;
+      const metalAccumulated = planet.metalPerHour * dT;
+      const crystalAccumulated = planet.crystalPerHour * dT;
+      const deuteriumAccumulated = planet.deuteriumPerHour * dT;
+      const metalCap = planet.metalCapacity || 1e4;
+      const crystalCap = planet.crystalCapacity || 1e4;
+      const deuteriumCap = planet.deuteriumCapacity || 1e4;
+      const metalTotal = Math.max(planet.lastSpiedMetal, Math.min(metalCap, planet.lastSpiedMetal + metalAccumulated));
+      const crystalTotal = Math.max(planet.lastSpiedCrystal, Math.min(crystalCap, planet.lastSpiedCrystal + crystalAccumulated));
+      const deuteriumTotal = Math.max(planet.lastSpiedDeuterium, Math.min(deuteriumCap, planet.lastSpiedDeuterium + deuteriumAccumulated));
+      const resourcesTotal = metalTotal + crystalTotal + deuteriumTotal;
+      const resourcesMSU = metalTotal + crystalTotal * 1.5 + deuteriumTotal * 3;
+      const lootMetal = metalTotal * lootFactor;
+      const lootCrystal = crystalTotal * lootFactor;
+      const lootDeuterium = deuteriumTotal * lootFactor;
+      const lootTotal = lootMetal + lootCrystal + lootDeuterium;
+      const lootMSU = lootMetal + lootCrystal * 1.5 + lootDeuterium * 3;
+      const smallCargoNeeded = Math.ceil(lootTotal / 5e3);
+      const largeCargoNeeded = Math.ceil(lootTotal / 25e3);
+      let coordsVal = 0;
+      try {
+        const parts = planet.coords.replace(/[\[\]]/g, "").split(":").map(Number);
+        if (parts.length === 3) {
+          coordsVal = parts[0] * 1e6 + parts[1] * 1e3 + parts[2];
+        }
+      } catch (e) {
+      }
+      return {
+        ...planet,
+        metalTotal: Math.floor(metalTotal),
+        crystalTotal: Math.floor(crystalTotal),
+        deuteriumTotal: Math.floor(deuteriumTotal),
+        resourcesTotal: Math.floor(resourcesTotal),
+        resourcesMSU: Math.floor(resourcesMSU),
+        lootMetal: Math.floor(lootMetal),
+        lootCrystal: Math.floor(lootCrystal),
+        lootDeuterium: Math.floor(lootDeuterium),
+        lootTotal: Math.floor(lootTotal),
+        lootMSU: Math.floor(lootMSU),
+        lootPercentageValue,
+        smallCargoNeeded,
+        largeCargoNeeded,
+        dT,
+        coordsVal
+      };
+    });
+  }, [spiedPlanets, tick, activeAccount]);
+  const handleDeletePlanet = async (planetId, e) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to remove this spied inactive target?")) {
+      try {
+        await db.spiedPlanets.delete(planetId);
+      } catch (err) {
+        console.error("Failed to delete spied target", err);
+      }
+    }
+  };
+  reactExports.useMemo(() => {
+    const galaxies = /* @__PURE__ */ new Set();
+    processedPlanets.forEach((p2) => {
+      const coords = parseCoords(p2.coords);
+      if (coords.galaxy > 0) {
+        galaxies.add(coords.galaxy);
+      }
+    });
+    return Array.from(galaxies).sort((a2, b) => a2 - b);
+  }, [processedPlanets]);
+  const toggleGalaxy = (g) => {
+    setSelectedGalaxies((prev) => {
+      if (prev.includes(g)) {
+        return prev.filter((x2) => x2 !== g);
+      } else {
+        return [...prev, g];
+      }
+    });
+  };
+  const filteredPlanets = reactExports.useMemo(() => {
+    return processedPlanets.filter((planet) => {
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = planet.playerName.toLowerCase().includes(searchLower) || planet.coords.toLowerCase().includes(searchLower);
+      const isLongInactive = planet.playerStatus.includes("longinactive");
+      const matchesStatus = statusFilter === "all" || statusFilter === "inactive" && !isLongInactive || statusFilter === "longinactive" && isLongInactive;
+      const matchesConfidence = confidenceFilter === "all" || planet.confidence >= parseInt(confidenceFilter, 10);
+      let matchesTab = true;
+      const targetCoords = parseCoords(planet.coords);
+      if (activeTab === "all") {
+        matchesTab = selectedGalaxies.length === 0 || selectedGalaxies.includes(targetCoords.galaxy);
+      } else if (activeTab === "proximity") {
+        const ownPlanet = ownPlanets.find((p2) => p2.id === proximityPlanetId);
+        if (ownPlanet) {
+          const own = parseCoords(ownPlanet.coords);
+          const maxSystems = (activeAccount == null ? void 0 : activeAccount.systems) || 499;
+          const isDonut = (activeAccount == null ? void 0 : activeAccount.donutSystem) === void 0 ? true : activeAccount.donutSystem !== 0;
+          let diff = Math.abs(targetCoords.system - own.system);
+          if (isDonut && diff > maxSystems / 2) {
+            diff = maxSystems - diff;
+          }
+          matchesTab = targetCoords.galaxy === own.galaxy && diff <= 100;
+        } else {
+          matchesTab = false;
+        }
+      } else if (activeTab === "galaxy") {
+        matchesTab = targetCoords.galaxy === selectedSingleGalaxy;
+      }
+      return matchesSearch && matchesStatus && matchesConfidence && matchesTab;
+    }).sort((a2, b) => {
+      let comparison = 0;
+      if (sortBy2 === "loot") {
+        comparison = a2.lootMSU - b.lootMSU;
+      } else if (sortBy2 === "coords") {
+        comparison = a2.coordsVal - b.coordsVal;
+      } else if (sortBy2 === "confidence") {
+        comparison = a2.confidence - b.confidence;
+      } else if (sortBy2 === "lastSpied") {
+        comparison = a2.lastSpiedTimestamp - b.lastSpiedTimestamp;
+      }
+      return sortOrder === "desc" ? -comparison : comparison;
+    });
+  }, [processedPlanets, searchQuery, statusFilter, confidenceFilter, sortBy2, sortOrder, activeTab, selectedGalaxies, proximityPlanetId, selectedSingleGalaxy, ownPlanets, activeAccount]);
+  const vicinityData = reactExports.useMemo(() => {
+    return ownPlanets.map((own) => {
+      const ownCoords = parseCoords(own.coords);
+      const maxSystems = (activeAccount == null ? void 0 : activeAccount.systems) || 499;
+      const isDonut = (activeAccount == null ? void 0 : activeAccount.donutSystem) === void 0 ? true : activeAccount.donutSystem !== 0;
+      let totalMetal = 0;
+      let totalCrystal = 0;
+      let totalDeuterium = 0;
+      let totalMSU = 0;
+      let targetCount = 0;
+      const vicinityTargets = [];
+      processedPlanets.forEach((target) => {
+        const targetCoords = parseCoords(target.coords);
+        if (targetCoords.galaxy !== ownCoords.galaxy) return;
+        let diff = Math.abs(targetCoords.system - ownCoords.system);
+        if (isDonut && diff > maxSystems / 2) {
+          diff = maxSystems - diff;
+        }
+        if (diff <= vicinityRange) {
+          totalMetal += target.lootMetal;
+          totalCrystal += target.lootCrystal;
+          totalDeuterium += target.lootDeuterium;
+          totalMSU += target.lootMSU;
+          targetCount++;
+          vicinityTargets.push(target);
+        }
+      });
+      return {
+        own,
+        totalMetal,
+        totalCrystal,
+        totalDeuterium,
+        totalMSU,
+        targetCount,
+        vicinityTargets
+      };
+    }).sort((a2, b) => b.totalMSU - a2.totalMSU);
+  }, [ownPlanets, processedPlanets, vicinityRange, activeAccount]);
+  const productivityData = reactExports.useMemo(() => {
+    return ownPlanets.map((own) => {
+      const ownCoords = parseCoords(own.coords);
+      const maxSystems = (activeAccount == null ? void 0 : activeAccount.systems) || 499;
+      const isDonut = (activeAccount == null ? void 0 : activeAccount.donutSystem) === void 0 ? true : activeAccount.donutSystem !== 0;
+      const vicinityTargets = [];
+      processedPlanets.forEach((target) => {
+        const targetCoords = parseCoords(target.coords);
+        if (targetCoords.galaxy !== ownCoords.galaxy) return;
+        let diff = Math.abs(targetCoords.system - ownCoords.system);
+        if (isDonut && diff > maxSystems / 2) {
+          diff = maxSystems - diff;
+        }
+        if (diff <= productivityRange) {
+          vicinityTargets.push(target);
+        }
+      });
+      const targetsWithProd = vicinityTargets.map((target) => {
+        const prodMSU = target.metalPerHour + target.crystalPerHour * 1.5 + target.deuteriumPerHour * 3;
+        return { target, prodMSU };
+      });
+      targetsWithProd.sort((a2, b) => b.prodMSU - a2.prodMSU);
+      const best20Targets = targetsWithProd.slice(0, 20);
+      let totalMetalProd = 0;
+      let totalCrystalProd = 0;
+      let totalDeuteriumProd = 0;
+      let totalMSUProd = 0;
+      best20Targets.forEach((item) => {
+        totalMetalProd += item.target.metalPerHour;
+        totalCrystalProd += item.target.crystalPerHour;
+        totalDeuteriumProd += item.target.deuteriumPerHour;
+        totalMSUProd += item.prodMSU;
+      });
+      return {
+        own,
+        totalMetalProd,
+        totalCrystalProd,
+        totalDeuteriumProd,
+        totalMSUProd,
+        targetCount: vicinityTargets.length,
+        topTargetsCount: best20Targets.length
+      };
+    }).sort((a2, b) => b.totalMSUProd - a2.totalMSUProd);
+  }, [ownPlanets, processedPlanets, productivityRange, activeAccount]);
+  const totalPages = Math.ceil(filteredPlanets.length / ITEMS_PER_PAGE);
+  const paginatedPlanets = reactExports.useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredPlanets.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredPlanets, currentPage]);
+  const renderPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    for (let i = start; i <= end; i++) {
+      pages.push(
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => setCurrentPage(i),
+            style: {
+              padding: "8px 14px",
+              borderRadius: "8px",
+              background: currentPage === i ? "var(--primary)" : "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              color: currentPage === i ? "#fff" : "var(--text-muted)",
+              cursor: "pointer",
+              fontWeight: 600,
+              transition: "all 0.2s",
+              outline: "none"
+            },
+            className: currentPage === i ? "" : "page-btn-hover",
+            children: i
+          },
+          i
+        )
+      );
+    }
+    return pages;
+  };
+  const stats = reactExports.useMemo(() => {
+    let totalLootVal = 0;
+    let totalLootMSU = 0;
+    let bestTarget = null;
+    let avgConfidence = 0;
+    filteredPlanets.forEach((p2) => {
+      totalLootVal += p2.lootTotal;
+      totalLootMSU += p2.lootMSU;
+      avgConfidence += p2.confidence;
+      if (!bestTarget || p2.lootMSU > bestTarget.lootMSU) {
+        bestTarget = p2;
+      }
+    });
+    const count = filteredPlanets.length;
+    avgConfidence = count > 0 ? Math.round(avgConfidence / count) : 0;
+    return {
+      totalLootVal,
+      totalLootMSU,
+      bestTarget,
+      avgConfidence,
+      count
+    };
+  }, [filteredPlanets]);
+  const toggleSort = (field) => {
+    if (sortBy2 === field) {
+      setSortOrder((o) => o === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortOrder("desc");
+    }
+  };
+  const formatNumber2 = (num) => {
+    if (num >= 1e9) return (num / 1e9).toFixed(1) + "B";
+    if (num >= 1e6) return (num / 1e6).toFixed(1) + "M";
+    if (num >= 1e3) return (num / 1e3).toFixed(1) + "K";
+    return (Math.round(num * 10) / 10).toString();
+  };
+  const formatAbbreviated = (num) => {
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
+    if (num >= 1e3) return (num / 1e3).toFixed(2) + "K";
+    return num.toLocaleString(void 0, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+  const getConfidenceBadgeColor = (conf) => {
+    if (conf >= 80) return "rgba(34, 197, 94, 0.15)";
+    if (conf >= 40) return "rgba(56, 189, 248, 0.15)";
+    return "rgba(230, 149, 60, 0.15)";
+  };
+  const getConfidenceTextColor = (conf) => {
+    if (conf >= 80) return "#22c55e";
+    if (conf >= 40) return "#38bdf8";
+    return "#e6953c";
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "view", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "32px", position: "relative" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "20px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { position: "relative", width: "50px", height: "50px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "radar-circle-glow" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "radar-pulse" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+          width: "50px",
+          height: "50px",
+          borderRadius: "50%",
+          background: "rgba(0, 98, 255, 0.2)",
+          border: "2px solid #0062ff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#00f2ff"
+        }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Activity, { size: 24, className: "radar-spin" }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { style: { color: "#fff", fontSize: "2.5rem", fontWeight: 800, margin: 0 }, children: "Raid Radar" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { color: "var(--text-muted)", margin: "4px 0 0" }, children: "Empirical target tracking and resource projection for inactive farming." })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "20px", marginBottom: "32px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.1 }, className: "glass", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", color: "var(--text-muted)" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 18 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 600 }, children: "Active Spied Targets" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: "#fff" }, children: [
+          stats.count,
+          " Planets"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: "Currently registered in database" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.2 }, className: "glass", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", color: "var(--text-muted)" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Ship, { size: 18 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 600 }, children: "Total Accumulated Loot" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "baseline", gap: "6px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.8rem", fontWeight: 800, color: "var(--primary)" }, children: formatNumber2(stats.totalLootMSU) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1rem", fontWeight: 600, color: "var(--text-muted)" }, children: "MSU" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: [
+          "Based on ",
+          (activeAccount == null ? void 0 : activeAccount.playerClass) === 3 ? 75 : 50,
+          "% inactive loot factor (",
+          (activeAccount == null ? void 0 : activeAccount.playerClass) === 3 ? "Discoverer" : "Other Class",
+          ")"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.3 }, className: "glass", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", color: "var(--text-muted)" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CheckCircle2, { size: 18 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 600 }, children: "Avg Data Confidence" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.8rem", fontWeight: 800, color: getConfidenceTextColor(stats.avgConfidence) }, children: [
+          stats.avgConfidence,
+          "%"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: "Higher spy counts = tighter estimates" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.4 }, className: "glass", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px", color: "var(--text-muted)" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Compass, { size: 18 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", fontWeight: 600 }, children: "Highest Yield Target" })
+        ] }),
+        stats.bestTarget ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "1.2rem", fontWeight: 800, color: "#fff" }, children: [
+            stats.bestTarget.playerName,
+            " ",
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "var(--primary)" }, children: [
+              "[",
+              stats.bestTarget.coords,
+              "]"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: [
+            "Yielding ",
+            formatNumber2(stats.bestTarget.lootMSU),
+            " MSU loot"
+          ] })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "1.2rem", fontWeight: 600, color: "var(--text-muted)" }, children: "None" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "4px", marginBottom: "-1px", position: "relative", zIndex: 2 }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setActiveTab("all"),
+          style: {
+            padding: "14px 28px",
+            background: activeTab === "all" ? "rgba(10, 16, 27, 0.98)" : "rgba(255, 255, 255, 0.01)",
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            borderBottom: activeTab === "all" ? "1px solid rgba(10, 16, 27, 0.98)" : "none",
+            borderTopLeftRadius: "16px",
+            borderTopRightRadius: "16px",
+            color: activeTab === "all" ? "#00f2ff" : "var(--text-muted)",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            borderTop: activeTab === "all" ? "2px solid #0062ff" : "1px solid rgba(255, 255, 255, 0.05)",
+            outline: "none",
+            backdropFilter: "blur(10px)"
+          },
+          children: "All Targets"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setActiveTab("proximity"),
+          style: {
+            padding: "14px 28px",
+            background: activeTab === "proximity" ? "rgba(10, 16, 27, 0.98)" : "rgba(255, 255, 255, 0.01)",
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            borderBottom: activeTab === "proximity" ? "1px solid rgba(10, 16, 27, 0.98)" : "none",
+            borderTopLeftRadius: "16px",
+            borderTopRightRadius: "16px",
+            color: activeTab === "proximity" ? "#00f2ff" : "var(--text-muted)",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            borderTop: activeTab === "proximity" ? "2px solid #0062ff" : "1px solid rgba(255, 255, 255, 0.05)",
+            outline: "none",
+            backdropFilter: "blur(10px)"
+          },
+          children: "Targets by Proximity"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setActiveTab("galaxy"),
+          style: {
+            padding: "14px 28px",
+            background: activeTab === "galaxy" ? "rgba(10, 16, 27, 0.98)" : "rgba(255, 255, 255, 0.01)",
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            borderBottom: activeTab === "galaxy" ? "1px solid rgba(10, 16, 27, 0.98)" : "none",
+            borderTopLeftRadius: "16px",
+            borderTopRightRadius: "16px",
+            color: activeTab === "galaxy" ? "#00f2ff" : "var(--text-muted)",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            borderTop: activeTab === "galaxy" ? "2px solid #0062ff" : "1px solid rgba(255, 255, 255, 0.05)",
+            outline: "none",
+            backdropFilter: "blur(10px)"
+          },
+          children: "Targets by Galaxy"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setActiveTab("vicinity"),
+          style: {
+            padding: "14px 28px",
+            background: activeTab === "vicinity" ? "rgba(10, 16, 27, 0.98)" : "rgba(255, 255, 255, 0.01)",
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            borderBottom: activeTab === "vicinity" ? "1px solid rgba(10, 16, 27, 0.98)" : "none",
+            borderTopLeftRadius: "16px",
+            borderTopRightRadius: "16px",
+            color: activeTab === "vicinity" ? "#00f2ff" : "var(--text-muted)",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            borderTop: activeTab === "vicinity" ? "2px solid #0062ff" : "1px solid rgba(255, 255, 255, 0.05)",
+            outline: "none",
+            backdropFilter: "blur(10px)"
+          },
+          children: "Best Loot Vicinities"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setActiveTab("productivity"),
+          style: {
+            padding: "14px 28px",
+            background: activeTab === "productivity" ? "rgba(10, 16, 27, 0.98)" : "rgba(255, 255, 255, 0.01)",
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            borderBottom: activeTab === "productivity" ? "1px solid rgba(10, 16, 27, 0.98)" : "none",
+            borderTopLeftRadius: "16px",
+            borderTopRightRadius: "16px",
+            color: activeTab === "productivity" ? "#00f2ff" : "var(--text-muted)",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            borderTop: activeTab === "productivity" ? "2px solid #0062ff" : "1px solid rgba(255, 255, 255, 0.05)",
+            outline: "none",
+            backdropFilter: "blur(10px)"
+          },
+          children: "Best Productivity Vicinities"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", gap: "20px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "glass", style: {
+      padding: "24px",
+      overflowX: "auto",
+      borderTopLeftRadius: activeTab === "all" ? "0px" : "20px",
+      background: "rgba(10, 16, 27, 0.98)",
+      border: "1px solid rgba(255, 255, 255, 0.05)",
+      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.5)"
+    }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { style: { margin: 0, color: "#fff", fontSize: "1.2rem", fontWeight: 700 }, children: [
+          activeTab === "all" && "All Inactive Targets",
+          activeTab === "proximity" && "Proximity Inactive Targets",
+          activeTab === "galaxy" && "Galaxy Inactive Targets",
+          activeTab === "vicinity" && "Best Loot Vicinities",
+          activeTab === "productivity" && "Best Productivity Vicinities (Top 20 Inactives)"
+        ] }),
+        activeTab !== "vicinity" && activeTab !== "productivity" && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.8rem", color: "var(--text-muted)" }, children: [
+          "Showing ",
+          filteredPlanets.length,
+          " targets"
+        ] })
+      ] }),
+      activeTab !== "vicinity" && activeTab !== "productivity" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "20px", background: "rgba(255,255,255,0.01)", padding: "16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.03)" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Search" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { position: "relative" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Search, { size: 16, style: { position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "text",
+                  placeholder: "Name or coords...",
+                  value: searchQuery,
+                  onChange: (e) => setSearchQuery(e.target.value),
+                  style: {
+                    width: "100%",
+                    boxSizing: "border-box",
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    borderRadius: "8px",
+                    padding: "8px 12px 8px 36px",
+                    color: "#fff",
+                    fontSize: "0.85rem",
+                    outline: "none",
+                    transition: "all 0.2s"
+                  },
+                  className: "search-input"
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Status" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                value: statusFilter,
+                onChange: (e) => setStatusFilter(e.target.value),
+                style: {
+                  background: "rgba(6, 11, 20, 0.95)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  borderRadius: "8px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  outline: "none",
+                  cursor: "pointer",
+                  fontSize: "0.85rem"
+                },
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All Statuses" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "inactive", children: "Inactive (i)" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "longinactive", children: "Long Inactive (I)" })
+                ]
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Confidence" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                value: confidenceFilter,
+                onChange: (e) => setConfidenceFilter(e.target.value),
+                style: {
+                  background: "rgba(6, 11, 20, 0.95)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  borderRadius: "8px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  outline: "none",
+                  cursor: "pointer",
+                  fontSize: "0.85rem"
+                },
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All Confidence" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "30", children: "≥ 30%" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "60", children: "≥ 60%" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "85", children: "≥ 85%" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "100", children: "100%" })
+                ]
+              }
+            )
+          ] }),
+          activeTab === "proximity" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Relative to Own Planet" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "select",
+              {
+                value: proximityPlanetId,
+                onChange: (e) => setProximityPlanetId(e.target.value),
+                style: {
+                  background: "rgba(6, 11, 20, 0.95)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  borderRadius: "8px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  outline: "none",
+                  cursor: "pointer",
+                  fontSize: "0.85rem"
+                },
+                children: ownPlanets.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "No planets registered" }) : ownPlanets.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: p2.id, children: [
+                  p2.name,
+                  " [",
+                  p2.coords,
+                  "]"
+                ] }, p2.id))
+              }
+            )
+          ] }),
+          activeTab === "galaxy" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Choose Galaxy" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexWrap: "wrap", gap: "4px" }, children: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((g) => {
+              const isActive = selectedSingleGalaxy === g;
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setSelectedSingleGalaxy(g),
+                  style: {
+                    padding: "6px 10px",
+                    borderRadius: "6px",
+                    background: isActive ? "var(--primary)" : "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    color: isActive ? "#fff" : "var(--text-muted)",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: "0.8rem",
+                    transition: "all 0.2s",
+                    outline: "none",
+                    flex: "1 1 auto",
+                    textAlign: "center"
+                  },
+                  className: isActive ? "" : "page-btn-hover",
+                  children: [
+                    "G",
+                    g
+                  ]
+                },
+                g
+              );
+            }) })
+          ] })
+        ] }),
+        activeTab === "all" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px", background: "rgba(255,255,255,0.01)", padding: "16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.03)" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Filter by Galaxies" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => setSelectedGalaxies([]),
+                style: {
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  background: selectedGalaxies.length === 0 ? "var(--primary)" : "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  color: selectedGalaxies.length === 0 ? "#fff" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "0.8rem",
+                  transition: "all 0.2s",
+                  outline: "none"
+                },
+                className: selectedGalaxies.length === 0 ? "" : "page-btn-hover",
+                children: "All"
+              }
+            ),
+            [1, 2, 3, 4, 5, 6, 7, 8, 9].map((g) => {
+              const isActive = selectedGalaxies.includes(g);
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => toggleGalaxy(g),
+                  style: {
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    background: isActive ? "var(--primary)" : "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    color: isActive ? "#fff" : "var(--text-muted)",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: "0.8rem",
+                    transition: "all 0.2s",
+                    outline: "none"
+                  },
+                  className: isActive ? "" : "page-btn-hover",
+                  children: [
+                    "G",
+                    g
+                  ]
+                },
+                g
+              );
+            })
+          ] })
+        ] }),
+        filteredPlanets.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { height: "240px", display: "flex", flexDirection: "column", justifyContent: "center", alignSelf: "center", textAlign: "center", opacity: 0.6 }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTriangle, { size: 48, style: { color: "var(--text-muted)", marginBottom: "16px", alignSelf: "center" } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { style: { margin: "0 0 6px 0", color: "#fff" }, children: "No Spied Targets Found" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { margin: 0, color: "var(--text-muted)", fontSize: "0.85rem" }, children: "Go spy on inactive targets in the galaxy view. Open reports in message log to populate this tracker!" })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { style: { width: "100%", borderCollapse: "collapse", color: "#fff", fontSize: "0.85rem" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { style: { background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { textAlign: "left", padding: "16px 12px", fontWeight: 600 }, children: "Target Planet" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("th", { style: { textAlign: "center", padding: "16px 12px", fontWeight: 600, cursor: "pointer" }, onClick: () => toggleSort("coords"), children: [
+              "Coords ",
+              sortBy2 === "coords" && (sortOrder === "asc" ? "↑" : "↓")
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { textAlign: "left", padding: "16px 12px", fontWeight: 600 }, children: "Empirical Growth Rate" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { textAlign: "right", padding: "16px 12px", fontWeight: 600 }, children: "Last Spy Resources" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { textAlign: "left", padding: "16px 12px", fontWeight: 600 }, children: "Current Estimated Resources" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("th", { style: { textAlign: "left", padding: "16px 12px", fontWeight: 600, cursor: "pointer" }, onClick: () => toggleSort("loot"), children: [
+              "Current Estimated Loot (",
+              (activeAccount == null ? void 0 : activeAccount.playerClass) === 3 ? 75 : 50,
+              "%) ",
+              sortBy2 === "loot" && (sortOrder === "asc" ? "↑" : "↓")
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("th", { style: { textAlign: "center", padding: "16px 12px", fontWeight: 600, cursor: "pointer" }, onClick: () => toggleSort("confidence"), children: [
+              "Confidence ",
+              sortBy2 === "confidence" && (sortOrder === "asc" ? "↑" : "↓")
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("th", { style: { textAlign: "right", padding: "16px 12px", fontWeight: 600, cursor: "pointer" }, onClick: () => toggleSort("lastSpied"), children: [
+              "Age ",
+              sortBy2 === "lastSpied" && (sortOrder === "asc" ? "↑" : "↓")
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { textAlign: "center", padding: "16px 12px", fontWeight: 600 }, children: "Tactical Action" })
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(AnimatePresence, { children: paginatedPlanets.map((planet) => {
+            const isLong = planet.playerStatus.includes("longinactive");
+            const ageSeconds = Math.max(0, Date.now() / 1e3 - planet.lastSpiedTimestamp);
+            let ageText = "Just now";
+            if (ageSeconds >= 86400) ageText = `${Math.floor(ageSeconds / 86400)}d`;
+            else if (ageSeconds >= 3600) ageText = `${Math.floor(ageSeconds / 3600)}h`;
+            else if (ageSeconds >= 60) ageText = `${Math.floor(ageSeconds / 60)}m`;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              motion.tr,
+              {
+                initial: { opacity: 0 },
+                animate: { opacity: 1 },
+                exit: { opacity: 0 },
+                style: { borderBottom: "1px solid rgba(255,255,255,0.03)", transition: "background 0.2s" },
+                className: "target-row",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "4px" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 700, fontSize: "0.95rem" }, children: planet.playerName }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                        fontSize: "0.7rem",
+                        fontWeight: 800,
+                        color: isLong ? "#ef4444" : "#f59e0b",
+                        background: isLong ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        border: isLong ? "1px solid rgba(239, 68, 68, 0.2)" : "1px solid rgba(245, 158, 11, 0.2)"
+                      }, children: isLong ? "I" : "i" })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: [
+                      "Planet ID: ",
+                      planet.planetId
+                    ] })
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px", textAlign: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                    "a",
+                    {
+                      href: `https://s267-en.ogame.gameforge.com/game/index.php?page=ingame&component=galaxy&galaxy=${planet.coords.split(":")[0]}&system=${planet.coords.split(":")[1]}&position=${planet.coords.split(":")[2]}`,
+                      target: "_blank",
+                      rel: "noreferrer",
+                      style: {
+                        color: "var(--primary)",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                        background: "rgba(0, 98, 255, 0.05)",
+                        border: "1px solid rgba(0, 98, 255, 0.15)",
+                        padding: "4px 8px",
+                        borderRadius: "6px",
+                        display: "inline-block",
+                        transition: "all 0.2s"
+                      },
+                      className: "coords-badge",
+                      children: [
+                        "[",
+                        planet.coords,
+                        "]"
+                      ]
+                    }
+                  ) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "2px", fontSize: "0.8rem" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "120px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.metal, fontWeight: 500 }, children: "Metal:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontWeight: 700 }, children: [
+                        "+",
+                        formatNumber2(planet.metalPerHour),
+                        "/h"
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "120px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.crystal, fontWeight: 500 }, children: "Crystal:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontWeight: 700 }, children: [
+                        "+",
+                        formatNumber2(planet.crystalPerHour),
+                        "/h"
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "120px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.deuterium, fontWeight: 500 }, children: "Deuterium:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontWeight: 700 }, children: [
+                        "+",
+                        formatNumber2(planet.deuteriumPerHour),
+                        "/h"
+                      ] })
+                    ] })
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px", textAlign: "right" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "2px", fontSize: "0.8rem" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "rgba(255,255,255,0.5)" }, children: [
+                      "M: ",
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { style: { color: "#fff" }, children: formatAbbreviated(planet.lastSpiedMetal) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "rgba(255,255,255,0.5)" }, children: [
+                      "C: ",
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { style: { color: "#fff" }, children: formatAbbreviated(planet.lastSpiedCrystal) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "rgba(255,255,255,0.5)" }, children: [
+                      "D: ",
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { style: { color: "#fff" }, children: formatAbbreviated(planet.lastSpiedDeuterium) })
+                    ] })
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "2px", fontSize: "0.8rem" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.metal, fontWeight: 500 }, children: "Metal:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 700 }, children: formatAbbreviated(planet.metalTotal) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.crystal, fontWeight: 500 }, children: "Crystal:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 700 }, children: formatAbbreviated(planet.crystalTotal) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.deuterium, fontWeight: 500 }, children: "Deuterium:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 700 }, children: formatAbbreviated(planet.deuteriumTotal) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px", borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "4px", paddingTop: "4px", alignItems: "center" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "var(--primary)", fontWeight: 600 }, children: "MSU:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 800, color: "var(--primary)" }, children: formatAbbreviated(planet.resourcesMSU) })
+                    ] })
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "2px", fontSize: "0.8rem" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.metal, fontWeight: 500 }, children: "Metal:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 700 }, children: formatAbbreviated(planet.lootMetal) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.crystal, fontWeight: 500 }, children: "Crystal:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 700 }, children: formatAbbreviated(planet.lootCrystal) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: RESOURCE_COLORS.deuterium, fontWeight: 500 }, children: "Deuterium:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontWeight: 700 }, children: formatAbbreviated(planet.lootDeuterium) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", width: "130px", borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "4px", paddingTop: "4px", alignItems: "center" }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "var(--primary)", fontWeight: 600 }, children: "MSU:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontWeight: 800, color: "var(--primary)", display: "flex", alignItems: "center", gap: "4px" }, children: [
+                        formatAbbreviated(planet.lootMSU),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+                          fontSize: "0.65rem",
+                          fontWeight: 800,
+                          color: "rgba(255,255,255,0.5)",
+                          background: "rgba(255,255,255,0.05)",
+                          padding: "1px 4px",
+                          borderRadius: "3px"
+                        }, children: [
+                          planet.lootPercentageValue,
+                          "%"
+                        ] })
+                      ] })
+                    ] })
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px", textAlign: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "4px", alignItems: "center" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      color: getConfidenceTextColor(planet.confidence),
+                      background: getConfidenceBadgeColor(planet.confidence),
+                      padding: "4px 10px",
+                      borderRadius: "8px",
+                      border: `1px solid ${getConfidenceTextColor(planet.confidence)}30`
+                    }, children: [
+                      planet.confidence,
+                      "%"
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.7rem", color: "var(--text-muted)" }, children: [
+                      planet.spyCount,
+                      " Spies"
+                    ] })
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: { padding: "16px 12px", textAlign: "right", color: "var(--text-muted)", fontWeight: 600 }, children: [
+                    ageText,
+                    " ago"
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { padding: "16px 12px", textAlign: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "8px", justifyContent: "center" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "div",
+                      {
+                        className: "nexus-tooltip action-button",
+                        "data-nexus-tooltip": `Requires: ${planet.smallCargoNeeded.toLocaleString()} Small Cargo OR ${planet.largeCargoNeeded.toLocaleString()} Large Cargo to plunder.`,
+                        style: {
+                          background: "rgba(255, 255, 255, 0.02)",
+                          border: "1px solid rgba(255, 255, 255, 0.05)",
+                          color: "var(--primary)",
+                          cursor: "default",
+                          padding: "8px",
+                          borderRadius: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center"
+                        },
+                        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Ship, { size: 16 })
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "a",
+                      {
+                        href: `https://s267-en.ogame.gameforge.com/game/index.php?page=ingame&component=fleetdispatch&galaxy=${planet.coords.split(":")[0]}&system=${planet.coords.split(":")[1]}&position=${planet.coords.split(":")[2]}&type=1&mission=6`,
+                        target: "_blank",
+                        rel: "noreferrer",
+                        className: "action-button",
+                        style: {
+                          background: "rgba(34, 197, 94, 0.05)",
+                          border: "1px solid rgba(34, 197, 94, 0.15)",
+                          color: "#22c55e",
+                          padding: "8px",
+                          borderRadius: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textDecoration: "none"
+                        },
+                        title: "Dispatch Spy Probe",
+                        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Play, { size: 16 })
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        onClick: (e) => handleDeletePlanet(planet.planetId, e),
+                        className: "action-button",
+                        style: {
+                          background: "rgba(239, 68, 68, 0.05)",
+                          border: "1px solid rgba(239, 68, 68, 0.15)",
+                          color: "#ef4444",
+                          padding: "8px",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center"
+                        },
+                        title: "Delete Target",
+                        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 16 })
+                      }
+                    )
+                  ] }) })
+                ]
+              },
+              planet.planetId
+            );
+          }) }) })
+        ] }),
+        filteredPlanets.length > 0 && totalPages > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(255, 255, 255, 0.05)" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "var(--text-muted)", fontSize: "0.85rem" }, children: [
+            "Showing ",
+            (currentPage - 1) * ITEMS_PER_PAGE + 1,
+            "-",
+            Math.min(currentPage * ITEMS_PER_PAGE, filteredPlanets.length),
+            " of ",
+            filteredPlanets.length,
+            " targets"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "8px", alignItems: "center" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                disabled: currentPage === 1,
+                onClick: () => setCurrentPage((p2) => p2 - 1),
+                style: {
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  background: currentPage === 1 ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  color: currentPage === 1 ? "rgba(255,255,255,0.2)" : "var(--text-muted)",
+                  cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                  transition: "all 0.2s",
+                  outline: "none"
+                },
+                className: currentPage === 1 ? "" : "page-btn-hover",
+                children: "Previous"
+              }
+            ),
+            renderPageNumbers(),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                disabled: currentPage === totalPages,
+                onClick: () => setCurrentPage((p2) => p2 + 1),
+                style: {
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  background: currentPage === totalPages ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  color: currentPage === totalPages ? "rgba(255,255,255,0.2)" : "var(--text-muted)",
+                  cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                  transition: "all 0.2s",
+                  outline: "none"
+                },
+                className: currentPage === totalPages ? "" : "page-btn-hover",
+                children: "Next"
+              }
+            )
+          ] })
+        ] })
+      ] }) : activeTab === "vicinity" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "8px", marginBottom: "24px", background: "rgba(255,255,255,0.01)", padding: "20px", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.03)", maxWidth: "500px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.85rem", color: "#fff", fontWeight: 700 }, children: "Vicinity Range Limit" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.9rem", color: "var(--primary)", fontWeight: 800 }, children: [
+              "± ",
+              vicinityRange,
+              " systems"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "range",
+                min: "1",
+                max: "250",
+                value: vicinityRange,
+                onChange: (e) => setVicinityRange(parseInt(e.target.value)),
+                style: {
+                  flex: 1,
+                  accentColor: "#0062ff",
+                  height: "6px",
+                  borderRadius: "3px",
+                  cursor: "pointer",
+                  background: "rgba(255,255,255,0.1)",
+                  outline: "none"
+                }
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: "1",
+                max: "250",
+                value: vicinityRange,
+                onChange: (e) => setVicinityRange(Math.min(250, Math.max(1, parseInt(e.target.value) || 1))),
+                style: {
+                  width: "70px",
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "8px",
+                  padding: "6px 10px",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  textAlign: "center",
+                  outline: "none"
+                }
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: "Calculates total available loot inside circular systems in the same galaxy." })
+        ] }),
+        vicinityData.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { height: "240px", display: "flex", flexDirection: "column", justifyContent: "center", alignSelf: "center", textAlign: "center", opacity: 0.6 }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTriangle, { size: 48, style: { color: "var(--text-muted)", marginBottom: "16px", alignSelf: "center" } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { style: { margin: "0 0 6px 0", color: "#fff" }, children: "No Own Planets Registered" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { margin: 0, color: "var(--text-muted)", fontSize: "0.85rem" }, children: "Ensure you have registered planets for the active account to view vicinity yields!" })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: "20px", marginTop: "12px" }, children: vicinityData.map(({ own, totalMetal, totalCrystal, totalDeuterium, totalMSU, targetCount }) => {
+          const maxMSU = Math.max(...vicinityData.map((v2) => v2.totalMSU)) || 1;
+          const percentageOfMax = totalMSU / maxMSU * 100;
+          const metalPct = totalMSU > 0 ? totalMetal / totalMSU * 100 : 0;
+          const crystalPct = totalMSU > 0 ? totalCrystal * 1.5 / totalMSU * 100 : 0;
+          const deutPct = totalMSU > 0 ? totalDeuterium * 3 / totalMSU * 100 : 0;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            motion.div,
+            {
+              whileHover: { scale: 1.02, y: -4, borderColor: "rgba(0, 98, 255, 0.4)" },
+              onClick: () => {
+                setProximityPlanetId(own.id);
+                setActiveTab("proximity");
+              },
+              style: {
+                background: "rgba(255, 255, 255, 0.01)",
+                border: "1px solid rgba(255, 255, 255, 0.04)",
+                borderRadius: "16px",
+                padding: "24px",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                transition: "all 0.3s ease",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.2)"
+              },
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "2px" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#fff", fontSize: "1.1rem", fontWeight: 800 }, children: own.name }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "var(--text-muted)", fontSize: "0.75rem" }, children: [
+                      "Planet ID: ",
+                      own.id
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+                    color: "#00f2ff",
+                    background: "rgba(0, 242, 255, 0.08)",
+                    border: "1px solid rgba(0, 242, 255, 0.15)",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    fontWeight: 700,
+                    fontSize: "0.8rem"
+                  }, children: [
+                    "[",
+                    own.coords,
+                    "]"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Vicinity Loot Yield" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "baseline", gap: "6px" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.8rem", fontWeight: 800, color: "var(--primary)" }, children: formatAbbreviated(totalMSU) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", color: "var(--text-muted)", fontWeight: 700 }, children: "MSU" })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "100%", height: "4px", background: "rgba(255,255,255,0.02)", borderRadius: "2px", overflow: "hidden" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${percentageOfMax}%`, height: "100%", background: "linear-gradient(90deg, #0062ff, #00f2ff)", borderRadius: "2px" } }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: "var(--text-muted)" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Target Density:" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "#fff", fontWeight: 700 }, children: [
+                    targetCount,
+                    " Targets nearby"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px", borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "12px", marginTop: "auto" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }, children: "Loot Mix Ratio" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%", height: "8px", background: "rgba(255,255,255,0.03)", borderRadius: "4px", display: "flex", overflow: "hidden" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${metalPct}%`, background: RESOURCE_COLORS.metal, height: "100%" }, title: `Metal: ${formatAbbreviated(totalMetal)}` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${crystalPct}%`, background: RESOURCE_COLORS.crystal, height: "100%" }, title: `Crystal: ${formatAbbreviated(totalCrystal)}` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${deutPct}%`, background: RESOURCE_COLORS.deuterium, height: "100%" }, title: `Deuterium: ${formatAbbreviated(totalDeuterium)}` })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.75rem", marginTop: "2px" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: RESOURCE_COLORS.metal }, children: [
+                      "M: ",
+                      formatAbbreviated(totalMetal)
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: RESOURCE_COLORS.crystal }, children: [
+                      "C: ",
+                      formatAbbreviated(totalCrystal)
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: RESOURCE_COLORS.deuterium }, children: [
+                      "D: ",
+                      formatAbbreviated(totalDeuterium)
+                    ] })
+                  ] })
+                ] })
+              ]
+            },
+            own.id
+          );
+        }) })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "8px", marginBottom: "24px", background: "rgba(255,255,255,0.01)", padding: "20px", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.03)", maxWidth: "500px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.85rem", color: "#fff", fontWeight: 700 }, children: "Productivity Range Limit" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "0.9rem", color: "#10b981", fontWeight: 800 }, children: [
+              "± ",
+              productivityRange,
+              " systems"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "16px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "range",
+                min: "1",
+                max: "250",
+                value: productivityRange,
+                onChange: (e) => setProductivityRange(parseInt(e.target.value)),
+                style: {
+                  flex: 1,
+                  accentColor: "#10b981",
+                  height: "6px",
+                  borderRadius: "3px",
+                  cursor: "pointer",
+                  background: "rgba(255,255,255,0.1)",
+                  outline: "none"
+                }
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: "1",
+                max: "250",
+                value: productivityRange,
+                onChange: (e) => setProductivityRange(Math.min(250, Math.max(1, parseInt(e.target.value) || 1))),
+                style: {
+                  width: "70px",
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "8px",
+                  padding: "6px 10px",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  textAlign: "center",
+                  outline: "none"
+                }
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" }, children: "Calculates total productivity MSU/h of the best 20 targets in the circular systems of every own planet." })
+        ] }),
+        productivityData.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { height: "240px", display: "flex", flexDirection: "column", justifyContent: "center", alignSelf: "center", textAlign: "center", opacity: 0.6 }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTriangle, { size: 48, style: { color: "var(--text-muted)", marginBottom: "16px", alignSelf: "center" } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { style: { margin: "0 0 6px 0", color: "#fff" }, children: "No Own Planets Registered" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { margin: 0, color: "var(--text-muted)", fontSize: "0.85rem" }, children: "Ensure you have registered planets for the active account to view productivity yields!" })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: "20px", marginTop: "12px" }, children: productivityData.map(({ own, totalMetalProd, totalCrystalProd, totalDeuteriumProd, totalMSUProd, targetCount, topTargetsCount }) => {
+          const maxMSUProd = Math.max(...productivityData.map((v2) => v2.totalMSUProd)) || 1;
+          const percentageOfMax = totalMSUProd / maxMSUProd * 100;
+          const metalPct = totalMSUProd > 0 ? totalMetalProd / totalMSUProd * 100 : 0;
+          const crystalPct = totalMSUProd > 0 ? totalCrystalProd * 1.5 / totalMSUProd * 100 : 0;
+          const deutPct = totalMSUProd > 0 ? totalDeuteriumProd * 3 / totalMSUProd * 100 : 0;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            motion.div,
+            {
+              whileHover: { scale: 1.02, y: -4, borderColor: "rgba(16, 185, 129, 0.4)" },
+              onClick: () => {
+                setProximityPlanetId(own.id);
+                setActiveTab("proximity");
+              },
+              style: {
+                background: "rgba(255, 255, 255, 0.01)",
+                border: "1px solid rgba(255, 255, 255, 0.04)",
+                borderRadius: "16px",
+                padding: "24px",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                transition: "all 0.3s ease",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.2)"
+              },
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "2px" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#fff", fontSize: "1.1rem", fontWeight: 800 }, children: own.name }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: "var(--text-muted)", fontSize: "0.75rem" }, children: [
+                      "Planet ID: ",
+                      own.id
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: {
+                    color: "#10b981",
+                    background: "rgba(16, 185, 129, 0.08)",
+                    border: "1px solid rgba(16, 185, 129, 0.15)",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    fontWeight: 700,
+                    fontSize: "0.8rem"
+                  }, children: [
+                    "[",
+                    own.coords,
+                    "]"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }, children: "Vicinity Productivity Yield" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "baseline", gap: "6px" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "1.8rem", fontWeight: 800, color: "#10b981" }, children: formatAbbreviated(totalMSUProd) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.9rem", color: "var(--text-muted)", fontWeight: 700 }, children: "MSU/h" })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: "100%", height: "4px", background: "rgba(255,255,255,0.02)", borderRadius: "2px", overflow: "hidden" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${percentageOfMax}%`, height: "100%", background: "linear-gradient(90deg, #10b981, #34d399)", borderRadius: "2px" } }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: "var(--text-muted)" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Target Density (Summing Best 20):" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#fff", fontWeight: 700 }, children: topTargetsCount === targetCount ? `${targetCount} Targets` : `${topTargetsCount} of ${targetCount} Targets` })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "6px", borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "12px", marginTop: "auto" }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }, children: "Production Growth Mix" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%", height: "8px", background: "rgba(255,255,255,0.03)", borderRadius: "4px", display: "flex", overflow: "hidden" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${metalPct}%`, background: RESOURCE_COLORS.metal, height: "100%" }, title: `Metal: ${formatAbbreviated(totalMetalProd)}/h` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${crystalPct}%`, background: RESOURCE_COLORS.crystal, height: "100%" }, title: `Crystal: ${formatAbbreviated(totalCrystalProd * 1.5)}/h (MSU-weighted)` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${deutPct}%`, background: RESOURCE_COLORS.deuterium, height: "100%" }, title: `Deuterium: ${formatAbbreviated(totalDeuteriumProd * 3)}/h (MSU-weighted)` })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.75rem", marginTop: "2px" }, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: RESOURCE_COLORS.metal }, children: [
+                      "M: ",
+                      formatAbbreviated(totalMetalProd),
+                      "/h"
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: RESOURCE_COLORS.crystal }, children: [
+                      "C: ",
+                      formatAbbreviated(totalCrystalProd),
+                      "/h"
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: RESOURCE_COLORS.deuterium }, children: [
+                      "D: ",
+                      formatAbbreviated(totalDeuteriumProd),
+                      "/h"
+                    ] })
+                  ] })
+                ] })
+              ]
+            },
+            own.id
+          );
+        }) })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+                .view {
+                    padding: 40px;
+                    max-width: 1400px;
+                    margin: 0 auto;
+                }
+                .glass {
+                    background: rgba(255, 255, 255, 0.02);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    border: 1px solid rgba(255, 255, 255, 0.04);
+                    border-radius: 20px;
+                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+                }
+                .target-row:hover {
+                    background: rgba(255, 255, 255, 0.02);
+                }
+                .search-input:focus {
+                    border-color: var(--primary) !important;
+                    background: rgba(0, 98, 255, 0.05) !important;
+                    box-shadow: 0 0 15px rgba(0, 98, 255, 0.1);
+                }
+                .coords-badge:hover {
+                    background: rgba(0, 98, 255, 0.1) !important;
+                    border-color: var(--primary) !important;
+                    box-shadow: 0 0 10px rgba(0, 98, 255, 0.2);
+                }
+                .action-button {
+                    transition: all 0.2s;
+                }
+                .action-button:hover {
+                    transform: scale(1.1);
+                    box-shadow: 0 0 10px rgba(255,255,255,0.1);
+                }
+                .page-btn-hover:hover {
+                    background: rgba(0, 98, 255, 0.1) !important;
+                    border-color: var(--primary) !important;
+                    color: #fff !important;
+                }
+            ` })
+  ] });
+};
 const App = () => {
   const [currentView, setCurrentView] = reactExports.useState("overview");
   const [showWelcome, setShowWelcome] = reactExports.useState(false);
@@ -72458,7 +73990,8 @@ const App = () => {
           currentView === "costsPlanner" && /* @__PURE__ */ jsxRuntimeExports.jsx(CostsPlanner, {}),
           currentView === "tools" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tools, {}),
           currentView === "signature" && /* @__PURE__ */ jsxRuntimeExports.jsx(SignatureMaker, { onBack: () => setCurrentView("overview") }),
-          currentView === "tutorials" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tutorials, { onNavigate: setCurrentView })
+          currentView === "tutorials" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tutorials, { onNavigate: setCurrentView }),
+          currentView === "raidRadar" && /* @__PURE__ */ jsxRuntimeExports.jsx(RaidRadar, {})
         ]
       },
       currentView

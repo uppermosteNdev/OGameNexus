@@ -5290,15 +5290,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: orbit-spin 40s linear infinite;
     pointer-events: auto; /* let children receive events */
-}
-
-/* Stop rotation when hovering anywhere in container */
-.rotary-sphere-container:hover .planets-orbit,
-.rotary-sphere-container:hover .planet-rotary-img-wrapper,
-.rotary-sphere-container:hover .tooltip-upright-content {
-    animation-play-state: paused !important;
 }
 
 /* Rotary Planet Items absolute angular positioning */
@@ -5355,7 +5347,6 @@
     border: 2px solid rgba(255, 255, 255, 0.15);
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    animation: counter-orbit-spin 40s linear infinite;
     transition: border-color 0.3s, box-shadow 0.3s;
 }
 
@@ -5396,7 +5387,6 @@
     white-space: nowrap;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(8px);
-    animation: counter-orbit-spin-tooltip 40s linear infinite;
     transform-origin: center center;
     transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }

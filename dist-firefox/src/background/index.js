@@ -6490,7 +6490,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       __publicField(this, "todoProjects");
       __publicField(this, "debrisHarvests");
       __publicField(this, "combatReports");
-      this.version(33).stores({
+      __publicField(this, "spiedPlanets");
+      this.version(34).stores({
         accounts: "playerId, playerName, universe, lastSeen",
         planets: "id, playerId, coords, lifeformId",
         expeditions: "messageId, playerId, timestamp, coords, result",
@@ -6503,7 +6504,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         lifeformSavedSetups: "++id, playerId, name",
         todoProjects: "++id, projectKey, playerId, planetId, type",
         debrisHarvests: "messageId, playerId, timestamp, coords",
-        combatReports: "messageId, playerId, timestamp, coords, winner"
+        combatReports: "messageId, playerId, timestamp, coords, winner",
+        spiedPlanets: "planetId, playerId, coords, lastSpiedTimestamp"
       });
       this.on("populate", () => {
         this.seedKnowledge();
@@ -6512,6 +6514,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       this.on("ready", () => {
         this.seedKnowledge();
         this.seedSettings();
+        this.migrateSpiedPlanets();
       });
     }
     async seedSettings() {
@@ -6545,6 +6548,47 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         await this.lifeformBonusBreakdown.bulkPut(LIFEFORM_BONUS_BREAKDOWN_DATA);
       } catch (error) {
         console.error("OGame Nexus: Failed to seed knowledge data", error);
+      }
+    }
+    calculateStorageCapacity(level, hasTraderClass) {
+      const lvl = Math.max(0, level || 0);
+      const baseCapacity = 5e3 * Math.floor(2.5 * Math.exp(20 / 33 * lvl));
+      if (hasTraderClass && lvl > 0) {
+        return Math.floor(baseCapacity * 1.1);
+      }
+      return baseCapacity;
+    }
+    async migrateSpiedPlanets() {
+      try {
+        const planets = await this.spiedPlanets.toArray();
+        const updates = [];
+        for (const p of planets) {
+          const hasTraderClass = p.hasTraderClass ?? false;
+          const metalStorageLevel = p.metalStorageLevel ?? 0;
+          const crystalStorageLevel = p.crystalStorageLevel ?? 0;
+          const deuteriumStorageLevel = p.deuteriumStorageLevel ?? 0;
+          const correctMetalCapacity = this.calculateStorageCapacity(metalStorageLevel, hasTraderClass);
+          const correctCrystalCapacity = this.calculateStorageCapacity(crystalStorageLevel, hasTraderClass);
+          const correctDeuteriumCapacity = this.calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass);
+          if (p.metalCapacity !== correctMetalCapacity || p.crystalCapacity !== correctCrystalCapacity || p.deuteriumCapacity !== correctDeuteriumCapacity || p.metalStorageLevel === void 0) {
+            updates.push({
+              ...p,
+              metalStorageLevel,
+              crystalStorageLevel,
+              deuteriumStorageLevel,
+              metalCapacity: correctMetalCapacity,
+              crystalCapacity: correctCrystalCapacity,
+              deuteriumCapacity: correctDeuteriumCapacity,
+              hasTraderClass
+            });
+          }
+        }
+        if (updates.length > 0) {
+          console.log(`OGame Nexus: Correcting and migrating capacities for ${updates.length} spied planets.`);
+          await this.spiedPlanets.bulkPut(updates);
+        }
+      } catch (error) {
+        console.error("OGame Nexus: Failed to migrate spied planets capacities", error);
       }
     }
   }
@@ -7445,10 +7489,171 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           });
           if (newCombats.length > 0) {
             await db.combatReports.bulkAdd(newCombats);
+            const account = await db.accounts.get(playerId);
+            if (account) {
+              for (const combat of newCombats) {
+                if (combat.attackerName && combat.attackerName.toLowerCase() === account.playerName.toLowerCase()) {
+                  const matchingPlanets = await db.spiedPlanets.where("coords").equals(combat.coords).toArray();
+                  if (matchingPlanets.length > 0) {
+                    const spiedPlanet = matchingPlanets[0];
+                    if (combat.timestamp > spiedPlanet.lastSpiedTimestamp) {
+                      const dT = (combat.timestamp - spiedPlanet.lastSpiedTimestamp) / 3600;
+                      const metalAccumulated = spiedPlanet.metalPerHour * dT;
+                      const crystalAccumulated = spiedPlanet.crystalPerHour * dT;
+                      const deuteriumAccumulated = spiedPlanet.deuteriumPerHour * dT;
+                      const metalCap = spiedPlanet.metalCapacity || 1e4;
+                      const crystalCap = spiedPlanet.crystalCapacity || 1e4;
+                      const deuteriumCap = spiedPlanet.deuteriumCapacity || 1e4;
+                      const metalTotalAtCombat = Math.max(spiedPlanet.lastSpiedMetal, Math.min(metalCap, spiedPlanet.lastSpiedMetal + metalAccumulated));
+                      const crystalTotalAtCombat = Math.max(spiedPlanet.lastSpiedCrystal, Math.min(crystalCap, spiedPlanet.lastSpiedCrystal + crystalAccumulated));
+                      const deuteriumTotalAtCombat = Math.max(spiedPlanet.lastSpiedDeuterium, Math.min(deuteriumCap, spiedPlanet.lastSpiedDeuterium + deuteriumAccumulated));
+                      const isDiscoverer = account.playerClass === 3;
+                      const reductionFactor = isDiscoverer ? 0.25 : 0.5;
+                      await db.spiedPlanets.put({
+                        ...spiedPlanet,
+                        lastSpiedMetal: Math.floor(metalTotalAtCombat * reductionFactor),
+                        lastSpiedCrystal: Math.floor(crystalTotalAtCombat * reductionFactor),
+                        lastSpiedDeuterium: Math.floor(deuteriumTotalAtCombat * reductionFactor),
+                        lastSpiedTimestamp: combat.timestamp
+                      });
+                    }
+                  }
+                }
+              }
+            }
           }
           sendResponse({ success: true, data: finalResults, newCount: newCombats.length });
         } catch (err) {
           console.error("OGame Nexus: Error tracking combats", err);
+          sendResponse({ success: false, error: String(err) });
+        }
+      })();
+      return true;
+    }
+    function calculateStorageCapacity(level, hasTraderClass) {
+      const lvl = Math.max(0, level || 0);
+      const baseCapacity = 5e3 * Math.floor(2.5 * Math.exp(20 / 33 * lvl));
+      if (hasTraderClass && lvl > 0) {
+        return Math.floor(baseCapacity * 1.1);
+      }
+      return baseCapacity;
+    }
+    if (message.type === "TRACK_ESPIONAGE") {
+      const { espionageReports, playerId } = message.data;
+      (async () => {
+        try {
+          const finalResults = [];
+          for (const report of espionageReports) {
+            const existing = await db.spiedPlanets.get(report.planetId);
+            if (!existing) {
+              const hasTraderClass = report.hasTraderClass || false;
+              const metalStorageLevel = report.metalStorageLevel || 0;
+              const crystalStorageLevel = report.crystalStorageLevel || 0;
+              const deuteriumStorageLevel = report.deuteriumStorageLevel || 0;
+              const newPlanet = {
+                planetId: report.planetId,
+                playerId: report.playerId,
+                playerName: report.playerName,
+                coords: report.coords,
+                metalPerHour: 0,
+                crystalPerHour: 0,
+                deuteriumPerHour: 0,
+                lastSpiedMetal: report.metal,
+                lastSpiedCrystal: report.crystal,
+                lastSpiedDeuterium: report.deuterium,
+                lastSpiedTimestamp: report.timestamp,
+                playerStatus: report.playerStatus,
+                lastHashCode: report.hashcode,
+                spyCount: 1,
+                confidence: 0,
+                lootPercentage: report.lootPercentage || 50,
+                hasTraderClass,
+                metalStorageLevel,
+                crystalStorageLevel,
+                deuteriumStorageLevel,
+                metalCapacity: calculateStorageCapacity(metalStorageLevel, hasTraderClass),
+                crystalCapacity: calculateStorageCapacity(crystalStorageLevel, hasTraderClass),
+                deuteriumCapacity: calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass)
+              };
+              await db.spiedPlanets.put(newPlanet);
+              finalResults.push({
+                messageId: report.messageId,
+                planetId: report.planetId,
+                isNew: true,
+                metal: report.metal,
+                crystal: report.crystal,
+                deuterium: report.deuterium
+              });
+            } else if (report.timestamp > existing.lastSpiedTimestamp) {
+              const dT = (report.timestamp - existing.lastSpiedTimestamp) / 3600;
+              let newMetalRate = existing.metalPerHour;
+              let newCrystalRate = existing.crystalPerHour;
+              let newDeuteriumRate = existing.deuteriumPerHour;
+              let newSpyCount = existing.spyCount;
+              let confidence = existing.confidence;
+              if (dT >= 0.0333) {
+                const rateM = Math.max(0, (report.metal - existing.lastSpiedMetal) / dT);
+                const rateC = Math.max(0, (report.crystal - existing.lastSpiedCrystal) / dT);
+                const rateD = Math.max(0, (report.deuterium - existing.lastSpiedDeuterium) / dT);
+                newMetalRate = Math.max(existing.metalPerHour, rateM);
+                newCrystalRate = Math.max(existing.crystalPerHour, rateC);
+                newDeuteriumRate = Math.max(existing.deuteriumPerHour, rateD);
+                newSpyCount = existing.spyCount + 1;
+                if (newSpyCount === 2) confidence = 30;
+                else if (newSpyCount === 3) confidence = 60;
+                else if (newSpyCount === 4) confidence = 85;
+                else if (newSpyCount >= 5) confidence = 100;
+              }
+              const hasTraderClass = report.hasTraderClass !== void 0 ? report.hasTraderClass : existing.hasTraderClass || false;
+              const metalStorageLevel = report.metalStorageLevel !== void 0 ? report.metalStorageLevel : existing.metalStorageLevel || 0;
+              const crystalStorageLevel = report.crystalStorageLevel !== void 0 ? report.crystalStorageLevel : existing.crystalStorageLevel || 0;
+              const deuteriumStorageLevel = report.deuteriumStorageLevel !== void 0 ? report.deuteriumStorageLevel : existing.deuteriumStorageLevel || 0;
+              await db.spiedPlanets.put({
+                ...existing,
+                playerName: report.playerName,
+                // Keep player name updated
+                playerStatus: report.playerStatus,
+                metalPerHour: newMetalRate,
+                crystalPerHour: newCrystalRate,
+                deuteriumPerHour: newDeuteriumRate,
+                lastSpiedMetal: report.metal,
+                lastSpiedCrystal: report.crystal,
+                lastSpiedDeuterium: report.deuterium,
+                lastSpiedTimestamp: report.timestamp,
+                lastHashCode: report.hashcode,
+                spyCount: newSpyCount,
+                confidence,
+                lootPercentage: report.lootPercentage || existing.lootPercentage || 50,
+                hasTraderClass,
+                metalStorageLevel,
+                crystalStorageLevel,
+                deuteriumStorageLevel,
+                metalCapacity: calculateStorageCapacity(metalStorageLevel, hasTraderClass),
+                crystalCapacity: calculateStorageCapacity(crystalStorageLevel, hasTraderClass),
+                deuteriumCapacity: calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass)
+              });
+              finalResults.push({
+                messageId: report.messageId,
+                planetId: report.planetId,
+                isNew: true,
+                metal: report.metal,
+                crystal: report.crystal,
+                deuterium: report.deuterium
+              });
+            } else {
+              finalResults.push({
+                messageId: report.messageId,
+                planetId: report.planetId,
+                isNew: false,
+                metal: report.metal,
+                crystal: report.crystal,
+                deuterium: report.deuterium
+              });
+            }
+          }
+          sendResponse({ success: true, data: finalResults });
+        } catch (err) {
+          console.error("OGame Nexus: Error tracking espionage reports", err);
           sendResponse({ success: false, error: String(err) });
         }
       })();

@@ -19,6 +19,7 @@ import Hotbar from './components/Hotbar';
 import WelcomeModal from './components/WelcomeModal';
 import ChangelogModal from './components/ChangelogModal';
 import Tutorials from './views/Tutorials';
+import RaidRadar from './views/RaidRadar';
 import './index.css';
 import '../content/styles.css';
 
@@ -233,6 +234,7 @@ const App: React.FC = () => {
                     {currentView === 'tools' && <Tools />}
                     {currentView === 'signature' && <SignatureMaker onBack={() => setCurrentView('overview')} />}
                     {currentView === 'tutorials' && <Tutorials onNavigate={setCurrentView} />}
+                    {currentView === 'raidRadar' && <RaidRadar />}
                 </motion.div>
             </AnimatePresence>
         );

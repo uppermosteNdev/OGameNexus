@@ -100,6 +100,11 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                     title: "Import Mine Production",
                     text: "Visit your in-game Resource Settings tab on every planet and then the Lifeform Player Bonuses. This allows the extension to map information about your empire production and lifeform levels.",
                     images: ["icons/tutorials/T1/ResourceSettings1.jpg", "icons/tutorials/T1/ResourceSettings2.jpg"]
+                },
+                {
+                    title: "Lifeform Synchronization",
+                    text: "Go to the in-game **Lifeform Research** page on all of your planets for the first time. Doing so enables OGame Nexus to scan, identify, and catalog your active technology Tiers for each planet.",
+                    images: ["icons/tutorials/T1/Lifeforms1.jpg"]
                 }
             ]
         },

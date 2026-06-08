@@ -96,7 +96,7 @@
   function setNewBadgeActive(active) {
     newBadgeActive = active;
   }
-  function isExtensionStillValid$2() {
+  function isExtensionStillValid$3() {
     return !!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
   }
   function scrapeExpeditionMessages() {
@@ -687,7 +687,7 @@
     window.dispatchEvent(new CustomEvent("ogame-nexus-trigger-tooltips"));
   }
   async function injectTodaySummaryCard(playerId, forceLoad = false, maxRarity = 0) {
-    if (!isExtensionStillValid$2()) return;
+    if (!isExtensionStillValid$3()) return;
     let existingWrapper = document.querySelector(".og-nexus-summary-wrapper");
     if (existingWrapper) {
       existingWrapper.style.display = "flex";
@@ -698,7 +698,7 @@
       data: { playerId }
     }, (response) => {
       var _a;
-      if (!isExtensionStillValid$2() || !(response == null ? void 0 : response.success)) return;
+      if (!isExtensionStillValid$3() || !(response == null ? void 0 : response.success)) return;
       const paginator = document.querySelector(".messagePaginator");
       if (!paginator) return;
       const allWrappers = document.querySelectorAll(".og-nexus-summary-wrapper");
@@ -897,7 +897,7 @@
   }
   async function trackExpeditions(playerId) {
     var _a;
-    if (!isExtensionStillValid$2()) return;
+    if (!isExtensionStillValid$3()) return;
     let removeOGLight = true;
     try {
       const localData = await chrome.storage.local.get("globalSettings");
@@ -941,7 +941,7 @@
             if (rarity > maxRarity) maxRarity = rarity;
           }
         });
-        triggerSiteTooltips$2();
+        triggerSiteTooltips$3();
         if (response.newCount && response.newCount > 0) {
           const newItems = response.data.filter((exp) => exp.isNew).map((exp) => ({ ...exp, type: "expedition" }));
           if (newItems.length > 0) {
@@ -985,7 +985,7 @@
     });
   }
   function updateExpeditionVisuals(msgElement, exp, removeOGLight = true) {
-    if (!isExtensionStillValid$2()) return;
+    if (!isExtensionStillValid$3()) return;
     if (removeOGLight) {
       cleanOGLightDOM$1(msgElement);
     }
@@ -1056,7 +1056,7 @@
                 `;
       trackedWrapper.appendChild(trackedBtn);
       footerActions.appendChild(trackedWrapper);
-      triggerSiteTooltips$2();
+      triggerSiteTooltips$3();
     }
     if (resType === "ressources" || resType === "resources") {
       if (content) content.style.display = "none";
@@ -1217,7 +1217,7 @@
       } else {
         msgElement.appendChild(container);
       }
-      triggerSiteTooltips$2();
+      triggerSiteTooltips$3();
     } else if (resType === "darkmatter") {
       if (content) content.style.display = "none";
       if (box) box.style.display = "none";
@@ -1360,7 +1360,7 @@
       } else {
         msgElement.appendChild(container);
       }
-      triggerSiteTooltips$2();
+      triggerSiteTooltips$3();
     } else if (resType === "navigation" || resType === "delay" || resType === "speedup") {
       if (content) content.style.display = "none";
       if (box) box.style.display = "none";
@@ -1493,7 +1493,7 @@
       } else {
         msgElement.appendChild(container);
       }
-      triggerSiteTooltips$2();
+      triggerSiteTooltips$3();
     } else if (resType === "combatpirates" || resType === "combataliens" || resType === "0") {
       if (content) content.style.display = "none";
       if (box) box.style.display = "none";
@@ -1625,7 +1625,7 @@
       } else {
         msgElement.appendChild(container);
       }
-      triggerSiteTooltips$2();
+      triggerSiteTooltips$3();
     } else if (resType === "shipwrecks") {
       if (content) content.style.display = "none";
       if (box) box.style.display = "none";
@@ -1822,7 +1822,7 @@
       } else {
         msgElement.appendChild(container);
       }
-      triggerSiteTooltips$2();
+      triggerSiteTooltips$3();
     } else if (resType === "trader") {
       if (content) content.style.display = "none";
       if (box) box.style.display = "none";
@@ -2424,10 +2424,10 @@
     }
     msgElement.setAttribute("data-og-nexus-visuals-applied", "true");
   }
-  function triggerSiteTooltips$2() {
+  function triggerSiteTooltips$3() {
     window.dispatchEvent(new CustomEvent("ogame-nexus-trigger-tooltips"));
   }
-  function isExtensionStillValid$1() {
+  function isExtensionStillValid$2() {
     return !!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
   }
   function scrapeLifeformMessages() {
@@ -2462,7 +2462,7 @@
   }
   async function trackLifeformDiscoveries(playerId) {
     var _a;
-    if (!isExtensionStillValid$1()) return;
+    if (!isExtensionStillValid$2()) return;
     let removeOGLight = true;
     try {
       const localData = await chrome.storage.local.get("globalSettings");
@@ -2518,7 +2518,7 @@
           }
           injectTodaySummaryCard(playerId, true, maxRarity);
         }
-        triggerSiteTooltips$1();
+        triggerSiteTooltips$2();
       }
     });
   }
@@ -2530,7 +2530,7 @@
   }
   function updateLifeformDiscoveryVisuals(msgElement, discovery, removeOGLight = true) {
     var _a, _b;
-    if (!isExtensionStillValid$1()) return;
+    if (!isExtensionStillValid$2()) return;
     if (removeOGLight) {
       cleanOGLightDOM(msgElement);
     }
@@ -2739,9 +2739,9 @@
       trackedWrapper.appendChild(trackedBtn);
       footerActions.appendChild(trackedWrapper);
     }
-    triggerSiteTooltips$1();
+    triggerSiteTooltips$2();
   }
-  function triggerSiteTooltips$1() {
+  function triggerSiteTooltips$2() {
     window.dispatchEvent(new CustomEvent("ogame-nexus-trigger-tooltips"));
   }
   const LIFEFORM_TECH_DATA = [
@@ -6380,7 +6380,7 @@
       }
     }
   }
-  function isExtensionStillValid() {
+  function isExtensionStillValid$1() {
     return !!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
   }
   function formatExactNumber(num) {
@@ -6506,7 +6506,7 @@
     return results;
   }
   async function trackCombatReports(playerId) {
-    if (!isExtensionStillValid()) return;
+    if (!isExtensionStillValid$1()) return;
     const combatData = scrapeCombatMessages();
     if (combatData.length === 0) return;
     chrome.runtime.sendMessage({
@@ -6530,12 +6530,12 @@
             }
           }
         });
-        triggerSiteTooltips();
+        triggerSiteTooltips$1();
       }
     });
   }
   function updateCombatVisuals(msgElement, combat) {
-    if (!isExtensionStillValid()) return;
+    if (!isExtensionStillValid$1()) return;
     const footerActions = msgElement.querySelector("message-footer-actions") || msgElement.querySelector(".msg_actions");
     if (footerActions && !footerActions.querySelector(".og-nexus-tracked-btn")) {
       const trackedWrapper = document.createElement("gradient-button");
@@ -6622,8 +6622,281 @@
       }
     }
   }
+  function triggerSiteTooltips$1() {
+    window.dispatchEvent(new CustomEvent("ogame-nexus-trigger-tooltips"));
+  }
+  function isExtensionStillValid() {
+    return !!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
+  }
+  function extractStorageAndAllianceDetails(msg, msgContainer) {
+    const hiddenBuildings = msg.getAttribute("data-raw-hiddenbuildings");
+    const buildingsRaw = msg.getAttribute("data-raw-buildings");
+    let metalStorageLevel;
+    let crystalStorageLevel;
+    let deuteriumStorageLevel;
+    if (buildingsRaw && !hiddenBuildings) {
+      try {
+        const buildings = JSON.parse(buildingsRaw);
+        if (buildings["22"] !== void 0) metalStorageLevel = parseInt(buildings["22"], 10);
+        if (buildings["23"] !== void 0) crystalStorageLevel = parseInt(buildings["23"], 10);
+        if (buildings["24"] !== void 0) deuteriumStorageLevel = parseInt(buildings["24"], 10);
+      } catch (e) {
+        console.error("OGame Nexus: Error parsing data-raw-buildings JSON", e);
+      }
+    }
+    const allianceClassRaw = msg.getAttribute("data-raw-allianceclass");
+    let hasTraderClass = false;
+    if (allianceClassRaw) {
+      try {
+        const allianceClass = JSON.parse(allianceClassRaw);
+        if (allianceClass.icon === "trader" || allianceClass.id === 3) {
+          hasTraderClass = true;
+        }
+      } catch (e) {
+        if (allianceClassRaw.includes("trader") || allianceClassRaw.includes("3")) {
+          hasTraderClass = true;
+        }
+      }
+    } else {
+      const filtersAllianceClass = msgContainer == null ? void 0 : msgContainer.getAttribute("data-messages-filters-allianceclass");
+      if (filtersAllianceClass) {
+        try {
+          const allianceClass = JSON.parse(filtersAllianceClass);
+          if (allianceClass.icon === "trader" || allianceClass.id === 3) {
+            hasTraderClass = true;
+          }
+        } catch (e) {
+        }
+      }
+    }
+    return { metalStorageLevel, crystalStorageLevel, deuteriumStorageLevel, hasTraderClass };
+  }
+  function scrapeEspionageMessages() {
+    const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]:not([data-og-nexus-processed="true"])');
+    const results = [];
+    for (const msg of espionageMessages) {
+      const msgContainer = msg.closest(".msg");
+      const messageId = msgContainer == null ? void 0 : msgContainer.getAttribute("data-msg-id");
+      if (!messageId) continue;
+      const targetPlanetType = msg.getAttribute("data-raw-targetplanettype");
+      if (targetPlanetType !== "1") {
+        msg.setAttribute("data-og-nexus-processed", "true");
+        continue;
+      }
+      const timestampRaw = msg.getAttribute("data-raw-timestamp");
+      const coordsRaw = msg.getAttribute("data-raw-coordinates") || msg.getAttribute("data-raw-coords");
+      const playerName = msg.getAttribute("data-raw-playername");
+      const playerId = msg.getAttribute("data-raw-targetplayerid");
+      const planetId = msg.getAttribute("data-raw-targetplanetid");
+      const playerStatusRaw = msg.getAttribute("data-raw-playerstatus");
+      const hashcode = msg.getAttribute("data-raw-hashcode");
+      const metal = parseInt(msg.getAttribute("data-raw-metal") || "0", 10);
+      const crystal = parseInt(msg.getAttribute("data-raw-crystal") || "0", 10);
+      const deuterium = parseInt(msg.getAttribute("data-raw-deuterium") || "0", 10);
+      let lootPercentage = 50;
+      const filtersLootAttr = msgContainer == null ? void 0 : msgContainer.getAttribute("data-messages-filters-loot");
+      if (filtersLootAttr) {
+        const parsed = parseInt(filtersLootAttr.replace("%", ""), 10);
+        if (!isNaN(parsed)) {
+          lootPercentage = parsed;
+        }
+      } else {
+        const rawLoot = msg.getAttribute("data-raw-loot");
+        if (rawLoot) {
+          const parsed = parseInt(rawLoot, 10);
+          if (!isNaN(parsed)) {
+            lootPercentage = parsed;
+          }
+        }
+      }
+      if (timestampRaw && coordsRaw && playerId && planetId && hashcode) {
+        const coords = coordsRaw.replace(/[\[\]]/g, "");
+        let playerStatus = [];
+        try {
+          if (playerStatusRaw) {
+            playerStatus = JSON.parse(playerStatusRaw);
+          }
+        } catch (e) {
+          if (playerStatusRaw && typeof playerStatusRaw === "string") {
+            playerStatus = playerStatusRaw.replace(/[\[\]"']/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+          }
+        }
+        const isInactive = playerStatus.includes("inactive") || playerStatus.includes("longinactive");
+        if (isInactive) {
+          const details = extractStorageAndAllianceDetails(msg, msgContainer || null);
+          results.push({
+            messageId,
+            playerId,
+            playerName: playerName || "Unknown",
+            planetId,
+            coords,
+            timestamp: parseInt(timestampRaw, 10),
+            metal,
+            crystal,
+            deuterium,
+            playerStatus,
+            hashcode,
+            lootPercentage,
+            ...details
+          });
+        }
+        msg.setAttribute("data-og-nexus-processed", "true");
+      }
+    }
+    return results;
+  }
+  const processedRawMessageIds = /* @__PURE__ */ new Set();
+  async function trackEspionageReports(playerId) {
+    if (!isExtensionStillValid()) return;
+    const espionageData = scrapeEspionageMessages();
+    if (espionageData.length === 0) return;
+    updateScrapedSpyCount(espionageData.length);
+    chrome.runtime.sendMessage({
+      type: "TRACK_ESPIONAGE",
+      data: { espionageReports: espionageData, playerId }
+    }, (response) => {
+      if (response == null ? void 0 : response.success) {
+        response.data.forEach((report) => {
+          const msgElement = document.querySelector(`.msg[data-msg-id="${report.messageId}"]`);
+          if (msgElement) {
+            updateEspionageVisuals(msgElement);
+          }
+        });
+        triggerSiteTooltips();
+      }
+    });
+  }
+  function scrapeRawEspionageHTML(htmls) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmls.join(""), "text/html");
+    const espionageMessages = doc.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]');
+    const results = [];
+    for (const msg of espionageMessages) {
+      const msgContainer = msg.closest(".msg");
+      const messageId = msgContainer == null ? void 0 : msgContainer.getAttribute("data-msg-id");
+      if (!messageId) continue;
+      const targetPlanetType = msg.getAttribute("data-raw-targetplanettype");
+      if (targetPlanetType !== "1") {
+        continue;
+      }
+      const timestampRaw = msg.getAttribute("data-raw-timestamp");
+      const coordsRaw = msg.getAttribute("data-raw-coordinates") || msg.getAttribute("data-raw-coords");
+      const playerName = msg.getAttribute("data-raw-playername");
+      const playerId = msg.getAttribute("data-raw-targetplayerid");
+      const planetId = msg.getAttribute("data-raw-targetplanetid");
+      const playerStatusRaw = msg.getAttribute("data-raw-playerstatus");
+      const hashcode = msg.getAttribute("data-raw-hashcode");
+      const metal = parseInt(msg.getAttribute("data-raw-metal") || "0", 10);
+      const crystal = parseInt(msg.getAttribute("data-raw-crystal") || "0", 10);
+      const deuterium = parseInt(msg.getAttribute("data-raw-deuterium") || "0", 10);
+      let lootPercentage = 50;
+      const filtersLootAttr = msgContainer == null ? void 0 : msgContainer.getAttribute("data-messages-filters-loot");
+      if (filtersLootAttr) {
+        const parsed = parseInt(filtersLootAttr.replace("%", ""), 10);
+        if (!isNaN(parsed)) {
+          lootPercentage = parsed;
+        }
+      } else {
+        const rawLoot = msg.getAttribute("data-raw-loot");
+        if (rawLoot) {
+          const parsed = parseInt(rawLoot, 10);
+          if (!isNaN(parsed)) {
+            lootPercentage = parsed;
+          }
+        }
+      }
+      if (timestampRaw && coordsRaw && playerId && planetId && hashcode) {
+        const coords = coordsRaw.replace(/[\[\]]/g, "");
+        let playerStatus = [];
+        try {
+          if (playerStatusRaw) {
+            playerStatus = JSON.parse(playerStatusRaw);
+          }
+        } catch (e) {
+          if (playerStatusRaw && typeof playerStatusRaw === "string") {
+            playerStatus = playerStatusRaw.replace(/[\[\]"']/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+          }
+        }
+        const isInactive = playerStatus.includes("inactive") || playerStatus.includes("longinactive");
+        if (isInactive) {
+          const details = extractStorageAndAllianceDetails(msg, msgContainer || null);
+          results.push({
+            messageId,
+            playerId,
+            playerName: playerName || "Unknown",
+            planetId,
+            coords,
+            timestamp: parseInt(timestampRaw, 10),
+            metal,
+            crystal,
+            deuterium,
+            playerStatus,
+            hashcode,
+            lootPercentage,
+            ...details
+          });
+        }
+      }
+    }
+    return results;
+  }
+  async function trackRawEspionageReports(playerId, htmls) {
+    if (!isExtensionStillValid()) return;
+    const espionageData = scrapeRawEspionageHTML(htmls);
+    if (espionageData.length === 0) return;
+    updateScrapedSpyCount(espionageData.length);
+    const unprocessedReports = espionageData.filter((report) => !processedRawMessageIds.has(report.messageId));
+    if (unprocessedReports.length === 0) return;
+    unprocessedReports.forEach((report) => processedRawMessageIds.add(report.messageId));
+    chrome.runtime.sendMessage({
+      type: "TRACK_ESPIONAGE",
+      data: { espionageReports: unprocessedReports, playerId }
+    }, (response) => {
+      if (response == null ? void 0 : response.success) {
+        response.data.forEach((report) => {
+          const msgElement = document.querySelector(`.msg[data-msg-id="${report.messageId}"]`);
+          if (msgElement) {
+            updateEspionageVisuals(msgElement);
+          }
+        });
+        triggerSiteTooltips();
+      }
+    });
+  }
+  function updateEspionageVisuals(msgElement, report) {
+    if (!isExtensionStillValid()) return;
+    const footerActions = msgElement.querySelector("message-footer-actions") || msgElement.querySelector(".msg_actions");
+    if (footerActions && !footerActions.querySelector(".og-nexus-tracked-btn")) {
+      const trackedWrapper = document.createElement("gradient-button");
+      trackedWrapper.setAttribute("sq28", "");
+      const trackedBtn = document.createElement("button");
+      trackedBtn.className = "custom_btn nexus-tooltip og-nexus-tracked-btn";
+      trackedBtn.setAttribute("data-nexus-tooltip", "OGame Nexus: Espionage Tracked");
+      trackedBtn.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 20 20" style="margin: 4px;">
+                <circle cx="10" cy="10" r="9" fill="none" stroke="#22c55e" stroke-width="1.5" />
+                <path d="M6 10 L9 13 L14 7" stroke="#22c55e" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        `;
+      trackedWrapper.appendChild(trackedBtn);
+      footerActions.appendChild(trackedWrapper);
+    }
+  }
   function triggerSiteTooltips() {
     window.dispatchEvent(new CustomEvent("ogame-nexus-trigger-tooltips"));
+  }
+  function updateScrapedSpyCount(count) {
+    const container = document.getElementById("og-nexus-scraping-status");
+    const badge = document.getElementById("og-nexus-spy-count-badge");
+    if (container && badge) {
+      badge.innerText = count.toString();
+      container.style.display = "flex";
+      container.style.transition = "all 0.3s ease";
+      container.style.textShadow = "0 0 8px #22d3ee";
+      setTimeout(() => {
+        container.style.textShadow = "none";
+      }, 1e3);
+    }
   }
   let currentTimeframe = "D";
   let currentReferenceDate = /* @__PURE__ */ new Date();
@@ -8006,6 +8279,10 @@
     <a id="og-nexus-text-dashboard-btn" class="menubutton ipiHintable" href="javascript:void(0);" target="_self">
         <span class="textlabel">OGame Nexus</span>
     </a>
+    <div id="og-nexus-scraping-status" style="display: none; margin-left: 36px; padding: 2px 0 6px 0; font-size: 10px; color: #a5f3fc; font-family: 'Outfit', sans-serif; align-items: center; gap: 6px; line-height: 1.2;">
+        <span class="status-pulse" style="display: inline-block; width: 6px; height: 6px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 6px #22c55e;"></span>
+        <span>Spy Reports: <strong id="og-nexus-spy-count-badge" style="color: #22d3ee; font-weight: 700;">0</strong> processed</span>
+    </div>
   `;
     const modalBtn = li.querySelector("#og-nexus-icon-modal-btn");
     modalBtn == null ? void 0 : modalBtn.addEventListener("click", (e) => {
@@ -8346,6 +8623,15 @@
       const playerId = getMetaContent("ogame-player-id");
       if (playerId) {
         injectTodaySummaryCard(playerId, false);
+        const now = Date.now();
+        if (!window._lastRawMessagesRequestTime || now - window._lastRawMessagesRequestTime > 1e3) {
+          window._lastRawMessagesRequestTime = now;
+          window.dispatchEvent(new CustomEvent("ogame-nexus-request-raw-messages"));
+        }
+        const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]:not([data-og-nexus-processed="true"])');
+        if (espionageMessages.length > 0) {
+          trackEspionageReports(playerId);
+        }
         const isFleetTabActive = !!document.querySelector('div.singleTab.marker[data-category-id="2"]');
         if (isFleetTabActive) {
           const expeditionMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]:not([data-og-nexus-processed="true"])');
@@ -8370,7 +8656,7 @@
         }
       }
     }
-  }, 100);
+  }, 50);
   const observer = new MutationObserver((mutations) => {
     if (document.querySelector("#menuTable")) {
       injectButton();
@@ -8409,4 +8695,14 @@
     }
   }
   initLowAnimationMode();
+  window.addEventListener("ogame-nexus-response-raw-messages", (event) => {
+    var _a;
+    const content = (_a = event.detail) == null ? void 0 : _a.content;
+    if (Array.isArray(content) && content.length > 0) {
+      const playerId = getMetaContent("ogame-player-id");
+      if (playerId) {
+        trackRawEspionageReports(playerId, content);
+      }
+    }
+  });
 })();

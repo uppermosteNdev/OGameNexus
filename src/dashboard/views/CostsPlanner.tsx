@@ -73,8 +73,8 @@ const RESEARCH_BASE_COSTS: Record<string, { base: ResourceCost; factor: number }
 
 const LIFEFORM_BUILDINGS_COSTS: Record<number, { base: ResourceCost; factor: number }> = {
     // Humans
-    11101: { base: { metal: 75, crystal: 30, deuterium: 0 }, factor: 1.15 },
-    11102: { base: { metal: 100, crystal: 50, deuterium: 20 }, factor: 1.15 },
+    11101: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.20 },
+    11102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.23 },
     11103: { base: { metal: 20000, crystal: 25000, deuterium: 10000 }, factor: 1.3 },
     11104: { base: { metal: 40000, crystal: 35000, deuterium: 15000 }, factor: 1.3 },
     11105: { base: { metal: 50000, crystal: 40000, deuterium: 20000 }, factor: 1.3 },
@@ -87,8 +87,8 @@ const LIFEFORM_BUILDINGS_COSTS: Record<number, { base: ResourceCost; factor: num
     11112: { base: { metal: 500000, crystal: 400000, deuterium: 200000 }, factor: 1.3 },
 
     // Rock'tal
-    12101: { base: { metal: 100, crystal: 40, deuterium: 0 }, factor: 1.15 },
-    12102: { base: { metal: 150, crystal: 75, deuterium: 30 }, factor: 1.15 },
+    12101: { base: { metal: 9, crystal: 3, deuterium: 0 }, factor: 1.20 },
+    12102: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.20 },
     12103: { base: { metal: 40000, crystal: 10000, deuterium: 15000 }, factor: 1.3 },
     12104: { base: { metal: 50000, crystal: 15000, deuterium: 20000 }, factor: 1.3 },
     12105: { base: { metal: 60000, crystal: 20000, deuterium: 25000 }, factor: 1.3 },
@@ -101,8 +101,8 @@ const LIFEFORM_BUILDINGS_COSTS: Record<number, { base: ResourceCost; factor: num
     12112: { base: { metal: 600000, crystal: 450000, deuterium: 250000 }, factor: 1.3 },
 
     // Mechas
-    13101: { base: { metal: 80, crystal: 35, deuterium: 0 }, factor: 1.15 },
-    13102: { base: { metal: 120, crystal: 60, deuterium: 25 }, factor: 1.15 },
+    13101: { base: { metal: 6, crystal: 2, deuterium: 0 }, factor: 1.21 },
+    13102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.18 },
     13103: { base: { metal: 30000, crystal: 20000, deuterium: 10000 }, factor: 1.3 },
     13104: { base: { metal: 50000, crystal: 30000, deuterium: 15000 }, factor: 1.3 },
     13105: { base: { metal: 80000, crystal: 50000, deuterium: 25000 }, factor: 1.3 },
@@ -115,8 +115,8 @@ const LIFEFORM_BUILDINGS_COSTS: Record<number, { base: ResourceCost; factor: num
     13112: { base: { metal: 750000, crystal: 500000, deuterium: 300000 }, factor: 1.3 },
 
     // Kaelesh
-    14101: { base: { metal: 90, crystal: 35, deuterium: 0 }, factor: 1.15 },
-    14102: { base: { metal: 130, crystal: 65, deuterium: 25 }, factor: 1.15 },
+    14101: { base: { metal: 4, crystal: 3, deuterium: 0 }, factor: 1.21 },
+    14102: { base: { metal: 6, crystal: 3, deuterium: 0 }, factor: 1.21 },
     14103: { base: { metal: 20000, crystal: 20000, deuterium: 30000 }, factor: 1.3 },
     14104: { base: { metal: 45000, crystal: 30000, deuterium: 20000 }, factor: 1.3 },
     14105: { base: { metal: 70000, crystal: 50000, deuterium: 35000 }, factor: 1.3 },
@@ -161,6 +161,25 @@ const calculateStandardCost = (base: ResourceCost, multiplier: number, start: nu
         metal += Math.floor(base.metal * Math.pow(multiplier, level - 1));
         crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1));
         deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1));
+    }
+    return { metal, crystal, deuterium };
+};
+
+const calculateLifeformBuildingCost = (itemId: number, base: ResourceCost, multiplier: number, start: number, end: number): ResourceCost => {
+    const isTechScaled = [11101, 11102, 12101, 12102, 13101, 13102, 14101, 14102].includes(itemId);
+    let metal = 0;
+    let crystal = 0;
+    let deuterium = 0;
+    for (let level = start + 1; level <= end; level++) {
+        if (isTechScaled) {
+            metal += Math.floor(base.metal * Math.pow(multiplier, level - 1) * level);
+            crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1) * level);
+            deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1) * level);
+        } else {
+            metal += Math.floor(base.metal * Math.pow(multiplier, level - 1));
+            crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1));
+            deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1));
+        }
     }
     return { metal, crystal, deuterium };
 };
@@ -544,7 +563,7 @@ const CostsPlanner: React.FC = () => {
                 } else if (item.category === 'LF Building' && realPlanet) {
                     const costConfig = LIFEFORM_BUILDINGS_COSTS[item.itemId];
                     if (costConfig) {
-                        cost = calculateStandardCost(costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
+                        cost = calculateLifeformBuildingCost(item.itemId, costConfig.base, costConfig.factor, realCurrent, item.targetLevel);
                         const multiplier = getLifeformBuildingCostMultiplier(realPlanet);
                         cost = applyDiscount(cost, multiplier);
                     }
@@ -985,7 +1004,7 @@ const CostsPlanner: React.FC = () => {
         const costConfig = LIFEFORM_BUILDINGS_COSTS[bld.id];
         if (!costConfig) return;
 
-        let cost = calculateStandardCost(costConfig.base, costConfig.factor, current, target);
+        let cost = calculateLifeformBuildingCost(bld.id, costConfig.base, costConfig.factor, current, target);
         const multiplier = getLifeformBuildingCostMultiplier(activePlanet);
         cost = applyDiscount(cost, multiplier);
 
@@ -1928,7 +1947,7 @@ const CostsPlanner: React.FC = () => {
                                                     const inputKey = `lfBuildings_${selectedPlanetId}_${bld.id}`;
                                                     const target = targetLevels[inputKey] ?? (current + 1);
                                                     const costConfig = LIFEFORM_BUILDINGS_COSTS[bld.id];
-                                                    let calculatedCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, current, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                                                    let calculatedCost = costConfig ? calculateLifeformBuildingCost(bld.id, costConfig.base, costConfig.factor, current, target) : { metal: 0, crystal: 0, deuterium: 0 };
                                                     const multiplier = getLifeformBuildingCostMultiplier(activePlanet);
                                                     calculatedCost = applyDiscount(calculatedCost, multiplier);
                                                     const hasUpgrade = target > current;
@@ -1987,7 +2006,7 @@ const CostsPlanner: React.FC = () => {
                                                                 </div>
 
                                                                 {hasUpgrade && (() => {
-                                                                    let singleCost = costConfig ? calculateStandardCost(costConfig.base, costConfig.factor, target - 1, target) : { metal: 0, crystal: 0, deuterium: 0 };
+                                                                    let singleCost = costConfig ? calculateLifeformBuildingCost(bld.id, costConfig.base, costConfig.factor, target - 1, target) : { metal: 0, crystal: 0, deuterium: 0 };
                                                                     const multiplier = getLifeformBuildingCostMultiplier(activePlanet);
                                                                     singleCost = applyDiscount(singleCost, multiplier);
                                                                     return (
