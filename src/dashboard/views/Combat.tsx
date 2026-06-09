@@ -36,7 +36,8 @@ import {
     ChevronRight,
     Circle,
     Search,
-    ChevronLeft
+    ChevronLeft,
+    Settings as SettingsIcon
 } from 'lucide-react';
 import { SHIP_DATA, RESEARCH_DATA, DEFENCE_DATA } from '../../db/staticData';
 
@@ -75,6 +76,68 @@ const formatYAxis = (value: number) => {
 
 const Combat: React.FC = () => {
     const combatReports = useLiveQuery(() => db.combatReports.toArray()) || [];
+
+    // Load Combat Filter Settings
+    const [filterMode, setFilterMode] = useState<'pvp' | 'pve' | 'all'>(() => {
+        const saved = localStorage.getItem('og-nexus-combat-settings');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                if (parsed.filterMode !== undefined) {
+                    return parsed.filterMode;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        return 'pvp'; // Default is PVP
+    });
+
+    // Save Settings helper
+    const saveFilterMode = (mode: 'pvp' | 'pve' | 'all') => {
+        setFilterMode(mode);
+        try {
+            const settingsObj = { filterMode: mode };
+            localStorage.setItem('og-nexus-combat-settings', JSON.stringify(settingsObj));
+            
+            // Also sync to chrome.storage.local for consistency
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({ combatSettings: settingsObj });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    // Load from chrome.storage.local on mount
+    useEffect(() => {
+        const loadFromChrome = async () => {
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                    const result = await chrome.storage.local.get('combatSettings');
+                    if (result?.combatSettings?.filterMode !== undefined) {
+                        setFilterMode(result.combatSettings.filterMode);
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+        loadFromChrome();
+    }, []);
+
+    // Filter reports based on active mode
+    const filteredReports = useMemo(() => {
+        return combatReports.filter(cr => {
+            const isExp = cr.isExpedition || (cr.coords ? cr.coords.trim().endsWith(':16') : false);
+            if (filterMode === 'pvp') return !isExp;
+            if (filterMode === 'pve') return isExp;
+            return true;
+        });
+    }, [combatReports, filterMode]);
+
+
+
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
     const rates = settings || { metal: 3, crystal: 2, deuterium: 1 };
 
@@ -140,8 +203,29 @@ const Combat: React.FC = () => {
     const [filterText, setFilterText] = useState('');
     const itemsPerPage = 10;
 
+    const [historyPage, setHistoryPage] = useState(1);
+    const historyItemsPerPage = 50;
+
+    // Reset history page when filter mode or active tab changes
+    useEffect(() => {
+        setHistoryPage(1);
+    }, [filterMode, activeTab]);
+
+    const sortedHistory = useMemo(() => {
+        return [...filteredReports].sort((a, b) => b.timestamp - a.timestamp);
+    }, [filteredReports]);
+
+    const { paginatedHistory, totalHistoryPages } = useMemo(() => {
+        const count = sortedHistory.length;
+        const pages = Math.ceil(count / historyItemsPerPage);
+        const start = (historyPage - 1) * historyItemsPerPage;
+        const items = sortedHistory.slice(start, start + historyItemsPerPage);
+        
+        return { paginatedHistory: items, totalHistoryPages: pages };
+    }, [sortedHistory, historyPage]);
+
     const { paginatedList, totalPages, totalItems } = useMemo(() => {
-        let filtered = [...combatReports].sort((a, b) => b.timestamp - a.timestamp);
+        let filtered = [...filteredReports].sort((a, b) => b.timestamp - a.timestamp);
         
         if (filterText) {
             const lowFilter = filterText.toLowerCase();
@@ -157,7 +241,7 @@ const Combat: React.FC = () => {
         const items = filtered.slice(start, start + itemsPerPage);
         
         return { paginatedList: items, totalPages: pages, totalItems: count };
-    }, [combatReports, filterText, currentPage]);
+    }, [filteredReports, filterText, currentPage]);
 
     // Reset page on filter change
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,7 +251,7 @@ const Combat: React.FC = () => {
 
     // --- Statistics ---
     const stats = useMemo(() => {
-        const total = combatReports.length;
+        const total = filteredReports.length;
         if (total === 0) return null;
 
         let wins = 0;
@@ -180,7 +264,7 @@ const Combat: React.FC = () => {
         let totalHonor = 0;
         let moons = 0;
 
-        combatReports.forEach(cr => {
+        filteredReports.forEach(cr => {
             if (cr.winner === 'attacker') wins++;
             else if (cr.winner === 'defender') losses++;
             else draws++;
@@ -209,7 +293,7 @@ const Combat: React.FC = () => {
             totalLootMSU, totalDebrisMSU, totalAttackerLosses, totalDefenderLosses,
             totalHonor, profit
         };
-    }, [combatReports, mMultiplier, cMultiplier, dMultiplier]);
+    }, [filteredReports, mMultiplier, cMultiplier, dMultiplier]);
 
     // --- Chart Data ---
     const outcomesPieData = useMemo(() => {
@@ -223,7 +307,7 @@ const Combat: React.FC = () => {
 
     const msuOverTimeData = useMemo(() => {
         const dataMap: Record<string, { attacker: number, defender: number, profit: number }> = {};
-        combatReports.forEach(cr => {
+        filteredReports.forEach(cr => {
             const dateKey = toLocaleDateKey(new Date(cr.timestamp * 1000));
             if (!dataMap[dateKey]) dataMap[dateKey] = { attacker: 0, defender: 0, profit: 0 };
             
@@ -251,11 +335,11 @@ const Combat: React.FC = () => {
             });
         }
         return results;
-    }, [combatReports, mMultiplier, cMultiplier, dMultiplier]);
+    }, [filteredReports, mMultiplier, cMultiplier, dMultiplier]);
 
     const zoneActivity = useMemo(() => {
         const zones: Record<string, number> = {};
-        combatReports.forEach(cr => {
+        filteredReports.forEach(cr => {
             const match = cr.coords.match(/(\d+):(\d+)/);
             if (match) {
                 const zone = `${match[1]}:${match[2]}`;
@@ -265,11 +349,11 @@ const Combat: React.FC = () => {
         return Object.entries(zones)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5);
-    }, [combatReports]);
+    }, [filteredReports]);
 
     const recentCombats = paginatedList;
 
-    if (!stats) {
+    if (combatReports.length === 0) {
         return (
             <div className="view">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
@@ -283,19 +367,71 @@ const Combat: React.FC = () => {
                         Engage hostile fleets or defensive installations to populate your tactical database.
                     </p>
                 </div>
+            </div>
+        );
+    }
 
-                <AnimatePresence>
-                    {selectedReport && (
-                        <CombatDetailModal 
-                            report={selectedReport} 
-                            onClose={() => setSelectedReport(null)} 
-                            rates={rates} 
-                            mMultiplier={mMultiplier}
-                            cMultiplier={cMultiplier}
-                            dMultiplier={dMultiplier}
-                        />
-                    )}
-                </AnimatePresence>
+    if (!stats) {
+        return (
+            <div className="view">
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <Flame size={32} color={THEME_CRIMSON} />
+                            <h1 style={{ margin: 0 }}>Combat Command</h1>
+                        </div>
+                        {/* 3-way Sleek Segmented Switch */}
+                        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '3px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            {[
+                                { id: 'pvp', label: 'PVP' },
+                                { id: 'pve', label: 'PVE' },
+                                { id: 'all', label: 'All' }
+                            ].map(opt => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => saveFilterMode(opt.id as 'pvp' | 'pve' | 'all')}
+                                    style={{
+                                        background: filterMode === opt.id ? THEME_CRIMSON : 'transparent',
+                                        color: filterMode === opt.id ? '#000' : 'rgba(255,255,255,0.6)',
+                                        border: 'none',
+                                        padding: '6px 14px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease-in-out',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px'
+                                    }}
+                                    onMouseEnter={e => {
+                                        if (filterMode !== opt.id) {
+                                            e.currentTarget.style.color = '#fff';
+                                        }
+                                    }}
+                                    onMouseLeave={e => {
+                                        if (filterMode !== opt.id) {
+                                            e.currentTarget.style.color = 'rgba(255,255,255,0.6)';
+                                        }
+                                    }}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Empty filter message */}
+                <div className="glass" style={{ padding: '60px', textAlign: 'center', marginTop: '32px' }}>
+                    <Sword size={64} color="rgba(255,255,255,0.1)" style={{ marginBottom: '24px' }} />
+                    <div style={{ fontSize: '1.5rem', color: '#fff', marginBottom: '1rem', fontWeight: 700 }}>No Combats Match Selection</div>
+                    <p style={{ color: 'rgba(255,255,255,0.5)', maxWidth: '500px', margin: '0 auto', lineHeight: '1.6' }}>
+                        No recorded combat logs match the active filter: <strong style={{ color: THEME_CRIMSON }}>{filterMode.toUpperCase()}</strong>.
+                        <br />
+                        Adjust your filter preferences at the top left of the page.
+                    </p>
+                </div>
             </div>
         );
     }
@@ -304,11 +440,51 @@ const Combat: React.FC = () => {
         <div className="view">
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Flame size={32} color={THEME_CRIMSON} />
-                    <h1 style={{ margin: 0 }}>Combat Command</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Flame size={32} color={THEME_CRIMSON} />
+                        <h1 style={{ margin: 0 }}>Combat Command</h1>
+                    </div>
+                    {/* 3-way Sleek Segmented Switch */}
+                    <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '3px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        {[
+                            { id: 'pvp', label: 'PVP' },
+                            { id: 'pve', label: 'PVE' },
+                            { id: 'all', label: 'All' }
+                        ].map(opt => (
+                            <button
+                                key={opt.id}
+                                onClick={() => saveFilterMode(opt.id as 'pvp' | 'pve' | 'all')}
+                                style={{
+                                    background: filterMode === opt.id ? THEME_CRIMSON : 'transparent',
+                                    color: filterMode === opt.id ? '#000' : 'rgba(255,255,255,0.6)',
+                                    border: 'none',
+                                    padding: '6px 14px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease-in-out',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
+                                }}
+                                onMouseEnter={e => {
+                                    if (filterMode !== opt.id) {
+                                        e.currentTarget.style.color = '#fff';
+                                    }
+                                }}
+                                onMouseLeave={e => {
+                                    if (filterMode !== opt.id) {
+                                        e.currentTarget.style.color = 'rgba(255,255,255,0.6)';
+                                    }
+                                }}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {['overview', 'resources', 'zones', 'history'].map(t => (
                         <button
                             key={t}
@@ -715,7 +891,7 @@ const Combat: React.FC = () => {
                                 <h3 style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '24px' }}>Direct Loot Seized</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                     {['metal', 'crystal', 'deuterium'].map(r => {
-                                        const val = combatReports.reduce((sum, cr) => sum + (cr.loot?.[r as keyof typeof cr.loot] || 0), 0);
+                                        const val = filteredReports.reduce((sum, cr) => sum + (cr.loot?.[r as keyof typeof cr.loot] || 0), 0);
                                         return (
                                             <div key={r} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                                 <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -740,7 +916,7 @@ const Combat: React.FC = () => {
                                 <h3 style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '24px' }}>Debris Field Generation</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                     {['metal', 'crystal', 'deuterium'].map(r => {
-                                        const val = combatReports.reduce((sum, cr) => sum + (cr.debris?.[r as keyof typeof cr.debris] || 0), 0);
+                                        const val = filteredReports.reduce((sum, cr) => sum + (cr.debris?.[r as keyof typeof cr.debris] || 0), 0);
                                         return (
                                             <div key={r} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                                 <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -806,7 +982,7 @@ const Combat: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {combatReports.sort((a,b) => b.timestamp - a.timestamp).map((cr, idx) => {
+                                    {paginatedHistory.map((cr, idx) => {
                                         const loot = cr.loot || { metal: 0, crystal: 0, deuterium: 0 };
                                         const debris = cr.debris || { metal: 0, crystal: 0, deuterium: 0 };
                                         
@@ -863,6 +1039,57 @@ const Combat: React.FC = () => {
                                     })}
                                 </tbody>
                             </table>
+                        </div>
+                        {/* History Pagination Controls */}
+                        <div style={{ padding: '20px 24px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', opacity: 0.8 }}>
+                            <div style={{ opacity: 0.5 }}>
+                                Showing {sortedHistory.length > 0 ? ((historyPage - 1) * historyItemsPerPage) + 1 : 0} - {Math.min(historyPage * historyItemsPerPage, sortedHistory.length)} of {sortedHistory.length} reports
+                            </div>
+                            {totalHistoryPages > 1 && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <button 
+                                        disabled={historyPage === 1}
+                                        onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: historyPage === 1 ? 'default' : 'pointer',
+                                            opacity: historyPage === 1 ? 0.3 : 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        }}
+                                    >
+                                        <ChevronLeft size={14} />
+                                        Prev
+                                    </button>
+                                    <span style={{ fontWeight: 700 }}>
+                                        Page {historyPage} of {totalHistoryPages || 1}
+                                    </span>
+                                    <button 
+                                        disabled={historyPage >= totalHistoryPages}
+                                        onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: historyPage >= totalHistoryPages ? 'default' : 'pointer',
+                                            opacity: historyPage >= totalHistoryPages ? 0.3 : 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        }}
+                                    >
+                                        Next
+                                        <ChevronRight size={14} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}
