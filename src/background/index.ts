@@ -630,6 +630,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (message.type === "GET_TOTAL_SHIPS") {
+        const playerId = String(message.playerId || '').trim();
+        (async () => {
+            try {
+                const planets = await db.planets.where('playerId').equals(playerId).toArray();
+                let total = 0;
+                planets.forEach(p => {
+                    if (p.ships) {
+                        Object.values(p.ships).forEach(count => {
+                            total += Number(count) || 0;
+                        });
+                    }
+                });
+                sendResponse({ success: true, totalShips: total });
+            } catch (err) {
+                console.error("OGame Nexus: Error getting total ships", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
     if (message.type === "TRACK_DEBRIS") {
         const { harvests, playerId } = message.data;
         (async () => {

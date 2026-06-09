@@ -1233,6 +1233,209 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
   }
 }
 
+let lastParsedFlyingShips = -1;
+let lastParsedMissionCounts: Record<string, number> = {};
+let cachedTotalShips = -1;
+let cachedTotalShipsPlayerId = "";
+
+const MISSION_COLORS: Record<string, string> = {
+  "15": "rgba(56, 189, 248, 0.28)", // Expedition (blue)
+  "7": "rgba(20, 184, 166, 0.28)",  // Colonisation (greenish teal)
+  "8": "rgba(34, 197, 94, 0.28)",   // Recycle (bright green)
+  "3": "rgba(74, 222, 128, 0.28)",   // Transport (pale green)
+  "4": "rgba(22, 101, 52, 0.32)",    // Deployment (darker green)
+  "6": "rgba(234, 179, 8, 0.28)",    // Espionage (yellow)
+  "5": "rgba(249, 115, 22, 0.28)",   // ACS Defend (orange)
+  "1": "rgba(239, 68, 68, 0.28)",    // Attack (red)
+  "2": "rgba(244, 63, 94, 0.28)",    // ACS Attack (brighter red)
+  "9": "rgba(239, 68, 68, 0.38)",    // Moon Destruction (flame)
+  "18": "rgba(244, 143, 177, 0.28)", // Lifeform Expedition (pale pink)
+};
+const DEFAULT_MISSION_COLOR = "rgba(148, 163, 184, 0.28)";
+
+function applyFleetOverlayStyling(ownFlying: number, total: number, missionCounts: Record<string, number>, totalMissions: number) {
+  const messagesCollapsed = document.getElementById('messages_collapsed');
+  const eventBox = document.getElementById('eventboxFilled');
+
+  if (!messagesCollapsed || total <= 0) return;
+
+  // Ensure percentage is at least 1% if there are own flying ships to show a visual segment
+  const percentage = ownFlying > 0 ? Math.max(1, Math.min(100, Math.round((ownFlying / total) * 100))) : 0;
+
+  // Determine the gradient segments based on mission type proportions
+  let gradientStr = "";
+  if (ownFlying > 0 && percentage > 0 && totalMissions > 0) {
+    let currentStop = 0;
+    const stops: string[] = [];
+    
+    // Sort active mission types by count ascending (least missions to most missions)
+    const sortedActiveMissionTypes = Object.keys(missionCounts)
+      .filter(type => missionCounts[type] > 0)
+      .sort((a, b) => {
+        const countA = missionCounts[a];
+        const countB = missionCounts[b];
+        if (countA !== countB) {
+          return countA - countB;
+        }
+        return a.localeCompare(b); // stable fallback sort
+      });
+
+    let firstColor = "";
+    let lastColor = "";
+    
+    // Find the first and last colors to anchor the gradient ends
+    sortedActiveMissionTypes.forEach(type => {
+      const color = MISSION_COLORS[type] || DEFAULT_MISSION_COLOR;
+      if (!firstColor) firstColor = color;
+      lastColor = color;
+    });
+
+    if (firstColor) {
+      stops.push(`${firstColor} 0%`);
+    }
+
+    sortedActiveMissionTypes.forEach(type => {
+      const count = missionCounts[type];
+      const color = MISSION_COLORS[type] || DEFAULT_MISSION_COLOR;
+      const segmentWidth = (count / totalMissions) * percentage;
+      const nextStop = currentStop + segmentWidth;
+
+      // Apply a soft gradient blend factor of 0.2 (20% transition zone on each side of segment)
+      const blendOffset = segmentWidth * 0.2;
+      stops.push(`${color} ${(currentStop + blendOffset).toFixed(2)}%`);
+      stops.push(`${color} ${(nextStop - blendOffset).toFixed(2)}%`);
+
+      currentStop = nextStop;
+    });
+
+    if (lastColor) {
+      stops.push(`${lastColor} ${percentage.toFixed(2)}%`);
+    }
+
+    // Remainder of progress bar up to 100% is dark/transparent
+    stops.push(`rgba(0, 0, 0, 0.15) ${percentage.toFixed(2)}%`);
+    stops.push(`rgba(0, 0, 0, 0.15) 100%`);
+
+    gradientStr = `linear-gradient(90deg, ${stops.join(', ')})`;
+  } else {
+    gradientStr = `linear-gradient(90deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.15) 100%)`;
+  }
+
+  // 1. Reset messagesCollapsed background to default
+  messagesCollapsed.style.background = '';
+
+  // 2. Add subtle cyan/blue border on the left side to mark the active Nexus status
+  messagesCollapsed.style.borderLeft = '3px solid rgba(6, 182, 212, 0.6)';
+
+  // 3. Manage the absolute progress bar element at the bottom
+  messagesCollapsed.style.position = 'relative';
+  let progressBar = document.getElementById('og-nexus-fleet-progress-bar');
+  if (!progressBar) {
+    progressBar = document.createElement('div');
+    progressBar.id = 'og-nexus-fleet-progress-bar';
+    progressBar.style.position = 'absolute';
+    progressBar.style.bottom = '0';
+    progressBar.style.left = '0';
+    progressBar.style.width = '100%';
+    progressBar.style.pointerEvents = 'none';
+    progressBar.style.zIndex = '100'; // Make sure it sits on top of other backgrounds
+
+    // Match the border radius of the parent to prevent bleeding
+    const computedStyle = window.getComputedStyle(messagesCollapsed);
+    progressBar.style.borderBottomLeftRadius = computedStyle.borderBottomLeftRadius;
+    progressBar.style.borderBottomRightRadius = computedStyle.borderBottomRightRadius;
+
+    messagesCollapsed.appendChild(progressBar);
+  }
+
+  progressBar.style.height = '4px';
+  progressBar.style.background = gradientStr;
+  progressBar.style.transition = 'background 0.4s ease';
+
+  // 4. Make sure eventBox background is transparent
+  if (eventBox) {
+    eventBox.style.background = 'transparent';
+    
+    // 5. Update the text label in undermark to show percentage
+    const undermark = eventBox.querySelector('.undermark');
+    if (undermark) {
+      const currentText = undermark.textContent || '';
+      // Only append if it doesn't already contain percentage
+      if (!currentText.includes('%')) {
+        undermark.textContent = `${currentText} (${percentage}%)`;
+      } else {
+        // If it already has percentage, update it if the percentage has changed
+        const updatedText = currentText.replace(/\s*\(\d+%\)/, ` (${percentage}%)`);
+        if (currentText !== updatedText) {
+          undermark.textContent = updatedText;
+        }
+      }
+    }
+  }
+}
+
+function updateFleetProgressOverlay() {
+  const messagesCollapsed = document.getElementById('messages_collapsed');
+  const eventBox = document.getElementById('eventboxFilled');
+  
+  if (!messagesCollapsed && !eventBox) return;
+
+  const playerId = getMetaContent("ogame-player-id");
+  if (!playerId) return;
+
+  const eventContent = document.getElementById('eventContent');
+  if (eventContent) {
+    const rows = eventContent.querySelectorAll('tr.eventFleet');
+    let ownFlyingShips = 0;
+    let totalMissions = 0;
+    const missionCounts: Record<string, number> = {};
+    
+    rows.forEach(row => {
+      const missionFleetImg = row.querySelector('td.missionFleet img');
+      if (missionFleetImg) {
+        const tooltipTitle = missionFleetImg.getAttribute('data-tooltip-title') || '';
+        const isOwn = /Own fleet|Eigene Flotte|Flotte personnelle|Flota propia|Flotta propria|Własna flota|Frota própria|Kendi filon|Kendi Filom|Собственный флот|Eigen vloot|Saját flotta|Vlastní flotila|Vlastná flotila|Egen flåde|Egen flotta|Oma laivasto|Vlastita flota|Flota proprie/i.test(tooltipTitle);
+        const isFriendly = /Friendly fleet|Freundliche Flotte|Flotte amicale|Flota amigable|Flotta amica|Przyjazna flota|Frota amigável|Dost filo|Дружественный флот|Vriendelijke vloot|Baráti flotta|Přátelská flotila|Priateľská flotila|Venlig flåde|Vänlig flotta|Vennlig flåte|Ystävällinen laivasto|Φιλικός στόλος|Prijateljska flota|Flota amica/i.test(tooltipTitle);
+        const missionType = row.getAttribute('data-mission-type') || '';
+        const isOwnFleet = isOwn || (isFriendly && (missionType === '18' || missionType === '15'));
+        
+        if (isOwnFleet) {
+          const detailsTd = row.querySelector('td.detailsFleet');
+          if (detailsTd) {
+            const text = detailsTd.textContent || '0';
+            const count = parseInt(text.replace(/[,.]/g, '').trim(), 10);
+            if (!isNaN(count) && count > 0) {
+              ownFlyingShips += count;
+              const missionType = row.getAttribute('data-mission-type') || 'unknown';
+              missionCounts[missionType] = (missionCounts[missionType] || 0) + 1;
+              totalMissions += 1;
+            }
+          }
+        }
+      }
+    });
+
+    const countsChanged = JSON.stringify(missionCounts) !== JSON.stringify(lastParsedMissionCounts);
+    if (ownFlyingShips !== lastParsedFlyingShips || countsChanged || cachedTotalShipsPlayerId !== playerId) {
+      lastParsedFlyingShips = ownFlyingShips;
+      lastParsedMissionCounts = missionCounts;
+      cachedTotalShipsPlayerId = playerId;
+      
+      chrome.runtime.sendMessage({ type: "GET_TOTAL_SHIPS", playerId }, (res) => {
+        if (res && res.success) {
+          cachedTotalShips = res.totalShips;
+          applyFleetOverlayStyling(ownFlyingShips, cachedTotalShips, missionCounts, totalMissions);
+        }
+      });
+    } else {
+      applyFleetOverlayStyling(ownFlyingShips, cachedTotalShips, missionCounts, totalMissions);
+    }
+  } else if (lastParsedFlyingShips >= 0 && cachedTotalShips > 0) {
+    const totalMissions = Object.values(lastParsedMissionCounts).reduce((a, b) => a + b, 0);
+    applyFleetOverlayStyling(lastParsedFlyingShips, cachedTotalShips, lastParsedMissionCounts, totalMissions);
+  }
+}
+
 function throttle(func: (...args: any[]) => void, limit: number) {
   let inThrottle = false;
   return function(this: any, ...args: any[]) {
@@ -1347,6 +1550,8 @@ const throttledObserverLogic = throttle(() => {
       }
     }
   }
+
+  updateFleetProgressOverlay();
 }, 50);
 
 const observer = new MutationObserver((mutations) => {
