@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import {
@@ -37,7 +37,9 @@ import {
     Circle,
     Search,
     ChevronLeft,
-    Settings as SettingsIcon
+    Settings as SettingsIcon,
+    ZoomIn,
+    ZoomOut
 } from 'lucide-react';
 import { SHIP_DATA, RESEARCH_DATA, DEFENCE_DATA } from '../../db/staticData';
 
@@ -75,7 +77,11 @@ const formatYAxis = (value: number) => {
 };
 
 const Combat: React.FC = () => {
-    const combatReports = useLiveQuery(() => db.combatReports.toArray()) || [];
+    const account = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const combatReports = useLiveQuery(
+        () => account ? db.combatReports.where('playerId').equals(account.playerId).toArray() : [],
+        [account]
+    ) || [];
 
     // Load Combat Filter Settings
     const [filterMode, setFilterMode] = useState<'pvp' | 'pve' | 'all'>(() => {
@@ -146,7 +152,6 @@ const Combat: React.FC = () => {
     const cMultiplier = rates.metal / rates.crystal;
     const dMultiplier = rates.metal / rates.deuterium;
 
-    const account = useLiveQuery(() => db.accounts.toArray())?.[0];
     const playerName = account?.playerName || 'YOU';
 
     const getWinnerName = (cr: any) => {
@@ -195,6 +200,516 @@ const Combat: React.FC = () => {
             window.removeEventListener('ognexus_navigated', handleNav);
         };
     }, []);
+
+    // --- Zones / Galaxy Hotspots State ---
+    const galaxiesCount = account?.galaxies || 9;
+    const systemsCount = account?.systems || 499;
+
+    const [activeGalaxy, setActiveGalaxy] = useState<number | null>(null);
+    const [zoomRange, setZoomRange] = useState<[number, number]>([1, 499]);
+    const [hoveredSystem, setHoveredSystem] = useState<number | null>(null);
+    const [mouseCoords, setMouseCoords] = useState<{ x: number, y: number } | null>(null);
+    const [selectedSystemForCombats, setSelectedSystemForCombats] = useState<number | null>(null);
+
+    // Zooming and Panning states
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStartX, setDragStartX] = useState(0);
+    const [dragStartRange, setDragStartRange] = useState<[number, number]>([1, 499]);
+    const [isPinching, setIsPinching] = useState(false);
+    const [pinchStartDist, setPinchStartDist] = useState(0);
+    const [pinchStartRange, setPinchStartRange] = useState<[number, number]>([1, 499]);
+    const [pinchMidPct, setPinchMidPct] = useState(0);
+
+    const [containerWidth, setContainerWidth] = useState(800);
+    const [canvasNode, setCanvasNode] = useState<HTMLCanvasElement | null>(null);
+
+    const resizeObserverRef = useRef<ResizeObserver | null>(null);
+    const containerRef = useCallback((node: HTMLDivElement | null) => {
+        if (resizeObserverRef.current) {
+            resizeObserverRef.current.disconnect();
+            resizeObserverRef.current = null;
+        }
+        if (node) {
+            setContainerWidth(node.getBoundingClientRect().width);
+            const ro = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    setContainerWidth(entry.contentRect.width);
+                }
+            });
+            ro.observe(node);
+            resizeObserverRef.current = ro;
+        }
+    }, []);
+
+    const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+        setCanvasNode(node);
+    }, []);
+
+    // Parse coordinates helper
+    const parseCoords = (coordsStr?: string) => {
+        if (!coordsStr) return null;
+        const match = coordsStr.match(/(\d+):(\d+):(\d+)/);
+        if (match) {
+            return {
+                galaxy: parseInt(match[1], 10),
+                system: parseInt(match[2], 10),
+                position: parseInt(match[3], 10)
+            };
+        }
+        const match2 = coordsStr.match(/(\d+):(\d+)/);
+        if (match2) {
+            return {
+                galaxy: parseInt(match2[1], 10),
+                system: parseInt(match2[2], 10),
+                position: 1
+            };
+        }
+        return null;
+    };
+
+    // Auto-select the galaxy with the highest total combat profit/loot on load
+    useEffect(() => {
+        if (activeGalaxy !== null || combatReports.length === 0) return;
+        
+        const galaxyProfits: Record<number, number> = {};
+        combatReports.forEach(cr => {
+            const parsed = parseCoords(cr.coords);
+            if (!parsed) return;
+            const loot = cr.loot || { metal: 0, crystal: 0, deuterium: 0 };
+            const lMSU = (loot.metal * mMultiplier) + (loot.crystal * cMultiplier) + (loot.deuterium * dMultiplier);
+            const debris = cr.debris || { metal: 0, crystal: 0, deuterium: 0 };
+            const dMSU = (debris.metal * mMultiplier) + (debris.crystal * cMultiplier) + (debris.deuterium * dMultiplier);
+            const profit = lMSU + dMSU - (cr.attackerLosses || 0);
+            
+            galaxyProfits[parsed.galaxy] = (galaxyProfits[parsed.galaxy] || 0) + profit;
+        });
+
+        let bestGalaxy = 1;
+        let highestProfit = -Infinity;
+        Object.entries(galaxyProfits).forEach(([gStr, profit]) => {
+            const g = parseInt(gStr, 10);
+            if (profit > highestProfit) {
+                highestProfit = profit;
+                bestGalaxy = g;
+            }
+        });
+        
+        setActiveGalaxy(bestGalaxy);
+    }, [combatReports, activeGalaxy, mMultiplier, cMultiplier, dMultiplier]);
+
+    // Reset zoom when galaxy or systemsCount changes
+    useEffect(() => {
+        setZoomRange([1, systemsCount]);
+    }, [systemsCount, activeGalaxy]);
+
+
+
+    // Compute aggregated systems data for the active galaxy
+    const systemData = useMemo(() => {
+        const currentGal = activeGalaxy || 1;
+        
+        const systems = Array.from({ length: systemsCount }, (_, idx) => {
+            const sysNum = idx + 1;
+            return {
+                system: sysNum,
+                coords: `[${currentGal}:${sysNum}]`,
+                profit: 0,
+                battlesCount: 0,
+                loot: 0,
+                losses: 0,
+            };
+        });
+
+        filteredReports.forEach(cr => {
+            const parsed = parseCoords(cr.coords);
+            if (!parsed || parsed.galaxy !== currentGal) return;
+            if (parsed.system < 1 || parsed.system > systemsCount) return;
+
+            const sysIdx = parsed.system - 1;
+            const loot = cr.loot || { metal: 0, crystal: 0, deuterium: 0 };
+            const lMSU = (loot.metal * mMultiplier) + (loot.crystal * cMultiplier) + (loot.deuterium * dMultiplier);
+            const debris = cr.debris || { metal: 0, crystal: 0, deuterium: 0 };
+            const dMSU = (debris.metal * mMultiplier) + (debris.crystal * cMultiplier) + (debris.deuterium * dMultiplier);
+            const profit = lMSU + dMSU - (cr.attackerLosses || 0);
+
+            systems[sysIdx].profit += profit;
+            systems[sysIdx].battlesCount += 1;
+            systems[sysIdx].loot += lMSU + dMSU;
+            systems[sysIdx].losses += cr.attackerLosses || 0;
+        });
+
+        return systems;
+    }, [filteredReports, activeGalaxy, systemsCount, mMultiplier, cMultiplier, dMultiplier]);
+
+    const { maxProfit, maxLoss } = useMemo(() => {
+        let maxP = 0;
+        let maxL = 0;
+        systemData.forEach(s => {
+            if (s.profit > maxP) maxP = s.profit;
+            if (s.profit < 0 && Math.abs(s.profit) > maxL) maxL = Math.abs(s.profit);
+        });
+        return { maxProfit: maxP || 1, maxLoss: maxL || 1 };
+    }, [systemData]);
+
+    const galaxyStats = useMemo(() => {
+        let totalBattles = 0;
+        let totalProfit = 0;
+        let totalLosses = 0;
+        let mostActiveSys = 1;
+        let maxBattles = -1;
+
+        systemData.forEach(s => {
+            totalBattles += s.battlesCount;
+            totalProfit += s.profit;
+            totalLosses += s.losses;
+            if (s.battlesCount > maxBattles) {
+                maxBattles = s.battlesCount;
+                mostActiveSys = s.system;
+            }
+        });
+
+        return {
+            totalBattles,
+            totalProfit,
+            totalLosses,
+            mostActiveSystem: mostActiveSys,
+            hasData: totalBattles > 0
+        };
+    }, [systemData]);
+
+    const topHotspots = useMemo(() => {
+        return [...systemData]
+            .filter(s => s.battlesCount > 0)
+            .sort((a, b) => b.profit - a.profit)
+            .slice(0, 5);
+    }, [systemData]);
+
+    const systemCombats = useMemo(() => {
+        if (selectedSystemForCombats === null) return [];
+        const currentGal = activeGalaxy || 1;
+        return filteredReports.filter(cr => {
+            const parsed = parseCoords(cr.coords);
+            return parsed && parsed.galaxy === currentGal && parsed.system === selectedSystemForCombats;
+        }).sort((a, b) => b.timestamp - a.timestamp);
+    }, [filteredReports, selectedSystemForCombats, activeGalaxy]);
+
+    // Zoom and Pan Handlers
+    const handleZoomButton = (factor: number) => {
+        const [start, end] = zoomRange;
+        const currentSpan = end - start;
+        const mid = start + currentSpan / 2;
+        const newSpan = Math.max(8, Math.min(systemsCount, currentSpan * factor));
+        
+        let newStart = mid - newSpan / 2;
+        let newEnd = mid + newSpan / 2;
+        
+        if (newStart < 1) {
+            newEnd += (1 - newStart);
+            newStart = 1;
+        }
+        if (newEnd > systemsCount) {
+            newStart -= (newEnd - systemsCount);
+            newEnd = systemsCount;
+        }
+        
+        setZoomRange([Math.max(1, newStart), Math.min(systemsCount, newEnd)]);
+    };
+
+    // Non-passive wheel event listener for zooming
+    useEffect(() => {
+        const canvas = canvasNode;
+        if (!canvas) return;
+
+        const onWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const pct = mouseX / rect.width;
+            
+            const [startSys, endSys] = zoomRange;
+            const currentSpan = endSys - startSys;
+            const mouseSystem = startSys + pct * currentSpan;
+            
+            const factor = e.deltaY < 0 ? 0.85 : 1.15;
+            const newSpan = Math.max(8, Math.min(systemsCount, currentSpan * factor));
+            
+            let newStart = mouseSystem - pct * newSpan;
+            let newEnd = mouseSystem + (1 - pct) * newSpan;
+            
+            if (newStart < 1) {
+                newEnd += (1 - newStart);
+                newStart = 1;
+            }
+            if (newEnd > systemsCount) {
+                newStart -= (newEnd - systemsCount);
+                newEnd = systemsCount;
+            }
+            
+            setZoomRange([Math.max(1, newStart), Math.min(systemsCount, newEnd)]);
+            
+            const sysFloat = newStart + pct * newSpan;
+            const sNum = Math.floor(sysFloat);
+            if (sNum >= 1 && sNum <= systemsCount) {
+                setHoveredSystem(sNum);
+            }
+        };
+
+        canvas.addEventListener('wheel', onWheel, { passive: false });
+        return () => {
+            canvas.removeEventListener('wheel', onWheel);
+        };
+    }, [canvasNode, zoomRange, systemsCount]);
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        e.preventDefault();
+        setIsDragging(true);
+        setDragStartX(e.clientX);
+        setDragStartRange([...zoomRange]);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const [startSys, endSys] = zoomRange;
+        const visibleCount = endSys - startSys + 1;
+        const pct = mouseX / rect.width;
+        const sysFloat = startSys + pct * visibleCount;
+        const sNum = Math.floor(sysFloat);
+
+        if (sNum >= 1 && sNum <= systemsCount) {
+            setHoveredSystem(sNum);
+            setMouseCoords({ x: mouseX, y: mouseY });
+        } else {
+            setHoveredSystem(null);
+            setMouseCoords(null);
+        }
+
+        if (isDragging) {
+            const deltaX = e.clientX - dragStartX;
+            const systemDelta = -(deltaX / rect.width) * (dragStartRange[1] - dragStartRange[0]);
+            
+            let newStart = dragStartRange[0] + systemDelta;
+            let newEnd = dragStartRange[1] + systemDelta;
+            
+            if (newStart < 1) {
+                newEnd += (1 - newStart);
+                newStart = 1;
+            }
+            if (newEnd > systemsCount) {
+                newStart -= (newEnd - systemsCount);
+                newEnd = systemsCount;
+            }
+            
+            setZoomRange([Math.max(1, newStart), Math.min(systemsCount, newEnd)]);
+        }
+    };
+
+    const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        setIsDragging(false);
+        const dragDistance = Math.abs(e.clientX - dragStartX);
+        if (dragDistance < 5) {
+            if (hoveredSystem !== null) {
+                setSelectedSystemForCombats(hoveredSystem);
+            }
+        }
+    };
+
+    const handleMouseLeave = () => {
+        setIsDragging(false);
+        setHoveredSystem(null);
+        setMouseCoords(null);
+    };
+
+    const getTouchDist = (t1: React.Touch, t2: React.Touch) => {
+        return Math.sqrt(Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2));
+    };
+
+    const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (e.touches.length === 1) {
+            setIsDragging(true);
+            setDragStartX(e.touches[0].clientX);
+            setDragStartRange([...zoomRange]);
+            setIsPinching(false);
+        } else if (e.touches.length === 2) {
+            setIsDragging(false);
+            setIsPinching(true);
+            const dist = getTouchDist(e.touches[0], e.touches[1]);
+            setPinchStartDist(dist);
+            setPinchStartRange([...zoomRange]);
+            
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+            setPinchMidPct(midX / rect.width);
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+        if ((isDragging || isPinching) && e.cancelable) {
+            e.preventDefault();
+        }
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (isDragging && e.touches.length === 1) {
+            const deltaX = e.touches[0].clientX - dragStartX;
+            const systemDelta = -(deltaX / rect.width) * (dragStartRange[1] - dragStartRange[0]);
+            
+            let newStart = dragStartRange[0] + systemDelta;
+            let newEnd = dragStartRange[1] + systemDelta;
+            
+            if (newStart < 1) {
+                newEnd += (1 - newStart);
+                newStart = 1;
+            }
+            if (newEnd > systemsCount) {
+                newStart -= (newEnd - systemsCount);
+                newEnd = systemsCount;
+            }
+            
+            setZoomRange([Math.max(1, newStart), Math.min(systemsCount, newEnd)]);
+        } else if (isPinching && e.touches.length === 2) {
+            const dist = getTouchDist(e.touches[0], e.touches[1]);
+            if (dist === 0 || pinchStartDist === 0) return;
+            
+            const factor = pinchStartDist / dist;
+            const currentSpan = pinchStartRange[1] - pinchStartRange[0];
+            const newSpan = Math.max(8, Math.min(systemsCount, currentSpan * factor));
+            
+            const mouseSystem = pinchStartRange[0] + pinchMidPct * currentSpan;
+            let newStart = mouseSystem - pinchMidPct * newSpan;
+            let newEnd = mouseSystem + (1 - pinchMidPct) * newSpan;
+            
+            if (newStart < 1) {
+                newEnd += (1 - newStart);
+                newStart = 1;
+            }
+            if (newEnd > systemsCount) {
+                newStart -= (newEnd - systemsCount);
+                newEnd = systemsCount;
+            }
+            
+            setZoomRange([Math.max(1, newStart), Math.min(systemsCount, newEnd)]);
+        }
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+        setIsDragging(false);
+        setIsPinching(false);
+        if (e.changedTouches && e.changedTouches.length === 1) {
+            const touchDistance = Math.abs(e.changedTouches[0].clientX - dragStartX);
+            if (touchDistance < 10) {
+                if (hoveredSystem !== null) {
+                    setSelectedSystemForCombats(hoveredSystem);
+                }
+            }
+        }
+    };
+
+    const focusSystem = (sysNum: number) => {
+        setHoveredSystem(sysNum);
+        let start = sysNum - 15;
+        let end = sysNum + 15;
+        if (start < 1) {
+            end += (1 - start);
+            start = 1;
+        }
+        if (end > systemsCount) {
+            start -= (end - systemsCount);
+            end = systemsCount;
+        }
+        setZoomRange([Math.max(1, start), Math.min(systemsCount, end)]);
+    };
+
+    // Canvas drawing effect
+    useEffect(() => {
+        const canvas = canvasNode;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const logicalHeight = 140;
+        const targetWidth = Math.floor(containerWidth * dpr);
+        const targetHeight = Math.floor(logicalHeight * dpr);
+
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            canvas.style.width = `${containerWidth}px`;
+            canvas.style.height = `${logicalHeight}px`;
+        }
+
+        // Reset transform scale to support high-DPI crisp rendering
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, containerWidth, logicalHeight);
+
+        const [startSys, endSys] = zoomRange;
+        const visibleCount = endSys - startSys + 1;
+        const barHeight = logicalHeight;
+
+        // Draw system hotspot bars
+        for (let idx = 0; idx < systemsCount; idx++) {
+            const sNum = idx + 1;
+            if (sNum < Math.floor(startSys) - 1 || sNum > Math.ceil(endSys) + 1) continue;
+
+            const xStart = ((sNum - startSys) / visibleCount) * containerWidth;
+            const xEnd = ((sNum + 1 - startSys) / visibleCount) * containerWidth;
+            const w = xEnd - xStart;
+
+            const data = systemData[idx];
+            let color = 'rgba(255, 255, 255, 0.05)';
+            let h = 2; // neutral system baseline
+
+            if (data.profit > 0) {
+                const ratio = data.profit / maxProfit;
+                const opacity = 0.15 + 0.85 * Math.min(1, Math.max(0, ratio));
+                color = `rgba(245, 158, 11, ${opacity})`;
+                h = (0.2 + 0.8 * Math.min(1, ratio)) * barHeight;
+            } else if (data.profit < 0) {
+                color = THEME_CRIMSON;
+                const ratio = Math.abs(data.profit) / maxLoss;
+                h = (0.2 + 0.8 * Math.min(1, ratio)) * barHeight;
+            }
+
+            ctx.fillStyle = color;
+            const gap = w > 3 ? 1 : 0;
+            const drawW = Math.max(0.5, w - gap);
+            const drawY = barHeight - h;
+            ctx.fillRect(xStart, drawY, drawW, h);
+
+            if (hoveredSystem === sNum) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.fillRect(xStart, drawY, drawW, h);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(xStart, drawY, drawW, h);
+            }
+        }
+    }, [systemData, zoomRange, hoveredSystem, containerWidth, systemsCount, canvasNode, maxProfit, maxLoss]);
+
+    const ticks = useMemo(() => {
+        const [startSys, endSys] = zoomRange;
+        const visibleCount = endSys - startSys + 1;
+        
+        const getTickStep = (count: number) => {
+            if (count <= 15) return 1;
+            if (count <= 30) return 2;
+            if (count <= 75) return 5;
+            if (count <= 150) return 10;
+            if (count <= 300) return 25;
+            if (count <= 600) return 50;
+            return 100;
+        };
+
+        const step = getTickStep(visibleCount);
+        const firstTick = Math.ceil(startSys / step) * step;
+        
+        const list = [];
+        for (let sNum = firstTick; sNum <= endSys; sNum += step) {
+            list.push(sNum);
+        }
+        return list;
+    }, [zoomRange]);
 
     const [selectedReport, setSelectedReport] = useState<any>(null);
 
@@ -649,6 +1164,294 @@ const Combat: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Galaxy Tabs Navigation */}
+                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '24px', scrollbarWidth: 'thin' }}>
+                            {Array.from({ length: galaxiesCount }, (_, i) => i + 1).map(g => (
+                                <button
+                                    key={g}
+                                    onClick={() => setActiveGalaxy(g)}
+                                    className={`tab-btn ${(activeGalaxy || 1) === g ? 'active' : ''}`}
+                                    style={{
+                                        background: (activeGalaxy || 1) === g ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+                                        border: '1px solid',
+                                        borderColor: (activeGalaxy || 1) === g ? THEME_AMBER : 'rgba(255,255,255,0.1)',
+                                        color: (activeGalaxy || 1) === g ? '#fff' : 'rgba(255,255,255,0.5)',
+                                        padding: '10px 20px',
+                                        borderRadius: '8px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        whiteSpace: 'nowrap',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px'
+                                    }}
+                                >
+                                    Galaxy {g}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Interactive Heatmap Card */}
+                        <div className="glass-card" style={{ padding: '24px', marginBottom: '32px', position: 'relative' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                <div 
+                                    onClick={() => setActiveTab('zones')}
+                                    style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px',
+                                        cursor: 'pointer'
+                                    }}
+                                    onMouseEnter={e => {
+                                        const text = e.currentTarget.querySelector('.heatmap-header-text') as HTMLElement;
+                                        if (text) text.style.color = THEME_AMBER;
+                                    }}
+                                    onMouseLeave={e => {
+                                        const text = e.currentTarget.querySelector('.heatmap-header-text') as HTMLElement;
+                                        if (text) text.style.color = '#fff';
+                                    }}
+                                >
+                                    <MapPin size={20} color={THEME_AMBER} />
+                                    <span className="heatmap-header-text" style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '4px', transition: 'color 0.2s' }}>
+                                        Stellar Hotspots Heatmap
+                                        <ChevronRight size={16} style={{ opacity: 0.6 }} />
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>
+                                    Viewing Systems: <strong style={{ color: THEME_AMBER }}>{Math.round(zoomRange[0])}</strong> - <strong style={{ color: THEME_AMBER }}>{Math.round(zoomRange[1])}</strong> of <strong style={{ color: 'rgba(255,255,255,0.8)' }}>{systemsCount}</strong>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => handleZoomButton(0.7)}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontWeight: 700
+                                        }}
+                                        className="tab-btn"
+                                    >
+                                        <ZoomIn size={14} /> Zoom In
+                                    </button>
+                                    <button
+                                        onClick={() => handleZoomButton(1.3)}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontWeight: 700
+                                        }}
+                                        className="tab-btn"
+                                    >
+                                        <ZoomOut size={14} /> Zoom Out
+                                    </button>
+                                    <button
+                                        onClick={() => setZoomRange([1, systemsCount])}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700
+                                        }}
+                                        className="tab-btn"
+                                    >
+                                        Reset View
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('zones')}
+                                        style={{
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            fontWeight: 700,
+                                            transition: 'all 0.2s',
+                                            marginLeft: '8px'
+                                        }}
+                                        className="tab-btn"
+                                    >
+                                        Detailed Zones <ExternalLink size={14} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Canvas Wrapper */}
+                            <div 
+                                ref={containerRef}
+                                style={{
+                                    position: 'relative',
+                                    background: 'rgba(0,0,0,0.5)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '12px',
+                                    padding: '6px',
+                                    cursor: isDragging ? 'grabbing' : 'grab',
+                                    overflow: 'hidden',
+                                    height: '178px',
+                                    userSelect: 'none',
+                                    WebkitUserSelect: 'none'
+                                }}
+                            >
+                                {/* HTML Coordinates Ruler */}
+                                <div style={{
+                                    position: 'relative',
+                                    width: '100%',
+                                    height: '24px',
+                                    borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+                                    marginBottom: '4px'
+                                }}>
+                                    {ticks.map(sNum => {
+                                        const [startSys, endSys] = zoomRange;
+                                        const visibleCount = endSys - startSys + 1;
+                                        const pct = ((sNum - startSys + 0.5) / visibleCount) * 100;
+                                        
+                                        return (
+                                            <div
+                                                key={sNum}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: `${pct}%`,
+                                                    transform: 'translateX(-50%)',
+                                                    top: '0px',
+                                                    fontSize: '9px',
+                                                    fontFamily: 'monospace',
+                                                    color: hoveredSystem === sNum ? THEME_AMBER : 'rgba(255, 255, 255, 0.4)',
+                                                    fontWeight: hoveredSystem === sNum ? 'bold' : 'normal',
+                                                    pointerEvents: 'none',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    transition: 'color 0.1s ease'
+                                                }}
+                                            >
+                                                <span>{sNum}</span>
+                                                <div style={{
+                                                    width: '1px',
+                                                    height: '5px',
+                                                    background: hoveredSystem === sNum ? THEME_AMBER : 'rgba(255, 255, 255, 0.25)',
+                                                    marginTop: '2px'
+                                                }} />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <canvas
+                                    ref={canvasRef}
+                                    width={containerWidth}
+                                    height={140}
+                                    onMouseDown={handleMouseDown}
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseLeave}
+                                    onTouchStart={handleTouchStart}
+                                    onTouchMove={handleTouchMove}
+                                    onTouchEnd={handleTouchEnd}
+                                    style={{ display: 'block', width: '100%', height: '140px' }}
+                                />
+
+                                {/* Interactive HTML Tooltip */}
+                                {hoveredSystem !== null && mouseCoords !== null && (
+                                    (() => {
+                                        const data = systemData[hoveredSystem - 1];
+                                        if (!data) return null;
+                                        
+                                        const tooltipX = mouseCoords.x + 220 > containerWidth ? mouseCoords.x - 230 : mouseCoords.x + 20;
+                                        const tooltipY = Math.max(10, mouseCoords.y - 50);
+                                        const isLoss = data.profit < 0;
+                                        const isWin = data.profit > 0;
+                                        const borderCol = isWin ? THEME_AMBER : (isLoss ? THEME_CRIMSON : 'rgba(255,255,255,0.2)');
+
+                                        return (
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: `${tooltipX}px`,
+                                                    top: `${tooltipY}px`,
+                                                    background: 'rgba(10, 15, 20, 0.95)',
+                                                    backdropFilter: 'blur(8px)',
+                                                    border: `1px solid ${borderCol}`,
+                                                    borderRadius: '10px',
+                                                    padding: '12px',
+                                                    width: '200px',
+                                                    pointerEvents: 'none',
+                                                    zIndex: 10,
+                                                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>Stellar System</div>
+                                                <div style={{ fontSize: '1rem', fontWeight: 900, color: '#fff', marginBottom: '8px' }}>
+                                                    {data.coords}
+                                                </div>
+                                                
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.75rem' }}>
+                                                    <span style={{ opacity: 0.6 }}>Combats Fought:</span>
+                                                    <span style={{ fontWeight: 800 }}>{data.battlesCount}</span>
+                                                </div>
+
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.75rem' }}>
+                                                    <span style={{ opacity: 0.6 }}>Total Yield:</span>
+                                                    <span style={{ fontWeight: 800, color: '#fff' }}>{formatYAxis(data.loot)} MSU</span>
+                                                </div>
+
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.75rem' }}>
+                                                    <span style={{ opacity: 0.6 }}>Losses Sustained:</span>
+                                                    <span style={{ fontWeight: 800, color: THEME_CRIMSON }}>{formatYAxis(data.losses)} MSU</span>
+                                                </div>
+
+                                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 800 }}>
+                                                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>Net Profit:</span>
+                                                    <span style={{ color: isWin ? '#22c55e' : (isLoss ? THEME_CRIMSON : '#fff') }}>
+                                                        {isWin ? '+' : ''}{formatYAxis(data.profit)} MSU
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()
+                                )}
+                            </div>
+
+                            {/* Heatmap Legend */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '12px', height: '12px', background: THEME_CRIMSON, borderRadius: '2px' }} />
+                                    <span>Negative Net Yield (Losses)</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '12px', height: '12px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '2px' }} />
+                                    <span>No recorded combat logs</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '36px', height: '12px', background: `linear-gradient(to right, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 1))`, borderRadius: '2px' }} />
+                                    <span>Positive Net Yield (Profit Scale)</span>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Recent & Zones Row */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                             <div className="glass-card" style={{ padding: '24px' }}>
@@ -953,6 +1756,370 @@ const Combat: React.FC = () => {
                     </motion.div>
                 )}
 
+                {activeTab === 'zones' && (
+                    <motion.div
+                        key="zones"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                    >
+                        {/* Galaxy Tabs Navigation */}
+                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '24px', scrollbarWidth: 'thin' }}>
+                            {Array.from({ length: galaxiesCount }, (_, i) => i + 1).map(g => (
+                                <button
+                                    key={g}
+                                    onClick={() => setActiveGalaxy(g)}
+                                    className={`tab-btn ${(activeGalaxy || 1) === g ? 'active' : ''}`}
+                                    style={{
+                                        background: (activeGalaxy || 1) === g ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+                                        border: '1px solid',
+                                        borderColor: (activeGalaxy || 1) === g ? THEME_AMBER : 'rgba(255,255,255,0.1)',
+                                        color: (activeGalaxy || 1) === g ? '#fff' : 'rgba(255,255,255,0.5)',
+                                        padding: '10px 20px',
+                                        borderRadius: '8px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        whiteSpace: 'nowrap',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px'
+                                    }}
+                                >
+                                    Galaxy {g}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Interactive Heatmap Card */}
+                        <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', position: 'relative' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <MapPin size={20} color={THEME_AMBER} />
+                                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff' }}>Stellar Hotspots Heatmap</span>
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>
+                                    Viewing Systems: <strong style={{ color: THEME_AMBER }}>{Math.round(zoomRange[0])}</strong> - <strong style={{ color: THEME_AMBER }}>{Math.round(zoomRange[1])}</strong> of <strong style={{ color: 'rgba(255,255,255,0.8)' }}>{systemsCount}</strong>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                        onClick={() => handleZoomButton(0.7)}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontWeight: 700
+                                        }}
+                                        className="tab-btn"
+                                    >
+                                        <ZoomIn size={14} /> Zoom In
+                                    </button>
+                                    <button
+                                        onClick={() => handleZoomButton(1.3)}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontWeight: 700
+                                        }}
+                                        className="tab-btn"
+                                    >
+                                        <ZoomOut size={14} /> Zoom Out
+                                    </button>
+                                    <button
+                                        onClick={() => setZoomRange([1, systemsCount])}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            padding: '6px 12px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700
+                                        }}
+                                        className="tab-btn"
+                                    >
+                                        Reset View
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Canvas Wrapper */}
+                            <div 
+                                ref={containerRef}
+                                style={{
+                                    position: 'relative',
+                                    background: 'rgba(0,0,0,0.5)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '12px',
+                                    padding: '6px',
+                                    cursor: isDragging ? 'grabbing' : 'grab',
+                                    overflow: 'hidden',
+                                    height: '178px',
+                                    userSelect: 'none',
+                                    WebkitUserSelect: 'none'
+                                }}
+                            >
+                                {/* HTML Coordinates Ruler */}
+                                <div style={{
+                                    position: 'relative',
+                                    width: '100%',
+                                    height: '24px',
+                                    borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+                                    marginBottom: '4px'
+                                }}>
+                                    {ticks.map(sNum => {
+                                        const [startSys, endSys] = zoomRange;
+                                        const visibleCount = endSys - startSys + 1;
+                                        const pct = ((sNum - startSys + 0.5) / visibleCount) * 100;
+                                        
+                                        return (
+                                            <div
+                                                key={sNum}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: `${pct}%`,
+                                                    transform: 'translateX(-50%)',
+                                                    top: '0px',
+                                                    fontSize: '9px',
+                                                    fontFamily: 'monospace',
+                                                    color: hoveredSystem === sNum ? THEME_AMBER : 'rgba(255, 255, 255, 0.4)',
+                                                    fontWeight: hoveredSystem === sNum ? 'bold' : 'normal',
+                                                    pointerEvents: 'none',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    transition: 'color 0.1s ease'
+                                                }}
+                                            >
+                                                <span>{sNum}</span>
+                                                <div style={{
+                                                    width: '1px',
+                                                    height: '5px',
+                                                    background: hoveredSystem === sNum ? THEME_AMBER : 'rgba(255, 255, 255, 0.25)',
+                                                    marginTop: '2px'
+                                                }} />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <canvas
+                                    ref={canvasRef}
+                                    width={containerWidth}
+                                    height={140}
+                                    onMouseDown={handleMouseDown}
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseLeave}
+                                    onTouchStart={handleTouchStart}
+                                    onTouchMove={handleTouchMove}
+                                    onTouchEnd={handleTouchEnd}
+                                    style={{ display: 'block', width: '100%', height: '140px' }}
+                                />
+
+                                {/* Interactive HTML Tooltip */}
+                                {hoveredSystem !== null && mouseCoords !== null && (
+                                    (() => {
+                                        const data = systemData[hoveredSystem - 1];
+                                        if (!data) return null;
+                                        
+                                        const tooltipX = mouseCoords.x + 220 > containerWidth ? mouseCoords.x - 230 : mouseCoords.x + 20;
+                                        const tooltipY = Math.max(10, mouseCoords.y - 50);
+                                        const isLoss = data.profit < 0;
+                                        const isWin = data.profit > 0;
+                                        const borderCol = isWin ? THEME_AMBER : (isLoss ? THEME_CRIMSON : 'rgba(255,255,255,0.2)');
+
+                                        return (
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: `${tooltipX}px`,
+                                                    top: `${tooltipY}px`,
+                                                    background: 'rgba(10, 15, 20, 0.95)',
+                                                    backdropFilter: 'blur(8px)',
+                                                    border: `1px solid ${borderCol}`,
+                                                    borderRadius: '10px',
+                                                    padding: '12px',
+                                                    width: '200px',
+                                                    pointerEvents: 'none',
+                                                    zIndex: 10,
+                                                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>Stellar System</div>
+                                                <div style={{ fontSize: '1rem', fontWeight: 900, color: '#fff', marginBottom: '8px' }}>
+                                                    {data.coords}
+                                                </div>
+                                                
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.75rem' }}>
+                                                    <span style={{ opacity: 0.6 }}>Combats Fought:</span>
+                                                    <span style={{ fontWeight: 800 }}>{data.battlesCount}</span>
+                                                </div>
+
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.75rem' }}>
+                                                    <span style={{ opacity: 0.6 }}>Total Yield:</span>
+                                                    <span style={{ fontWeight: 800, color: '#fff' }}>{formatYAxis(data.loot)} MSU</span>
+                                                </div>
+
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.75rem' }}>
+                                                    <span style={{ opacity: 0.6 }}>Losses Sustained:</span>
+                                                    <span style={{ fontWeight: 800, color: THEME_CRIMSON }}>{formatYAxis(data.losses)} MSU</span>
+                                                </div>
+
+                                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 800 }}>
+                                                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>Net Profit:</span>
+                                                    <span style={{ color: isWin ? '#22c55e' : (isLoss ? THEME_CRIMSON : '#fff') }}>
+                                                        {isWin ? '+' : ''}{formatYAxis(data.profit)} MSU
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()
+                                )}
+                            </div>
+
+                            {/* Heatmap Legend */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '12px', height: '12px', background: THEME_CRIMSON, borderRadius: '2px' }} />
+                                    <span>Negative Net Yield (Losses)</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '12px', height: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '2px' }} />
+                                    <span>No recorded combat logs</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '36px', height: '12px', background: `linear-gradient(to right, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 1))`, borderRadius: '2px' }} />
+                                    <span>Positive Net Yield (Profit Scale)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Hotspot details columns */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                            {/* Left Side: Top Hotspots List */}
+                            <div className="glass-card" style={{ padding: '24px' }}>
+                                <div style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Award size={18} color={THEME_AMBER} />
+                                    Top System Hotspots in Galaxy {activeGalaxy || 1}
+                                </div>
+
+                                {topHotspots.length === 0 ? (
+                                    <div style={{ padding: '40px 20px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
+                                        No combat profits recorded in this Galaxy yet.
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        {topHotspots.map((hs, index) => (
+                                            <div 
+                                                key={hs.system}
+                                                onClick={() => focusSystem(hs.system)}
+                                                style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    padding: '12px 16px',
+                                                    background: 'rgba(255,255,255,0.02)',
+                                                    border: '1px solid rgba(255,255,255,0.05)',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                className="combat-row-hover"
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                    <div style={{
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 900,
+                                                        color: THEME_AMBER,
+                                                        width: '22px',
+                                                        height: '22px',
+                                                        borderRadius: '50%',
+                                                        background: 'rgba(245, 158, 11, 0.1)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        border: `1px solid ${THEME_AMBER}30`
+                                                    }}>{index + 1}</div>
+                                                    <div>
+                                                        <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>System {hs.coords}</span>
+                                                        <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                            {hs.battlesCount} engagements
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <span style={{ color: '#22c55e', fontWeight: 900, fontSize: '0.9rem' }}>
+                                                        +{formatYAxis(hs.profit)}
+                                                    </span>
+                                                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                        MSU Yield
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Right Side: Summary Stats */}
+                            <div className="glass-card" style={{ padding: '24px' }}>
+                                <div style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <TrendingUp size={18} color={THEME_AMBER} />
+                                    Galaxy Tactical Metrics
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', height: 'calc(100% - 40px)' }}>
+                                    <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>Total Engagements</span>
+                                        <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff' }}>{galaxyStats.totalBattles}</div>
+                                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>Recorded in stellar database</span>
+                                    </div>
+
+                                    <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>Net Profit Yield</span>
+                                        <div style={{ fontSize: '1.6rem', fontWeight: 900, color: galaxyStats.totalProfit >= 0 ? '#22c55e' : THEME_CRIMSON }}>
+                                            {galaxyStats.totalProfit >= 0 ? '+' : ''}{formatYAxis(galaxyStats.totalProfit)}
+                                        </div>
+                                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>MSU Profit minus Fleet losses</span>
+                                    </div>
+
+                                    <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>Attacker Fleet Losses</span>
+                                        <div style={{ fontSize: '1.6rem', fontWeight: 900, color: THEME_CRIMSON }}>{formatYAxis(galaxyStats.totalLosses)}</div>
+                                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>Total MSU losses in operations</span>
+                                    </div>
+
+                                    <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>Most Active System</span>
+                                        <div style={{ fontSize: '1.6rem', fontWeight: 900, color: THEME_AMBER }}>
+                                            {galaxyStats.hasData ? `[${activeGalaxy}:${galaxyStats.mostActiveSystem}]` : 'N/A'}
+                                        </div>
+                                        <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>System with the highest activity</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
                 {activeTab === 'history' && (
                     <motion.div
                         key="history"
@@ -1108,6 +2275,24 @@ const Combat: React.FC = () => {
                 )}
             </AnimatePresence>
 
+            <AnimatePresence>
+                {selectedSystemForCombats !== null && (
+                    <SystemCombatsModal
+                        system={selectedSystemForCombats}
+                        galaxy={activeGalaxy || 1}
+                        combats={systemCombats}
+                        onClose={() => setSelectedSystemForCombats(null)}
+                        onSelectReport={(report) => {
+                            setSelectedReport(report);
+                        }}
+                        rates={rates}
+                        mMultiplier={mMultiplier}
+                        cMultiplier={cMultiplier}
+                        dMultiplier={dMultiplier}
+                    />
+                )}
+            </AnimatePresence>
+
             <style>{`
                 .tab-btn:hover { background: rgba(239, 68, 68, 0.05) !important; color: #fff !important; }
                 .tab-btn.active:hover { background: rgba(239, 68, 68, 0.2) !important; }
@@ -1129,7 +2314,7 @@ const Combat: React.FC = () => {
 };
 
 const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, dMultiplier }: { report: any, onClose: () => void, rates: any, mMultiplier: number, cMultiplier: number, dMultiplier: number }) => {
-    const account = useLiveQuery(() => db.accounts.toArray())?.[0];
+    const account = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const accountPlayerName = account?.playerName || 'YOU';
     
     const isAccountWin = (report.winner === 'attacker' && report.attackerName === accountPlayerName) ||
@@ -1396,6 +2581,282 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
                     >
                         ACKNOWLEDGE REPORT
                     </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+const SystemCombatsModal = ({
+    system,
+    galaxy,
+    combats,
+    onClose,
+    onSelectReport,
+    rates,
+    mMultiplier,
+    cMultiplier,
+    dMultiplier
+}: {
+    system: number;
+    galaxy: number;
+    combats: any[];
+    onClose: () => void;
+    onSelectReport: (report: any) => void;
+    rates: any;
+    mMultiplier: number;
+    cMultiplier: number;
+    dMultiplier: number;
+}) => {
+    const account = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const accountPlayerName = account?.playerName || 'YOU';
+    
+    // Pagination states
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+    
+    const totalPages = Math.ceil(combats.length / itemsPerPage);
+    const paginatedCombats = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return combats.slice(start, start + itemsPerPage);
+    }, [combats, currentPage]);
+
+    const getWinnerName = (cr: any) => {
+        if (cr.winner === 'none') return 'NONE';
+        if (cr.winner === 'attacker') return cr.attackerName || 'YOU';
+        if (cr.winner === 'defender') {
+            if (cr.isExpedition || cr.coords.trim().endsWith(':16')) {
+                const defName = String(cr.defenderName || '').toLowerCase();
+                if (cr.expeditionAttackType === 1 || defName.includes('pirat')) return 'Pirates';
+                if (cr.expeditionAttackType === 2 || defName.includes('alien')) return 'Aliens';
+                return 'Expedition Hostiles';
+            }
+            return cr.defenderName || 'Defender';
+        }
+        return cr.winner.toUpperCase();
+    };
+
+    return (
+        <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            padding: '40px 24px',
+            overflow: 'auto',
+            WebkitOverflowScrolling: 'touch'
+        }}>
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.9)',
+                    backdropFilter: 'blur(20px)',
+                    pointerEvents: 'auto'
+                }}
+                onClick={onClose}
+            />
+            <motion.div 
+                initial={{ scale: 0.9, y: 40, rotateX: -10 }}
+                animate={{ scale: 1, y: 0, rotateX: 0 }}
+                exit={{ scale: 0.9, y: 40, rotateX: -10 }}
+                style={{
+                    position: 'relative',
+                    width: '100%',
+                    maxWidth: '1000px',
+                    maxHeight: '90vh',
+                    margin: '40px auto',
+                    background: 'linear-gradient(135deg, #1a1f25 0%, #0d1115 100%)',
+                    borderRadius: '32px',
+                    border: `1px solid ${THEME_AMBER}30`,
+                    boxShadow: `0 0 50px ${THEME_AMBER}15, 0 25px 50px -12px rgba(0, 0, 0, 0.8)`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    perspective: '1000px',
+                    zIndex: 1
+                }}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div style={{ padding: '32px 48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: `linear-gradient(to right, transparent, ${THEME_AMBER}, transparent)` }} />
+                    
+                    <div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900, letterSpacing: '-1px' }}>System Combat Operations</div>
+                        <div style={{ fontSize: '0.9rem', color: THEME_AMBER, fontWeight: 700, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                            Sector: [{galaxy}:{system}] • {combats.length} total engagements
+                        </div>
+                    </div>
+                    
+                    <button 
+                        onClick={onClose}
+                        style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: '#fff',
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                        className="tab-btn"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Table Body */}
+                <div style={{ padding: '32px 48px', overflowY: 'auto', flexGrow: 1 }}>
+                    {combats.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '60px 0', color: 'rgba(255,255,255,0.4)' }}>
+                            No combat logs registered in this system.
+                        </div>
+                    ) : (
+                        <>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', color: '#fff', fontSize: '0.8rem' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', textAlign: 'left', opacity: 0.5 }}>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700 }}>COORD/TIME</th>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700 }}>ATTACKER</th>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700, textAlign: 'center' }}>VS</th>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700 }}>DEFENDER</th>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700 }}>WINNER</th>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700, textAlign: 'right' }}>LOOT MSU</th>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700, textAlign: 'right' }}>DEBRIS MSU</th>
+                                        <th style={{ padding: '16px 8px', fontWeight: 700, textAlign: 'right' }}>LOSSES</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedCombats.map((cr, idx) => {
+                                        const loot = cr.loot || { metal: 0, crystal: 0, deuterium: 0 };
+                                        const debris = cr.debris || { metal: 0, crystal: 0, deuterium: 0 };
+                                        
+                                        const winnerName = getWinnerName(cr);
+                                        const isAccountWin = (cr.winner === 'attacker' && cr.attackerName === accountPlayerName) ||
+                                                            (cr.winner === 'defender' && cr.defenderName === accountPlayerName);
+                                        const isTie = cr.winner === 'none';
+
+                                        const rowBg = isAccountWin ? 'rgba(34, 197, 94, 0.03)' : (isTie ? 'rgba(234, 179, 8, 0.03)' : 'rgba(239, 68, 68, 0.03)');
+                                        const statusColor = isAccountWin ? '#22c55e' : (isTie ? '#eab308' : '#ef4444');
+                                        const prefix = isAccountWin ? '+' : (isTie ? '' : '-');
+
+                                        const lMSU = (loot.metal * mMultiplier) + (loot.crystal * cMultiplier) + (loot.deuterium * dMultiplier);
+                                        const dMSU = (debris.metal * mMultiplier) + (debris.crystal * cMultiplier) + (debris.deuterium * dMultiplier);
+
+                                        return (
+                                            <tr key={idx} 
+                                                onClick={() => {
+                                                    onSelectReport(cr);
+                                                }}
+                                                style={{ 
+                                                    borderBottom: '1px solid rgba(255,255,255,0.05)', 
+                                                    transition: 'all 0.2s',
+                                                    background: rowBg,
+                                                    cursor: 'pointer'
+                                                }}
+                                                className="combat-row-hover"
+                                            >
+                                                <td style={{ padding: '16px 8px' }}>
+                                                    <div style={{ fontWeight: 800 }}>{cr.coords}</div>
+                                                    <div style={{ fontSize: '0.7rem', opacity: 0.4, marginTop: '2px' }}>
+                                                        {new Date(cr.timestamp * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '16px 8px', fontWeight: 700 }}>{cr.attackerName || 'Unknown'}</td>
+                                                <td style={{ padding: '16px 8px', textAlign: 'center' }}><SwordIcon size={12} style={{ opacity: 0.3 }} /></td>
+                                                <td style={{ padding: '16px 8px', fontWeight: 700 }}>{cr.defenderName || 'Unknown'}</td>
+                                                <td style={{ padding: '16px 8px' }}>
+                                                    <span style={{
+                                                        padding: '3px 8px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '0.65rem',
+                                                        fontWeight: 900,
+                                                        background: statusColor + '20',
+                                                        color: statusColor,
+                                                        textTransform: 'uppercase',
+                                                        border: `1px solid ${statusColor}40`
+                                                    }}>
+                                                        {getWinnerName(cr)}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '16px 8px', textAlign: 'right', color: statusColor, fontWeight: 700 }}>
+                                                    {prefix}{formatYAxis(lMSU)}
+                                                </td>
+                                                <td style={{ padding: '16px 8px', textAlign: 'right', fontWeight: 700, opacity: 0.8 }}>
+                                                    {formatYAxis(dMSU)}
+                                                </td>
+                                                <td style={{ padding: '16px 8px', textAlign: 'right', color: '#ef4444', opacity: 0.8 }}>
+                                                    {formatYAxis(cr.attackerLosses || 0)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+
+                            {/* Pagination Controls */}
+                            {totalPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px', fontSize: '0.75rem', opacity: 0.8 }}>
+                                    <div style={{ opacity: 0.5 }}>
+                                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, combats.length)} of {combats.length} operations
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <button 
+                                            disabled={currentPage === 1}
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            style={{
+                                                background: 'rgba(255,255,255,0.05)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                color: '#fff',
+                                                padding: '6px 12px',
+                                                borderRadius: '6px',
+                                                cursor: currentPage === 1 ? 'default' : 'pointer',
+                                                opacity: currentPage === 1 ? 0.3 : 1,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                            }}
+                                        >
+                                            <ChevronLeft size={14} />
+                                            Prev
+                                        </button>
+                                        <span style={{ fontWeight: 700 }}>
+                                            Page {currentPage} of {totalPages}
+                                        </span>
+                                        <button 
+                                            disabled={currentPage >= totalPages}
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            style={{
+                                                background: 'rgba(255,255,255,0.05)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                color: '#fff',
+                                                padding: '6px 12px',
+                                                borderRadius: '6px',
+                                                cursor: currentPage >= totalPages ? 'default' : 'pointer',
+                                                opacity: currentPage >= totalPages ? 0.3 : 1,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                            }}
+                                        >
+                                            Next
+                                            <ChevronRight size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
             </motion.div>
         </div>
