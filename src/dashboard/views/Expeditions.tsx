@@ -98,7 +98,9 @@ const getExpeditionCategory = (exp: any): CategoryId | null => {
     const isNav = res.includes('navigation') || res === 'delay' || res === 'speedup' || res === 'early';
     if (isNav) {
         const shift = exp.resultDetails?.returnTimeAbsoluteIncreaseHours ?? 0;
-        if (res === 'delay' || (res.includes('navigation') && shift > 0)) return 'delay';
+        const multiplier = exp.resultDetails?.returnTimeMultiplier;
+        const hasMultiplier = multiplier !== undefined;
+        if (res === 'delay' || (res.includes('navigation') && (shift > 0 || (hasMultiplier && multiplier >= 1)))) return 'delay';
         return 'speedup';
     }
 

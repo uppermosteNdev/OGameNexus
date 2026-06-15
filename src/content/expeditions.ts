@@ -1446,7 +1446,7 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
         if (msgElement.querySelector('.og-nexus-navigation-result')) return;
 
         const details = exp.resultDetails || {};
-        let isDelay = (details.returnTimeAbsoluteIncreaseHours || 0) > 0;
+        let isDelay = (details.returnTimeAbsoluteIncreaseHours || 0) > 0 || (details.returnTimeMultiplier !== undefined && details.returnTimeMultiplier >= 1);
         if (resType === 'delay') isDelay = true;
         if (resType === 'speedup') isDelay = false;
         const navColor = isDelay ? '#f97316' : '#22c55e'; // Orange for delay, Green for reduction
