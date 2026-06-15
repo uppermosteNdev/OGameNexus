@@ -254,6 +254,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     await db.transaction('rw', [db.planets, db.accounts], async () => {
                         const existingPlanets = await db.planets.where('playerId').equals(account.playerId).toArray();
 
+                        // Purge any existing invalid/placeholder planets (coords '0:0:0' or empty coords) from the database
+                        const invalidPlanetIds = existingPlanets.filter(p => !p.coords || p.coords === "0:0:0" || p.coords.includes("0:0:0")).map(p => p.id);
+                        if (invalidPlanetIds.length > 0) {
+                            console.log(`OGame Nexus: Purging invalid planets from database: ${invalidPlanetIds.join(', ')}`);
+                            await db.planets.bulkDelete(invalidPlanetIds);
+                            // Remove them from local copy to keep tracking list clean
+                            for (let i = existingPlanets.length - 1; i >= 0; i--) {
+                                if (invalidPlanetIds.includes(existingPlanets[i].id)) {
+                                    existingPlanets.splice(i, 1);
+                                }
+                            }
+                        }
+
                         for (const p of planets) {
                             const existing = existingPlanets.find(ep => ep.id === p.id);
                             const isMainPlanet = activePlanetId === p.id;

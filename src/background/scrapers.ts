@@ -264,9 +264,17 @@ export function parseSupplies(html: string): ScrapedSupplies {
     const data: ScrapedSupplies = {};
 
     const getLevelByTechId = (techId: number) => {
-        const regex = new RegExp(`data-technology=["']${techId}["'][^>]*>[\\s\\S]*?class=["']level["'][^>]*data-value=["'](\\d+)["']`, "i");
+        const regex = new RegExp(`(<li[^>]*data-technology=["']${techId}["'][^>]*>)[\\s\\S]*?class=["']level["'][^>]*data-value=["'](\\d+)["']`, "i");
         const match = html.match(regex);
-        return match ? parseInt(match[1]) : undefined;
+        if (match) {
+            const liTag = match[1];
+            let level = parseInt(match[2], 10);
+            if (liTag.includes('active') && level > 0) {
+                level--;
+            }
+            return level;
+        }
+        return undefined;
     };
 
     data.metalMine = getLevelByTechId(1);
@@ -293,7 +301,12 @@ export function parseResearches(html: string): { id: number, level: number }[] |
         const innerContent = match[2];
         const levelMatch = innerContent.match(levelRegex);
         if (levelMatch) {
-            researches.push({ id, level: parseInt(levelMatch[1]) });
+            let level = parseInt(levelMatch[1]);
+            const liTag = match[0].split('>')[0];
+            if (liTag.includes('active') && level > 0) {
+                level--;
+            }
+            researches.push({ id, level });
         }
     }
 
@@ -318,10 +331,15 @@ export function parseLifeformResearch(html: string): { slotNumber: number, selec
             const levelMatch = innerContent.match(levelRegex);
 
             if (levelMatch) {
+                let level = parseInt(levelMatch[1], 10);
+                const liTag = match[0].split('>')[0];
+                if (liTag.includes('active') && level > 0) {
+                    level--;
+                }
                 techSetup.push({
                     slotNumber,
                     selectedTechId: internalTechId,
-                    level: parseInt(levelMatch[1], 10)
+                    level
                 });
             }
         }
@@ -344,10 +362,15 @@ export function parseLifeformBuildings(html: string): { id: number, name: string
         const levelMatch = innerContent.match(levelRegex);
 
         if (levelMatch) {
+            let level = parseInt(levelMatch[1], 10);
+            const liTag = match[0].split('>')[0];
+            if (liTag.includes('active') && level > 0) {
+                level--;
+            }
             buildings.push({
                 id,
                 name,
-                level: parseInt(levelMatch[1], 10)
+                level
             });
         }
     }

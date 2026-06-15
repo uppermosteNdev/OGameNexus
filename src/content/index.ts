@@ -109,6 +109,12 @@ function scrapePlanetList() {
     const planetCoordsRaw = node.querySelector(".planet-koords")?.textContent || "";
     // Clean coords from brackets: [1:2:3] -> 1:2:3
     const planetCoords = planetCoordsRaw.replace(/[\[\]]/g, "");
+
+    // Ignore placeholder slots (Free Slot) which have coords [0:0:0] or lack a proper planet id
+    if (!node.id || !node.id.startsWith("planet-") || !planetCoords || planetCoords === "0:0:0") {
+      return;
+    }
+
     const planetImg = node.querySelector(".planetPic")?.getAttribute("src") || "";
 
     planets.push({
@@ -539,7 +545,11 @@ function scrapeSuppliesData() {
     const techId = parseInt(node.getAttribute("data-technology") || "0");
     const levelNode = node.querySelector(".level");
     if (techId > 0 && levelNode) {
-      const level = parseInt(levelNode.getAttribute("data-value") || "0");
+      let level = parseInt(levelNode.getAttribute("data-value") || "0");
+      // If currently upgrading, data-value is target level. Subtract 1 to get current.
+      if (node.classList.contains("active") && level > 0) {
+        level--;
+      }
 
       // Map tech IDs to fields
       if (techId === 1) data.metalMine = level;
@@ -569,7 +579,11 @@ function scrapeResearchLevels() {
     const techId = parseInt(node.getAttribute("data-technology") || "0");
     const levelNode = node.querySelector(".level");
     if (techId > 0 && levelNode) {
-      const level = parseInt(levelNode.getAttribute("data-value") || "0");
+      let level = parseInt(levelNode.getAttribute("data-value") || "0");
+      // If currently researching, data-value is target level. Subtract 1 to get current.
+      if (node.classList.contains("active") && level > 0) {
+        level--;
+      }
       researches.push({ id: techId, level });
     }
   });
@@ -597,7 +611,11 @@ function scrapeLifeformSetup() {
 
     const levelNode = node.querySelector(".level");
     if (levelNode) {
-      const level = parseInt(levelNode.getAttribute("data-value") || "0");
+      let level = parseInt(levelNode.getAttribute("data-value") || "0");
+      // If currently researching, data-value is target level. Subtract 1 to get current.
+      if (node.classList.contains("active") && level > 0) {
+        level--;
+      }
       techSetup.push({ slotNumber, selectedTechId: internalTechId, level });
     }
   });
@@ -758,7 +776,11 @@ function scrapeLifeformBuildings() {
     const levelNode = node.querySelector(".level");
 
     if (techId > 0 && levelNode) {
-      const level = parseInt(levelNode.getAttribute("data-value") || "0");
+      let level = parseInt(levelNode.getAttribute("data-value") || "0");
+      // If currently upgrading, data-value is target level. Subtract 1 to get current.
+      if (node.classList.contains("active") && level > 0) {
+        level--;
+      }
       buildings.push({ id: techId, name, level });
     }
   });
@@ -779,7 +801,11 @@ function scrapeFacilitiesData() {
     const levelNode = node.querySelector(".level");
 
     if (techId > 0 && levelNode) {
-      const level = parseInt(levelNode.getAttribute("data-value") || "0");
+      let level = parseInt(levelNode.getAttribute("data-value") || "0");
+      // If currently upgrading, data-value is target level. Subtract 1 to get current.
+      if (node.classList.contains("active") && level > 0) {
+        level--;
+      }
       buildings.push({ id: techId, name, level });
     }
   });
