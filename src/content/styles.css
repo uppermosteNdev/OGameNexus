@@ -491,17 +491,20 @@ body.og-nexus-modal-open {
 }
 
 /* Clickable Summary Card */
-.og-nexus-expedition-summary-card {
+.og-nexus-expedition-summary-card,
+.og-nexus-combat-summary-card {
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
   width: auto;
   max-width: 100%;
 }
 
-.og-nexus-expedition-summary-card.clickable {
+.og-nexus-expedition-summary-card.clickable,
+.og-nexus-combat-summary-card.clickable {
   cursor: pointer !important;
 }
 
-.og-nexus-expedition-summary-card.clickable:hover {
+.og-nexus-expedition-summary-card.clickable:hover,
+.og-nexus-combat-summary-card.clickable:hover {
   border-color: rgba(255, 255, 255, 0.25) !important;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 255, 255, 0.05) !important;
   transform: translateY(-1px);
@@ -560,6 +563,44 @@ body.og-nexus-modal-open {
   pointer-events: auto;
   cursor: help;
   text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* Pulsing "New!" Combat Badge */
+.og-nexus-new-combat-badge {
+  position: absolute;
+  top: -10px;
+  right: 12px;
+  background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  text-transform: uppercase;
+  font-family: 'Segoe UI', 'Roboto', system-ui, sans-serif;
+  animation: og-nexus-combat-badge-pulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: auto;
+  cursor: pointer;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+@keyframes og-nexus-combat-badge-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
 }
 
 /* Glassmorphic Session Banner */

@@ -4,7 +4,7 @@ import { trackExpeditions, injectTodaySummaryCard } from './expeditions';
 import { trackLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime } from './empire';
 import { trackDebrisHarvests } from './harvests';
-import { trackCombatReports } from './combats';
+import { trackCombatReports, injectTodayCombatSummaryCard } from './combats';
 import { trackEspionageReports, trackRawEspionageReports } from './espionage';
 import { renderAnalyticsTab } from './analytics';
 
@@ -913,10 +913,6 @@ function injectButton() {
     <a id="og-nexus-text-dashboard-btn" class="menubutton ipiHintable" href="javascript:void(0);" target="_self">
         <span class="textlabel">OGame Nexus</span>
     </a>
-    <div id="og-nexus-scraping-status" style="display: none; margin-left: 36px; padding: 2px 0 6px 0; font-size: 10px; color: #a5f3fc; font-family: 'Outfit', sans-serif; align-items: center; gap: 6px; line-height: 1.2;">
-        <span class="status-pulse" style="display: inline-block; width: 6px; height: 6px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 6px #22c55e;"></span>
-        <span>Spy Reports: <strong id="og-nexus-spy-count-badge" style="color: #22d3ee; font-weight: 700;">0</strong> processed</span>
-    </div>
   `;
 
   const modalBtn = li.querySelector("#og-nexus-icon-modal-btn");
@@ -1527,8 +1523,24 @@ const throttledObserverLogic = throttle(() => {
   if (window.location.href.includes('page=ingame&component=messages')) {
     const playerId = getMetaContent("ogame-player-id");
     if (playerId) {
-      // 1. Always ensure the summary card is visible if we're on the messages page
-      injectTodaySummaryCard(playerId, false);
+      // 1. Conditionally show the summary card depending on the active subtab
+      const isExpeditionsTabActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]');
+      const isCombatsTabActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="21"]');
+
+      if (isExpeditionsTabActive) {
+        injectTodaySummaryCard(playerId, false);
+        const combatWrapper = document.querySelector('.og-nexus-combat-summary-wrapper') as HTMLElement;
+        if (combatWrapper) combatWrapper.style.display = 'none';
+      } else if (isCombatsTabActive) {
+        injectTodayCombatSummaryCard(playerId, false);
+        const expWrapper = document.querySelector('.og-nexus-summary-wrapper') as HTMLElement;
+        if (expWrapper) expWrapper.style.display = 'none';
+      } else {
+        const expWrapper = document.querySelector('.og-nexus-summary-wrapper') as HTMLElement;
+        if (expWrapper) expWrapper.style.display = 'none';
+        const combatWrapper = document.querySelector('.og-nexus-combat-summary-wrapper') as HTMLElement;
+        if (combatWrapper) combatWrapper.style.display = 'none';
+      }
 
       // Trigger a request to the page context to get all raw messages from window.ogame.messages.content
       const now = Date.now();

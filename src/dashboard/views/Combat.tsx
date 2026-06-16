@@ -1104,8 +1104,8 @@ const Combat: React.FC = () => {
                                                 ))}
                                             </Pie>
                                             <Tooltip
-                                                contentStyle={{ background: 'rgba(10, 15, 20, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
-                                                itemStyle={{ fontSize: '0.8rem', fontWeight: 700 }}
+                                                contentStyle={{ background: 'rgba(10, 15, 20, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                                                itemStyle={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}
                                             />
                                         </PieChart>
                                     </ResponsiveContainer>
@@ -1152,9 +1152,9 @@ const Combat: React.FC = () => {
                                                 tickFormatter={formatYAxis}
                                             />
                                             <Tooltip
-                                                contentStyle={{ background: 'rgba(10, 15, 20, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                                                contentStyle={{ background: 'rgba(10, 15, 20, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
                                                 labelStyle={{ color: '#fff', fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px' }}
-                                                itemStyle={{ fontSize: '0.8rem' }}
+                                                itemStyle={{ fontSize: '0.8rem', color: '#fff' }}
                                             />
                                             <Area type="monotone" name="Losses (MSU)" dataKey="attacker" stroke={OUTCOME_COLORS.defender} fillOpacity={1} fill="url(#colorAttacker)" />
                                             <Area type="monotone" name="Profit (MSU)" dataKey="profit" stroke="#22c55e" fillOpacity={1} fill="url(#colorProfit)" />

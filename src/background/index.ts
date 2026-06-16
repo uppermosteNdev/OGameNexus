@@ -527,6 +527,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (message.type === "GET_TODAY_COMBAT_STATS") {
+        const playerId = String(message.data.playerId).trim();
+        (async () => {
+            try {
+                const now = new Date();
+                const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
+
+                const todayCombats = await db.combatReports
+                    .where('timestamp')
+                    .aboveOrEqual(startOfDay)
+                    .filter(c => String(c.playerId).trim() === playerId)
+                    .toArray();
+
+                const account = await db.accounts.get(playerId);
+                const playerName = account?.playerName?.toLowerCase() || '';
+
+                const totals = { metal: 0, crystal: 0, deuterium: 0, damageDealt: 0, debrisGenerated: 0 };
+                todayCombats.forEach(combat => {
+                    if (combat.isExpedition) return;
+
+                    const isAttacker = combat.attackerName && combat.attackerName.toLowerCase() === playerName;
+                    if (isAttacker) {
+                        totals.damageDealt += combat.defenderLosses || 0;
+                        totals.metal += combat.loot?.metal || 0;
+                        totals.crystal += combat.loot?.crystal || 0;
+                        totals.deuterium += combat.loot?.deuterium || 0;
+                    }
+                    totals.debrisGenerated += (combat.debris?.metal || 0) + (combat.debris?.crystal || 0) + (combat.debris?.deuterium || 0);
+                });
+
+                sendResponse({ success: true, totals });
+            } catch (err) {
+                console.error("OGame Nexus: Error getting today combat stats", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
     if (message.type === "GET_RECENT_EXPEDITIONS") {
         const playerId = String(message.data.playerId).trim();
         const limit = message.data.limit || 20;

@@ -108,6 +108,7 @@ const ExpeditionCalculator: React.FC = () => {
     ) || [];
 
     const [selectedPreset, setSelectedPreset] = useState<string>('');
+    const [isBoosterInitialized, setIsBoosterInitialized] = useState(false);
 
     const [calcConfig, setCalcConfig] = useState<ExpoCalcConfig>({
         universeSpeed: 1,
@@ -120,7 +121,8 @@ const ExpeditionCalculator: React.FC = () => {
         resBonusPercent: 0,
         shipBonusPercent: 0,
         lifeformDiscovererBonusPercent: 0,
-        lifeformCargoBonuses: {}
+        lifeformCargoBonuses: {},
+        expeditionBoosterPercent: 0
     });
 
     const lifeformExpeditionBonuses = useMemo(() => {
@@ -268,6 +270,27 @@ const ExpeditionCalculator: React.FC = () => {
         const cargoHyperspaceTechMultiplier = activeAccount.cargoHyperspaceTechMultiplier || 5;
         const lifeformCargoBonuses = lifeformExpeditionBonuses.cargoBonuses;
 
+        // Calculate account-wide active expedition resource booster percentage
+        let activeBoosterPercent = 0;
+        const boosterMap = new Map<string, any>();
+        planets.forEach(p => {
+            if (p.activeItems && p.activeItems.length > 0) {
+                p.activeItems.forEach(item => {
+                    const title = (item.title || item.name || '').toLowerCase();
+                    if (title.includes('expedition resource booster')) {
+                        const existing = boosterMap.get(title);
+                        if (!existing || (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0)) {
+                            boosterMap.set(title, item);
+                        }
+                    }
+                });
+            }
+        });
+        boosterMap.forEach(item => {
+            activeBoosterPercent += item.bonus || 0;
+        });
+        const defaultBoosterPercent = Math.round(activeBoosterPercent * 100);
+
         setCalcConfig(prev => {
             const next = {
                 ...prev,
@@ -279,7 +302,8 @@ const ExpeditionCalculator: React.FC = () => {
                 resBonusPercent,
                 shipBonusPercent,
                 lifeformDiscovererBonusPercent,
-                lifeformCargoBonuses
+                lifeformCargoBonuses,
+                expeditionBoosterPercent: !isBoosterInitialized && planets.length > 0 ? defaultBoosterPercent : prev.expeditionBoosterPercent
             };
 
             // Determine if we should update/initialize the fleet
@@ -297,7 +321,11 @@ const ExpeditionCalculator: React.FC = () => {
             return next;
         });
 
-    }, [activeAccount, lifeformExpeditionBonuses, selectedPreset, planets]);
+        if (!isBoosterInitialized && planets.length > 0) {
+            setIsBoosterInitialized(true);
+        }
+
+    }, [activeAccount, lifeformExpeditionBonuses, selectedPreset, planets, isBoosterInitialized]);
 
     const calcResults = useMemo(() => calculateExpeditionFinds(calcConfig), [calcConfig]);
 
@@ -336,8 +364,9 @@ const ExpeditionCalculator: React.FC = () => {
 
         const resBonusFactor = 1 + (config.resBonusPercent / 100);
         const lifeformFactor = 1 + (config.lifeformDiscovererBonusPercent / 100);
+        const boosterFactor = 1 + ((config.expeditionBoosterPercent || 0) / 100);
 
-        const goalMetal = trueExpeditionLimit * resBonusFactor * lifeformFactor;
+        const goalMetal = trueExpeditionLimit * resBonusFactor * lifeformFactor * boosterFactor;
 
         let baseCap = cargoId === 202 ? 5000 : 25000;
         let classCargoBonus = (isCollector && (cargoId === 202 || cargoId === 203)) ? 1.25 : 1;
@@ -481,6 +510,14 @@ const ExpeditionCalculator: React.FC = () => {
                                 <div className="input-wrapper">
                                     <Shield size={14} className="input-icon" style={{ color: RESOURCE_COLORS.deuterium }} />
                                     <input type="number" step="0.1" value={calcConfig.lifeformDiscovererBonusPercent} onChange={e => setCalcConfig({ ...calcConfig, lifeformDiscovererBonusPercent: Number(e.target.value) })} />
+                                </div>
+                            </div>
+
+                            <div className="param-field">
+                                <label>Expedition Booster item %</label>
+                                <div className="input-wrapper">
+                                    <TrendingUp size={14} className="input-icon" style={{ color: '#fbbf24' }} />
+                                    <input type="number" step="1" value={calcConfig.expeditionBoosterPercent} onChange={e => setCalcConfig({ ...calcConfig, expeditionBoosterPercent: Number(e.target.value) })} />
                                 </div>
                             </div>
 

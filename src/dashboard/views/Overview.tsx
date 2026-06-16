@@ -1124,7 +1124,8 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" />
                             <YAxis stroke="rgba(255,255,255,0.3)" tickFormatter={(val) => formatNumber(val)} />
                             <Tooltip
-                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(0,242,255,0.2)', borderRadius: '12px', fontSize: '0.8rem' }}
+                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(0,242,255,0.2)', borderRadius: '12px', fontSize: '0.8rem', color: '#fff' }}
+                                itemStyle={{ color: '#fff' }}
                                 formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
                                 itemSorter={(item: any) => {
                                     const order: Record<string, number> = { 'Metal': 1, 'Crystal': 2, 'Deuterium': 3 };
@@ -1184,7 +1185,8 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" />
                             <YAxis stroke="rgba(255,255,255,0.3)" tickFormatter={(val) => formatNumber(val)} />
                             <Tooltip
-                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(189,0,255,0.2)', borderRadius: '12px', fontSize: '0.8rem' }}
+                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(189,0,255,0.2)', borderRadius: '12px', fontSize: '0.8rem', color: '#fff' }}
+                                itemStyle={{ color: '#fff' }}
                                 formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
                                 itemSorter={(item: any) => {
                                     const order: Record<string, number> = { 'Metal': 1, 'Crystal': 2, 'Deuterium': 3 };
@@ -1244,7 +1246,8 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" />
                             <YAxis stroke="rgba(255,255,255,0.3)" tickFormatter={(val) => formatNumber(val)} />
                             <Tooltip
-                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '12px', fontSize: '0.8rem' }}
+                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '12px', fontSize: '0.8rem', color: '#fff' }}
+                                itemStyle={{ color: '#fff' }}
                                 formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
                                 itemSorter={(item: any) => {
                                     const order: Record<string, number> = { 'Metal': 1, 'Crystal': 2, 'Deuterium': 3 };
@@ -1304,7 +1307,8 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" />
                             <YAxis stroke="rgba(255,255,255,0.3)" tickFormatter={(val) => formatNumber(val)} />
                             <Tooltip
-                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '12px', fontSize: '0.8rem' }}
+                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '12px', fontSize: '0.8rem', color: '#fff' }}
+                                itemStyle={{ color: '#fff' }}
                                 formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
                                 itemSorter={(item: any) => {
                                     const order: Record<string, number> = { 'Metal': 1, 'Crystal': 2, 'Deuterium': 3 };
@@ -1356,7 +1360,8 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" />
                             <YAxis stroke="rgba(255,255,255,0.3)" tickFormatter={(val) => formatNumber(val)} />
                             <Tooltip
-                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(0,242,255,0.2)', borderRadius: '12px', fontSize: '0.8rem' }}
+                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(0,242,255,0.2)', borderRadius: '12px', fontSize: '0.8rem', color: '#fff' }}
+                                itemStyle={{ color: '#fff' }}
                                 formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
                             />
                             <Area 

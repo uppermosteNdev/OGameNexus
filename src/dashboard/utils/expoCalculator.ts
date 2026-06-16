@@ -53,6 +53,7 @@ export interface ExpoCalcConfig {
     shipBonusPercent: number;
     lifeformDiscovererBonusPercent: number; // Lifeform Bonus for Discoverer Class (Id 32)
     lifeformCargoBonuses?: Record<number, number>; // Ship ID -> lifeform cargo bonus percentage
+    expeditionBoosterPercent: number;
 }
 
 export function calculateExpeditionFinds(config: ExpoCalcConfig) {
@@ -95,12 +96,13 @@ export function calculateExpeditionFinds(config: ExpoCalcConfig) {
     // 4. Calculate Resource Finds
     const resBonusFactor = 1 + (config.resBonusPercent / 100);
     const lifeformFactor = 1 + (config.lifeformDiscovererBonusPercent / 100);
+    const boosterFactor = 1 + ((config.expeditionBoosterPercent || 0) / 100);
 
     // Base finds before being capped by cargo
     const potentialMetal = expeditionLimit * resBonusFactor;
 
-    // Final finds are capped by cargo, then applied lifeform bonus
-    const maxMetal = Math.floor(Math.min(potentialMetal, totalCargo) * lifeformFactor);
+    // Final finds are capped by cargo, then applied lifeform bonus, and then multiplied by the booster item percentage
+    const maxMetal = Math.floor(Math.floor(Math.min(potentialMetal, totalCargo) * lifeformFactor) * boosterFactor);
     const maxCrystal = Math.floor(maxMetal / 2);
     const maxDeuterium = Math.floor(maxMetal / 3);
 
@@ -138,7 +140,7 @@ export function calculateExpeditionFinds(config: ExpoCalcConfig) {
         totalCargo,
         totalSI,
         maxShipsSI: effectiveSIPool * shipBonusFactor,
-        theoreticalMaxMetal: Math.floor(potentialMetal * lifeformFactor),
+        theoreticalMaxMetal: Math.floor(Math.floor(potentialMetal * lifeformFactor) * boosterFactor),
         theoreticalMaxShipsSI: expeditionLimit * shipBonusFactor
     };
 }

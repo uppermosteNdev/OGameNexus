@@ -46,7 +46,7 @@ interface AnalyticsDataAggregate {
     combatsResources: { metal: number, crystal: number, deuterium: number, msu: number, darkMatter: number, artifacts: number };
     debrisResources: { metal: number, crystal: number, deuterium: number, msu: number, darkMatter: number, artifacts: number };
     shipsMap: Record<number, number>;
-    timeline: number[];
+    timeline: { expeditions: number, combats: number, debris: number, total: number }[];
     trackingDays: number;
 }
 
@@ -231,22 +231,28 @@ function processAnalyticsData(tfExp: any[], monthExp: any[], refDate: Date, trac
     };
 
     const daysInMonth = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0).getDate();
-    aggregate.timeline = new Array(daysInMonth).fill(0);
+    aggregate.timeline = Array.from({ length: daysInMonth }, () => ({
+        expeditions: 0,
+        combats: 0,
+        debris: 0,
+        total: 0
+    }));
 
     // Timeline bars always use the month set for events
-    const processMonthTimeline = (items: any[]) => {
+    const processMonthTimeline = (items: any[], type: 'expeditions' | 'combats' | 'debris') => {
         items.forEach(item => {
             const date = new Date(item.timestamp * 1000);
             const idx = date.getDate() - 1;
             if (idx >= 0 && idx < daysInMonth) {
-                aggregate.timeline[idx]++;
+                aggregate.timeline[idx][type]++;
+                aggregate.timeline[idx].total++;
             }
         });
     };
 
-    processMonthTimeline(monthExp);
-    processMonthTimeline(monthCombats);
-    processMonthTimeline(monthDebris);
+    processMonthTimeline(monthExp, 'expeditions');
+    processMonthTimeline(monthCombats, 'combats');
+    processMonthTimeline(monthDebris, 'debris');
 
     // Stats use the TF-filtered set
     tfExp.forEach(exp => {
@@ -378,8 +384,8 @@ function getPickerLabel(tf: Timeframe, refDate: Date) {
     return `${monthNames[refDate.getMonth()]} ${refDate.getFullYear()}`;
 }
 
-function renderTimelineChart(container: HTMLElement, timeline: number[], expeditions: any[], lifeforms: any[], combats: any[], debrisHarvests: any[]) {
-    const maxVal = Math.max(...timeline, 1);
+function renderTimelineChart(container: HTMLElement, timeline: any[], expeditions: any[], lifeforms: any[], combats: any[], debrisHarvests: any[]) {
+    const maxVal = Math.max(...timeline.map(t => t.total), 1);
 
     const wrapper = document.createElement('div');
     wrapper.style.cssText = `
@@ -398,7 +404,7 @@ function renderTimelineChart(container: HTMLElement, timeline: number[], expedit
     const bounds = getTimeframeBounds(currentTimeframe, currentReferenceDate);
 
     timeline.forEach((val, idx) => {
-        const pct = (val / maxVal) * 100;
+        const pct = (val.total / maxVal) * 100;
         const col = document.createElement('div');
         col.style.cssText = `
             display: flex;
@@ -425,7 +431,7 @@ function renderTimelineChart(container: HTMLElement, timeline: number[], expedit
 
         const barContainer = document.createElement('div');
         barContainer.className = 'nexus-tooltip';
-        let tipText = `Day ${idx + 1}: ${val}`;
+        let tipText = `Day ${idx + 1}: ${val.total} Events`;
         barContainer.setAttribute('data-nexus-tooltip', tipText);
 
         barContainer.style.cssText = `
@@ -460,10 +466,33 @@ function renderTimelineChart(container: HTMLElement, timeline: number[], expedit
         fill.style.cssText = `
             width: 100%;
             height: ${pct}%;
-            background: ${val > 0 ? '#6ee7b7' : 'transparent'};
+            display: flex;
+            flex-direction: column-reverse;
             border-radius: 2px;
+            overflow: hidden;
             transition: height 0.3s;
         `;
+
+        if (val.total > 0) {
+            const categories = [
+                { count: val.expeditions, color: '#00f2ff' }, // cyan as Expeditions
+                { count: val.combats, color: '#ef4444' }, // orange red as Combats
+                { count: val.debris, color: '#6ee7b7' } // same green as now for Debris Fields
+            ];
+
+            categories.forEach(cat => {
+                if (cat.count > 0) {
+                    const segment = document.createElement('div');
+                    const segPct = (cat.count / val.total) * 100;
+                    segment.style.cssText = `
+                        width: 100%;
+                        height: ${segPct}%;
+                        background: ${cat.color};
+                    `;
+                    fill.appendChild(segment);
+                }
+            });
+        }
 
         barContainer.appendChild(fill);
 
@@ -576,45 +605,57 @@ function renderPieChartCard(aggregate: AnalyticsDataAggregate) {
 
 function renderShipsCard(aggregate: AnalyticsDataAggregate) {
     const card = document.createElement('div');
-    card.className = 'custom-scrollbar';
     card.style.cssText = `
         flex: 1;
         background: rgba(15, 23, 42, 0.4);
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 8px;
-        padding: 20px;
+        padding: 8px 12px;
         display: flex;
         flex-direction: column;
         backdrop-filter: blur(8px);
-        overflow-y: auto;
-        min-height: 180px;
+        overflow: hidden;
+        min-height: 120px;
         transition: border-color 0.3s;
     `;
-
-    const sortedShips = Object.entries(aggregate.shipsMap).sort((a, b) => b[1] - a[1]);
-
-    if (sortedShips.length === 0) {
-        card.innerHTML = `<div style="color: #64748b; text-align: center; margin-top: auto; margin-bottom: auto;">No ships found in this period.</div>`;
-        return card;
-    }
 
     const grid = document.createElement('div');
     grid.style.cssText = `
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        width: 100%;
     `;
 
-    sortedShips.forEach(([shipId, count]) => {
+    // 15 ships specified by user in the correct order
+    const SHIP_ORDER = [
+        202, // Small Cargo
+        203, // Large Cargo
+        204, // Light Fighter
+        205, // Heavy Fighter
+        206, // Cruiser
+        207, // Battleship
+        208, // Colony Ship
+        209, // Recycler
+        210, // Espionage Probe
+        211, // Bomber
+        213, // Destroyer
+        214, // Deathstar
+        215, // Battlecruiser
+        218, // Reaper
+        219  // Pathfinder
+    ];
+
+    SHIP_ORDER.forEach(shipId => {
+        const count = aggregate.shipsMap[shipId] || 0;
         let sName = 'Ship ' + shipId;
         let sIcon = '';
-        const shipInfo = SHIP_DATA.find(s => s.id.toString() === shipId);
+        const shipInfo = SHIP_DATA.find(s => s.id === shipId);
         if (shipInfo) {
             sName = shipInfo.name;
             sIcon = shipInfo.icon;
         }
 
-        const id = parseInt(shipId);
         // Civilian vs Light Combat vs Heavy Combat configurations
         let shipConfig = {
             color: '#ef4444',
@@ -622,14 +663,14 @@ function renderShipsCard(aggregate: AnalyticsDataAggregate) {
             border: 'rgba(239, 68, 68, 0.3)'
         };
 
-        if (id === 202 || id === 203 || id === 210 || id === 219 || id === 208 || id === 209) {
+        if (shipId === 202 || shipId === 203 || shipId === 210 || shipId === 219 || shipId === 208 || shipId === 209) {
             // Civilian/Utility (Teal/Ice-Blue)
             shipConfig = {
                 color: '#00f2ff',
                 glow: 'rgba(0, 242, 255, 0.2)',
                 border: 'rgba(0, 242, 255, 0.3)'
             };
-        } else if (id === 204 || id === 205 || id === 206) {
+        } else if (shipId === 204 || shipId === 205 || shipId === 206) {
             // Light/Medium Combat (Amber)
             shipConfig = {
                 color: '#f59e0b',
@@ -638,58 +679,71 @@ function renderShipsCard(aggregate: AnalyticsDataAggregate) {
             };
         }
 
+        const isZero = count === 0;
+
         const item = document.createElement('div');
+        item.className = 'nexus-tooltip';
+        item.setAttribute('data-nexus-tooltip', `${sName}: ${count.toLocaleString()}`);
+        item.setAttribute('title', `${sName}: ${count.toLocaleString()}`);
+        
         item.style.cssText = `
             display: flex;
+            flex-direction: row;
             align-items: center;
-            justify-content: space-between;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(255,255,255,0.04);
-            border-left: 3px solid ${shipConfig.color};
-            border-radius: 6px;
-            padding: 8px 14px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            justify-content: flex-start;
+            background: rgba(30, 41, 59, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-left: 2px solid ${shipConfig.color};
+            border-radius: 4px;
+            padding: 4px 8px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             cursor: pointer;
+            position: relative;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+            opacity: ${isZero ? '0.45' : '1'};
+            gap: 8px;
+            height: 32px;
         `;
 
         item.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
-                ${sIcon ? `<img src="${chrome.runtime.getURL(sIcon)}" style="width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); filter: grayscale(0.15); transition: all 0.3s;"/>` : ''}
-                <div style="font-size: 11.5px; color: #cbd5e1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; transition: color 0.3s;">${sName}</div>
-            </div>
-            <div style="font-weight: 700; color: ${shipConfig.color}; font-size: 13px; text-shadow: 0 0 8px ${shipConfig.glow}; transition: all 0.3s; padding-left: 4px;">${formatNumber(count)}</div>
+            ${sIcon ? `<img src="${chrome.runtime.getURL(sIcon)}" style="width: 24px; height: 24px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.1); filter: ${isZero ? 'grayscale(0.8)' : 'grayscale(0.15)'}; transition: all 0.2s; object-fit: cover; flex-shrink: 0;"/>` : ''}
+            <div class="ship-count" style="font-weight: 700; color: ${shipConfig.color}; font-size: 12px; text-shadow: 0 0 4px ${shipConfig.glow}; transition: all 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${formatNumber(count)}</div>
         `;
 
         const img = item.querySelector('img') as HTMLImageElement | null;
-        const text = item.querySelector('div > div') as HTMLDivElement | null;
+        const countDiv = item.querySelector('.ship-count') as HTMLDivElement | null;
 
         item.onmouseover = () => {
             item.style.background = 'rgba(255, 255, 255, 0.05)';
             item.style.borderColor = shipConfig.border;
             item.style.borderLeftColor = shipConfig.color;
-            item.style.boxShadow = `0 4px 15px ${shipConfig.glow}, inset 0 0 10px rgba(255,255,255,0.01)`;
-            item.style.transform = 'translateY(-1px)';
+            item.style.boxShadow = `0 4px 10px ${shipConfig.glow}, inset 0 1px 0 rgba(255,255,255,0.05)`;
+            item.style.transform = 'translateY(-1px) scale(1.02)';
+            item.style.opacity = '1';
             if (img) {
                 img.style.filter = 'none';
                 img.style.borderColor = shipConfig.color;
             }
-            if (text) {
-                text.style.color = '#ffffff';
+            if (countDiv) {
+                countDiv.style.color = '#ffffff';
+                countDiv.style.textShadow = `0 0 8px ${shipConfig.color}`;
             }
         };
 
         item.onmouseout = () => {
-            item.style.background = 'rgba(255,255,255,0.02)';
-            item.style.borderColor = 'rgba(255,255,255,0.04)';
+            item.style.background = 'rgba(30, 41, 59, 0.15)';
+            item.style.borderColor = 'rgba(255, 255, 255, 0.03)';
             item.style.borderLeftColor = shipConfig.color;
             item.style.boxShadow = 'none';
             item.style.transform = 'none';
+            item.style.opacity = isZero ? '0.45' : '1';
             if (img) {
-                img.style.filter = 'grayscale(0.15)';
-                img.style.borderColor = 'rgba(255,255,255,0.1)';
+                img.style.filter = isZero ? 'grayscale(0.8)' : 'grayscale(0.15)';
+                img.style.borderColor = 'rgba(255, 255, 255, 0.1)';
             }
-            if (text) {
-                text.style.color = '#cbd5e1';
+            if (countDiv) {
+                countDiv.style.color = shipConfig.color;
+                countDiv.style.textShadow = `0 0 4px ${shipConfig.glow}`;
             }
         };
 
@@ -782,19 +836,6 @@ function renderTotalsTable(ag: AnalyticsDataAggregate, globalAg: AnalyticsDataAg
     const totalDarkMatter = ag.expeditionsResources.darkMatter; // Combats and Debris do not drop DM
     const totalArtifacts = ag.expeditionsResources.artifacts; // Combats and Debris do not drop Artifacts
 
-    const dataRow = document.createElement('tr');
-    dataRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Total</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalEvents) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalMetal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalCrystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalDeuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalMsu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(totalDarkMatter) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(totalArtifacts) || '-'}</td>
-    `;
-    t.appendChild(dataRow);
-
     const globalEvents = globalAg.totalExpeditions + globalAg.totalCombats + globalAg.totalDebris;
     const globalMetal = globalAg.expeditionsResources.metal + globalAg.combatsResources.metal + globalAg.debrisResources.metal;
     const globalCrystal = globalAg.expeditionsResources.crystal + globalAg.combatsResources.crystal + globalAg.debrisResources.crystal;
@@ -805,9 +846,52 @@ function renderTotalsTable(ag: AnalyticsDataAggregate, globalAg: AnalyticsDataAg
 
     const avgDenominator = globalAg.trackingDays;
 
+    // 1. Total Today
+    const dataRow = document.createElement('tr');
+    dataRow.innerHTML = `
+        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Total Today</td>
+        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalEvents) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalMetal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalCrystal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalDeuterium) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalMsu) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(totalDarkMatter) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(totalArtifacts) || '-'}</td>
+    `;
+    t.appendChild(dataRow);
+
+    // 2. Avg. Expo. Events
+    const avgExpoRow = document.createElement('tr');
+    avgExpoRow.innerHTML = `
+        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Avg. Expo. Events</td>
+        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(globalAg.totalExpeditions / avgDenominator, 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.metal / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.crystal / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.deuterium / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.msu / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(Math.round(globalAg.expeditionsResources.darkMatter / avgDenominator)) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(Math.round(globalAg.expeditionsResources.artifacts / avgDenominator)) || '-'}</td>
+    `;
+    t.appendChild(avgExpoRow);
+
+    // 3. Avg. Combat Events
+    const avgCombatRow = document.createElement('tr');
+    avgCombatRow.innerHTML = `
+        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Avg. Combat Events</td>
+        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(globalAg.totalCombats / avgDenominator, 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.metal / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.crystal / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.deuterium / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.msu / avgDenominator), 0) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
+    `;
+    t.appendChild(avgCombatRow);
+
+    // 4. Average All Events
     const avgRow = document.createElement('tr');
     avgRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05);">Average</td>
+        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05);">Average All Events</td>
         <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold;">${formatNumber(globalEvents / avgDenominator, 0) || '-'}</td>
         <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C;">${formatNumber(Math.round(globalMetal / avgDenominator), 0) || '-'}</td>
         <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6;">${formatNumber(Math.round(globalCrystal / avgDenominator), 0) || '-'}</td>

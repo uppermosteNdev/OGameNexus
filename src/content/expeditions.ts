@@ -665,9 +665,14 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
 
     let existingWrapper = document.querySelector('.og-nexus-summary-wrapper') as HTMLElement;
 
+    const isExpeditionsTabActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]');
+
     if (existingWrapper) {
-        existingWrapper.style.display = 'flex';
+        existingWrapper.style.display = isExpeditionsTabActive ? 'flex' : 'none';
+        if (!isExpeditionsTabActive) return;
         if (!forceLoad) return;
+    } else {
+        if (!isExpeditionsTabActive) return;
     }
 
     chrome.runtime.sendMessage({
@@ -756,6 +761,9 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
                 }
             }
 
+            const currentIsActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]');
+            existingWrapper.style.display = currentIsActive ? 'flex' : 'none';
+
             updateBadgeState(existingWrapper);
             updateCardClickability(existingWrapper);
             if (existingWrapper.classList.contains('og-nexus-expanded')) {
@@ -765,11 +773,12 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
         }
 
         const totals = response.totals;
+        const currentIsActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]');
 
         const wrapper = document.createElement('div');
         wrapper.className = 'og-nexus-summary-wrapper';
         wrapper.style.cssText = `
-            display: flex;
+            display: ${currentIsActive ? 'flex' : 'none'};
             flex-direction: column;
             align-items: center;
             width: 100%;

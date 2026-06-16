@@ -452,6 +452,45 @@ const Expeditions: React.FC = () => {
     ) || [];
     const activePlanetId = useMemo(() => planets[0]?.id, [planets]);
 
+    // Active expedition boosters
+    const activeExpeditionBoosters = useMemo(() => {
+        const map = new Map<string, any>();
+        planets.forEach(p => {
+            if (p.activeItems && p.activeItems.length > 0) {
+                p.activeItems.forEach(item => {
+                    const title = (item.title || item.name || '').toLowerCase();
+                    const isTarget = title.includes('expedition resource booster') || 
+                                   title.includes('expedition computer') || 
+                                   title.includes('expedition turbo');
+                    
+                    if (isTarget) {
+                        const existing = map.get(title);
+                        // Keep the one with the latest expiration (or first encountered if none have expiry)
+                        if (!existing || (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0)) {
+                            map.set(title, {
+                                ...item,
+                                planetName: p.name || 'Unknown',
+                                coords: p.coords || ''
+                            });
+                        }
+                    }
+                });
+            }
+        });
+        return Array.from(map.values());
+    }, [planets]);
+
+    const expeditionResBoosterPercent = useMemo(() => {
+        let total = 0;
+        activeExpeditionBoosters.forEach(item => {
+            const title = (item.title || item.name || '').toLowerCase();
+            if (title.includes('expedition resource booster')) {
+                total += item.bonus || 0;
+            }
+        });
+        return total;
+    }, [activeExpeditionBoosters]);
+
     const theoreticalMax = useMemo(() => {
         if (!activeAccount || !planets) return null;
 
@@ -525,13 +564,34 @@ const Expeditions: React.FC = () => {
         const shipBonusFactor = 1 + (currentShipBonus / 100);
 
         // No cargo cap
-        const maxMetal = Math.floor(limit * resBonusFactor * classBonusFactor);
-        const maxCrystal = Math.floor(maxMetal / 2);
-        const maxDeuterium = Math.floor(maxMetal / 3);
+        const baseMetal = Math.floor(limit * resBonusFactor * classBonusFactor);
+        const baseCrystal = Math.floor(baseMetal / 2);
+        const baseDeuterium = Math.floor(baseMetal / 3);
+
+        const maxMetal = expeditionResBoosterPercent > 0 
+            ? Math.floor(baseMetal * (1 + expeditionResBoosterPercent)) 
+            : baseMetal;
+        const maxCrystal = expeditionResBoosterPercent > 0 
+            ? Math.floor(baseCrystal * (1 + expeditionResBoosterPercent)) 
+            : baseCrystal;
+        const maxDeuterium = expeditionResBoosterPercent > 0 
+            ? Math.floor(baseDeuterium * (1 + expeditionResBoosterPercent)) 
+            : baseDeuterium;
+
         const maxShipsSI = Math.floor(limit * shipBonusFactor);
 
-        return { maxMetal, maxCrystal, maxDeuterium, maxShipsSI, className };
-    }, [activeAccount, planets]);
+        return { 
+            maxMetal, 
+            maxCrystal, 
+            maxDeuterium, 
+            maxShipsSI, 
+            className,
+            baseMetal,
+            baseCrystal,
+            baseDeuterium,
+            boosterPercent: expeditionResBoosterPercent
+        };
+    }, [activeAccount, planets, expeditionResBoosterPercent]);
 
     const [visibleCategories, setVisibleCategories] = useState<Set<CategoryId>>(new Set(CATEGORIES.map(c => c.id)));
     const [visibleResources, setVisibleResources] = useState<Set<string>>(new Set(['metal', 'crystal', 'deuterium', 'msu']));
@@ -1768,31 +1828,94 @@ const Expeditions: React.FC = () => {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                                         {/* THEORETICAL MAX FIND SECTION */}
                                         {theoreticalMax && (
-                                            <div className="glass" style={{ padding: '40px', borderRadius: '24px', background: 'rgba(5, 10, 20, 0.6)', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '40px', position: 'relative', overflow: 'hidden' }}>
+                                            <div className="glass" style={{ padding: '40px 40px 48px 40px', borderRadius: '24px', background: 'rgba(5, 10, 20, 0.6)', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '32px', position: 'relative', overflow: 'hidden' }}>
                                                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: `linear-gradient(90deg, ${RESOURCE_COLORS.metal}, ${RESOURCE_COLORS.crystal}, ${RESOURCE_COLORS.deuterium}, ${THEME_CYAN})` }} />
 
-                                                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start' }}>
                                                     <div style={{ textAlign: 'center' }}>
                                                         <div style={{ fontSize: '0.8rem', fontWeight: 900, color: RESOURCE_COLORS.metal, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '8px' }}>POTENTIAL MAX METAL</div>
                                                         <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#fff' }}>{theoreticalMax.maxMetal.toLocaleString()}</div>
+                                                        {theoreticalMax.boosterPercent > 0 && (
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 800, marginTop: '4px' }}>
+                                                                Base: {theoreticalMax.baseMetal.toLocaleString()} (+{(theoreticalMax.boosterPercent * 100).toFixed(0)}%)
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div style={{ textAlign: 'center' }}>
                                                         <div style={{ fontSize: '0.8rem', fontWeight: 900, color: RESOURCE_COLORS.crystal, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '8px' }}>POTENTIAL MAX CRYSTAL</div>
                                                         <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#fff' }}>{theoreticalMax.maxCrystal.toLocaleString()}</div>
+                                                        {theoreticalMax.boosterPercent > 0 && (
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 800, marginTop: '4px' }}>
+                                                                Base: {theoreticalMax.baseCrystal.toLocaleString()} (+{(theoreticalMax.boosterPercent * 100).toFixed(0)}%)
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
 
                                                 <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.05)' }} />
 
-                                                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start' }}>
                                                     <div style={{ textAlign: 'center' }}>
                                                         <div style={{ fontSize: '0.8rem', fontWeight: 900, color: RESOURCE_COLORS.deuterium, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '8px' }}>POTENTIAL MAX DEUTERIUM</div>
                                                         <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#fff' }}>{theoreticalMax.maxDeuterium.toLocaleString()}</div>
+                                                        {theoreticalMax.boosterPercent > 0 && (
+                                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 800, marginTop: '4px' }}>
+                                                                Base: {theoreticalMax.baseDeuterium.toLocaleString()} (+{(theoreticalMax.boosterPercent * 100).toFixed(0)}%)
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div style={{ textAlign: 'center' }}>
                                                         <div style={{ fontSize: '0.8rem', fontWeight: 900, color: THEME_CYAN, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '8px' }}>POTENTIAL SI POOL</div>
                                                         <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#fff' }}>{theoreticalMax.maxShipsSI.toLocaleString()}</div>
                                                     </div>
+                                                </div>
+
+                                                <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.05)' }} />
+
+                                                {/* Active boosters list */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <Package size={14} color={THEME_CYAN} />
+                                                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                            Active Expedition Boosters
+                                                        </span>
+                                                    </div>
+                                                    {activeExpeditionBoosters.length > 0 ? (
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                                                            {activeExpeditionBoosters.map((item, idx) => {
+                                                                const title = (item.title || item.name || '').toLowerCase();
+                                                                const isRes = title.includes('expedition resource booster');
+                                                                const isComputer = title.includes('expedition computer');
+                                                                const accentColor = isRes ? '#10b981' : isComputer ? '#bd00ff' : '#00f2ff';
+                                                                return (
+                                                                    <div key={idx} className="glass" style={{
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '10px',
+                                                                        padding: '8px 14px',
+                                                                        borderRadius: '12px',
+                                                                        background: 'rgba(255, 255, 255, 0.02)',
+                                                                        border: `1px solid ${accentColor}33`
+                                                                    }}>
+                                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: accentColor, boxShadow: `0 0 8px ${accentColor}` }} />
+                                                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#fff' }}>{item.title}</div>
+                                                                        {item.bonus > 0 && (
+                                                                            <div style={{ fontSize: '0.75rem', fontWeight: 900, color: accentColor }}>
+                                                                                +{item.bonus * 100}%
+                                                                            </div>
+                                                                        )}
+                                                                        <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
+                                                                            ({item.timeRemaining || (item.isPermanent ? 'Permanent' : 'Active')})
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', fontStyle: 'italic', fontWeight: 600 }}>
+                                                            No active expedition boosters detected. Visit the Empire or Overview page to scrape active boosters.
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div style={{ position: 'absolute', bottom: '12px', right: '20px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.45)', fontWeight: 800, fontStyle: 'italic', letterSpacing: '0.02em' }}>
