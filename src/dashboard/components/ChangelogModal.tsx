@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Zap, Maximize2, Cpu, VolumeX, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
+import { Radar, Swords, Activity, Compass, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -11,56 +11,24 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings }) => {
     const changes = [
         {
-            icon: <Zap size={22} color="var(--primary)" />,
-            title: "Performance Boost: Low Animation Mode",
-            desc: "Introduce a global performance toggle that completely turns off background stars, smooth blurs, and other flashy animations. Highly recommended for players experiencing slow speeds or visual lag.",
-            customElement: (
-                <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <span style={{ fontSize: '0.8rem', color: '#00f2ff', fontWeight: 650, letterSpacing: '0.3px' }}>
-                        This option is now available in the Settings menu.
-                    </span>
-                    <motion.button
-                        onClick={onNavigateToSettings}
-                        whileHover={{ scale: 1.02, background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.22) 0%, rgba(0, 184, 212, 0.08) 100%)', border: '1px solid rgba(0, 242, 255, 0.65)', boxShadow: '0 0 10px rgba(0, 242, 255, 0.15)' }}
-                        whileTap={{ scale: 0.98 }}
-                        style={{
-                            alignSelf: 'flex-start',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 14px',
-                            background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.12) 0%, rgba(0, 184, 212, 0.04) 100%)',
-                            border: '1px solid rgba(0, 242, 255, 0.3)',
-                            borderRadius: '8px',
-                            color: '#00f2ff',
-                            fontSize: '0.74rem',
-                            fontWeight: 750,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px'
-                        }}
-                    >
-                        <span>Take me there</span>
-                        <ArrowRight size={12} />
-                    </motion.button>
-                </div>
-            )
+            icon: <Radar size={22} color="#00f2ff" />,
+            title: "Stellar Hotspots Heatmap",
+            desc: "Interactive, zoomable galaxy heatmap inside the dashboard tracking localized combat densities with a paginated drill-down log modal."
         },
         {
-            icon: <Maximize2 size={22} color="#ff8e3c" />,
-            title: "Enlarge expedition shipwreck",
-            desc: "Ship icons inside deep-space expedition findings are enlarged by 25% (45px) alongside cleaner, larger labels (12px) for improved visibility and scanning."
+            icon: <Swords size={22} color="#ef4444" />,
+            title: "Combat Reports Bounty Bar",
+            desc: "Dynamic daily stats card tracking Metal, Crystal, Deuterium loot, Damage Dealt, and Debris Generated from player battles with a dismissable 'New' badge."
         },
         {
-            icon: <Cpu size={22} color="var(--color-deuterium)" />,
-            title: "Optimized Game Sync Engine",
-            desc: "The in-game sync engine has been upgraded to run more efficiently, significantly reducing CPU usage during gameplay and active tab observation."
+            icon: <Activity size={22} color="#10b981" />,
+            title: "Segmented Timelines & Redesigned Averages",
+            desc: "Event charts now segment daily counts by color. The totals table features sorted averages: Total Today, Avg. Expo. Events, Avg. Combat Events, and Average All Events."
         },
         {
-            icon: <VolumeX size={22} color="#14b8a6" />,
-            title: "Clean Developer Console",
-            desc: "The developer tools console has been completely cleaned up by silencing unnecessary debug logs and background notification printouts."
+            icon: <Compass size={22} color="#facc15" />,
+            title: "Expedition Calculator Booster Scaling",
+            desc: "Integrated the 'Expedition Booster item %' config into the Player Bonuses config to scale forecasted resource finds and optimal cargo presets."
         }
     ];
 
@@ -159,7 +127,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.0.9
+                                v1.1.0
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

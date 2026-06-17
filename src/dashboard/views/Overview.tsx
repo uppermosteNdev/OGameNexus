@@ -271,7 +271,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
     const totals = useMemo(() => {
         const result = { metal: 0, crystal: 0, deuterium: 0, lastUpdated: 0 };
         if (!calcResults) return result;
-        
+
         planets.forEach(p => {
             const prod = calcResults.planets[p.id]?.total;
             if (prod) {
@@ -562,6 +562,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
     }, [expeditions, combatReports, debrisHarvests, mMultiplier, cMultiplier, dMultiplier, totalMSUPerHour]);
 
     const [activeModal, setActiveModal] = useState<'mines' | 'expedition' | 'fleet' | 'combats' | 'debris' | 'total' | null>(null);
+    const [isDonateHovered, setIsDonateHovered] = useState(false);
 
 
     return (
@@ -577,164 +578,239 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                     Empire 360°
                 </motion.h1>
 
-                {activeAccount && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(0, 242, 255, 0.06)', borderColor: 'rgba(0, 242, 255, 0.3)' }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => onSelect && onSelect('signature')}
-                        title="Customize Empire Signature"
-                        style={{
-                            display: 'flex',
-                            gap: '24px',
-                            alignItems: 'center',
-                            background: 'rgba(0, 242, 255, 0.03)',
-                            padding: '16px 24px',
-                            borderRadius: '24px',
-                            border: '1px solid rgba(0, 242, 255, 0.1)',
-                            backdropFilter: 'blur(10px)',
-                            cursor: 'pointer',
-                            transition: 'border-color 0.2s, background-color 0.2s'
-                        }}
-                    >
-                        <div style={{ textAlign: 'right' }}>
-                            <div style={{
-                                color: '#fff',
-                                fontWeight: 800,
-                                fontSize: '1.4rem',
-                                letterSpacing: '-0.02em',
-                                textShadow: '0 0 20px rgba(0, 242, 255, 0.3)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'flex-end',
-                                gap: '12px'
-                            }}>
-                                {activeAccount.playerName}
-                                {activeAccount.honorPoints !== undefined && (
-                                    <span style={{
-                                        fontSize: '0.85rem',
-                                        color: '#22c55e',
-                                        fontWeight: 700,
-                                        background: 'rgba(34, 197, 94, 0.1)',
-                                        padding: '2px 8px',
-                                        borderRadius: '6px',
-                                        border: '1px solid rgba(34, 197, 94, 0.2)'
-                                    }}>
-                                        {activeAccount.honorPoints.toLocaleString()} HP
-                                    </span>
-                                )}
-                                {activeAccount.playerClass !== undefined && (
-                                    <span style={{
-                                        fontSize: '0.85rem',
-                                        color: activeAccount.playerClass === 1 ? '#E6953C' : activeAccount.playerClass === 2 ? '#ef4444' : '#06b6d4',
-                                        fontWeight: 900,
-                                        background: 'rgba(255, 255, 255, 0.03)',
-                                        padding: '2px 10px',
-                                        borderRadius: '8px',
-                                        border: `1px solid ${activeAccount.playerClass === 1 ? 'rgba(230, 149, 60, 0.3)' : activeAccount.playerClass === 2 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(6, 182, 212, 0.3)'}`,
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.05em'
-                                    }}>
-                                        {activeAccount.playerClass === 1 ? 'Collector' : activeAccount.playerClass === 2 ? 'Warrior' : 'Discoverer'}
-                                    </span>
-                                )}
-                            </div>
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'flex-end',
-                                gap: '12px',
-                                marginTop: '4px'
-                            }}>
-                                {activeAccount.score !== undefined && (
-                                    <div
-                                        title={activeAccount.totalPlayers ? `Rank ${activeAccount.rank} of ${activeAccount.totalPlayers} players` : undefined}
-                                        style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 700 }}
-                                    >
-                                        {activeAccount.score.toLocaleString()} pts
-                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: '6px', fontWeight: 500 }}>
-                                            (#{activeAccount.rank})
-                                        </span>
-                                    </div>
-                                )}
-                                {activeAccount.allianceTag && (
-                                    <span style={{
-                                        color: 'var(--primary)',
-                                        fontSize: '0.7rem',
-                                        fontWeight: 800,
-                                        background: 'rgba(0, 242, 255, 0.1)',
-                                        padding: '2px 8px',
-                                        borderRadius: '6px',
-                                        border: '1px solid var(--primary-glow)'
-                                    }}>
-                                        {activeAccount.allianceTag}
-                                    </span>
-                                )}
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500 }}>
-                                    {activeAccount.allianceName || 'Independent'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div style={{
-                            position: 'relative',
-                            width: '72px',
-                            height: '72px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}>
-                            <svg
-                                style={{
-                                    position: 'absolute',
-                                    width: '84px',
-                                    height: '84px',
-                                    zIndex: 0,
-                                    filter: 'drop-shadow(0 0 4px var(--primary-glow))'
-                                }}
-                                viewBox="0 0 100 100"
-                            >
-                                <circle
-                                    cx="50"
-                                    cy="50"
-                                    r="48"
-                                    fill="none"
-                                    stroke="var(--primary)"
-                                    strokeWidth="1.5"
-                                    strokeDasharray="6 8"
-                                    opacity="0.4"
-                                    strokeLinecap="round"
-                                />
-                            </svg>
-
-                            <div style={{
-                                width: '100%',
-                                height: '100%',
-                                borderRadius: '50%',
-                                background: 'var(--bg-dark)',
-                                border: '2px solid var(--primary)',
-                                boxShadow: '0 0 15px var(--primary-glow)',
-                                overflow: 'hidden',
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    {activeAccount && (
+                        <motion.div
+                            onMouseEnter={() => setIsDonateHovered(true)}
+                            onMouseLeave={() => setIsDonateHovered(false)}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            whileHover={{
+                                scale: 1.02,
+                                backgroundColor: 'rgba(0, 242, 255, 0.06)',
+                                borderColor: 'rgba(0, 242, 255, 0.3)',
+                                boxShadow: '0 0 15px rgba(0, 242, 255, 0.15)'
+                            }}
+                            whileTap={{ scale: 0.98 }}
+                            style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                position: 'relative',
-                                zIndex: 1
-                            }}>
-                                {activeAccount.avatarUrl ? (
-                                    <img
-                                        src={activeAccount.avatarUrl}
-                                        alt="Avatar"
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                    />
-                                ) : (
-                                    <User size={32} color="var(--primary)" />
-                                )}
+                                background: 'rgba(0, 242, 255, 0.03)',
+                                padding: '12px 20px',
+                                borderRadius: '24px',
+                                border: '1px solid rgba(0, 242, 255, 0.1)',
+                                backdropFilter: 'blur(10px)',
+                                height: '106px',
+                                boxSizing: 'border-box',
+                                transition: 'border-color 0.2s, background-color 0.2s',
+                                cursor: 'pointer',
+                                overflow: 'hidden'
+                            }}
+                        >
+                            <a
+                                href="https://ko-fi.com/W0M821KSSE"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
+                            >
+                                <AnimatePresence>
+                                    {isDonateHovered && (
+                                        <motion.span
+                                            initial={{ opacity: 0, width: 0, marginRight: 0 }}
+                                            animate={{ opacity: 1, width: 'auto', marginRight: 12 }}
+                                            exit={{ opacity: 0, width: 0, marginRight: 0 }}
+                                            transition={{ duration: 0.25, ease: 'easeInOut' }}
+                                            style={{
+                                                overflow: 'hidden',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                justifyContent: 'center',
+                                                color: 'var(--text-main)',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 600,
+                                                fontFamily: 'var(--font-main)',
+                                                textShadow: '0 0 8px rgba(0, 242, 255, 0.2)'
+                                            }}
+                                        >
+                                            <div style={{ whiteSpace: 'nowrap' }}>
+                                                Hi! This is uppermosteN, the sole developer of OGame Nexus.
+                                            </div>
+                                            <div style={{ whiteSpace: 'nowrap', marginTop: '4px', color: 'rgba(248, 250, 252, 0.85)' }}>
+                                                If you like what I do, a coffee would be much appreciated ❤️
+                                            </div>
+                                        </motion.span>
+                                    )}
+                                </AnimatePresence>
+                                <img
+                                    height="36"
+                                    style={{ border: '0px', height: '36px', display: 'block' }}
+                                    src="https://storage.ko-fi.com/cdn/kofi2.png?v=6"
+                                    alt="Buy Me a Coffee at ko-fi.com"
+                                />
+                            </a>
+                        </motion.div>
+                    )}
+
+                    {activeAccount && (
+                        <motion.div
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            whileHover={{ scale: 1.02, backgroundColor: 'rgba(0, 242, 255, 0.06)', borderColor: 'rgba(0, 242, 255, 0.3)' }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => onSelect && onSelect('signature')}
+                            title="Customize Empire Signature"
+                            style={{
+                                display: 'flex',
+                                gap: '24px',
+                                alignItems: 'center',
+                                background: 'rgba(0, 242, 255, 0.03)',
+                                padding: '16px 24px',
+                                borderRadius: '24px',
+                                border: '1px solid rgba(0, 242, 255, 0.1)',
+                                backdropFilter: 'blur(10px)',
+                                cursor: 'pointer',
+                                transition: 'border-color 0.2s, background-color 0.2s'
+                            }}
+                        >
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{
+                                    color: '#fff',
+                                    fontWeight: 800,
+                                    fontSize: '1.4rem',
+                                    letterSpacing: '-0.02em',
+                                    textShadow: '0 0 20px rgba(0, 242, 255, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-end',
+                                    gap: '12px'
+                                }}>
+                                    {activeAccount.playerName}
+                                    {activeAccount.honorPoints !== undefined && (
+                                        <span style={{
+                                            fontSize: '0.85rem',
+                                            color: '#22c55e',
+                                            fontWeight: 700,
+                                            background: 'rgba(34, 197, 94, 0.1)',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            border: '1px solid rgba(34, 197, 94, 0.2)'
+                                        }}>
+                                            {activeAccount.honorPoints.toLocaleString()} HP
+                                        </span>
+                                    )}
+                                    {activeAccount.playerClass !== undefined && (
+                                        <span style={{
+                                            fontSize: '0.85rem',
+                                            color: activeAccount.playerClass === 1 ? '#E6953C' : activeAccount.playerClass === 2 ? '#ef4444' : '#06b6d4',
+                                            fontWeight: 900,
+                                            background: 'rgba(255, 255, 255, 0.03)',
+                                            padding: '2px 10px',
+                                            borderRadius: '8px',
+                                            border: `1px solid ${activeAccount.playerClass === 1 ? 'rgba(230, 149, 60, 0.3)' : activeAccount.playerClass === 2 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(6, 182, 212, 0.3)'}`,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.05em'
+                                        }}>
+                                            {activeAccount.playerClass === 1 ? 'Collector' : activeAccount.playerClass === 2 ? 'Warrior' : 'Discoverer'}
+                                        </span>
+                                    )}
+                                </div>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-end',
+                                    gap: '12px',
+                                    marginTop: '4px'
+                                }}>
+                                    {activeAccount.score !== undefined && (
+                                        <div
+                                            title={activeAccount.totalPlayers ? `Rank ${activeAccount.rank} of ${activeAccount.totalPlayers} players` : undefined}
+                                            style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 700 }}
+                                        >
+                                            {activeAccount.score.toLocaleString()} pts
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: '6px', fontWeight: 500 }}>
+                                                (#{activeAccount.rank})
+                                            </span>
+                                        </div>
+                                    )}
+                                    {activeAccount.allianceTag && (
+                                        <span style={{
+                                            color: 'var(--primary)',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 800,
+                                            background: 'rgba(0, 242, 255, 0.1)',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            border: '1px solid var(--primary-glow)'
+                                        }}>
+                                            {activeAccount.allianceTag}
+                                        </span>
+                                    )}
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500 }}>
+                                        {activeAccount.allianceName || 'Independent'}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
-                    </motion.div>
-                )}
+
+                            <div style={{
+                                position: 'relative',
+                                width: '72px',
+                                height: '72px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                <svg
+                                    style={{
+                                        position: 'absolute',
+                                        width: '84px',
+                                        height: '84px',
+                                        zIndex: 0,
+                                        filter: 'drop-shadow(0 0 4px var(--primary-glow))'
+                                    }}
+                                    viewBox="0 0 100 100"
+                                >
+                                    <circle
+                                        cx="50"
+                                        cy="50"
+                                        r="48"
+                                        fill="none"
+                                        stroke="var(--primary)"
+                                        strokeWidth="1.5"
+                                        strokeDasharray="6 8"
+                                        opacity="0.4"
+                                        strokeLinecap="round"
+                                    />
+                                </svg>
+
+                                <div style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderRadius: '50%',
+                                    background: 'var(--bg-dark)',
+                                    border: '2px solid var(--primary)',
+                                    boxShadow: '0 0 15px var(--primary-glow)',
+                                    overflow: 'hidden',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    position: 'relative',
+                                    zIndex: 1
+                                }}>
+                                    {activeAccount.avatarUrl ? (
+                                        <img
+                                            src={activeAccount.avatarUrl}
+                                            alt="Avatar"
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        <User size={32} color="var(--primary)" />
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </div>
             </div>
 
             <div className="bento-grid" style={{
@@ -904,9 +980,9 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                 <div style={{ position: 'relative', width: '80px', height: '80px', flexShrink: 0 }}>
                                     <div style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: 'linear-gradient(135deg, #43D159, #00F2FF, #BD00FF)', opacity: 0.2, filter: 'blur(10px)' }} />
                                     <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)', position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <img 
-                                            src={`icons/lifeforms/${lfStats.domSpecies.toLowerCase().replace(/['’‘`\s]/g, "")}-icon-large.jpg`} 
-                                            alt="" 
+                                        <img
+                                            src={`icons/lifeforms/${lfStats.domSpecies.toLowerCase().replace(/['’‘`\s]/g, "")}-icon-large.jpg`}
+                                            alt=""
                                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                             onError={(e) => { (e.target as any).src = 'icons/lifeforms/humans-icon-large.jpg'; }}
                                         />
@@ -933,10 +1009,10 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         const species = lifeformSpecies.find(s => s.lifeformId === id);
                                         const experience = activeAccount?.lifeformExperience?.find(e => e.lifeformId === id);
                                         const name = species?.lifeformName || (id === 1 ? 'Humans' : id === 2 ? "Rock'tal" : id === 3 ? 'Mechas' : 'Kaelesh');
-                                        
+
                                         const level = experience?.level || 0;
                                         const progress = level >= 100 ? 100 : (experience && experience.nextLevelExp > 0 ? (experience.currentExp / experience.nextLevelExp) * 100 : 0);
-                                        
+
                                         const colors: Record<number, string> = {
                                             1: '#43D159', // Human - Green
                                             2: '#FF4D00', // Rocktal - Orange
@@ -946,9 +1022,9 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         const color = colors[id];
 
                                         return (
-                                            <div key={id} style={{ 
-                                                display: 'flex', 
-                                                flexDirection: 'column', 
+                                            <div key={id} style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
                                                 gap: '4px',
                                                 padding: '8px 12px',
                                                 background: level > 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.01)',
@@ -969,9 +1045,9 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                     <motion.div
                                                         initial={{ width: 0 }}
                                                         animate={{ width: `${progress}%` }}
-                                                        style={{ 
-                                                            height: '100%', 
-                                                            background: color, 
+                                                        style={{
+                                                            height: '100%',
+                                                            background: color,
                                                             boxShadow: `0 0 10px ${color}33`,
                                                             borderRadius: '2px'
                                                         }}
@@ -1364,13 +1440,13 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                 itemStyle={{ color: '#fff' }}
                                 formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
                             />
-                            <Area 
-                                type="monotone" 
-                                dataKey="totalMsu" 
-                                name="Total Yield (MSU)" 
-                                stroke={THEME_CYAN} 
-                                fillOpacity={1} 
-                                fill="url(#colorTotal)" 
+                            <Area
+                                type="monotone"
+                                dataKey="totalMsu"
+                                name="Total Yield (MSU)"
+                                stroke={THEME_CYAN}
+                                fillOpacity={1}
+                                fill="url(#colorTotal)"
                                 strokeWidth={3}
                             />
                             <Area type="monotone" dataKey="msu" name="Expedition (MSU)" stroke="#22c55e" fill="transparent" strokeDasharray="5 5" />

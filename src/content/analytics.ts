@@ -50,8 +50,52 @@ interface AnalyticsDataAggregate {
     trackingDays: number;
 }
 
+interface OptionalRowConfig {
+    id: string;
+    enabled: boolean;
+}
+
+const DEFAULT_ROWS_CONFIG: OptionalRowConfig[] = [
+    { id: 'totalToday', enabled: true },
+    { id: 'avgExpo', enabled: true },
+    { id: 'avgExpo7D', enabled: false },
+    { id: 'avgExpo30D', enabled: false },
+    { id: 'avgCombat', enabled: true },
+    { id: 'avgCombat7D', enabled: false },
+    { id: 'avgCombat30D', enabled: false },
+    { id: 'avgAll', enabled: true },
+    { id: 'avgAll7D', enabled: false },
+    { id: 'avgAll30D', enabled: false }
+];
+
+let cachedRowsConfig: OptionalRowConfig[] | null = null;
+let isConfigLoaded = false;
+let dragSourceIndex = -1;
+
 export function renderAnalyticsTab(container: HTMLElement, expeditions: any[], lifeforms: any[] = [], combats: any[] = [], debrisHarvests: any[] = []) {
     container.innerHTML = '';
+
+    if (!isConfigLoaded) {
+        cachedRowsConfig = [...DEFAULT_ROWS_CONFIG];
+        isConfigLoaded = true;
+        try {
+            chrome.storage.local.get(['nexusTerminalRowsConfig'], (res) => {
+                if (res && res.nexusTerminalRowsConfig) {
+                    const loadedConfig = res.nexusTerminalRowsConfig as OptionalRowConfig[];
+                    const merged = [...loadedConfig];
+                    DEFAULT_ROWS_CONFIG.forEach(d => {
+                        if (!merged.find(m => m.id === d.id)) {
+                            merged.push(d);
+                        }
+                    });
+                    cachedRowsConfig = merged;
+                    renderAnalyticsTab(container, expeditions, lifeforms, combats, debrisHarvests);
+                }
+            });
+        } catch (e) {
+            console.error("Error loading row config", e);
+        }
+    }
 
     // 1. Month bounds for the timeline bars
     const mBounds = getMonthBounds(currentReferenceDate);
@@ -192,7 +236,7 @@ export function renderAnalyticsTab(container: HTMLElement, expeditions: any[], l
 
     // Bottom Table
     const globalAggregate = processAnalyticsData(expeditions, expeditions, currentReferenceDate, trackingDays, lifeforms, combats, debrisHarvests, combats, debrisHarvests);
-    const tableDiv = renderTotalsTable(aggregate, globalAggregate);
+    const tableDiv = renderTotalsTable(aggregate, globalAggregate, expeditions, lifeforms, combats, debrisHarvests, container);
     container.appendChild(tableDiv);
 }
 
@@ -754,15 +798,44 @@ function renderShipsCard(aggregate: AnalyticsDataAggregate) {
     return card;
 }
 
-function renderTotalsTable(ag: AnalyticsDataAggregate, globalAg: AnalyticsDataAggregate) {
+function renderTotalsTable(
+    ag: AnalyticsDataAggregate,
+    globalAg: AnalyticsDataAggregate,
+    expeditions: any[],
+    lifeforms: any[],
+    combats: any[],
+    debrisHarvests: any[],
+    container: HTMLElement
+) {
     const card = document.createElement('div');
     card.style.cssText = `
         background: rgba(15, 23, 42, 0.4);
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 8px;
-        overflow: hidden;
+        overflow: visible;
         backdrop-filter: blur(8px);
+        position: relative;
     `;
+
+    // Inject styles once if not present
+    if (!document.getElementById('og-nexus-totals-styles')) {
+        const style = document.createElement('style');
+        style.id = 'og-nexus-totals-styles';
+        style.textContent = `
+            .nexus-cog-row-item {
+                transition: transform 0.2s, background-color 0.2s, border-color 0.2s;
+            }
+            .nexus-cog-row-item:hover {
+                background: rgba(255, 255, 255, 0.06) !important;
+                border-color: rgba(0, 242, 255, 0.3) !important;
+                box-shadow: 0 0 10px rgba(0, 242, 255, 0.1);
+            }
+            .nexus-cog-row-item:active {
+                cursor: grabbing !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
 
     const t = document.createElement('table');
     t.style.cssText = `width: 100%; border-collapse: collapse; text-align: right; color: #e2e8f0; font-size: 13px;`;
@@ -781,60 +854,167 @@ function renderTotalsTable(ag: AnalyticsDataAggregate, globalAg: AnalyticsDataAg
         '<img src="' + chrome.runtime.getURL('icons/lifeforms/artifact-icon-large.png') + '" style="width: 24px; filter: grayscale(0.2); border-radius: 2px;">'
     ];
 
-    hdrs.forEach((h) => {
+    hdrs.forEach((h, idx) => {
         const th = document.createElement('th');
-        th.style.cssText = `padding: 12px; border-right: 1px solid rgba(255,255,255,0.03); ${h ? 'text-align: center;' : 'width: 120px;'}`;
-        th.innerHTML = h;
+        th.style.cssText = `padding: 12px; border-right: 1px solid rgba(255,255,255,0.03); ${h ? 'text-align: center;' : 'width: 240px; position: relative;'}`;
+        if (idx === 0) {
+            th.innerHTML = `
+                <div class="og-nexus-totals-settings-cog" style="cursor: pointer; display: flex; align-items: center; justify-content: center; color: #64748b; transition: color 0.2s; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 10;" title="Configure Rows">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </div>
+            `;
+            const cog = th.querySelector('.og-nexus-totals-settings-cog') as HTMLElement;
+            if (cog) {
+                cog.onmouseenter = () => { cog.style.color = '#00f2ff'; };
+                cog.onmouseleave = () => { cog.style.color = '#64748b'; };
+                cog.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleSettingsModal(card, container, expeditions, lifeforms, combats, debrisHarvests);
+                };
+            }
+        } else {
+            th.innerHTML = h;
+        }
         tr.appendChild(th);
     });
     t.appendChild(tr);
 
+    // Render fixed rows
     const expedRow = document.createElement('tr');
+    expedRow.style.background = 'rgba(0, 242, 255, 0.08)';
     expedRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #94a3b8; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Expeditions</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 2px solid rgba(255,255,255,0.05); font-weight: bold;">${formatNumber(ag.totalExpeditions) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.expeditionsResources.metal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.expeditionsResources.crystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.expeditionsResources.deuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.expeditionsResources.msu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(ag.expeditionsResources.darkMatter) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(ag.expeditionsResources.artifacts) || '-'}</td>
+        <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.03);">Expeditions</td>
+        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.03); font-weight: bold;">${formatNumber(ag.totalExpeditions) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.metal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.crystal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.deuterium) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.msu) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatExactNumber(ag.expeditionsResources.darkMatter) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatExactNumber(ag.expeditionsResources.artifacts) || '-'}</td>
     `;
     t.appendChild(expedRow);
 
     const combatRow = document.createElement('tr');
+    combatRow.style.background = 'rgba(239, 68, 68, 0.08)';
     combatRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #94a3b8; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Combats</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 2px solid rgba(255,255,255,0.05); font-weight: bold;">${formatNumber(ag.totalCombats) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.combatsResources.metal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.combatsResources.crystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.combatsResources.deuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.combatsResources.msu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
+        <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.03);">Combats</td>
+        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.03); font-weight: bold;">${formatNumber(ag.totalCombats) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.metal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.crystal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.deuterium) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.msu) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
     `;
     t.appendChild(combatRow);
 
     const debrisRow = document.createElement('tr');
+    debrisRow.style.background = 'rgba(34, 197, 94, 0.08)';
     debrisRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #94a3b8; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Debris Fields</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 2px solid rgba(255,255,255,0.05); font-weight: bold;">${formatNumber(ag.totalDebris) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.debrisResources.metal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.debrisResources.crystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.debrisResources.deuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(ag.debrisResources.msu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
+        <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.03);">Debris Fields</td>
+        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.03); font-weight: bold;">${formatNumber(ag.totalDebris) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.metal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.crystal) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.deuterium) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.msu) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
     `;
     t.appendChild(debrisRow);
 
+    // 7D and 30D aggregate setups
+    const ts7D = Date.now() / 1000 - 7 * 24 * 3600;
+    const ts30D = Date.now() / 1000 - 30 * 24 * 3600;
+
+    const exps7D = expeditions.filter(e => e.timestamp >= ts7D);
+    const combats7D = combats.filter(c => c.timestamp >= ts7D);
+    const debris7D = debrisHarvests.filter(d => d.timestamp >= ts7D);
+    const lf7D = lifeforms.filter(l => l.timestamp >= ts7D);
+
+    const exps30D = expeditions.filter(e => e.timestamp >= ts30D);
+    const combats30D = combats.filter(c => c.timestamp >= ts30D);
+    const debris30D = debrisHarvests.filter(d => d.timestamp >= ts30D);
+    const lf30D = lifeforms.filter(l => l.timestamp >= ts30D);
+
+    const trackingDays7D = Math.max(1, Math.min(7, globalAg.trackingDays));
+    const trackingDays30D = Math.max(1, Math.min(30, globalAg.trackingDays));
+
+    const ag7D = processAnalyticsData(exps7D, exps7D, currentReferenceDate, trackingDays7D, lf7D, combats7D, debris7D, combats7D, debris7D);
+    const ag30D = processAnalyticsData(exps30D, exps30D, currentReferenceDate, trackingDays30D, lf30D, combats30D, debris30D, combats30D, debris30D);
+
+    const avgDenominator = globalAg.trackingDays;
+
+    // Render configured optional rows in order
+    const currentRows = cachedRowsConfig || DEFAULT_ROWS_CONFIG;
+    currentRows.forEach((rowConf) => {
+        if (!rowConf.enabled) return;
+        const rowData = getRowMetadata(rowConf.id, ag, globalAg, ag7D, ag30D, avgDenominator, trackingDays7D, trackingDays30D);
+        if (!rowData) return;
+
+        const rowTr = document.createElement('tr');
+        rowTr.style.background = rowData.bg;
+        rowTr.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
+        rowTr.innerHTML = `
+            <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05);">${rowData.title}</td>
+            <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold;">${formatNumber(rowData.events, 0) || '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C;">${formatNumber(Math.round(rowData.metal), 0) || '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6;">${formatNumber(Math.round(rowData.crystal), 0) || '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159;">${formatNumber(Math.round(rowData.deuterium), 0) || '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1);">${formatNumber(Math.round(rowData.msu), 0) || '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7;">${rowData.dm !== null ? formatExactNumber(Math.round(rowData.dm)) : '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24;">${rowData.artifacts !== null ? formatExactNumber(Math.round(rowData.artifacts)) : '-'}</td>
+        `;
+        t.appendChild(rowTr);
+    });
+
+    card.appendChild(t);
+    return card;
+}
+
+function getRowName(id: string): string {
+    switch (id) {
+        case 'totalToday': return '∑ Today';
+        case 'avgExpo': return 'Average Expo Events';
+        case 'avgExpo7D': return 'Average Expo Events (7D)';
+        case 'avgExpo30D': return 'Average Expo Events (30D)';
+        case 'avgCombat': return 'Average Combat Events';
+        case 'avgCombat7D': return 'Average Combat Events (7D)';
+        case 'avgCombat30D': return 'Average Combat Events (30D)';
+        case 'avgAll': return 'Average All Events';
+        case 'avgAll7D': return 'Average All Events (7D)';
+        case 'avgAll30D': return 'Average All Events (30D)';
+        default: return id;
+    }
+}
+
+function getRowColor(id: string): string {
+    if (id === 'totalToday') return '#ec4899';
+    if (id.startsWith('avgExpo')) return '#00f2ff';
+    if (id.startsWith('avgCombat')) return '#ef4444';
+    if (id.startsWith('avgAll')) return '#eab308';
+    return '#94a3b8';
+}
+
+function getRowMetadata(
+    rowId: string,
+    ag: AnalyticsDataAggregate,
+    globalAg: AnalyticsDataAggregate,
+    ag7D: AnalyticsDataAggregate,
+    ag30D: AnalyticsDataAggregate,
+    avgDenominator: number,
+    trackingDays7D: number,
+    trackingDays30D: number
+) {
     const totalEvents = ag.totalExpeditions + ag.totalCombats + ag.totalDebris;
     const totalMetal = ag.expeditionsResources.metal + ag.combatsResources.metal + ag.debrisResources.metal;
     const totalCrystal = ag.expeditionsResources.crystal + ag.combatsResources.crystal + ag.debrisResources.crystal;
     const totalDeuterium = ag.expeditionsResources.deuterium + ag.combatsResources.deuterium + ag.debrisResources.deuterium;
     const totalMsu = ag.expeditionsResources.msu + ag.combatsResources.msu + ag.debrisResources.msu;
-    const totalDarkMatter = ag.expeditionsResources.darkMatter; // Combats and Debris do not drop DM
-    const totalArtifacts = ag.expeditionsResources.artifacts; // Combats and Debris do not drop Artifacts
+    const totalDarkMatter = ag.expeditionsResources.darkMatter;
+    const totalArtifacts = ag.expeditionsResources.artifacts;
 
     const globalEvents = globalAg.totalExpeditions + globalAg.totalCombats + globalAg.totalDebris;
     const globalMetal = globalAg.expeditionsResources.metal + globalAg.combatsResources.metal + globalAg.debrisResources.metal;
@@ -844,65 +1024,319 @@ function renderTotalsTable(ag: AnalyticsDataAggregate, globalAg: AnalyticsDataAg
     const globalDarkMatter = globalAg.expeditionsResources.darkMatter;
     const globalArtifacts = globalAg.expeditionsResources.artifacts;
 
-    const avgDenominator = globalAg.trackingDays;
+    switch (rowId) {
+        case 'totalToday':
+            return {
+                title: '∑ Today',
+                bg: 'rgba(236, 72, 153, 0.08)',
+                color: '#ec4899',
+                events: totalEvents,
+                metal: totalMetal,
+                crystal: totalCrystal,
+                deuterium: totalDeuterium,
+                msu: totalMsu,
+                dm: totalDarkMatter,
+                artifacts: totalArtifacts
+            };
+        case 'avgExpo':
+            return {
+                title: 'Average Expo Events',
+                bg: 'rgba(0, 242, 255, 0.08)',
+                color: '#00f2ff',
+                events: globalAg.totalExpeditions / avgDenominator,
+                metal: globalAg.expeditionsResources.metal / avgDenominator,
+                crystal: globalAg.expeditionsResources.crystal / avgDenominator,
+                deuterium: globalAg.expeditionsResources.deuterium / avgDenominator,
+                msu: globalAg.expeditionsResources.msu / avgDenominator,
+                dm: globalAg.expeditionsResources.darkMatter / avgDenominator,
+                artifacts: globalAg.expeditionsResources.artifacts / avgDenominator
+            };
+        case 'avgExpo7D':
+            return {
+                title: 'Average Expo Events (7D)',
+                bg: 'rgba(0, 242, 255, 0.08)',
+                color: '#00f2ff',
+                events: ag7D.totalExpeditions / trackingDays7D,
+                metal: ag7D.expeditionsResources.metal / trackingDays7D,
+                crystal: ag7D.expeditionsResources.crystal / trackingDays7D,
+                deuterium: ag7D.expeditionsResources.deuterium / trackingDays7D,
+                msu: ag7D.expeditionsResources.msu / trackingDays7D,
+                dm: ag7D.expeditionsResources.darkMatter / trackingDays7D,
+                artifacts: ag7D.expeditionsResources.artifacts / trackingDays7D
+            };
+        case 'avgExpo30D':
+            return {
+                title: 'Average Expo Events (30D)',
+                bg: 'rgba(0, 242, 255, 0.08)',
+                color: '#00f2ff',
+                events: ag30D.totalExpeditions / trackingDays30D,
+                metal: ag30D.expeditionsResources.metal / trackingDays30D,
+                crystal: ag30D.expeditionsResources.crystal / trackingDays30D,
+                deuterium: ag30D.expeditionsResources.deuterium / trackingDays30D,
+                msu: ag30D.expeditionsResources.msu / trackingDays30D,
+                dm: ag30D.expeditionsResources.darkMatter / trackingDays30D,
+                artifacts: ag30D.expeditionsResources.artifacts / trackingDays30D
+            };
+        case 'avgCombat':
+            return {
+                title: 'Average Combat Events',
+                bg: 'rgba(239, 68, 68, 0.08)',
+                color: '#ef4444',
+                events: globalAg.totalCombats / avgDenominator,
+                metal: globalAg.combatsResources.metal / avgDenominator,
+                crystal: globalAg.combatsResources.crystal / avgDenominator,
+                deuterium: globalAg.combatsResources.deuterium / avgDenominator,
+                msu: globalAg.combatsResources.msu / avgDenominator,
+                dm: null,
+                artifacts: null
+            };
+        case 'avgCombat7D':
+            return {
+                title: 'Average Combat Events (7D)',
+                bg: 'rgba(239, 68, 68, 0.08)',
+                color: '#ef4444',
+                events: ag7D.totalCombats / trackingDays7D,
+                metal: ag7D.combatsResources.metal / trackingDays7D,
+                crystal: ag7D.combatsResources.crystal / trackingDays7D,
+                deuterium: ag7D.combatsResources.deuterium / trackingDays7D,
+                msu: ag7D.combatsResources.msu / trackingDays7D,
+                dm: null,
+                artifacts: null
+            };
+        case 'avgCombat30D':
+            return {
+                title: 'Average Combat Events (30D)',
+                bg: 'rgba(239, 68, 68, 0.08)',
+                color: '#ef4444',
+                events: ag30D.totalCombats / trackingDays30D,
+                metal: ag30D.combatsResources.metal / trackingDays30D,
+                crystal: ag30D.combatsResources.crystal / trackingDays30D,
+                deuterium: ag30D.combatsResources.deuterium / trackingDays30D,
+                msu: ag30D.combatsResources.msu / trackingDays30D,
+                dm: null,
+                artifacts: null
+            };
+        case 'avgAll':
+            return {
+                title: 'Average All Events',
+                bg: 'rgba(234, 179, 8, 0.08)',
+                color: '#eab308',
+                events: globalEvents / avgDenominator,
+                metal: globalMetal / avgDenominator,
+                crystal: globalCrystal / avgDenominator,
+                deuterium: globalDeuterium / avgDenominator,
+                msu: globalMsu / avgDenominator,
+                dm: globalDarkMatter / avgDenominator,
+                artifacts: globalArtifacts / avgDenominator
+            };
+        case 'avgAll7D':
+            return {
+                title: 'Average All Events (7D)',
+                bg: 'rgba(234, 179, 8, 0.08)',
+                color: '#eab308',
+                events: (ag7D.totalExpeditions + ag7D.totalCombats + ag7D.totalDebris) / trackingDays7D,
+                metal: (ag7D.expeditionsResources.metal + ag7D.combatsResources.metal + ag7D.debrisResources.metal) / trackingDays7D,
+                crystal: (ag7D.expeditionsResources.crystal + ag7D.combatsResources.crystal + ag7D.debrisResources.crystal) / trackingDays7D,
+                deuterium: (ag7D.expeditionsResources.deuterium + ag7D.combatsResources.deuterium + ag7D.debrisResources.deuterium) / trackingDays7D,
+                msu: (ag7D.expeditionsResources.msu + ag7D.combatsResources.msu + ag7D.debrisResources.msu) / trackingDays7D,
+                dm: ag7D.expeditionsResources.darkMatter / trackingDays7D,
+                artifacts: ag7D.expeditionsResources.artifacts / trackingDays7D
+            };
+        case 'avgAll30D':
+            return {
+                title: 'Average All Events (30D)',
+                bg: 'rgba(234, 179, 8, 0.08)',
+                color: '#eab308',
+                events: (ag30D.totalExpeditions + ag30D.totalCombats + ag30D.totalDebris) / trackingDays30D,
+                metal: (ag30D.expeditionsResources.metal + ag30D.combatsResources.metal + ag30D.debrisResources.metal) / trackingDays30D,
+                crystal: (ag30D.expeditionsResources.crystal + ag30D.combatsResources.crystal + ag30D.debrisResources.crystal) / trackingDays30D,
+                deuterium: (ag30D.expeditionsResources.deuterium + ag30D.combatsResources.deuterium + ag30D.debrisResources.deuterium) / trackingDays30D,
+                msu: (ag30D.expeditionsResources.msu + ag30D.combatsResources.msu + ag30D.debrisResources.msu) / trackingDays30D,
+                dm: ag30D.expeditionsResources.darkMatter / trackingDays30D,
+                artifacts: ag30D.expeditionsResources.artifacts / trackingDays30D
+            };
+        default:
+            return null;
+    }
+}
 
-    // 1. Total Today
-    const dataRow = document.createElement('tr');
-    dataRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Total Today</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalEvents) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalMetal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalCrystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalDeuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(totalMsu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(totalDarkMatter) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(totalArtifacts) || '-'}</td>
+function renderDragList(listContainer: HTMLElement, config: OptionalRowConfig[], onUpdate: (c: OptionalRowConfig[]) => void) {
+    listContainer.innerHTML = '';
+    config.forEach((item, idx) => {
+        const rowItem = document.createElement('div');
+        rowItem.className = 'nexus-cog-row-item';
+        rowItem.draggable = true;
+        rowItem.style.cssText = `
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: ${item.enabled ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.2)'};
+            border: 1px solid ${item.enabled ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.02)'};
+            border-radius: 6px;
+            cursor: grab;
+            user-select: none;
+            gap: 12px;
+            opacity: ${item.enabled ? '1' : '0.45'};
+            transition: opacity 0.2s, background-color 0.2s, border-color 0.2s;
+        `;
+        
+        rowItem.addEventListener('dragstart', (e) => {
+            dragSourceIndex = idx;
+            rowItem.style.opacity = '0.4';
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+            }
+        });
+        rowItem.addEventListener('dragend', () => {
+            rowItem.style.opacity = item.enabled ? '1' : '0.45';
+        });
+        rowItem.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+        rowItem.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (dragSourceIndex !== -1 && dragSourceIndex !== idx) {
+                const updated = [...config];
+                const draggedItem = updated[dragSourceIndex];
+                updated.splice(dragSourceIndex, 1);
+                updated.splice(idx, 0, draggedItem);
+                onUpdate(updated);
+            }
+        });
+
+        const handle = document.createElement('span');
+        handle.innerHTML = '&#8942;&#8942;';
+        handle.style.cssText = 'color: #64748b; cursor: grab; font-weight: bold; font-size: 14px;';
+        rowItem.appendChild(handle);
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = item.enabled;
+        checkbox.style.cssText = 'cursor: pointer; width: 14px; height: 14px;';
+        checkbox.addEventListener('change', () => {
+            const updated = [...config];
+            updated[idx] = { ...updated[idx], enabled: checkbox.checked };
+            onUpdate(updated);
+        });
+        rowItem.appendChild(checkbox);
+
+        const dot = document.createElement('div');
+        const color = getRowColor(item.id);
+        dot.style.cssText = `width: 8px; height: 8px; border-radius: 50%; background: ${color}; box-shadow: 0 0 6px ${color}; flex-shrink: 0;`;
+        rowItem.appendChild(dot);
+
+        const name = document.createElement('span');
+        name.textContent = getRowName(item.id);
+        name.style.cssText = 'color: #e2e8f0; font-size: 13px; font-weight: 500;';
+        rowItem.appendChild(name);
+
+        listContainer.appendChild(rowItem);
+    });
+}
+
+let isSettingsModalOpen = false;
+
+function toggleSettingsModal(
+    card: HTMLElement,
+    container: HTMLElement,
+    expeditions: any[],
+    lifeforms: any[],
+    combats: any[],
+    debrisHarvests: any[]
+) {
+    const existing = card.querySelector('.og-nexus-totals-settings-modal');
+    if (existing) {
+        existing.remove();
+        isSettingsModalOpen = false;
+        return;
+    }
+
+    isSettingsModalOpen = true;
+
+    const modal = document.createElement('div');
+    modal.className = 'og-nexus-totals-settings-modal';
+    modal.style.cssText = `
+        position: absolute;
+        left: 12px;
+        top: 48px;
+        background: rgba(10, 16, 27, 0.98);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(0, 242, 255, 0.25);
+        border-radius: 12px;
+        padding: 16px;
+        z-index: 1000;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(0, 242, 255, 0.15);
+        width: 320px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
     `;
-    t.appendChild(dataRow);
 
-    // 2. Avg. Expo. Events
-    const avgExpoRow = document.createElement('tr');
-    avgExpoRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Avg. Expo. Events</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(globalAg.totalExpeditions / avgDenominator, 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.metal / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.crystal / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.deuterium / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.expeditionsResources.msu / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(Math.round(globalAg.expeditionsResources.darkMatter / avgDenominator)) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatExactNumber(Math.round(globalAg.expeditionsResources.artifacts / avgDenominator)) || '-'}</td>
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;';
+    
+    const title = document.createElement('span');
+    title.textContent = 'Configure Table Rows';
+    title.style.cssText = 'color: #fff; font-weight: 700; font-size: 14px;';
+    
+    const saveBtn = document.createElement('button');
+    saveBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
     `;
-    t.appendChild(avgExpoRow);
-
-    // 3. Avg. Combat Events
-    const avgCombatRow = document.createElement('tr');
-    avgCombatRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 2px solid rgba(255,255,255,0.05);">Avg. Combat Events</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(globalAg.totalCombats / avgDenominator, 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.metal / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.crystal / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.deuterium / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); border-bottom: 2px solid rgba(255,255,255,0.05);">${formatNumber(Math.round(globalAg.combatsResources.msu / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 2px solid rgba(255,255,255,0.05);">-</td>
+    saveBtn.style.cssText = `
+        background: rgba(34, 197, 94, 0.2);
+        color: #22c55e;
+        border: 1px solid rgba(34, 197, 94, 0.4);
+        border-radius: 6px;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
     `;
-    t.appendChild(avgCombatRow);
+    saveBtn.onmouseenter = () => {
+        saveBtn.style.background = 'rgba(34, 197, 94, 0.3)';
+        saveBtn.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.4)';
+    };
+    saveBtn.onmouseleave = () => {
+        saveBtn.style.background = 'rgba(34, 197, 94, 0.2)';
+        saveBtn.style.boxShadow = 'none';
+    };
+    
+    saveBtn.onclick = () => {
+        try {
+            chrome.storage.local.set({ nexusTerminalRowsConfig: cachedRowsConfig }, () => {
+                modal.remove();
+                isSettingsModalOpen = false;
+                renderAnalyticsTab(container, expeditions, lifeforms, combats, debrisHarvests);
+            });
+        } catch (e) {
+            console.error("Failed to save configuration", e);
+            modal.remove();
+            isSettingsModalOpen = false;
+            renderAnalyticsTab(container, expeditions, lifeforms, combats, debrisHarvests);
+        }
+    };
 
-    // 4. Average All Events
-    const avgRow = document.createElement('tr');
-    avgRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: left; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05);">Average All Events</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold;">${formatNumber(globalEvents / avgDenominator, 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C;">${formatNumber(Math.round(globalMetal / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6;">${formatNumber(Math.round(globalCrystal / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159;">${formatNumber(Math.round(globalDeuterium / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">${formatNumber(Math.round(globalMsu / avgDenominator), 0) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7;">${formatExactNumber(Math.round(globalDarkMatter / avgDenominator)) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24;">${formatExactNumber(Math.round(globalArtifacts / avgDenominator)) || '-'}</td>
-    `;
-    t.appendChild(avgRow);
+    header.appendChild(title);
+    header.appendChild(saveBtn);
+    modal.appendChild(header);
 
-    card.appendChild(t);
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = 'max-height: 280px; overflow-y: auto; padding-right: 4px;';
+    listContainer.className = 'custom-scrollbar';
+    modal.appendChild(listContainer);
 
-    return card;
+    const updateList = (newConfig: OptionalRowConfig[]) => {
+        cachedRowsConfig = newConfig;
+        renderDragList(listContainer, cachedRowsConfig, updateList);
+    };
+
+    renderDragList(listContainer, cachedRowsConfig || DEFAULT_ROWS_CONFIG, updateList);
+    card.appendChild(modal);
 }

@@ -989,7 +989,7 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                         let newSpyCount = existing.spyCount;
                         let confidence = existing.confidence;
 
-                        if (dT >= 0.0333) { // Avoid noise/division by zero (minimum 2 minutes)
+                        if (dT >= 9 / 3600) { // Avoid noise/division by zero (minimum 9 seconds)
                             const rateM = Math.max(0, (report.metal - existing.lastSpiedMetal) / dT);
                             const rateC = Math.max(0, (report.crystal - existing.lastSpiedCrystal) / dT);
                             const rateD = Math.max(0, (report.deuterium - existing.lastSpiedDeuterium) / dT);
@@ -1090,6 +1090,19 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
             } catch (err) {
                 console.error("OGame Nexus: Debug delete error", err);
                 sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "GET_ALL_SPIED_PLANETS") {
+        (async () => {
+            try {
+                const planets = await db.spiedPlanets.toArray();
+                sendResponse({ success: true, planets });
+            } catch (err) {
+                console.error("OGame Nexus: Error in GET_ALL_SPIED_PLANETS", err);
+                sendResponse({ success: false, planets: [] });
             }
         })();
         return true;

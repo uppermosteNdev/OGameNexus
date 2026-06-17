@@ -233,6 +233,45 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                     images: ["icons/tutorials/T5/Signature1.jpg", "icons/tutorials/T5/Signature2.jpg"]
                 }
             ]
+        },
+        {
+            id: "raid-radar",
+            title: "Raid Radar",
+            icon: <Activity size={24} color="#00f2ff" />,
+            desc: "Master the empirical inactive player target tracking and resource accumulation projection. Learn how to configure limits, spy targets, and analyze productivity yields around your planets.",
+            badge: "Target Radar",
+            badgeColor: "rgba(0, 242, 255, 0.15)",
+            badgeTextColor: "#00f2ff",
+            view: "raidRadar",
+            accentColor: "#00f2ff",
+            gridClass: "bento-standard",
+            steps: [
+                {
+                    title: "Empirical Farming",
+                    text: "The Raid Radar helps you manage and profit from inactive player planets in an efficient way. Each time you spy any inactive player, Nexus will read their spy report, estimate their planet production and keep track of the loot on that planet since last time spied.",
+                    images: ["icons/tutorials/T6/RaidRadar1.jpg"]
+                },
+                {
+                    title: "Initiate Espionage",
+                    text: "Go to Galaxy view and start spying inactive players from any planet/moon.",
+                    images: ["icons/tutorials/T6/RaidRadar2.jpg"]
+                },
+                {
+                    title: "Production Delta & Confidence",
+                    text: "In order to best estimate the inactive planet production, at least two different spies are needed 10 seconds or more apart. More spies will increase the confidence of that inactive player's production, making it a more accurate target. You can see this confidence meter inside both Raid Radar and in-game Galaxy View.",
+                    images: ["icons/tutorials/T6/RaidRadar3.jpg", "icons/tutorials/T6/RaidRadar4.jpg"]
+                },
+                {
+                    title: "Galaxy View Summary & Filters",
+                    text: "The bottom of the GalaxyView provides a summary of the inactives in each system and also a dropdown with settings that highlight/hide inactive planets based on production values. This helps in visually filtering potentially great targets from worse ones.",
+                    images: ["icons/tutorials/T6/RaidRadar5.jpg"]
+                },
+                {
+                    title: "Advanced Targeting",
+                    text: "Inside the Raid Radar menu, you will have an ever-growing source of inactive targets and multiple ways in which you can filter and search for good targets. For example, one of these is the Best Productivity Vicinities that will show a total of inactive productivity in a configurable system range around each of your planets; this can give you a good idea about close-by areas of target finding.<br /><br />**Take note!** Raid Radar can only precisely calculate inactive planet production but the estimated resources on these planets are just that, estimates - other players may also attack these targets, stealing their resources and Raid Radar has no way of tracking that.",
+                    images: ["icons/tutorials/T6/RaidRadar6.jpg"]
+                }
+            ]
         }
     ];
 

@@ -7,6 +7,7 @@ import { trackDebrisHarvests } from './harvests';
 import { trackCombatReports, injectTodayCombatSummaryCard } from './combats';
 import { trackEspionageReports, trackRawEspionageReports } from './espionage';
 import { renderAnalyticsTab } from './analytics';
+import { initGalaxyView, cleanupGalaxyView } from './galaxy';
 
 /**
  * Safely sends a message to the background script.
@@ -1590,6 +1591,13 @@ const throttledObserverLogic = throttle(() => {
   }
 
   updateFleetProgressOverlay();
+
+  // OGame Galaxy View integration
+  if (document.querySelector("#galaxycomponent")) {
+    initGalaxyView();
+  } else {
+    cleanupGalaxyView();
+  }
 }, 50);
 
 const observer = new MutationObserver((mutations) => {

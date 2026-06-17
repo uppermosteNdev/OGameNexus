@@ -16,7 +16,8 @@ import {
     BookOpen,
     ChevronLeft,
     ChevronRight,
-    ShoppingCart
+    ShoppingCart,
+    Radar
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -26,42 +27,22 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
-    const [isCollapsed, setIsCollapsed] = useState(() => {
-        if (typeof window !== 'undefined') {
-            return window.innerWidth < 1024;
-        }
-        return true;
-    });
-
-    useEffect(() => {
-        const handleDocumentClick = (e: MouseEvent | TouchEvent) => {
-            const sidebarElement = document.querySelector('aside');
-            if (sidebarElement && !sidebarElement.contains(e.target as Node)) {
-                setIsCollapsed(true);
-            }
-        };
-
-        if (!isCollapsed) {
-            document.addEventListener('mousedown', handleDocumentClick);
-            document.addEventListener('touchstart', handleDocumentClick);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleDocumentClick);
-            document.removeEventListener('touchstart', handleDocumentClick);
-        };
-    }, [isCollapsed]);
+    const isCollapsed = true;
+    const [hoveredItem, setHoveredItem] = useState<{ label: string, top: number } | null>(null);
 
     const handleItemClick = (e: React.MouseEvent, itemId: string) => {
-        if (isCollapsed) {
-            e.stopPropagation();
-            setIsCollapsed(false);
-        } else {
-            onSelect(itemId);
-            // On mobile or smaller viewports, auto-collapse after selecting
-            if (window.innerWidth < 1024) {
-                setIsCollapsed(true);
-            }
+        onSelect(itemId);
+    };
+
+    const handleMouseEnter = (e: React.MouseEvent, label: string) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const sidebarElement = e.currentTarget.closest('aside');
+        const sidebarRect = sidebarElement?.getBoundingClientRect();
+        if (sidebarRect) {
+            setHoveredItem({
+                label,
+                top: rect.top - sidebarRect.top + (rect.height / 2)
+            });
         }
     };
 
@@ -70,6 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
         { id: 'expeditions', label: 'Expeditions', icon: <Compass size={22} /> },
         { id: 'lifeforms', label: 'Lifeforms', icon: <Dna size={22} /> },
         { id: 'combat', label: 'Combats', icon: <Swords size={22} /> },
+        { id: 'raidRadar', label: 'Raid Radar', icon: <Radar size={22} /> },
         { id: 'debris', label: 'Debris Fields', icon: <Orbit size={22} /> },
         { id: 'empire', label: 'Empire', icon: <Rocket size={22} /> },
         { id: 'costsPlanner', label: 'Costs Planner', icon: <ShoppingCart size={22} /> },
@@ -83,8 +65,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     return (
         <motion.aside
             animate={{ 
-                width: isCollapsed ? 80 : 280,
-                padding: isCollapsed ? '40px 8px' : '40px 16px'
+                width: 80,
+                padding: '40px 8px'
             }}
             transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
             style={{
@@ -98,22 +80,18 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                 display: 'flex',
                 flexDirection: 'column',
                 zIndex: 100,
-                overflow: 'hidden',
-                cursor: isCollapsed ? 'pointer' : 'default',
-                flexShrink: 0
-            }}
-            onClick={() => {
-                if (isCollapsed) {
-                    setIsCollapsed(false);
-                }
+                overflow: 'visible', // Allow tooltips to overflow aside boundary
+                cursor: 'default',
+                flexShrink: 0,
+                position: 'relative'
             }}
         >
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: isCollapsed ? 'center' : 'flex-start',
-                gap: isCollapsed ? '0px' : '12px',
-                padding: isCollapsed ? '0 0 48px' : '0 12px 48px',
+                justifyContent: 'center',
+                gap: '0px',
+                padding: '0 0 48px',
                 color: 'var(--primary)',
                 textShadow: '0 0 10px var(--primary-glow)',
                 width: '100%',
@@ -133,25 +111,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                         src="icons/nexus.png" 
                         alt="Planet" 
                         style={{ 
-                            width: isCollapsed ? '36px' : '42px', 
-                            height: isCollapsed ? '36px' : '42px', 
+                            width: '36px', 
+                            height: '36px', 
                             objectFit: 'contain',
                             transition: 'all 0.3s ease'
                         }} 
                     />
                 </div>
-                {!isCollapsed && (
-                    <motion.div 
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        transition={{ duration: 0.2 }}
-                        style={{ display: 'flex', flexDirection: 'column', whiteSpace: 'nowrap' }}
-                    >
-                        <span style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '2px', color: '#fff' }}>OG NEXUS</span>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '1px' }}>COMMAND DECK</span>
-                    </motion.div>
-                )}
             </div>
 
             <nav className="sidebar-nav custom-scrollbar" style={{ 
@@ -167,27 +133,28 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                     return (
                         <motion.button
                             key={item.id}
+                            className={`sidebar-item ${isActive ? 'active' : ''}`}
                             onClick={(e) => handleItemClick(e, item.id)}
-                            whileHover={{ x: isCollapsed ? 0 : 4, scale: isCollapsed ? 1.08 : 1 }}
+                            onMouseEnter={(e) => handleMouseEnter(e, item.label)}
+                            onMouseLeave={() => setHoveredItem(null)}
+                            whileHover={{ scale: 1.08 }}
                             whileTap={{ scale: 0.98 }}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: isCollapsed ? 'center' : 'flex-start',
-                                gap: isCollapsed ? '0px' : '16px',
-                                padding: isCollapsed ? '14px 0' : '14px 16px',
+                                justifyContent: 'center',
+                                padding: '14px 0',
                                 borderRadius: '12px',
                                 border: 'none',
                                 background: isActive ? 'linear-gradient(90deg, rgba(0, 242, 255, 0.1) 0%, transparent 100%)' : 'transparent',
                                 color: isActive ? 'var(--primary)' : 'var(--text-muted)',
                                 cursor: 'pointer',
                                 position: 'relative',
-                                textAlign: 'left',
+                                textAlign: 'center',
                                 width: '100%',
                                 overflow: 'hidden',
-                                transition: 'background 0.3s ease, color 0.3s ease, padding 0.3s ease, justify-content 0.3s ease'
+                                transition: 'background 0.3s ease, color 0.3s ease'
                             }}
-                            title={isCollapsed ? item.label : undefined}
                         >
                             {isActive && (
                                 <motion.div
@@ -209,72 +176,96 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                width: isCollapsed ? '100%' : 'auto'
+                                width: '100%'
                             }}>
                                 {item.icon}
                             </span>
-                            {!isCollapsed && (
-                                <motion.span 
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -10 }}
-                                    transition={{ duration: 0.2 }}
-                                    style={{
-                                        fontWeight: isActive ? 600 : 400,
-                                        fontSize: '0.95rem',
-                                        letterSpacing: '0.5px',
-                                        whiteSpace: 'nowrap'
-                                    }}
-                                >
-                                    {item.label}
-                                </motion.span>
-                            )}
                         </motion.button>
                     );
                 })}
             </nav>
 
-            {/* Manual Toggle Button at bottom */}
-            <div style={{
-                display: 'flex',
-                justifyContent: isCollapsed ? 'center' : 'flex-end',
-                paddingTop: '20px',
-                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                marginTop: '16px',
-                width: '100%'
-            }}>
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation(); // Avoid triggering aside's click
-                        setIsCollapsed(!isCollapsed);
-                    }}
-                    style={{
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '8px',
-                        borderRadius: '50%',
-                        transition: 'all 0.2s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.color = 'var(--primary)';
-                        e.currentTarget.style.borderColor = 'var(--primary)';
-                        e.currentTarget.style.background = 'rgba(0, 242, 255, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.color = 'var(--text-muted)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-                    }}
-                    title={isCollapsed ? "Expand Menu" : "Collapse Menu"}
-                >
-                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-                </button>
-            </div>
+            {/* Hover Tooltip Overlay */}
+            {hoveredItem && (
+                <div style={{
+                    position: 'absolute',
+                    left: '92px',
+                    top: `${hoveredItem.top}px`,
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(6, 11, 20, 0.95)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(0, 242, 255, 0.25)',
+                    borderRadius: '10px',
+                    padding: '8px 16px',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    zIndex: 1000,
+                    pointerEvents: 'none',
+                    boxShadow: '0 4px 20px rgba(0, 242, 255, 0.2), inset 0 0 10px rgba(0, 242, 255, 0.05)',
+                    animation: 'nexus-tooltip-fade-in 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                }}>
+                    <div style={{
+                        position: 'absolute',
+                        left: '-6px',
+                        top: '50%',
+                        transform: 'translateY(-50%) rotate(45deg)',
+                        width: '10px',
+                        height: '10px',
+                        background: 'rgba(6, 11, 20, 0.95)',
+                        borderLeft: '1px solid rgba(0, 242, 255, 0.25)',
+                        borderBottom: '1px solid rgba(0, 242, 255, 0.25)',
+                        zIndex: -1
+                    }} />
+                    
+                    {/* Small Vertical Indicator Bar inside Tooltip */}
+                    <div style={{
+                        width: '3px',
+                        height: '14px',
+                        backgroundColor: 'var(--primary)',
+                        borderRadius: '2px',
+                        boxShadow: '0 0 8px var(--primary)'
+                    }} />
+
+                    <span style={{
+                        fontFamily: 'var(--font-main)',
+                        letterSpacing: '0.02em',
+                        color: 'var(--text-main)',
+                        textShadow: '0 0 8px rgba(0, 242, 255, 0.3)'
+                    }}>
+                        {hoveredItem.label}
+                    </span>
+                </div>
+            )}
+
+            {/* Global Keyframe Styles for Tooltip Slide-In */}
+            <style>{`
+                @keyframes nexus-tooltip-fade-in {
+                    from { opacity: 0; transform: translateY(-50%) scale(0.95) translateX(-8px); }
+                    to { opacity: 1; transform: translateY(-50%) scale(1) translateX(0); }
+                }
+                .sidebar-item {
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                }
+                .sidebar-item:not(.active):hover {
+                    color: var(--primary) !important;
+                    background: linear-gradient(90deg, rgba(0, 242, 255, 0.08) 0%, transparent 100%) !important;
+                }
+                .sidebar-item.active:hover {
+                    background: linear-gradient(90deg, rgba(0, 242, 255, 0.18) 0%, transparent 100%) !important;
+                }
+                .sidebar-item svg {
+                    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), filter 0.3s ease !important;
+                }
+                .sidebar-item:hover svg {
+                    filter: drop-shadow(0 0 6px var(--primary-glow)) !important;
+                }
+            `}</style>
         </motion.aside>
     );
 };

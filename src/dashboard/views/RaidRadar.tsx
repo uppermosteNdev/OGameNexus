@@ -11,7 +11,8 @@ import {
     Play,
     CheckCircle2,
     Ship,
-    AlertTriangle
+    AlertTriangle,
+    RotateCcw
 } from 'lucide-react';
 
 const THEME_CYAN = '#0062ff';
@@ -49,13 +50,90 @@ const RaidRadar: React.FC = () => {
     const [sortBy, setSortBy] = useState<'loot' | 'coords' | 'confidence' | 'lastSpied'>('loot');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-    const [activeTab, setActiveTab] = useState<'all' | 'proximity' | 'galaxy' | 'vicinity' | 'productivity'>('all');
+    const [activeTab, setActiveTab] = useState<'all' | 'proximity' | 'galaxy' | 'vicinity' | 'productivity' | 'settings'>('all');
     const [selectedGalaxies, setSelectedGalaxies] = useState<number[]>([]);
     const [proximityPlanetId, setProximityPlanetId] = useState<string>('');
     const [selectedSingleGalaxy, setSelectedSingleGalaxy] = useState<number>(1);
     const [vicinityRange, setVicinityRange] = useState<number>(50);
-    const [productivityRange, setProductivityRange] = useState<number>(30);
+    const [productivityRange, setProductivityRange] = useState<number>(50);
     const [currentPage, setCurrentPage] = useState<number>(1);
+
+    const [intervals, setIntervals] = useState({
+        t0: 10000,
+        t1: 250000,
+        t2: 500000,
+        t3: 1000000
+    });
+
+    const [tempIntervals, setTempIntervals] = useState({
+        t0: 10000,
+        t1: 250000,
+        t2: 500000,
+        t3: 1000000
+    });
+
+    useEffect(() => {
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            chrome.storage.local.get('galaxyIntervals', (result) => {
+                if (result && result.galaxyIntervals) {
+                    setIntervals(prev => ({ ...prev, ...result.galaxyIntervals }));
+                    setTempIntervals(prev => ({ ...prev, ...result.galaxyIntervals }));
+                }
+            });
+        }
+    }, []);
+
+    const galaxiesCount = activeAccount?.galaxies || 9;
+    const galaxyList = useMemo(() => Array.from({ length: galaxiesCount }, (_, i) => i + 1), [galaxiesCount]);
+
+    const handleTempIntervalChange = (key: 't0' | 't1' | 't2' | 't3', value: number) => {
+        setTempIntervals(prev => ({ ...prev, [key]: value }));
+    };
+
+    const validationError = useMemo(() => {
+        const { t0, t1, t2, t3 } = tempIntervals;
+        if (isNaN(t0) || isNaN(t1) || isNaN(t2) || isNaN(t3)) {
+            return "All interval values must be valid numbers.";
+        }
+        if (t0 < 0 || t1 < 0 || t2 < 0 || t3 < 0) {
+            return "Interval values cannot be negative.";
+        }
+        if (t0 >= t1) {
+            return "Gray Threshold must be strictly less than Sky Blue Limit.";
+        }
+        if (t1 >= t2) {
+            return "Sky Blue Limit must be strictly less than Emerald Green Limit.";
+        }
+        if (t2 >= t3) {
+            return "Emerald Green Limit must be strictly less than Amber Orange Limit.";
+        }
+        return null;
+    }, [tempIntervals]);
+
+    const [savedSuccess, setSavedSuccess] = useState(false);
+    const handleSaveIntervals = () => {
+        if (validationError) return;
+        setIntervals(tempIntervals);
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            chrome.storage.local.set({ galaxyIntervals: tempIntervals }, () => {
+                setSavedSuccess(true);
+                setTimeout(() => setSavedSuccess(false), 2000);
+            });
+        } else {
+            setSavedSuccess(true);
+            setTimeout(() => setSavedSuccess(false), 2000);
+        }
+    };
+
+    const handleResetIntervals = () => {
+        const defaults = {
+            t0: 10000,
+            t1: 250000,
+            t2: 500000,
+            t3: 1000000
+        };
+        setTempIntervals(defaults);
+    };
 
     const ITEMS_PER_PAGE = 20;
 
@@ -79,20 +157,17 @@ const RaidRadar: React.FC = () => {
     }, []);
 
     // Calculate dynamic values for each planet (live resource accumulation and required cargo ships)
-    const processedPlanets = useMemo(() => {
+    const allProcessedPlanets = useMemo(() => {
         const now = Date.now() / 1000;
         const isDiscoverer = activeAccount?.playerClass === 3;
         const lootPercentageValue = isDiscoverer ? 75 : 50;
         const lootFactor = lootPercentageValue / 100;
         
         // Only display players who have a calculated storage capacity cap spied
-        // AND whose last spy report is NOT older than 2 days (48 hours)
-        const twoDaysInSeconds = 2 * 24 * 60 * 60; // 172,800 seconds
         const spiedPlanetsWithCap = spiedPlanets.filter(planet => 
             planet.metalCapacity !== undefined && 
             planet.crystalCapacity !== undefined && 
-            planet.deuteriumCapacity !== undefined &&
-            (now - planet.lastSpiedTimestamp) <= twoDaysInSeconds
+            planet.deuteriumCapacity !== undefined
         );
         
         return spiedPlanetsWithCap.map(planet => {
@@ -155,6 +230,12 @@ const RaidRadar: React.FC = () => {
             };
         });
     }, [spiedPlanets, tick, activeAccount]);
+
+    const processedPlanets = useMemo(() => {
+        const now = Date.now() / 1000;
+        const twoDaysInSeconds = 2 * 24 * 60 * 60; // 172,800 seconds
+        return allProcessedPlanets.filter(planet => (now - planet.lastSpiedTimestamp) <= twoDaysInSeconds);
+    }, [allProcessedPlanets, tick]);
 
     // Handle Delete target from DB
     const handleDeletePlanet = async (planetId: string, e: React.MouseEvent) => {
@@ -305,9 +386,9 @@ const RaidRadar: React.FC = () => {
             const maxSystems = activeAccount?.systems || 499;
             const isDonut = activeAccount?.donutSystem === undefined ? true : activeAccount.donutSystem !== 0;
 
-            const vicinityTargets: typeof processedPlanets = [];
+            const vicinityTargets: typeof allProcessedPlanets = [];
 
-            processedPlanets.forEach(target => {
+            allProcessedPlanets.forEach(target => {
                 const targetCoords = parseCoords(target.coords);
                 if (targetCoords.galaxy !== ownCoords.galaxy) return;
 
@@ -330,15 +411,12 @@ const RaidRadar: React.FC = () => {
             // Sort targets by productivity MSU per hour descending
             targetsWithProd.sort((a, b) => b.prodMSU - a.prodMSU);
 
-            // Take the best 20 targets (or all if less than 20)
-            const best20Targets = targetsWithProd.slice(0, 20);
-
             let totalMetalProd = 0;
             let totalCrystalProd = 0;
             let totalDeuteriumProd = 0;
             let totalMSUProd = 0;
 
-            best20Targets.forEach(item => {
+            targetsWithProd.forEach(item => {
                 totalMetalProd += item.target.metalPerHour;
                 totalCrystalProd += item.target.crystalPerHour;
                 totalDeuteriumProd += item.target.deuteriumPerHour;
@@ -351,11 +429,10 @@ const RaidRadar: React.FC = () => {
                 totalCrystalProd,
                 totalDeuteriumProd,
                 totalMSUProd,
-                targetCount: vicinityTargets.length,
-                topTargetsCount: best20Targets.length
+                targetCount: vicinityTargets.length
             };
         }).sort((a, b) => b.totalMSUProd - a.totalMSUProd);
-    }, [ownPlanets, processedPlanets, productivityRange, activeAccount]);
+    }, [ownPlanets, allProcessedPlanets, productivityRange, activeAccount]);
 
     const totalPages = Math.ceil(filteredPlanets.length / ITEMS_PER_PAGE);
 
@@ -448,6 +525,19 @@ const RaidRadar: React.FC = () => {
         if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
         if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
         return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    };
+
+    const formatCompactInterval = (num: number): string => {
+        if (isNaN(num)) return '-';
+        if (num >= 1000000) {
+            const val = num / 1000000;
+            return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + 'M';
+        }
+        if (num >= 1000) {
+            const val = num / 1000;
+            return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + 'K';
+        }
+        return Math.floor(num).toString();
     };
 
     const getConfidenceBadgeColor = (conf: number): string => {
@@ -658,6 +748,27 @@ const RaidRadar: React.FC = () => {
                 >
                     Best Productivity Vicinities
                 </button>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    style={{
+                        padding: '14px 28px',
+                        background: activeTab === 'settings' ? 'rgba(10, 16, 27, 0.98)' : 'rgba(255, 255, 255, 0.01)',
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        borderBottom: activeTab === 'settings' ? '1px solid rgba(10, 16, 27, 0.98)' : 'none',
+                        borderTopLeftRadius: '16px',
+                        borderTopRightRadius: '16px',
+                        color: activeTab === 'settings' ? '#00f2ff' : 'var(--text-muted)',
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        borderTop: activeTab === 'settings' ? '2px solid #0062ff' : '1px solid rgba(255, 255, 255, 0.05)',
+                        outline: 'none',
+                        backdropFilter: 'blur(10px)'
+                    }}
+                >
+                    Settings
+                </button>
             </div>
 
             {/* List and Grid view */}
@@ -676,16 +787,17 @@ const RaidRadar: React.FC = () => {
                             {activeTab === 'proximity' && 'Proximity Inactive Targets'}
                             {activeTab === 'galaxy' && 'Galaxy Inactive Targets'}
                             {activeTab === 'vicinity' && 'Best Loot Vicinities'}
-                            {activeTab === 'productivity' && 'Best Productivity Vicinities (Top 20 Inactives)'}
+                            {activeTab === 'productivity' && 'Best Productivity Vicinities'}
+                            {activeTab === 'settings' && 'Raid Radar Settings'}
                         </h3>
-                        {activeTab !== 'vicinity' && activeTab !== 'productivity' && (
+                        {activeTab !== 'vicinity' && activeTab !== 'productivity' && activeTab !== 'settings' && (
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                 Showing {filteredPlanets.length} targets
                             </span>
                         )}
                     </div>
 
-                    {activeTab !== 'vicinity' && activeTab !== 'productivity' ? (
+                    {activeTab !== 'vicinity' && activeTab !== 'productivity' && activeTab !== 'settings' ? (
                         <>
                             {/* Integrated In-Tab Filters Section */}
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px', background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
@@ -799,7 +911,7 @@ const RaidRadar: React.FC = () => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Choose Galaxy</span>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(g => {
+                                    {galaxyList.map(g => {
                                         const isActive = selectedSingleGalaxy === g;
                                         return (
                                             <button
@@ -853,7 +965,7 @@ const RaidRadar: React.FC = () => {
                                 >
                                     All
                                 </button>
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(g => {
+                                {galaxyList.map(g => {
                                     const isActive = selectedGalaxies.includes(g);
                                     return (
                                         <button
@@ -1359,7 +1471,7 @@ const RaidRadar: React.FC = () => {
                         </div>
                     )}
                 </>
-            ) : (
+            ) : activeTab === 'productivity' ? (
                 <>
                     {/* Productivity Range Slider Control */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px', background: 'rgba(255,255,255,0.01)', padding: '20px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.03)', maxWidth: '500px' }}>
@@ -1405,7 +1517,7 @@ const RaidRadar: React.FC = () => {
                             />
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            Calculates total productivity MSU/h of the best 20 targets in the circular systems of every own planet.
+                            Calculates total productivity MSU/h of all targets in the circular systems of every own planet.
                         </span>
                     </div>
 
@@ -1419,7 +1531,7 @@ const RaidRadar: React.FC = () => {
                         </div>
                     ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '20px', marginTop: '12px' }}>
-                            {productivityData.map(({ own, totalMetalProd, totalCrystalProd, totalDeuteriumProd, totalMSUProd, targetCount, topTargetsCount }) => {
+                            {productivityData.map(({ own, totalMetalProd, totalCrystalProd, totalDeuteriumProd, totalMSUProd, targetCount }) => {
                                 const maxMSUProd = Math.max(...productivityData.map(v => v.totalMSUProd)) || 1;
                                 const percentageOfMax = (totalMSUProd / maxMSUProd) * 100;
                                 const metalPct = totalMSUProd > 0 ? (totalMetalProd / totalMSUProd) * 100 : 0;
@@ -1484,9 +1596,9 @@ const RaidRadar: React.FC = () => {
 
                                         {/* Counts & Targets Badge */}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                            <span>Target Density (Summing Best 20):</span>
+                                            <span>Target Density:</span>
                                             <span style={{ color: '#fff', fontWeight: 700 }}>
-                                                {topTargetsCount === targetCount ? `${targetCount} Targets` : `${topTargetsCount} of ${targetCount} Targets`}
+                                                {targetCount} Targets
                                             </span>
                                         </div>
 
@@ -1510,6 +1622,237 @@ const RaidRadar: React.FC = () => {
                         </div>
                     )}
                 </>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', padding: '12px' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.01)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                            <Globe size={20} color="#00f2ff" />
+                            <h4 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#fff' }}>Galaxy View Highlights (MSU/h Intervals)</h4>
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.6' }}>
+                            Configure the production thresholds (in MSU/h) that define the 5 color-coded highlight bands for inactive players in the Galaxy View. These changes apply immediately in real-time.
+                        </p>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
+                            {/* Threshold 0 */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(255, 255, 255, 0.01)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#64748b', boxShadow: '0 0 6px #64748b' }}></div>
+                                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#cbd5e1' }}>Gray Threshold (Low Yield)</span>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Targets below this value will be highlighted in Gray.</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        step="1000"
+                                        value={isNaN(tempIntervals.t0) ? '' : tempIntervals.t0}
+                                        onChange={(e) => handleTempIntervalChange('t0', parseInt(e.target.value))}
+                                        style={{
+                                            background: 'rgba(0,0,0,0.2)',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            borderRadius: '8px',
+                                            padding: '8px 12px',
+                                            color: '#fff',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 700,
+                                            width: '100%',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, minWidth: '45px' }}>{formatCompactInterval(tempIntervals.t0)}</span>
+                                </div>
+                            </div>
+
+                            {/* Threshold 1 */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(255, 255, 255, 0.01)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#38bdf8', boxShadow: '0 0 6px #38bdf8' }}></div>
+                                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#cbd5e1' }}>Sky Blue Limit (Medium Yield)</span>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Interval between Gray and this limit will be Sky Blue.</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        step="10000"
+                                        value={isNaN(tempIntervals.t1) ? '' : tempIntervals.t1}
+                                        onChange={(e) => handleTempIntervalChange('t1', parseInt(e.target.value))}
+                                        style={{
+                                            background: 'rgba(0,0,0,0.2)',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            borderRadius: '8px',
+                                            padding: '8px 12px',
+                                            color: '#fff',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 700,
+                                            width: '100%',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, minWidth: '45px' }}>{formatCompactInterval(tempIntervals.t1)}</span>
+                                </div>
+                            </div>
+
+                            {/* Threshold 2 */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(255, 255, 255, 0.01)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }}></div>
+                                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#cbd5e1' }}>Emerald Green Limit (High Yield)</span>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Interval between Sky Blue and this limit will be Emerald Green.</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        step="10000"
+                                        value={isNaN(tempIntervals.t2) ? '' : tempIntervals.t2}
+                                        onChange={(e) => handleTempIntervalChange('t2', parseInt(e.target.value))}
+                                        style={{
+                                            background: 'rgba(0,0,0,0.2)',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            borderRadius: '8px',
+                                            padding: '8px 12px',
+                                            color: '#fff',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 700,
+                                            width: '100%',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, minWidth: '45px' }}>{formatCompactInterval(tempIntervals.t2)}</span>
+                                </div>
+                            </div>
+
+                            {/* Threshold 3 */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(255, 255, 255, 0.01)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 6px #f59e0b' }}></div>
+                                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#cbd5e1' }}>Amber Orange Limit (Extreme Yield)</span>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Interval between Emerald Green and this limit will be Amber/Orange.</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        step="50000"
+                                        value={isNaN(tempIntervals.t3) ? '' : tempIntervals.t3}
+                                        onChange={(e) => handleTempIntervalChange('t3', parseInt(e.target.value))}
+                                        style={{
+                                            background: 'rgba(0,0,0,0.2)',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            borderRadius: '8px',
+                                            padding: '8px 12px',
+                                            color: '#fff',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 700,
+                                            width: '100%',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, minWidth: '45px' }}>{formatCompactInterval(tempIntervals.t3)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Visual Color Ribbon showing the color intervals based on values */}
+                        <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#cbd5e1' }}>Active Highlight Bands Visualisation:</span>
+                            <div style={{ display: 'flex', width: '100%', height: '36px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 700 }}>
+                                <div style={{ flex: 1, background: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                                    &lt; {formatCompactInterval(tempIntervals.t0)}/h
+                                </div>
+                                <div style={{ flex: 1.5, background: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000' }}>
+                                    {formatCompactInterval(tempIntervals.t0)} - {formatCompactInterval(tempIntervals.t1)}/h
+                                </div>
+                                <div style={{ flex: 1.5, background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000' }}>
+                                    {formatCompactInterval(tempIntervals.t1)} - {formatCompactInterval(tempIntervals.t2)}/h
+                                </div>
+                                <div style={{ flex: 1.5, background: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000' }}>
+                                    {formatCompactInterval(tempIntervals.t2)} - {formatCompactInterval(tempIntervals.t3)}/h
+                                </div>
+                                <div style={{ flex: 1, background: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                                    &gt; {formatCompactInterval(tempIntervals.t3)}/h
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Validation Error Alert Box */}
+                        {validationError && (
+                            <div style={{
+                                marginTop: '24px',
+                                padding: '12px 16px',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                borderRadius: '8px',
+                                color: '#ef4444',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px'
+                            }}>
+                                <AlertTriangle size={18} />
+                                <span>{validationError}</span>
+                            </div>
+                        )}
+
+                        {/* Actions Panel */}
+                        <div style={{ marginTop: '32px', display: 'flex', gap: '16px', justifyContent: 'flex-start' }}>
+                            <button
+                                disabled={!!validationError}
+                                onClick={handleSaveIntervals}
+                                style={{
+                                    padding: '12px 24px',
+                                    borderRadius: '10px',
+                                    background: validationError 
+                                        ? 'rgba(255, 255, 255, 0.05)' 
+                                        : savedSuccess
+                                            ? 'linear-gradient(135deg, #10b981, #059669)'
+                                            : 'linear-gradient(135deg, #0062ff, #00d4ff)',
+                                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                                    color: validationError ? 'rgba(255, 255, 255, 0.3)' : '#fff',
+                                    cursor: validationError ? 'not-allowed' : 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.9rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    transition: 'all 0.3s ease',
+                                    boxShadow: (validationError || savedSuccess) ? 'none' : '0 4px 15px rgba(0, 98, 255, 0.3)',
+                                    outline: 'none'
+                                }}
+                                className={validationError ? '' : 'save-btn-glow'}
+                            >
+                                <CheckCircle2 size={18} />
+                                {savedSuccess ? "Saved successfully!" : "Save Changes"}
+                            </button>
+
+                            <button
+                                onClick={handleResetIntervals}
+                                style={{
+                                    padding: '12px 24px',
+                                    borderRadius: '10px',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.9rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    transition: 'all 0.3s ease',
+                                    outline: 'none'
+                                }}
+                                className="reset-btn-hover"
+                            >
+                                <RotateCcw size={18} />
+                                Reset to Defaults
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
                 </div>
             </div>
@@ -1552,6 +1895,23 @@ const RaidRadar: React.FC = () => {
                     background: rgba(0, 98, 255, 0.1) !important;
                     border-color: var(--primary) !important;
                     color: #fff !important;
+                }
+                .save-btn-glow:hover {
+                    box-shadow: 0 6px 20px rgba(0, 98, 255, 0.45) !important;
+                    transform: translateY(-1px);
+                    filter: brightness(1.1);
+                }
+                .save-btn-glow:active {
+                    transform: translateY(1px);
+                }
+                .reset-btn-hover:hover {
+                    background: rgba(255, 255, 255, 0.08) !important;
+                    border-color: rgba(255, 255, 255, 0.15) !important;
+                    color: #fff !important;
+                    transform: translateY(-1px);
+                }
+                .reset-btn-hover:active {
+                    transform: translateY(1px);
                 }
             `}</style>
         </div>
