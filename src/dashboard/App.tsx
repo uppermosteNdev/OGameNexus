@@ -101,7 +101,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to get manifest version", e);
         }
-        return "1.1.0";
+        return "1.1.1";
     };
 
     const autoDismissChangelogForNewInstall = (version: string) => {

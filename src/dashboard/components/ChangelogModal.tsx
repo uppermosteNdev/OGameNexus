@@ -12,23 +12,67 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
     const changes = [
         {
             icon: <Radar size={22} color="#00f2ff" />,
-            title: "Stellar Hotspots Heatmap",
-            desc: "Interactive, zoomable galaxy heatmap inside the dashboard tracking localized combat densities with a paginated drill-down log modal."
+            title: "Raid Radar & Galaxy Projections",
+            desc: "Track inactive targets, estimate loot growth, and view color-coded hourly resource production projections with live-calculating tooltips inside the Galaxy View.",
+            customElement: (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <button
+                        onClick={() => {
+                            onAcknowledge();
+                            window.dispatchEvent(new CustomEvent('ognexus_navigated', { detail: { view: 'tutorials' } }));
+                        }}
+                        style={{
+                            background: 'rgba(0, 242, 255, 0.1)',
+                            color: '#00f2ff',
+                            border: '1px solid rgba(0, 242, 255, 0.3)',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0, 242, 255, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0, 242, 255, 0.1)';
+                        }}
+                    >
+                        See tutorial
+                    </button>
+                    <button
+                        onClick={() => {
+                            onAcknowledge();
+                            window.dispatchEvent(new CustomEvent('ognexus_navigated', { detail: { view: 'raidRadar' } }));
+                        }}
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: '#fff',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.05)';
+                        }}
+                    >
+                        Take me there
+                    </button>
+                </div>
+            )
         },
         {
-            icon: <Swords size={22} color="#ef4444" />,
-            title: "Combat Reports Bounty Bar",
-            desc: "Dynamic daily stats card tracking Metal, Crystal, Deuterium loot, Damage Dealt, and Debris Generated from player battles with a dismissable 'New' badge."
-        },
-        {
-            icon: <Activity size={22} color="#10b981" />,
-            title: "Segmented Timelines & Redesigned Averages",
-            desc: "Event charts now segment daily counts by color. The totals table features sorted averages: Total Today, Avg. Expo. Events, Avg. Combat Events, and Average All Events."
-        },
-        {
-            icon: <Compass size={22} color="#facc15" />,
-            title: "Expedition Calculator Booster Scaling",
-            desc: "Integrated the 'Expedition Booster item %' config into the Player Bonuses config to scale forecasted resource finds and optimal cargo presets."
+            icon: <Activity size={22} color="#ec4899" />,
+            title: "At-A-Glance Row Customization",
+            desc: "Added settings cog to customize and sort table rows. Supports HTML5 drag-and-drop ordering, row background color-coding, and storage sync."
         }
     ];
 
@@ -127,7 +171,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.0
+                                v1.1.1
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

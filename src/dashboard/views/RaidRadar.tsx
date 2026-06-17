@@ -589,7 +589,7 @@ const RaidRadar: React.FC = () => {
                         <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Active Spied Targets</span>
                     </div>
                     <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff' }}>
-                        {stats.count} Planets
+                        {allProcessedPlanets.length} Planets
                     </div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Currently registered in database</span>
                 </motion.div>
