@@ -501,7 +501,9 @@ function renderTimelineChart(container: HTMLElement, timeline: any[], expedition
             barContainer.style.transform = 'none';
         };
         barContainer.onclick = () => {
-            currentTimeframe = 'D';
+            if (currentTimeframe === 'ALL') {
+                currentTimeframe = 'D';
+            }
             currentReferenceDate = new Date(currentReferenceDate.getFullYear(), currentReferenceDate.getMonth(), idx + 1);
             renderAnalyticsTab(container, expeditions, lifeforms, combats, debrisHarvests);
         };
@@ -892,8 +894,8 @@ function renderTotalsTable(
         <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.crystal) || '-'}</td>
         <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.deuterium) || '-'}</td>
         <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.msu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatExactNumber(ag.expeditionsResources.darkMatter) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatExactNumber(ag.expeditionsResources.artifacts) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.darkMatter) || '-'}</td>
+        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.artifacts) || '-'}</td>
     `;
     t.appendChild(expedRow);
 
@@ -964,8 +966,8 @@ function renderTotalsTable(
             <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6;">${formatNumber(Math.round(rowData.crystal), 0) || '-'}</td>
             <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159;">${formatNumber(Math.round(rowData.deuterium), 0) || '-'}</td>
             <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1);">${formatNumber(Math.round(rowData.msu), 0) || '-'}</td>
-            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7;">${rowData.dm !== null ? formatExactNumber(Math.round(rowData.dm)) : '-'}</td>
-            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24;">${rowData.artifacts !== null ? formatExactNumber(Math.round(rowData.artifacts)) : '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7;">${rowData.dm !== null ? formatNumber(Math.round(rowData.dm)) : '-'}</td>
+            <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24;">${rowData.artifacts !== null ? formatNumber(Math.round(rowData.artifacts)) : '-'}</td>
         `;
         t.appendChild(rowTr);
     });

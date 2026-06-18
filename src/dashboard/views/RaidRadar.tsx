@@ -10,10 +10,11 @@ import {
     Trash2,
     Play,
     CheckCircle2,
-    Ship,
     AlertTriangle,
-    RotateCcw
+    RotateCcw,
+    Ship
 } from 'lucide-react';
+import { LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';
 
 const THEME_CYAN = '#0062ff';
 const RESOURCE_COLORS = {
@@ -47,7 +48,7 @@ const RaidRadar: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [confidenceFilter, setConfidenceFilter] = useState('all');
-    const [sortBy, setSortBy] = useState<'loot' | 'coords' | 'confidence' | 'lastSpied'>('loot');
+    const [sortBy, setSortBy] = useState<'loot' | 'coords' | 'confidence' | 'lastSpied' | 'production'>('loot');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
     const [activeTab, setActiveTab] = useState<'all' | 'proximity' | 'galaxy' | 'vicinity' | 'productivity' | 'settings'>('all');
@@ -162,6 +163,84 @@ const RaidRadar: React.FC = () => {
         const isDiscoverer = activeAccount?.playerClass === 3;
         const lootPercentageValue = isDiscoverer ? 75 : 50;
         const lootFactor = lootPercentageValue / 100;
+
+        // Calculate dynamic cargo capacity based on research and lifeforms
+        const lifeformCargoBonuses: Record<number, number> = {};
+        if (ownPlanets && activeAccount) {
+            ownPlanets.filter(p => p.type === 'planet').forEach(p => {
+                const setup = p.lifeformSetup || [];
+                const expData = activeAccount.lifeformExperience?.find((e: any) => e.lifeformId === p.lifeformId);
+                let buildingBonus = 0;
+                if (p.lifeformBuildings) {
+                    p.lifeformBuildings.forEach((b: any) => {
+                        if (b.id === 11111) buildingBonus += b.level * 0.005;
+                        else if (b.id === 13107) buildingBonus += b.level * 0.003;
+                        else if (b.id === 13111) buildingBonus += b.level * 0.004;
+                    });
+                }
+                const totalMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
+
+                setup.forEach((slot: any) => {
+                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                    if (!tech || !tech.target) return;
+
+                    const uniqueBonusIds: number[] = [];
+                    const bonusToTargets: Record<number, any[]> = {};
+
+                    tech.target.forEach((t: any) => {
+                        if (!uniqueBonusIds.includes(t.bonusBreakdownId)) {
+                            uniqueBonusIds.push(t.bonusBreakdownId);
+                            bonusToTargets[t.bonusBreakdownId] = [];
+                        }
+                        bonusToTargets[t.bonusBreakdownId].push(t);
+                    });
+
+                    const hasOnlyBonus1 = tech.bonus1BaseValue !== null && tech.bonus1BaseValue !== undefined &&
+                        (tech.bonus2BaseValue === null || tech.bonus2BaseValue === undefined) &&
+                        (tech.bonus3BaseValue === null || tech.bonus3BaseValue === undefined);
+
+                    uniqueBonusIds.forEach((id, index) => {
+                        if (id !== 10) return; // Only cargo capacity bonuses
+
+                        let baseValue = null;
+                        if (index === 0) baseValue = tech.bonus1BaseValue;
+                        else if (index === 1) baseValue = tech.bonus2BaseValue;
+                        else if (index === 2) baseValue = tech.bonus3BaseValue;
+
+                        if (baseValue === null && hasOnlyBonus1) {
+                            baseValue = tech.bonus1BaseValue;
+                        }
+
+                        if (baseValue === null || baseValue === undefined) return;
+
+                        const finalValue = baseValue * slot.level * totalMultiplier;
+                        const targets = bonusToTargets[id];
+                        const shipTargets = targets.filter((t: any) => t.gameKnowledgeId).map((t: any) => t.gameKnowledgeId);
+
+                        const applyToShip = (tid: number) => {
+                            if (tid === 212) return;
+                            lifeformCargoBonuses[tid] = (lifeformCargoBonuses[tid] || 0) + finalValue;
+                        };
+
+                        if (shipTargets.length > 0) {
+                            shipTargets.forEach(applyToShip);
+                        } else {
+                            [202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 213, 214, 215, 218, 219].forEach(applyToShip);
+                        }
+                    });
+                });
+            });
+        }
+
+        const hypLevel = activeAccount?.researches?.find(r => r.id === 114)?.level || 0;
+        const cargoHyperspaceTechMultiplier = activeAccount?.cargoHyperspaceTechMultiplier || 5;
+        const isCollector = activeAccount?.playerClass === 1;
+
+        const lfSmallCargoBonus = lifeformCargoBonuses[202] || 0;
+        const smallCargoCapacity = 5000 * (1 + (hypLevel * cargoHyperspaceTechMultiplier) / 100 + (lfSmallCargoBonus / 100)) * (isCollector ? 1.25 : 1);
+
+        const lfLargeCargoBonus = lifeformCargoBonuses[203] || 0;
+        const largeCargoCapacity = 25000 * (1 + (hypLevel * cargoHyperspaceTechMultiplier) / 100 + (lfLargeCargoBonus / 100)) * (isCollector ? 1.25 : 1);
         
         // Only display players who have a calculated storage capacity cap spied
         const spiedPlanetsWithCap = spiedPlanets.filter(planet => 
@@ -198,8 +277,8 @@ const RaidRadar: React.FC = () => {
             const lootMSU = lootMetal + lootCrystal * 1.5 + lootDeuterium * 3;
 
             // Required cargo count based on capacity (Small = 5,000, Large = 25,000)
-            const smallCargoNeeded = Math.ceil(lootTotal / 5000);
-            const largeCargoNeeded = Math.ceil(lootTotal / 25000);
+            const smallCargoNeeded = Math.ceil(lootTotal / (smallCargoCapacity > 0 ? smallCargoCapacity : 5000));
+            const largeCargoNeeded = Math.ceil(lootTotal / (largeCargoCapacity > 0 ? largeCargoCapacity : 25000));
 
             // Coordinates parse for numeric sorting: "[5:27:5]" -> [5, 27, 5]
             let coordsVal = 0;
@@ -210,8 +289,11 @@ const RaidRadar: React.FC = () => {
                 }
             } catch (e) {}
 
+            const productionMSU = planet.metalPerHour + planet.crystalPerHour * 1.5 + planet.deuteriumPerHour * 3;
+
             return {
                 ...planet,
+                productionMSU,
                 metalTotal: Math.floor(metalTotal),
                 crystalTotal: Math.floor(crystalTotal),
                 deuteriumTotal: Math.floor(deuteriumTotal),
@@ -229,7 +311,7 @@ const RaidRadar: React.FC = () => {
                 coordsVal
             };
         });
-    }, [spiedPlanets, tick, activeAccount]);
+    }, [spiedPlanets, tick, activeAccount, ownPlanets]);
 
     const processedPlanets = useMemo(() => {
         const now = Date.now() / 1000;
@@ -330,6 +412,8 @@ const RaidRadar: React.FC = () => {
                     comparison = a.confidence - b.confidence;
                 } else if (sortBy === 'lastSpied') {
                     comparison = a.lastSpiedTimestamp - b.lastSpiedTimestamp;
+                } else if (sortBy === 'production') {
+                    comparison = a.productionMSU - b.productionMSU;
                 }
 
                 return sortOrder === 'desc' ? -comparison : comparison;
@@ -504,13 +588,21 @@ const RaidRadar: React.FC = () => {
         };
     }, [filteredPlanets]);
 
-    const toggleSort = (field: 'loot' | 'coords' | 'confidence' | 'lastSpied') => {
+    const toggleSort = (field: 'loot' | 'coords' | 'confidence' | 'lastSpied' | 'production') => {
         if (sortBy === field) {
             setSortOrder(o => o === 'asc' ? 'desc' : 'asc');
         } else {
             setSortBy(field);
             setSortOrder('desc');
         }
+    };
+
+    const getIntervalColor = (msuPerHour: number): string => {
+        if (msuPerHour < intervals.t0) return '#64748b'; // Gray
+        if (msuPerHour > intervals.t3) return '#ec4899'; // Hot Pink / Magenta
+        if (msuPerHour > intervals.t2) return '#f59e0b'; // Amber/Orange
+        if (msuPerHour > intervals.t1) return '#10b981'; // Emerald Green
+        return '#38bdf8'; // Sky Blue
     };
 
     const formatNumber = (num: number): string => {
@@ -1009,7 +1101,9 @@ const RaidRadar: React.FC = () => {
                                     <th style={{ textAlign: 'center', padding: '16px 12px', fontWeight: 600, cursor: 'pointer' }} onClick={() => toggleSort('coords')}>
                                         Coords {sortBy === 'coords' && (sortOrder === 'asc' ? '↑' : '↓')}
                                     </th>
-                                    <th style={{ textAlign: 'left', padding: '16px 12px', fontWeight: 600 }}>Empirical Growth Rate</th>
+                                    <th style={{ textAlign: 'left', padding: '16px 12px', fontWeight: 600, cursor: 'pointer' }} onClick={() => toggleSort('production')}>
+                                        Production Rate {sortBy === 'production' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
                                     <th style={{ textAlign: 'right', padding: '16px 12px', fontWeight: 600 }}>Last Spy Resources</th>
                                     <th style={{ textAlign: 'left', padding: '16px 12px', fontWeight: 600 }}>
                                         Current Estimated Resources
@@ -1105,6 +1199,12 @@ const RaidRadar: React.FC = () => {
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '120px' }}>
                                                             <span style={{ color: RESOURCE_COLORS.deuterium, fontWeight: 500 }}>Deuterium:</span>
                                                             <span style={{ fontWeight: 700 }}>+{formatNumber(planet.deuteriumPerHour)}/h</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '120px', borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '4px', paddingTop: '4px', alignItems: 'center' }}>
+                                                            <span style={{ color: getIntervalColor(planet.productionMSU), fontWeight: 600 }}>MSU:</span>
+                                                            <span style={{ fontWeight: 800, color: getIntervalColor(planet.productionMSU) }}>
+                                                                +{formatNumber(planet.productionMSU)}/h
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -1206,44 +1306,36 @@ const RaidRadar: React.FC = () => {
                                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                                                         {/* Small / Large Cargo Requirements Tooltip */}
                                                         <div 
-                                                            className="nexus-tooltip action-button" 
+                                                            className="nexus-tooltip action-button tooltip-left" 
                                                             data-nexus-tooltip={`Requires: ${planet.smallCargoNeeded.toLocaleString()} Small Cargo OR ${planet.largeCargoNeeded.toLocaleString()} Large Cargo to plunder.`}
                                                             style={{
                                                                 background: 'rgba(255, 255, 255, 0.02)',
                                                                 border: '1px solid rgba(255, 255, 255, 0.05)',
-                                                                color: 'var(--primary)',
                                                                 cursor: 'default',
-                                                                padding: '8px',
+                                                                width: '34px',
+                                                                height: '34px',
+                                                                padding: 0,
                                                                 borderRadius: '8px',
                                                                 display: 'flex',
                                                                 alignItems: 'center',
                                                                 justifyContent: 'center'
                                                             }}
                                                         >
-                                                            <Ship size={16} />
+                                                            {typeof chrome !== 'undefined' ? (
+                                                                <img 
+                                                                    src={chrome.runtime.getURL('icons/ships/large-cargo-large.jpg')} 
+                                                                    alt="Large Cargo" 
+                                                                    style={{ 
+                                                                        width: '100%', 
+                                                                        height: '100%', 
+                                                                        borderRadius: '7px',
+                                                                        objectFit: 'cover' 
+                                                                    }} 
+                                                                />
+                                                            ) : (
+                                                                <span style={{ fontSize: '0.65rem', fontWeight: 900 }}>LC</span>
+                                                            )}
                                                         </div>
-
-                                                        {/* Link to spy dispatch page pre-filled */}
-                                                        <a
-                                                            href={`https://s267-en.ogame.gameforge.com/game/index.php?page=ingame&component=fleetdispatch&galaxy=${planet.coords.split(':')[0]}&system=${planet.coords.split(':')[1]}&position=${planet.coords.split(':')[2]}&type=1&mission=6`}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="action-button"
-                                                            style={{
-                                                                background: 'rgba(34, 197, 94, 0.05)',
-                                                                border: '1px solid rgba(34, 197, 94, 0.15)',
-                                                                color: '#22c55e',
-                                                                padding: '8px',
-                                                                borderRadius: '8px',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                textDecoration: 'none'
-                                                            }}
-                                                            title="Dispatch Spy Probe"
-                                                        >
-                                                            <Play size={16} />
-                                                        </a>
 
                                                         {/* Delete Target button */}
                                                         <button
@@ -1858,6 +1950,22 @@ const RaidRadar: React.FC = () => {
             </div>
 
             <style>{`
+                .nexus-tooltip.tooltip-left::after {
+                    left: auto;
+                    right: 0;
+                    transform: translateY(5px);
+                }
+                .nexus-tooltip.tooltip-left::before {
+                    left: auto;
+                    right: 12px;
+                    transform: translateY(5px);
+                }
+                .nexus-tooltip.tooltip-left:hover::after {
+                    transform: translateY(0) !important;
+                }
+                .nexus-tooltip.tooltip-left:hover::before {
+                    transform: translateY(0) !important;
+                }
                 .view {
                     padding: 40px;
                     max-width: 1400px;

@@ -5,10 +5,13 @@ export function formatExactNumber(num: number): string {
 }
 
 export function formatNumber(num: number, decimals: number = 2): string {
-    if (num >= 1000000000) return (num / 1000000000).toFixed(decimals) + 'G';
-    if (num >= 1000000) return (num / 1000000).toFixed(decimals) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(decimals) + 'K';
-    return Math.round(num).toString();
+    const n = num || 0;
+    const d = 2;
+    if (n >= 1000000000000) return (n / 1000000000000).toFixed(d) + 'T';
+    if (n >= 1000000000) return (n / 1000000000).toFixed(d) + 'B';
+    if (n >= 1000000) return (n / 1000000).toFixed(d) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(d) + 'K';
+    return Math.round(n).toString();
 }
 
 export function scrapeDebrisHarvestMessages() {

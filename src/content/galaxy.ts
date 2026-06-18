@@ -514,7 +514,7 @@ export function applyGalaxyRings() {
     else shouldShow = showG0;
 
     if (!shouldShow) {
-      rowEl.style.opacity = '0.15';
+      rowEl.style.opacity = '0.35';
       rowEl.style.transition = 'opacity 0.2s ease';
     } else {
       rowEl.style.opacity = '';

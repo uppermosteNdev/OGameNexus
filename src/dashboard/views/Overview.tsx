@@ -168,11 +168,13 @@ const AtAGlancePanel: React.FC<{
 };
 
 const formatNumber = (num: number) => {
-    if (num >= 1000000000000) return (num / 1000000000000).toFixed(1) + 'T';
-    if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
-    return Math.floor(num || 0).toString();
+    const n = num || 0;
+    const d = 2;
+    if (n >= 1000000000000) return (n / 1000000000000).toFixed(d) + 'T';
+    if (n >= 1000000000) return (n / 1000000000).toFixed(d) + 'B';
+    if (n >= 1000000) return (n / 1000000).toFixed(d) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(d) + 'K';
+    return Math.round(n).toString();
 };
 
 const THEME_CYAN = '#00f2ff';

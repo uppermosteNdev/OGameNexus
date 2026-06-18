@@ -10,10 +10,13 @@ export function formatExactNumber(num: number): string {
 }
 
 export function formatNumber(num: number): string {
-    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'G';
-    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
-    return num.toString();
+    const n = num || 0;
+    const d = 2;
+    if (n >= 1000000000000) return (n / 1000000000000).toFixed(d) + 'T';
+    if (n >= 1000000000) return (n / 1000000000).toFixed(d) + 'B';
+    if (n >= 1000000) return (n / 1000000).toFixed(d) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(d) + 'K';
+    return Math.round(n).toString();
 }
 
 export function scrapeCombatMessages() {
@@ -311,13 +314,7 @@ function triggerSiteTooltips() {
 }
 
 export function formatCompactNumber(num: number): string {
-    if (num >= 1000000) {
-        return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
-    }
-    if (num >= 1000) {
-        return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-    }
-    return num.toString();
+    return formatNumber(num);
 }
 
 function animateValue(obj: HTMLElement, start: number, end: number, duration: number) {
