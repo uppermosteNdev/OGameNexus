@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Radar, Swords, Activity, Compass, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
+import { Radar, Swords, Activity, Compass, ArrowRight, Sparkles, ShieldCheck, Hash } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -73,6 +73,11 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
             icon: <Activity size={22} color="#ec4899" />,
             title: "At-A-Glance Row Customization",
             desc: "Added settings cog to customize and sort table rows. Supports HTML5 drag-and-drop ordering, row background color-coding, and storage sync."
+        },
+        {
+            icon: <Hash size={22} color="#a855f7" />,
+            title: "Standardized Number Formatting",
+            desc: "Unified number displaying across Combats, Expeditions, Harvests, and At-A-Glance modules. Employs T/B/M/K suffixes with exactly 2 decimal places, and displays values under 1,000 as clean, rounded integers."
         }
     ];
 
@@ -171,7 +176,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.1
+                                v1.1.2
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>
