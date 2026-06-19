@@ -321,8 +321,11 @@ export interface LifeformSavedSetup {
 }
 
 export interface SpiedPlanet {
-    planetId: string; // Primary key from data-raw-targetplanetid
-    playerId: string;
+    planetKey: string; // Primary key: `${universe}_${planetId}`
+    planetId: string;
+    playerId: string; // target player ID
+    userPlayerId: string; // active account player ID who spied it
+    universe: string; // active account universe
     playerName: string;
     coords: string; // "5:27:5"
     metalPerHour: number; // Running maximum metal growth rate
@@ -379,6 +382,33 @@ export class OGNexusDB extends Dexie {
             debrisHarvests: 'messageId, playerId, timestamp, coords',
             combatReports: 'messageId, playerId, timestamp, coords, winner',
             spiedPlanets: 'planetId, playerId, coords, lastSpiedTimestamp'
+        });
+
+        this.version(35).stores({
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId'
+        }).upgrade(async (tx) => {
+            try {
+                const accounts = await tx.table('accounts').toArray();
+                const defaultAccount = accounts.sort((a: any, b: any) => b.lastSeen - a.lastSeen)[0];
+                const defaultUniverse = defaultAccount?.universe || 'unknown';
+                const defaultUserPlayerId = defaultAccount?.playerId || 'unknown';
+
+                const rawRecords = await tx.table('spiedPlanets').toArray();
+                const migrated = rawRecords.map(r => {
+                    const uni = r.universe || defaultUniverse;
+                    const userPid = r.userPlayerId || defaultUserPlayerId;
+                    return {
+                        ...r,
+                        universe: uni,
+                        userPlayerId: userPid,
+                        planetKey: `${uni}_${r.planetId}`
+                    };
+                });
+                await tx.table('spiedPlanets').clear();
+                await tx.table('spiedPlanets').bulkPut(migrated);
+            } catch (err) {
+                console.error('OGame Nexus: Failed to migrate spied planets to version 35', err);
+            }
         });
 
         // Seed data for new database installations

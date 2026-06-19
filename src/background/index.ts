@@ -875,7 +875,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     if (account) {
                         for (const combat of newCombats) {
                             if (combat.attackerName && combat.attackerName.toLowerCase() === account.playerName.toLowerCase()) {
-                                const matchingPlanets = await db.spiedPlanets.where('coords').equals(combat.coords).toArray();
+                                const matchingPlanets = await db.spiedPlanets
+                                    .where('coords')
+                                    .equals(combat.coords)
+                                    .filter(p => p.universe === account.universe)
+                                    .toArray();
                                 if (matchingPlanets.length > 0) {
                                     const spiedPlanet = matchingPlanets[0];
                                     // Only reduce if the combat report is newer than our last spied/reduced state
@@ -930,13 +934,14 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
 }
 
     if (message.type === "TRACK_ESPIONAGE") {
-        const { espionageReports, playerId } = message.data;
+        const { espionageReports, userPlayerId, universe } = message.data;
         (async () => {
             try {
                 const finalResults: any[] = [];
 
                 for (const report of espionageReports) {
-                    const existing = await db.spiedPlanets.get(report.planetId);
+                    const planetKey = `${universe}_${report.planetId}`;
+                    const existing = await db.spiedPlanets.get(planetKey);
 
                     if (!existing) {
                         // First spy report: create baseline
@@ -946,8 +951,11 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                         const deuteriumStorageLevel = report.deuteriumStorageLevel || 0;
 
                         const newPlanet = {
+                            planetKey,
                             planetId: report.planetId,
-                            playerId: report.playerId,
+                            playerId: report.playerId, // target player ID
+                            userPlayerId,
+                            universe,
                             playerName: report.playerName,
                             coords: report.coords,
                             metalPerHour: 0,
@@ -1015,6 +1023,9 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
 
                         await db.spiedPlanets.put({
                             ...existing,
+                            planetKey,
+                            userPlayerId,
+                            universe,
                             playerName: report.playerName, // Keep player name updated
                             playerStatus: report.playerStatus,
                             metalPerHour: newMetalRate,
@@ -1096,9 +1107,15 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
     }
 
     if (message.type === "GET_ALL_SPIED_PLANETS") {
+        const { universe } = message.data || {};
         (async () => {
             try {
-                const planets = await db.spiedPlanets.toArray();
+                let planets;
+                if (universe) {
+                    planets = await db.spiedPlanets.where('universe').equals(universe).toArray();
+                } else {
+                    planets = await db.spiedPlanets.toArray();
+                }
                 sendResponse({ success: true, planets });
             } catch (err) {
                 console.error("OGame Nexus: Error in GET_ALL_SPIED_PLANETS", err);

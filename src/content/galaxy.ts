@@ -557,7 +557,8 @@ export function initGalaxyView() {
 
     if (!isCacheLoaded && !isLoadingCache) {
       isLoadingCache = true;
-      chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS" }, (response) => {
+      const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+      chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe } }, (response) => {
         isLoadingCache = false;
         if (response && response.success) {
           spiedPlanetsCache = response.planets || [];

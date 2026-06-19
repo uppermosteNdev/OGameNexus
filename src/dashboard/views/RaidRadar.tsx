@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, Planet } from '../../db';
+import { db, Planet, SpiedPlanet } from '../../db';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Activity,
@@ -39,7 +39,14 @@ const parseCoords = (coordsStr: string) => {
 
 const RaidRadar: React.FC = () => {
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
-    const spiedPlanets = useLiveQuery(() => db.spiedPlanets.toArray()) || [];
+    const spiedPlanets = useLiveQuery<SpiedPlanet[]>(() => {
+        if (!activeAccount) return [];
+        return db.spiedPlanets
+            .where('universe')
+            .equals(activeAccount.universe)
+            .filter(p => p.userPlayerId === activeAccount.playerId)
+            .toArray();
+    }, [activeAccount]) || [];
     const ownPlanets = useLiveQuery<Planet[]>(() => {
         if (!activeAccount) return [];
         return db.planets.where('playerId').equals(activeAccount.playerId).filter(p => p.type === 'planet').toArray();
@@ -320,11 +327,11 @@ const RaidRadar: React.FC = () => {
     }, [allProcessedPlanets, tick]);
 
     // Handle Delete target from DB
-    const handleDeletePlanet = async (planetId: string, e: React.MouseEvent) => {
+    const handleDeletePlanet = async (planetKey: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (confirm("Are you sure you want to remove this spied inactive target?")) {
             try {
-                await db.spiedPlanets.delete(planetId);
+                await db.spiedPlanets.delete(planetKey);
             } catch (err) {
                 console.error("Failed to delete spied target", err);
             }
@@ -1339,7 +1346,7 @@ const RaidRadar: React.FC = () => {
 
                                                         {/* Delete Target button */}
                                                         <button
-                                                            onClick={(e) => handleDeletePlanet(planet.planetId, e)}
+                                                            onClick={(e) => handleDeletePlanet(planet.planetKey, e)}
                                                             className="action-button"
                                                             style={{
                                                                 background: 'rgba(239, 68, 68, 0.05)',

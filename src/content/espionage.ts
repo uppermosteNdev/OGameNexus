@@ -168,9 +168,11 @@ export async function trackEspionageReports(playerId: string) {
 
     updateScrapedSpyCount(espionageData.length);
 
+    const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+
     chrome.runtime.sendMessage({
         type: "TRACK_ESPIONAGE",
-        data: { espionageReports: espionageData, playerId }
+        data: { espionageReports: espionageData, userPlayerId: playerId, universe }
     }, (response) => {
         if (response?.success) {
             response.data.forEach((report: any) => {
@@ -286,9 +288,11 @@ export async function trackRawEspionageReports(playerId: string, htmls: string[]
     // Mark as processed immediately to prevent duplicate sends
     unprocessedReports.forEach(report => processedRawMessageIds.add(report.messageId));
 
+    const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+
     chrome.runtime.sendMessage({
         type: "TRACK_ESPIONAGE",
-        data: { espionageReports: unprocessedReports, playerId }
+        data: { espionageReports: unprocessedReports, userPlayerId: playerId, universe }
     }, (response) => {
         if (response?.success) {
             response.data.forEach((report: any) => {
