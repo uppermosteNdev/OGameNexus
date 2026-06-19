@@ -384,8 +384,54 @@ export class OGNexusDB extends Dexie {
             spiedPlanets: 'planetId, playerId, coords, lastSpiedTimestamp'
         });
 
+        // Version 35 schema drops the old 'spiedPlanets' store (to allow keyPath modification from planetId to planetKey)
+        // and creates 'spiedPlanetsTemp' as a temporary holder to preserve the user's spy cache.
         this.version(35).stores({
-            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId'
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: 'messageId, playerId, timestamp, coords',
+            combatReports: 'messageId, playerId, timestamp, coords, winner',
+            spiedPlanets: null, // Drop the table
+            spiedPlanetsTemp: 'planetId' // Create temp table
+        }).upgrade(async (tx) => {
+            try {
+                // Copy version 34 spied planets to the temporary table before the store is dropped
+                const oldPlanets = await tx.table('spiedPlanets').toArray();
+                if (oldPlanets.length > 0) {
+                    await tx.table('spiedPlanetsTemp').bulkAdd(oldPlanets);
+                }
+            } catch (err) {
+                console.error('OGame Nexus: Error in schema migration v35', err);
+            }
+        });
+
+        // Version 36 schema recreates the 'spiedPlanets' store with the new primary key 'planetKey' and indexes,
+        // migrates data from 'spiedPlanetsTemp' (adding userPlayerId and universe), and drops 'spiedPlanetsTemp'.
+        this.version(36).stores({
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: 'messageId, playerId, timestamp, coords',
+            combatReports: 'messageId, playerId, timestamp, coords, winner',
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId', // Recreated
+            spiedPlanetsTemp: null // Drop temp table
         }).upgrade(async (tx) => {
             try {
                 const accounts = await tx.table('accounts').toArray();
@@ -393,21 +439,29 @@ export class OGNexusDB extends Dexie {
                 const defaultUniverse = defaultAccount?.universe || 'unknown';
                 const defaultUserPlayerId = defaultAccount?.playerId || 'unknown';
 
-                const rawRecords = await tx.table('spiedPlanets').toArray();
-                const migrated = rawRecords.map(r => {
-                    const uni = r.universe || defaultUniverse;
-                    const userPid = r.userPlayerId || defaultUserPlayerId;
-                    return {
-                        ...r,
-                        universe: uni,
-                        userPlayerId: userPid,
-                        planetKey: `${uni}_${r.planetId}`
-                    };
-                });
-                await tx.table('spiedPlanets').clear();
-                await tx.table('spiedPlanets').bulkPut(migrated);
+                let tempPlanets: any[] = [];
+                try {
+                    tempPlanets = await tx.table('spiedPlanetsTemp').toArray();
+                } catch (e) {
+                    // spiedPlanetsTemp does not exist (expected if upgrading from the broken v35 schema)
+                    console.log('OGame Nexus: spiedPlanetsTemp table not present, skipping migration restore.');
+                }
+
+                if (tempPlanets.length > 0) {
+                    const migrated = tempPlanets.map(r => {
+                        const uni = r.universe || defaultUniverse;
+                        const userPid = r.userPlayerId || defaultUserPlayerId;
+                        return {
+                            ...r,
+                            universe: uni,
+                            userPlayerId: userPid,
+                            planetKey: `${uni}_${r.planetId}`
+                        };
+                    });
+                    await tx.table('spiedPlanets').bulkPut(migrated);
+                }
             } catch (err) {
-                console.error('OGame Nexus: Failed to migrate spied planets to version 35', err);
+                console.error('OGame Nexus: Error in schema migration v36', err);
             }
         });
 
