@@ -195,7 +195,13 @@ const DebrisTable: React.FC<{
 };
 
 const DebrisFields: React.FC = () => {
-    const harvests = useLiveQuery(() => db.debrisHarvests.toArray()) || [];
+    const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const harvests = useLiveQuery(
+        () => activeAccount
+            ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray()
+            : [],
+        [activeAccount]
+    ) || [];
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
     const rates = settings || { metal: 3, crystal: 2, deuterium: 1 };
 

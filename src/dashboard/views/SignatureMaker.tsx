@@ -98,7 +98,7 @@ const SignatureMaker: React.FC<SignatureMakerProps> = ({ onBack }) => {
     ) ?? 0;
 
     const harvestCount = useLiveQuery(
-        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).count() : 0,
+        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).count() : 0,
         [activeAccount]
     ) ?? 0;
 

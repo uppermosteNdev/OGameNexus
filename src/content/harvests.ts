@@ -56,12 +56,13 @@ export function scrapeDebrisHarvestMessages() {
 
 export function trackDebrisHarvests(playerId: string) {
     const harvests = scrapeDebrisHarvestMessages();
+    const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
 
     if (harvests.length > 0) {
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
             chrome.runtime.sendMessage({
                 type: "TRACK_DEBRIS",
-                data: { harvests, playerId }
+                data: { harvests, playerId, universe }
             }, (response) => {
                 if (response && response.success) {
                     response.data.forEach((harvest: any) => {

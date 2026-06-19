@@ -1089,7 +1089,8 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
       </div>
     `;
 
-    chrome.runtime.sendMessage({ type: "GET_ALL_ANALYTICS", playerId }, (response) => {
+    const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+    chrome.runtime.sendMessage({ type: "GET_ALL_ANALYTICS", playerId, universe }, (response) => {
       if (response && response.success) {
         renderAnalyticsTab(container, response.expeditions, response.lifeforms || [], response.combats || [], response.debrisHarvests || []);
       } else {

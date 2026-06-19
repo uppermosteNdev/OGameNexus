@@ -634,6 +634,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "GET_ALL_ANALYTICS") {
         const playerId = String(message.playerId || message.data?.playerId || '').trim();
+        const universe = String(message.universe || message.data?.universe || '').trim();
         (async () => {
             try {
                 const results = await db.expeditions
@@ -652,7 +653,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     return String(c.playerId).trim() === playerId;
                 });
                 const debrisHarvests = await db.debrisHarvests
-                    .filter(d => String(d.playerId).trim() === playerId)
+                    .filter(d => String(d.playerId).trim() === playerId && (!universe || d.universe === universe))
                     .toArray();
                 sendResponse({ success: true, expeditions: results, lifeforms, combats, debrisHarvests });
             } catch (err) {
@@ -705,29 +706,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === "TRACK_DEBRIS") {
-        const { harvests, playerId } = message.data;
+        const { harvests, playerId, universe } = message.data;
         (async () => {
             try {
-                const messageIds = harvests.map((d: any) => d.messageId);
-                const existingHarvests = await db.debrisHarvests.bulkGet(messageIds);
+                const harvestKeys = harvests.map((d: any) => `${universe}_${d.messageId}`);
+                const existingHarvests = await db.debrisHarvests.bulkGet(harvestKeys);
                 const newHarvests: any[] = [];
                 const finalResults: any[] = [];
-
+ 
                 harvests.forEach((harvest: any, index: number) => {
                     const existing = existingHarvests[index];
+                    const harvestKey = harvestKeys[index];
                     if (!existing) {
-                        const newEntry = { ...harvest, tracked: true, playerId };
+                        const newEntry = { ...harvest, harvestKey, universe, tracked: true, playerId };
                         newHarvests.push(newEntry);
                         finalResults.push({ ...newEntry, isNew: true });
                     } else {
                         finalResults.push(existing);
                     }
                 });
-
+ 
                 if (newHarvests.length > 0) {
                     await db.debrisHarvests.bulkPut(newHarvests);
                 }
-
+ 
                 sendResponse({ success: true, data: finalResults, newCount: newHarvests.length });
             } catch (err) {
                 console.error("OGame Nexus: Debris tracking error", err);

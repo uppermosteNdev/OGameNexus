@@ -174,6 +174,7 @@ export interface LifeformDiscovery {
 }
 
 export interface DebrisHarvest {
+    harvestKey: string;
     messageId: string;
     playerId: string;
     timestamp: number;
@@ -186,6 +187,7 @@ export interface DebrisHarvest {
     recyclerAmount?: number;
     totalCapacity?: number;
     tracked: boolean;
+    universe: string;
 }
 
 export interface CombatReport {
@@ -462,6 +464,87 @@ export class OGNexusDB extends Dexie {
                 }
             } catch (err) {
                 console.error('OGame Nexus: Error in schema migration v36', err);
+            }
+        });
+
+        // Version 37 schema drops 'debrisHarvests' to change keyPath to 'harvestKey' (two-step migration)
+        this.version(37).stores({
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: null, // Drop table
+            debrisHarvestsTemp: 'messageId', // Temp table
+            combatReports: 'messageId, playerId, timestamp, coords, winner',
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId'
+        }).upgrade(async (tx) => {
+            try {
+                // Copy existing debris harvests to temp table before store is dropped
+                const oldHarvests = await tx.table('debrisHarvests').toArray();
+                if (oldHarvests.length > 0) {
+                    await tx.table('debrisHarvestsTemp').bulkAdd(oldHarvests);
+                }
+            } catch (err) {
+                console.error('OGame Nexus: Error in schema migration v37', err);
+            }
+        });
+
+        // Version 38 schema recreates 'debrisHarvests' with 'harvestKey' as primary key
+        // and populates it from 'debrisHarvestsTemp' (mapping to universe) before dropping temp table.
+        this.version(38).stores({
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: 'harvestKey, messageId, playerId, timestamp, coords, universe', // Recreated
+            debrisHarvestsTemp: null, // Drop temp table
+            combatReports: 'messageId, playerId, timestamp, coords, winner',
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId'
+        }).upgrade(async (tx) => {
+            try {
+                const accounts = await tx.table('accounts').toArray();
+                const accountMap = new Map<string, string>();
+                accounts.forEach((acc: any) => {
+                    accountMap.set(acc.playerId, acc.universe);
+                });
+
+                const defaultAccount = accounts.sort((a: any, b: any) => b.lastSeen - a.lastSeen)[0];
+                const defaultUniverse = defaultAccount?.universe || 'unknown';
+
+                let tempHarvests: any[] = [];
+                try {
+                    tempHarvests = await tx.table('debrisHarvestsTemp').toArray();
+                } catch (e) {
+                    console.log('OGame Nexus: debrisHarvestsTemp table not present, skipping migration restore.');
+                }
+
+                if (tempHarvests.length > 0) {
+                    const migrated = tempHarvests.map(r => {
+                        const uni = r.universe || accountMap.get(r.playerId) || defaultUniverse;
+                        return {
+                            ...r,
+                            universe: uni,
+                            harvestKey: r.harvestKey || `${uni}_${r.messageId}`
+                        };
+                    });
+                    await tx.table('debrisHarvests').bulkPut(migrated);
+                }
+            } catch (err) {
+                console.error('OGame Nexus: Error in schema migration v38', err);
             }
         });
 

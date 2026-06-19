@@ -61,7 +61,7 @@ const DataManagement: React.FC = () => {
                 planets: p.length,
                 expeditions: await db.expeditions.where('playerId').equals(activeAccount.playerId).count(),
                 lifeforms: await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).count(),
-                debris: await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).count(),
+                debris: await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).count(),
                 combats: await db.combatReports.where('playerId').equals(activeAccount.playerId).count(),
                 todos: tCount
             };
@@ -161,7 +161,7 @@ const DataManagement: React.FC = () => {
             const planets = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
             const expeditions = await db.expeditions.where('playerId').equals(activeAccount.playerId).toArray();
             const lifeformDiscoveries = await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).toArray();
-            const debrisHarvests = await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).toArray();
+            const debrisHarvests = await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray();
             const combatReports = await db.combatReports.where('playerId').equals(activeAccount.playerId).toArray();
 
             const pIds = planets.map(p => p.id);
@@ -321,7 +321,15 @@ const DataManagement: React.FC = () => {
             // 5. Debris Harvests
             if (backup.debrisHarvests && backup.debrisHarvests.length > 0) {
                 setNexusImportLog(prev => [...prev, `Restoring ${backup.debrisHarvests.length} debris harvesting logs...`]);
-                await db.debrisHarvests.bulkPut(backup.debrisHarvests);
+                const migratedDebris = backup.debrisHarvests.map((d: any) => {
+                    const uni = d.universe || backup.universe || activeAccount?.universe || 'unknown';
+                    return {
+                        ...d,
+                        universe: uni,
+                        harvestKey: d.harvestKey || `${uni}_${d.messageId}`
+                    };
+                });
+                await db.debrisHarvests.bulkPut(migratedDebris);
                 setNexusStats(s => ({ ...s, processed: s.processed + backup.debrisHarvests.length, imported: s.imported + backup.debrisHarvests.length }));
             }
 
@@ -1236,16 +1244,20 @@ const DataManagement: React.FC = () => {
                     const debrisToInsert: any[] = [];
                     let debrisSkipped = 0;
                     let debrisErrors = 0;
-
+ 
                     for (const report of rawAcc.debrisFieldReports) {
                         const messageId = String(report.id);
-                        if (existingDebris.has(messageId)) {
+                        const universe = String(acc.serverId);
+                        const harvestKey = `${universe}_${messageId}`;
+                        if (existingDebris.has(harvestKey)) {
                             processed++;
                             skipped++;
                             debrisSkipped++;
                         } else {
                             try {
                                 debrisToInsert.push({
+                                    harvestKey,
+                                    universe,
                                     messageId: messageId,
                                     playerId: String(acc.playerId),
                                     timestamp: (report.date || 0) / (String(report.date || 0).length > 10 ? 1000 : 1),

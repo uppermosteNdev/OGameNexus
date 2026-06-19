@@ -249,7 +249,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
 
     // Debris Harvests Data
     const debrisHarvests = useLiveQuery(
-        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray() : [],
         [activeAccount]
     ) || [];
 
