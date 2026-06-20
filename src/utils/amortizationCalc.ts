@@ -290,13 +290,17 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         const staffBonus = (account?.hasCommander && account?.hasAdmiral && account?.hasEngineer && account?.hasGeologist && account?.hasTechnocrat) ? 0.02 : 0;
         const allyTraderBonus = account?.allianceClass === 1 ? 0.05 : 0;
 
+        const maxCrawlers = (m + c + d) * universeSpeed;
+        const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);
+        const crawlerBonus = activeCrawlers * 0.0002;
+
         const boosterMetal = p.boosters?.metal || 0;
         const boosterCrystal = p.boosters?.crystal || 0;
         const boosterDeut = p.boosters?.deuterium || 0;
 
-        const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal + boosterMetal + geologistBonus + staffBonus + allyTraderBonus;
-        const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal + boosterCrystal + geologistBonus + staffBonus + allyTraderBonus;
-        const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut + boosterDeut + geologistBonus + staffBonus + allyTraderBonus;
+        const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal + boosterMetal + geologistBonus + staffBonus + allyTraderBonus + crawlerBonus;
+        const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal + boosterCrystal + geologistBonus + staffBonus + allyTraderBonus + crawlerBonus;
+        const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut + boosterDeut + geologistBonus + staffBonus + allyTraderBonus + crawlerBonus;
 
         results.planets[p.id] = {
             base: { metal: baseMetal, crystal: baseCrystal, deuterium: baseDeut },
@@ -649,8 +653,16 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             const techB = prodData.globalBonuses[resKey as keyof typeof prodData.globalBonuses];
                             const classB = (state.account.playerClass === 1) ? 0.25 : 0;
 
+                            const mVal = p.metalMine || 0;
+                            const cVal = p.crystalMine || 0;
+                            const dVal = p.deuteriumMine || 0;
+                            const uSpeed = state.account?.universeSpeed || 1;
+                            const maxCr = (mVal + cVal + dVal) * uSpeed;
+                            const activeCr = Math.min(p.crawlers || 0, maxCr);
+                            const crawlerB = activeCr * 0.0002;
+
                             breakdownStr = `\n                            - Multiplier Breakdown (${resKey}): ${(m * 100).toFixed(1)}% 
-                                [100% Base + ${(plasmaB * 100).toFixed(1)}% Plasma + ${(lfbB * 100).toFixed(1)}% LF Buildings + ${(techB * 100).toFixed(1)}% LF Techs + ${(classB * 100).toFixed(0)}% Class]`;
+                                [100% Base + ${(plasmaB * 100).toFixed(1)}% Plasma + ${(lfbB * 100).toFixed(1)}% LF Buildings + ${(techB * 100).toFixed(1)}% LF Techs + ${(classB * 100).toFixed(0)}% Class + ${(crawlerB * 100).toFixed(1)}% Crawlers]`;
                         } else if (entry.type === AmortizationType.LifeformProductionResearches || entry.type === AmortizationType.LifeformExpeditionResearches) {
                             const effect = entry.effect as any;
                             const techMult = getPlanetTechMultiplier(p, state.account);

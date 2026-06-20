@@ -294,6 +294,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                         sensorPhalanx: facilities.find((f: any) => f.id === 42)?.level,
                                         jumpGate: facilities.find((f: any) => f.id === 43)?.level
                                     } : {}),
+                                    crawlers: supplies?.crawlers !== undefined ? supplies.crawlers : (empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers),
                                     lifeformId: lifeformId || overview?.planetData?.lifeformId || empirePlanet?.lifeformId || existing?.lifeformId,
 
                                     // Security: LF Tech levels can only go up. Merge incoming with existing.
@@ -315,6 +316,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     } : {})
                                 } : {
                                     // Even if not the active planet, if we have empire data for it, merge it
+                                    crawlers: empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers,
                                     ships: empirePlanet?.ships || existing?.ships,
                                     defenses: empirePlanet?.defenses || existing?.defenses,
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || []),

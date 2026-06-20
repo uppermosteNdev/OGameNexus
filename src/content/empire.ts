@@ -78,6 +78,9 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
             if (techId && planet.ships) {
                 const count = getEntityLevel(val);
                 planet.ships[parseInt(techId)] = count;
+                if (parseInt(techId) === 217) {
+                    planet.crawlers = count;
+                }
             }
         });
 
@@ -314,4 +317,299 @@ function mapTechToPlanet(planet: Partial<Planet>, techId: number, level: number)
         case 42: planet.sensorPhalanx = level; break;
         case 43: planet.jumpGate = level; break;
     }
+}
+
+export function parseAjaxEmpireJson(
+    ajaxData: any,
+    isMoonView: boolean
+): { planets: Partial<Planet>[], research: Record<number, number> } {
+    const planets: Partial<Planet>[] = [];
+    const research: Record<number, number> = {};
+
+    let data = ajaxData;
+    if (ajaxData && typeof ajaxData.mergedArray === 'string') {
+        try {
+            data = JSON.parse(ajaxData.mergedArray);
+        } catch (e) {
+            console.error("OGame Nexus: Failed to parse mergedArray from AJAX response", e);
+        }
+    }
+
+    const rawPlanets = data?.planets || [];
+    const groups = data?.groups || {};
+
+    // 1. Extract global standard research from the first planet
+    if (rawPlanets.length > 0 && groups.research) {
+        const firstPlanet = rawPlanets[0];
+        groups.research.forEach((techId: number) => {
+            const val = firstPlanet[techId];
+            if (val !== undefined) {
+                research[techId] = typeof val === 'number' ? val : parseInt(val);
+            }
+        });
+    }
+
+    // 2. Parse planet/moon details
+    rawPlanets.forEach((p: any) => {
+        const planet: Partial<Planet> = {
+            id: String(p.id),
+            type: isMoonView ? 'moon' : 'planet',
+            name: p.name,
+            coords: p.coordinates ? p.coordinates.replace(/[\[\]]/g, '') : undefined,
+            diameter: p.diameter ? parseInt(p.diameter.replace(/\D/g, '')) : undefined,
+            fieldsUsed: p.fieldUsed ? parseInt(p.fieldUsed) : undefined,
+            fieldsTotal: p.fieldMax ? parseInt(p.fieldMax) : undefined,
+            ships: {},
+            defenses: {},
+            lastUpdated: Date.now()
+        };
+
+        // Parse hourly production rates
+        if (p.production && p.production.hourly) {
+            planet.production = {
+                metal: p.production.hourly["0"] !== undefined ? (typeof p.production.hourly["0"] === 'number' ? p.production.hourly["0"] : parseInt(p.production.hourly["0"])) : 0,
+                crystal: p.production.hourly["1"] !== undefined ? (typeof p.production.hourly["1"] === 'number' ? p.production.hourly["1"] : parseInt(p.production.hourly["1"])) : 0,
+                deuterium: p.production.hourly["2"] !== undefined ? (typeof p.production.hourly["2"] === 'number' ? p.production.hourly["2"] : parseInt(p.production.hourly["2"])) : 0,
+                lastUpdated: Date.now()
+            };
+        }
+
+        // Parse storage capacities
+        if (p.metalStorage !== undefined) {
+            planet.metalCapacity = typeof p.metalStorage === 'number' ? p.metalStorage : parseInt(p.metalStorage);
+        }
+        if (p.crystalStorage !== undefined) {
+            planet.crystalCapacity = typeof p.crystalStorage === 'number' ? p.crystalStorage : parseInt(p.crystalStorage);
+        }
+        if (p.deuteriumStorage !== undefined) {
+            planet.deuteriumCapacity = typeof p.deuteriumStorage === 'number' ? p.deuteriumStorage : parseInt(p.deuteriumStorage);
+        }
+
+        // Parse temperature (e.g., "-7°C to 33°C")
+        if (p.temperature) {
+            const temps = p.temperature.match(/(-?\d+)/g);
+            if (temps && temps.length >= 2) {
+                planet.tempMin = parseInt(temps[0]);
+                planet.tempMax = parseInt(temps[1]);
+            }
+        }
+
+        // Map supply levels (Mine levels, storages)
+        if (groups.supply) {
+            groups.supply.forEach((techId: number) => {
+                const level = p[techId] !== undefined ? parseInt(p[techId]) : 0;
+                mapTechToPlanet(planet, techId, level);
+            });
+        }
+
+        // Map station levels (Robotics, Shipyard, Research Lab, Space Dock, Silo, etc.)
+        if (groups.station) {
+            groups.station.forEach((techId: number) => {
+                const level = p[techId] !== undefined ? parseInt(p[techId]) : 0;
+                mapTechToPlanet(planet, techId, level);
+            });
+        }
+
+        // Map ship counts
+        if (groups.ships) {
+            groups.ships.forEach((techId: number) => {
+                const count = p[techId] !== undefined ? parseInt(p[techId]) : 0;
+                if (planet.ships) planet.ships[techId] = count;
+            });
+        }
+
+        if (p["217"] !== undefined) {
+            planet.crawlers = typeof p["217"] === 'number' ? p["217"] : parseInt(p["217"]);
+        } else if (planet.ships && planet.ships[217] !== undefined) {
+            planet.crawlers = planet.ships[217];
+        }
+
+        // Map defense counts
+        if (groups.defence) {
+            groups.defence.forEach((techId: number) => {
+                const count = p[techId] !== undefined ? parseInt(p[techId]) : 0;
+                if (planet.defenses) planet.defenses[techId] = count;
+            });
+        }
+
+        // Map all lifeform building levels
+        const lfBuildings: { id: number, name?: string, level: number }[] = [];
+        const lfBuildingGroups = ['lifeform1buildings', 'lifeform2buildings', 'lifeform3buildings', 'lifeform4buildings'];
+        lfBuildingGroups.forEach((groupName) => {
+            const buildingIds = groups[groupName] || [];
+            buildingIds.forEach((techId: number) => {
+                const level = p[techId] !== undefined ? parseInt(p[techId]) : 0;
+                if (level > 0) {
+                    lfBuildings.push({ id: techId, level });
+                }
+            });
+        });
+        if (lfBuildings.length > 0) planet.lifeformBuildings = lfBuildings;
+
+        // Map all lifeform tech levels (active slots check handled during DB write)
+        const lfSetup: { slotNumber: number, selectedTechId: number | null, level: number }[] = [];
+        const lfResearchGroups = ['lifeform1research', 'lifeform2research', 'lifeform3research', 'lifeform4research'];
+        lfResearchGroups.forEach((groupName) => {
+            const researchIds = groups[groupName] || [];
+            researchIds.forEach((techId: number) => {
+                const level = p[techId] !== undefined ? parseInt(p[techId]) : 0;
+                if (level > 0) {
+                    const techStr = techId.toString();
+                    let slotNumber = 0;
+                    if (techStr.length === 5 && techStr.startsWith('1')) {
+                        slotNumber = parseInt(techStr.substring(3, 5), 10);
+                    }
+                    const techData = LIFEFORM_TECH_DATA.find(t => t.gkId === techId);
+                    const normalizedTechId = techData ? techData.id : techId;
+                    lfSetup.push({ slotNumber, selectedTechId: normalizedTechId, level });
+                }
+            });
+        });
+        if (lfSetup.length > 0) planet.lifeformSetup = lfSetup;
+
+        // Infer active lifeformId from building levels (second digit of techId e.g. 13101: 3=Mechas)
+        let inferredLifeformId = 0;
+        const firstLfBuilding = lfBuildings.find(b => b.level > 0);
+        if (firstLfBuilding) {
+            const techStr = firstLfBuilding.id.toString();
+            if (techStr.length === 5 && techStr.startsWith('1')) {
+                inferredLifeformId = parseInt(techStr[1], 10);
+            }
+        }
+        // Fallback to active tech research selection
+        if (!inferredLifeformId && lfSetup.length > 0) {
+            const firstLfTech = lfSetup.find(t => t.level > 0);
+            if (firstLfTech && firstLfTech.selectedTechId) {
+                const techData = LIFEFORM_TECH_DATA.find(t => t.id === firstLfTech.selectedTechId);
+                if (techData) {
+                    inferredLifeformId = techData.lifeformId;
+                }
+            }
+        }
+        if (inferredLifeformId > 0) {
+            planet.lifeformId = inferredLifeformId;
+        }
+
+        // Parse Active Items / Boosters from equipment_html
+        if (p.equipment_html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(p.equipment_html, 'text/html');
+            const itemEls = doc.querySelectorAll('.item_img');
+            
+            const activeItems: ActiveItem[] = [];
+            const boosters = { metal: 0, crystal: 0, deuterium: 0 };
+            
+            itemEls.forEach(itemEl => {
+                const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || '';
+                const titleParts = tooltipTitle.split('|');
+                const title = titleParts[0].trim();
+                const bodyHtml = titleParts.slice(1).join('|');
+                
+                const lowerTitle = title.toLowerCase();
+                let type: ActiveItem['type'] = 'other';
+                let bonus = 0;
+                
+                if (lowerTitle.includes('metal booster')) {
+                    type = 'metal';
+                    if (lowerTitle.includes('platinum')) bonus = 0.40;
+                    else if (lowerTitle.includes('gold')) bonus = 0.30;
+                    else if (lowerTitle.includes('silver')) bonus = 0.20;
+                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                } else if (lowerTitle.includes('crystal booster')) {
+                    type = 'crystal';
+                    if (lowerTitle.includes('platinum')) bonus = 0.40;
+                    else if (lowerTitle.includes('gold')) bonus = 0.30;
+                    else if (lowerTitle.includes('silver')) bonus = 0.20;
+                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                } else if (lowerTitle.includes('deuterium booster')) {
+                    type = 'deuterium';
+                    if (lowerTitle.includes('platinum')) bonus = 0.40;
+                    else if (lowerTitle.includes('gold')) bonus = 0.30;
+                    else if (lowerTitle.includes('silver')) bonus = 0.20;
+                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                } else if (lowerTitle.includes('expedition resource booster')) {
+                    type = 'expedition_res';
+                } else if (lowerTitle.includes('resource booster')) {
+                    type = 'resource';
+                } else if (lowerTitle.includes('expedition slots')) {
+                    type = 'expedition_slots';
+                } else if (lowerTitle.includes('fleet slots')) {
+                    type = 'fleet_slots';
+                } else if (lowerTitle.includes('planet fields')) {
+                    type = 'fields';
+                }
+                
+                const titlePercentMatch = title.match(/\((\d+)%\)/);
+                if (titlePercentMatch) {
+                    bonus = parseInt(titlePercentMatch[1], 10) / 100;
+                }
+                
+                let rarity = '';
+                const parentClass = itemEl.parentElement?.className || '';
+                const rarityMatch = parentClass.match(/r_(\w+)/);
+                if (rarityMatch) rarity = rarityMatch[1];
+                
+                let timeRemaining = '';
+                let expiryTimestamp: number | undefined;
+                let duration = '';
+                let isPermanent = false;
+                
+                const decodedHtml = bodyHtml
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#43;/g, '+');
+                
+                const restTimeMatch = decodedHtml.match(/class="restTime"[^>]*>Time remaining:\s*([^<]+)/i) || 
+                                      decodedHtml.match(/Time remaining:\s*([^<]+)/i);
+                if (restTimeMatch) {
+                    timeRemaining = restTimeMatch[1].trim();
+                    const secondsRemaining = parseOgameTime(timeRemaining);
+                    if (secondsRemaining > 0) {
+                        expiryTimestamp = Date.now() + (secondsRemaining * 1000);
+                    }
+                }
+                
+                const durationMatch = decodedHtml.match(/Duration:\s*([^<]+)/i);
+                if (durationMatch) {
+                    duration = durationMatch[1].trim();
+                    if (duration.toLowerCase().includes('permanent')) {
+                        isPermanent = true;
+                    }
+                }
+                
+                activeItems.push({
+                    name: title,
+                    title,
+                    rarity,
+                    timeRemaining,
+                    expiryTimestamp,
+                    duration,
+                    isPermanent,
+                    bonus,
+                    type
+                });
+                
+                if (bonus > 0) {
+                    if (type === 'metal') boosters.metal += bonus;
+                    else if (type === 'crystal') boosters.crystal += bonus;
+                    else if (type === 'deuterium') boosters.deuterium += bonus;
+                    else if (type === 'resource') {
+                        boosters.metal += bonus;
+                        boosters.crystal += bonus;
+                        boosters.deuterium += bonus;
+                    }
+                }
+            });
+            
+            if (activeItems.length > 0) {
+                planet.activeItems = activeItems;
+                planet.boosters = boosters;
+            }
+        }
+
+        planets.push(planet);
+    });
+
+    return { planets, research };
 }

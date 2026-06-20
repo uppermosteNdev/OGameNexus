@@ -2,12 +2,66 @@ console.log("OGame Nexus: Content script loaded.");
 
 import { trackExpeditions, injectTodaySummaryCard } from './expeditions';
 import { trackLifeformDiscoveries } from './lifeforms';
-import { scrapeEmpireData, parseOgameTime } from './empire';
+import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson } from './empire';
 import { trackDebrisHarvests } from './harvests';
 import { trackCombatReports, injectTodayCombatSummaryCard } from './combats';
 import { trackEspionageReports, trackRawEspionageReports } from './espionage';
 import { renderAnalyticsTab } from './analytics';
 import { initGalaxyView, cleanupGalaxyView } from './galaxy';
+import {
+  SHIP_DATA,
+  RESEARCH_DATA,
+  DEFENCE_DATA,
+  BUILDING_DATA,
+  LIFEFORM_RESEARCH_DATA,
+  LIFEFORM_BUILDING_DATA
+} from '../db/staticData';
+
+const PLANET_PROPERTY_NAMES: Record<string, string> = {
+  metalMine: "Metal Mine",
+  crystalMine: "Crystal Mine",
+  deuteriumMine: "Deuterium Synthesizer",
+  solarPlant: "Solar Plant",
+  fusionReactor: "Fusion Reactor",
+  solarSatellites: "Solar Satellites",
+  metalStorage: "Metal Storage",
+  crystalStorage: "Crystal Storage",
+  deuteriumStorage: "Deuterium Tank",
+  roboticsFactory: "Robotics Factory",
+  naniteFactory: "Nanite Factory",
+  shipyard: "Shipyard",
+  researchLab: "Research Lab",
+  terraformer: "Terraformer",
+  allianceDepot: "Alliance Depot",
+  missileSilo: "Missile Silo",
+  spaceDock: "Space Dock",
+  lunarBase: "Lunar Base",
+  sensorPhalanx: "Sensor Phalanx",
+  jumpGate: "Jump Gate",
+  crawlers: "Crawlers"
+};
+
+function getEntityName(id: number): string {
+  const ship = SHIP_DATA.find(x => x.id === id);
+  if (ship) return ship.name;
+  
+  const def = DEFENCE_DATA.find(x => x.id === id);
+  if (def) return def.name;
+  
+  const res = RESEARCH_DATA.find(x => x.id === id);
+  if (res) return res.name;
+  
+  const bld = BUILDING_DATA.find(x => x.id === id);
+  if (bld) return bld.name;
+
+  const lfBld = LIFEFORM_BUILDING_DATA.find(x => x.id === id);
+  if (lfBld) return lfBld.name;
+
+  const lfRes = LIFEFORM_RESEARCH_DATA.find(x => x.id === id);
+  if (lfRes) return lfRes.name;
+
+  return `Tech #${id}`;
+}
 
 /**
  * Safely sends a message to the background script.
@@ -627,12 +681,15 @@ function scrapeLifeformSetup() {
   return techSetup.length > 0 ? techSetup : null;
 }
 
-function scrapeLifeformExperience() {
-  const url = window.location.href;
-  if (!url.includes("component=lfbonuses")) return null;
+function scrapeLifeformExperience(sourceDoc?: ParentNode) {
+  if (!sourceDoc) {
+    const url = window.location.href;
+    if (!url.includes("component=lfbonuses")) return null;
+  }
 
+  const root = sourceDoc || document;
   const experience: { lifeformId: number, level: number, currentExp: number, nextLevelExp: number }[] = [];
-  const items = document.querySelectorAll("lifeform-item");
+  const items = root.querySelectorAll("lifeform-item");
 
   items.forEach(item => {
     const icon = item.querySelector(".lifeform-item-icon");
@@ -874,7 +931,7 @@ function scrapeAndSync() {
     lifeformId: scrapeLifeformId(),
     researches: scrapeResearchLevels(),
     lifeformSetup: scrapeLifeformSetup(),
-    lifeformExperience: scrapeLifeformExperience(),
+    lifeformExperience: undefined,
     lifeformBuildings: scrapeLifeformBuildings(),
     overview: scrapeOverviewData(),
     supplies: scrapeSuppliesData(),
@@ -1052,16 +1109,133 @@ async function toggleNexusModal() {
     tabs.appendChild(tab);
   });
 
+  const rightGroup = document.createElement('div');
+  rightGroup.style.cssText = `display: flex; align-items: center; gap: 16px; z-index: 3;`;
+
+  const syncBadge = document.createElement('div');
+  syncBadge.id = 'og-nexus-modal-sync-badge';
+  syncBadge.style.cssText = `
+    font-size: 11px;
+    font-weight: 700;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 6px;
+    padding: 4px 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.05);
+    font-family: system-ui, -apple-system, sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+  `;
+  syncBadge.textContent = 'Game Synced: ...';
+
+  syncBadge.addEventListener('mouseenter', () => {
+    if (!syncBadge.classList.contains('syncing')) {
+      syncBadge.style.background = 'rgba(56, 189, 248, 0.15)';
+      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.2)';
+    }
+  });
+
+  syncBadge.addEventListener('mouseleave', () => {
+    if (!syncBadge.classList.contains('syncing')) {
+      syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
+      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
+    }
+  });
+
+  syncBadge.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (syncBadge.classList.contains('syncing')) return;
+
+    syncBadge.classList.add('syncing');
+    syncBadge.style.color = '#94a3b8';
+    syncBadge.style.background = 'rgba(148, 163, 184, 0.08)';
+    syncBadge.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+    syncBadge.style.textShadow = 'none';
+    syncBadge.style.boxShadow = 'none';
+    syncBadge.style.cursor = 'default';
+    syncBadge.textContent = 'Game Synced: Syncing...';
+
+    try {
+      await performBackgroundEmpireSync();
+      const now = Date.now();
+      await chrome.storage.local.set({ 'last_empire_sync_time': now });
+      
+      syncBadge.style.color = '#38bdf8';
+      syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
+      syncBadge.style.textShadow = '0 0 8px rgba(56, 189, 248, 0.4)';
+      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
+      syncBadge.style.cursor = 'pointer';
+      syncBadge.textContent = 'Game Synced: Just now';
+    } catch (err) {
+      console.error('OGame Nexus: Background sync failed', err);
+      syncBadge.style.color = '#ef4444';
+      syncBadge.style.background = 'rgba(239, 68, 68, 0.08)';
+      syncBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+      syncBadge.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.4)';
+      syncBadge.style.cursor = 'pointer';
+      syncBadge.textContent = 'Game Synced: Failed (Retry)';
+    } finally {
+      syncBadge.classList.remove('syncing');
+    }
+  });
+
   const closeBtn = document.createElement('div');
   closeBtn.innerHTML = '&#x2715;';
-  closeBtn.style.cssText = `cursor: pointer; font-size: 20px; color: #94a3b8; transition: color 0.2s;`;
+  closeBtn.style.cssText = `cursor: pointer; font-size: 20px; color: #94a3b8; transition: color 0.2s; display: flex; align-items: center; justify-content: center;`;
   closeBtn.addEventListener('mouseenter', () => closeBtn.style.color = '#f1f5f9');
   closeBtn.addEventListener('mouseleave', () => closeBtn.style.color = '#94a3b8');
-  closeBtn.addEventListener('click', () => overlay.remove());
+
+  rightGroup.appendChild(syncBadge);
+  rightGroup.appendChild(closeBtn);
+
+  const updateHeaderBadge = async () => {
+    try {
+      const res = await chrome.storage.local.get('last_empire_sync_time');
+      const timestamp = res.last_empire_sync_time;
+      if (timestamp) {
+        const diffMin = Math.floor((Date.now() - timestamp) / 60000);
+        let timeAgoStr = '';
+        if (diffMin < 1) {
+          timeAgoStr = 'Just now';
+        } else if (diffMin === 1) {
+          timeAgoStr = '1m ago';
+        } else if (diffMin < 60) {
+          timeAgoStr = `${diffMin}m ago`;
+        } else {
+          const diffHrs = Math.floor(diffMin / 60);
+          timeAgoStr = diffHrs === 1 ? '1h ago' : `${diffHrs}h ago`;
+        }
+        syncBadge.textContent = `Game Synced: ${timeAgoStr}`;
+      } else {
+        syncBadge.textContent = 'Game Synced: Never';
+      }
+    } catch (e) {
+      syncBadge.textContent = 'Game Synced: Unknown';
+    }
+  };
+
+  updateHeaderBadge();
+  const badgeTimer = setInterval(updateHeaderBadge, 15000);
+
+  const cleanUpModal = () => {
+    clearInterval(badgeTimer);
+    overlay.remove();
+    document.body.classList.remove('og-nexus-modal-open');
+  };
+
+  closeBtn.addEventListener('click', cleanUpModal);
 
   header.appendChild(titleGroup);
   header.appendChild(tabs);
-  header.appendChild(closeBtn);
+  header.appendChild(rightGroup);
   modal.appendChild(header);
   modal.appendChild(contentArea);
   overlay.appendChild(modal);
@@ -1070,7 +1244,7 @@ async function toggleNexusModal() {
   renderTabContent('analytics', contentArea);
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) cleanUpModal();
   });
 }
 
@@ -1476,7 +1650,6 @@ const throttledObserverLogic = throttle(() => {
   const isObservablePage = window.location.href.includes("component=lfresearch") ||
     window.location.href.includes("component=overview") ||
     window.location.href.includes("component=lfbuildings") ||
-    window.location.href.includes("component=lfbonuses") ||
     window.location.href.includes("component=facilities") ||
     window.location.href.includes("component=supplies") ||
     window.location.href.includes("component=empire") ||
@@ -1488,14 +1661,13 @@ const throttledObserverLogic = throttle(() => {
 
   if (isObservablePage) {
     const hasTechList = !!document.querySelector("#technologies li.technology");
-    const hasLfItems = !!document.querySelector("lifeform-item");
     const hasProdTable = !!document.querySelector("tr.summaryHourly") ||
       !!document.querySelector("tr.summary.hourly") ||
       !!Array.from(document.querySelectorAll('tr')).find(r => r.textContent?.toLowerCase().includes('total hourly production'));
     const hasEmpire = !!document.querySelector("#empire .planet");
 
     // Only scrape if we have visible content and either the URL changed or we haven't scraped this page's content yet
-    if (hasTechList || hasLfItems || hasProdTable || hasEmpire) {
+    if (hasTechList || hasProdTable || hasEmpire) {
       if (urlChanged || !(window as any)._contentScraped) {
         (window as any)._lastScrapedUrl = currentUrl;
         (window as any)._contentScraped = true;
@@ -1506,7 +1678,6 @@ const throttledObserverLogic = throttle(() => {
         (window as any)._ogNexusScrapeTimeout = setTimeout(() => {
           // Double check we still have content before scraping
           if (document.querySelector("#technologies li.technology") ||
-            document.querySelector("lifeform-item") ||
             document.querySelector("tr.summaryHourly") ||
             document.querySelector("tr.summary.hourly") ||
             document.querySelector("#empire") ||
@@ -1614,6 +1785,258 @@ observer.observe(document.body, { childList: true, subtree: true });
 scrapeAndSync();
 injectButton();
 
+
+async function performBackgroundEmpireSync() {
+  console.log("OGame Nexus: Starting background Empire sync (fetching planets and moons)...");
+  const playerId = getMetaContent("ogame-player-id");
+  const playerName = getMetaContent("ogame-player-name");
+
+  if (!playerId || !playerName) {
+    throw new Error("Player context not found");
+  }
+
+  // Fetch planetType=0 (Planets)
+  const planetsRes = await fetch('/game/index.php?page=ajax&component=empire&ajax=1&planetType=0&asJson=1', {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  });
+  if (!planetsRes.ok) throw new Error("Failed to fetch planets");
+  const planetsText = await planetsRes.text();
+  if (planetsText.trim().startsWith('<')) {
+    throw new Error("Invalid response: Received HTML redirect/login page instead of JSON");
+  }
+  const planetsJson = JSON.parse(planetsText);
+
+  // Fetch planetType=1 (Moons)
+  const moonsRes = await fetch('/game/index.php?page=ajax&component=empire&ajax=1&planetType=1&asJson=1', {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  });
+  if (!moonsRes.ok) throw new Error("Failed to fetch moons");
+  const moonsText = await moonsRes.text();
+  if (moonsText.trim().startsWith('<')) {
+    throw new Error("Invalid response: Received HTML redirect/login page instead of JSON");
+  }
+  const moonsJson = JSON.parse(moonsText);
+
+  // Fetch Lifeform Bonuses (Experience)
+  const lfBonusesRes = await fetch('/game/index.php?page=ajax&component=lfbonuses&ajax=1', {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  });
+  if (!lfBonusesRes.ok) throw new Error("Failed to fetch lifeform bonuses");
+  const lfBonusesHtml = await lfBonusesRes.text();
+
+  console.log("OGame Nexus: Planets AJAX raw JSON:", planetsJson);
+  console.log("OGame Nexus: Moons AJAX raw JSON:", moonsJson);
+  console.log("OGame Nexus: Lifeform Bonuses AJAX raw HTML length:", lfBonusesHtml.length);
+
+  // Parse using our new AJAX parser
+  const planetsData = parseAjaxEmpireJson(planetsJson, false);
+  const moonsData = parseAjaxEmpireJson(moonsJson, true);
+  
+  const lfParser = new DOMParser();
+  const lfDoc = lfParser.parseFromString(lfBonusesHtml, "text/html");
+  const lifeformExperienceData = scrapeLifeformExperience(lfDoc);
+
+  // Count standard buildings, ships, defenses, and lifeform tech for logging
+  let totalPlanets = [...planetsData.planets, ...moonsData.planets];
+  let supplyCount = 0;
+  let stationCount = 0;
+  let shipCount = 0;
+  let defenseCount = 0;
+  let lfBuildingsCount = 0;
+  let lfTechsCount = 0;
+
+  totalPlanets.forEach(p => {
+    // Standard buildings
+    if (p.metalMine) supplyCount++;
+    if (p.crystalMine) supplyCount++;
+    if (p.deuteriumMine) supplyCount++;
+    if (p.solarPlant) supplyCount++;
+    if (p.fusionReactor) supplyCount++;
+    if (p.metalStorage) supplyCount++;
+    if (p.crystalStorage) supplyCount++;
+    if (p.deuteriumStorage) supplyCount++;
+    
+    // Facilities
+    if (p.roboticsFactory) stationCount++;
+    if (p.naniteFactory) stationCount++;
+    if (p.shipyard) stationCount++;
+    if (p.researchLab) stationCount++;
+    if (p.terraformer) stationCount++;
+    if (p.missileSilo) stationCount++;
+    if (p.spaceDock) stationCount++;
+    if (p.lunarBase) stationCount++;
+    if (p.sensorPhalanx) stationCount++;
+    if (p.jumpGate) stationCount++;
+
+    // Ships
+    if (p.ships) {
+      Object.values(p.ships).forEach(count => { if (count > 0) shipCount += count; });
+    }
+
+    // Defenses
+    if (p.defenses) {
+      Object.values(p.defenses).forEach(count => { if (count > 0) defenseCount += count; });
+    }
+
+    // Lifeforms
+    if (p.lifeformBuildings) {
+      p.lifeformBuildings.forEach(b => { if (b.level > 0) lfBuildingsCount++; });
+    }
+    if (p.lifeformSetup) {
+      p.lifeformSetup.forEach(t => { if (t.level > 0) lfTechsCount++; });
+    }
+  });
+
+  const researchCount = Object.keys(planetsData.research).length;
+
+  console.log(`OGame Nexus: Background Sync - Parsed ${planetsData.planets.length} planets and ${moonsData.planets.length} moons.`);
+  console.log(`OGame Nexus: Background Sync Details:
+    - Standard Buildings/Facilities: ${supplyCount + stationCount} levels across planets
+    - Researches: ${researchCount} techs parsed
+    - Combat Ships: ${shipCount} ships total
+    - Defense Structures: ${defenseCount} units total
+    - Lifeform Buildings: ${lfBuildingsCount} structures
+    - Lifeform Technologies: ${lfTechsCount} slots
+    - Lifeform Experience: ${lifeformExperienceData ? lifeformExperienceData.length : 0} lifeforms parsed`);
+
+  // Detailed group logs about synced items
+  console.groupCollapsed(`OGame Nexus: Detailed Sync Log (Ships, Buildings, Techs, LF XP)`);
+
+  // 1. Researches (Global)
+  if (researchCount > 0) {
+    console.groupCollapsed(`Researches Synced (${researchCount})`);
+    const researchesList: string[] = [];
+    Object.entries(planetsData.research).forEach(([techIdStr, level]) => {
+      const techId = parseInt(techIdStr);
+      if (level > 0) {
+        researchesList.push(`${getEntityName(techId)} (Lvl ${level})`);
+      }
+    });
+    console.log(researchesList.join(', ') || 'None');
+    console.groupEnd();
+  }
+
+  // 1.5 Lifeform Experience (Global)
+  if (lifeformExperienceData && lifeformExperienceData.length > 0) {
+    console.groupCollapsed(`Lifeform Experience Synced (${lifeformExperienceData.length})`);
+    const lfExpNames = ["Humans", "Rock'tal", "Mechas", "Kaelesh"];
+    const expList = lifeformExperienceData.map((e: any) => {
+      const name = lfExpNames[e.lifeformId - 1] || `LF #${e.lifeformId}`;
+      return `${name} (Lvl ${e.level}, XP: ${e.currentExp}/${e.nextLevelExp})`;
+    });
+    console.log(expList.join(', '));
+    console.groupEnd();
+  }
+
+  // 2. Planets & Moons details
+  totalPlanets.forEach(p => {
+    console.groupCollapsed(`${p.name} [${p.coords}] (${p.type === 'moon' ? 'Moon' : 'Planet'})`);
+    
+    // Buildings & Facilities
+    const bldList: string[] = [];
+    Object.entries(PLANET_PROPERTY_NAMES).forEach(([propName, dispName]) => {
+      const val = (p as any)[propName];
+      if (val !== undefined && val > 0) {
+        bldList.push(`${dispName}: Lvl ${val}`);
+      }
+    });
+    if (bldList.length > 0) {
+      console.log(`%cBuildings & Facilities:`, 'font-weight: bold; color: #4fc3f7;', bldList.join(', '));
+    }
+
+    // Ships
+    if (p.ships) {
+      const shipList: string[] = [];
+      Object.entries(p.ships).forEach(([techIdStr, count]) => {
+        const techId = parseInt(techIdStr);
+        if (count > 0) {
+          shipList.push(`${getEntityName(techId)}: ${count.toLocaleString()}`);
+        }
+      });
+      if (shipList.length > 0) {
+        console.log(`%cShips:`, 'font-weight: bold; color: #81c784;', shipList.join(', '));
+      }
+    }
+
+    // Defenses
+    if (p.defenses) {
+      const defList: string[] = [];
+      Object.entries(p.defenses).forEach(([techIdStr, count]) => {
+        const techId = parseInt(techIdStr);
+        if (count > 0) {
+          defList.push(`${getEntityName(techId)}: ${count.toLocaleString()}`);
+        }
+      });
+      if (defList.length > 0) {
+        console.log(`%cDefenses:`, 'font-weight: bold; color: #e57373;', defList.join(', '));
+      }
+    }
+
+    // Lifeform Buildings
+    if (p.lifeformBuildings && p.lifeformBuildings.length > 0) {
+      const lfBldList = p.lifeformBuildings.map(b => `${getEntityName(b.id)}: Lvl ${b.level}`);
+      console.log(`%cLifeform Buildings:`, 'font-weight: bold; color: #ffb74d;', lfBldList.join(', '));
+    }
+
+    // Lifeform Technologies
+    if (p.lifeformSetup && p.lifeformSetup.length > 0) {
+      const lfTechList = p.lifeformSetup
+        .filter(t => t.selectedTechId !== null && t.level > 0)
+        .map(t => `${getEntityName(t.selectedTechId!)} (Slot ${t.slotNumber}): Lvl ${t.level}`);
+      if (lfTechList.length > 0) {
+        console.log(`%cLifeform Technologies:`, 'font-weight: bold; color: #ba68c8;', lfTechList.join(', '));
+      }
+    }
+
+    console.groupEnd();
+  });
+
+  console.groupEnd();
+
+  // Scrape the active sidebar planet list to verify existence/order
+  const planetsList = scrapePlanetList();
+
+  // Get active planet ID
+  const activePlanetId = getActivePlanetId();
+
+  // Send SYNC_SESSION to the background script
+  safeSendMessage({
+    type: "SYNC_SESSION",
+    data: {
+      isFullPlanetList: true,
+      account: {
+        playerId,
+        playerName,
+        universe: getMetaContent("ogame-universe") || "unknown",
+        universeName: getMetaContent("ogame-universe-name") || "unknown",
+        allianceId: getMetaContent("ogame-alliance-id") || undefined,
+        allianceName: getMetaContent("ogame-alliance-name") || undefined,
+        allianceTag: getMetaContent("ogame-alliance-tag") || undefined,
+        serverUrl: window.location.origin,
+        playerClass: scrapePlayerClass(),
+        allianceClass: scrapeAllianceClass(),
+        ...scrapeOfficers()
+      },
+      planets: planetsList.length > 0 ? planetsList : [...planetsData.planets, ...moonsData.planets].map(p => ({
+        id: p.id,
+        name: p.name || "Unknown",
+        coords: p.coords || "",
+        type: p.type || "planet",
+        lastUpdated: Date.now()
+      })),
+      activePlanetId,
+      lifeformId: scrapeLifeformId(),
+      researches: Object.entries(planetsData.research).map(([id, level]) => ({ id: parseInt(id), level })),
+      lifeformExperience: lifeformExperienceData || undefined,
+      empire: {
+        planets: [...planetsData.planets, ...moonsData.planets],
+        research: planetsData.research
+      }
+    }
+  });
+}
+
+
 async function initLowAnimationMode() {
   try {
     const localData = await chrome.storage.local.get('globalSettings');
@@ -1655,5 +2078,48 @@ window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
     }
   }
 });
+
+// Auto-sync function checking every 5 minutes
+async function checkAutoSync() {
+  try {
+    const playerId = getMetaContent("ogame-player-id");
+    const playerName = getMetaContent("ogame-player-name");
+    // Only attempt sync if player has an active session/context loaded
+    if (!playerId || !playerName) return;
+
+    const res = await chrome.storage.local.get('last_empire_sync_time');
+    const lastSync = res.last_empire_sync_time || 0;
+    const now = Date.now();
+
+    // 5 minutes = 5 * 60 * 1000 milliseconds
+    if (now - lastSync >= 5 * 60 * 1000) {
+      console.log("OGame Nexus: Auto-sync triggered (5 minutes elapsed since last sync).");
+      
+      // Update sync time immediately to prevent concurrent triggers in other tabs
+      await chrome.storage.local.set({ 'last_empire_sync_time': now });
+
+      try {
+        await performBackgroundEmpireSync();
+        
+        // Update badge if modal is open
+        const badge = document.getElementById('og-nexus-modal-sync-badge');
+        if (badge) {
+          badge.textContent = 'Game Synced: Just now';
+        }
+      } catch (syncErr) {
+        console.error("OGame Nexus: Empire background sync failed, scheduling retry in 2 minutes", syncErr);
+        // Set timestamp back to 3 minutes ago, so next checkAutoSync (running every minute)
+        // will retry after 2 more minutes instead of waiting another 5 minutes
+        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 3 * 60 * 1000 });
+      }
+    }
+  } catch (err) {
+    console.error("OGame Nexus: Error during auto-sync check", err);
+  }
+}
+
+// Initial check after 5 seconds, then check every 60 seconds
+setTimeout(checkAutoSync, 5000);
+setInterval(checkAutoSync, 60000);
 
 
