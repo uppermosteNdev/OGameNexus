@@ -1,5 +1,149 @@
 import { SpiedPlanet } from '../db';
 
+function isContextValid(): boolean {
+  try {
+    return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
+  } catch (e) {
+    return false;
+  }
+}
+
+function getOwnCoordinatesList(): string[] {
+  const coords: string[] = [];
+  const coordsNodes = document.querySelectorAll("#planetList .planet-koords");
+  coordsNodes.forEach(node => {
+    const text = node.textContent?.trim() || "";
+    const clean = text.replace(/[\[\]]/g, "");
+    if (clean && clean !== "0:0:0" && !coords.includes(clean)) {
+      coords.push(clean);
+    }
+  });
+  return coords;
+}
+
+function getOwnSystemsInGalaxy(galaxy: number): number[] {
+  const ownCoords = getOwnCoordinatesList();
+  const systems: number[] = [];
+  ownCoords.forEach(coords => {
+    const parts = coords.split(':').map(Number);
+    if (parts.length === 3 && parts[0] === galaxy) {
+      if (!systems.includes(parts[1])) {
+        systems.push(parts[1]);
+      }
+    }
+  });
+  return systems;
+}
+
+function getFlyingEspionageCoords(): string[] {
+  const coords: string[] = [];
+  const eventContent = document.getElementById('eventContent');
+  if (!eventContent) return coords;
+
+  const rows = eventContent.querySelectorAll('tr.eventFleet[data-mission-type="6"]');
+  const ownCoords = getOwnCoordinatesList();
+
+  rows.forEach(row => {
+    // Only check if it's our own fleet
+    const missionFleetImg = row.querySelector('td.missionFleet img');
+    if (missionFleetImg) {
+      const tooltipTitle = missionFleetImg.getAttribute('data-tooltip-title') || '';
+      const isOwn = /Own fleet|Eigene Flotte|Flotte personnelle|Flota propia|Flotta propria|Własna flota|Frota própria|Kendi filon|Kendi Filom|Собственный флот|Eigen vloot|Saját flotta|Vlastní flotila|Vlastná flotila|Egen flåde|Egen flotta|Oma laivasto|Vlastita flota|Flota proprie/i.test(tooltipTitle);
+      if (!isOwn) return;
+    }
+
+    const text = row.textContent || "";
+    const matches = text.match(/\d+:\d+:\d+/g);
+    if (matches) {
+      matches.forEach(match => {
+        if (!ownCoords.includes(match) && !coords.includes(match)) {
+          coords.push(match);
+        }
+      });
+    }
+  });
+  return coords;
+}
+
+function getRecentlySpied(): Record<string, number> {
+  try {
+    const data = localStorage.getItem('og-nexus-recently-spied');
+    if (!data) return {};
+    const parsed = JSON.parse(data);
+    const now = Date.now();
+    const clean: Record<string, number> = {};
+    for (const [coords, ts] of Object.entries(parsed)) {
+      if (typeof ts === 'number' && now - ts < 15 * 60 * 1000) {
+        clean[coords] = ts;
+      }
+    }
+    return clean;
+  } catch (e) {
+    return {};
+  }
+}
+
+function markAsRecentlySpied(coords: string) {
+  const spied = getRecentlySpied();
+  spied[coords] = Date.now();
+  try {
+    localStorage.setItem('og-nexus-recently-spied', JSON.stringify(spied));
+  } catch (e) {}
+  
+  // Refresh sidebar if it is currently open
+  const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+  if (sidebar && sidebar.classList.contains('open')) {
+    updateSidebarData();
+  }
+}
+
+function handleEspionageClick(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  const spyBtn = target.closest('.espionage, .js_actionEspionage, .js_spy');
+  if (spyBtn) {
+    const row = spyBtn.closest('.galaxyRow.ctContentRow');
+    if (row) {
+      const galaxyInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
+      const systemInput = document.querySelector('input#system_input') as HTMLInputElement | null;
+      const posCell = row.querySelector('.cellPosition');
+      if (galaxyInput && systemInput && posCell) {
+        const galaxy = parseInt(galaxyInput.value, 10);
+        const system = parseInt(systemInput.value, 10);
+        const position = parseInt(posCell.textContent || '', 10);
+        if (!isNaN(galaxy) && !isNaN(system) && !isNaN(position)) {
+          const coords = `${galaxy}:${system}:${position}`;
+          markAsRecentlySpied(coords);
+        }
+      }
+    }
+  }
+}
+
+function getEspionageStatus(coords: string, flyingCoords: string[], recentlySpied: Record<string, number>): { text: string; className: string; tooltip: string } {
+  if (flyingCoords.includes(coords) || recentlySpied[coords]) {
+    let tooltipText = 'Spied in the last 15 minutes';
+    if (flyingCoords.includes(coords)) {
+      tooltipText = 'Espionage fleet in transit';
+    } else {
+      const elapsedMs = Date.now() - recentlySpied[coords];
+      const minutesAgo = Math.floor(elapsedMs / 60000);
+      tooltipText = `Spied ${minutesAgo}m ago`;
+    }
+    return {
+      text: '✓',
+      className: 'spy-status-spied',
+      tooltip: tooltipText
+    };
+  }
+
+  return {
+    text: '',
+    className: '',
+    tooltip: ''
+  };
+}
+
+
 // Configurable Galaxy highlight intervals (MSU/h) with defaults
 let galaxyIntervals = {
   t0: 10000,
@@ -75,6 +219,11 @@ let tooltipElement: HTMLElement | null = null;
 let currentHoveredPlanet: SpiedPlanet | string | null = null;
 let lastGalaxy: number | null = null;
 let lastSystem: number | null = null;
+
+let sidebarCurrentPage = 1;
+let sidebarSortMode: 'none' | 'desc' | 'asc' = 'none';
+let selectedGalaxyTab = 1;
+let sidebarGalaxiesCount = 9;
 
 // Helpers to format numbers
 const formatCompactNumber = (num: number): string => {
@@ -293,6 +442,386 @@ function getRingColor(msuPerHour: number): string {
   return '#38bdf8';                                      // Group 1: Sky Blue
 }
 
+function parseCoords(coordsStr: string) {
+  try {
+    const parts = coordsStr.replace(/[\[\]]/g, '').split(':').map(Number);
+    return {
+      galaxy: parts[0] || 0,
+      system: parts[1] || 0,
+      position: parts[2] || 0
+    };
+  } catch (e) {
+    return { galaxy: 0, system: 0, position: 0 };
+  }
+}
+
+function parseCoordsVal(coordsStr: string): number {
+
+  try {
+    const parts = coordsStr.replace(/[\[\]]/g, '').split(':').map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 1000000 + parts[1] * 1000 + parts[2];
+    }
+  } catch (e) {}
+  return 0;
+}
+
+function navigateToSystem(galaxy: number, system: number) {
+  window.dispatchEvent(new CustomEvent('ogame-nexus-navigate-galaxy', {
+    detail: { galaxy, system }
+  }));
+}
+
+function openIntelSidebar() {
+  sessionStorage.setItem('og-nexus-intel-sidebar-open', 'true');
+  const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+
+  if (!isContextValid()) {
+    console.warn("OGame Nexus: Extension context invalidated. Please reload the page.");
+    return;
+  }
+
+  // Ensure sidebar element exists
+  let sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+  if (!sidebar) {
+    sidebar = document.createElement('div');
+    sidebar.id = 'og-nexus-galaxy-intel-sidebar';
+    sidebar.className = 'og-nexus-galaxy-intel-sidebar';
+    document.body.appendChild(sidebar);
+  }
+
+  // Trigger open class
+  sidebar.classList.add('open');
+
+  // Determine G of current planet/view
+  const galaxyInput = document.getElementById('galaxy_input') as HTMLInputElement | null;
+  selectedGalaxyTab = galaxyInput ? (parseInt(galaxyInput.value, 10) || 1) : 1;
+  sidebarCurrentPage = 1;
+  sidebarSortMode = 'desc';
+
+  // Build basic layout once
+  buildSidebarLayout(sidebar);
+
+  // Load cache and render content
+  try {
+    chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe } }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn("OGame Nexus: Extension context invalidated. Please reload the page.");
+        return;
+      }
+      if (response && response.success) {
+        spiedPlanetsCache = response.planets || [];
+        sidebarGalaxiesCount = response.galaxies || 9;
+      }
+      // Re-create tabs container dynamically based on galaxies count
+      rebuildGTabs(sidebar);
+      
+      // Update contents
+      updateSidebarData();
+    });
+  } catch (e) {
+    console.warn("OGame Nexus: Extension context invalidated during message dispatch. Please reload the page.", e);
+  }
+}
+
+function closeIntelSidebar() {
+  const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+  if (sidebar) {
+    sidebar.classList.remove('open');
+  }
+  sessionStorage.setItem('og-nexus-intel-sidebar-open', 'false');
+}
+
+function buildSidebarLayout(sidebar: HTMLElement) {
+  if (sidebar.querySelector('.og-nexus-intel-sidebar-header')) return;
+
+  const savedRange = sessionStorage.getItem('og-nexus-intel-max-range');
+  const maxRange = savedRange ? parseInt(savedRange, 10) : 500;
+  const rangeDisplay = maxRange === 500 ? 'Unlimited' : `${maxRange} sys`;
+
+  sidebar.innerHTML = `
+    <div class="og-nexus-intel-sidebar-header">
+      <h2 class="og-nexus-intel-sidebar-title">Raid Helper</h2>
+      <button class="og-nexus-intel-close-btn" id="og-nexus-intel-close-btn">&times;</button>
+    </div>
+    
+    <div class="og-nexus-intel-sidebar-body">
+      <div id="og-nexus-intel-tabs-wrapper"></div>
+      
+      <div class="og-nexus-intel-range-container">
+        <div class="og-nexus-intel-range-header">
+          <span class="range-label">Max range from own planets:</span>
+          <span class="range-value" id="og-nexus-intel-range-val">${rangeDisplay}</span>
+        </div>
+        <input type="range" id="og-nexus-intel-range-slider" min="1" max="500" value="${maxRange}" class="og-nexus-intel-range-slider">
+        <div id="og-nexus-intel-range-warning-wrapper"></div>
+      </div>
+
+      <table class="og-nexus-intel-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th style="width: 45px; text-align: center;">Spy</th>
+            <th>Coordinates</th>
+            <th id="og-nexus-intel-sort-prod" class="sortable-header">Production ↕</th>
+          </tr>
+        </thead>
+        <tbody id="og-nexus-intel-tbody">
+          <tr>
+            <td colspan="4" class="og-nexus-intel-no-data">Loading Raid Radar cache...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="og-nexus-intel-sidebar-footer">
+      <div id="og-nexus-intel-pagination-wrapper"></div>
+      <div class="og-nexus-intel-total-count" id="og-nexus-intel-total-count-lbl">Total targets tracked: 0</div>
+    </div>
+  `;
+
+  // Attach event listeners
+  sidebar.querySelector('#og-nexus-intel-close-btn')?.addEventListener('click', closeIntelSidebar);
+
+  sidebar.querySelector('#og-nexus-intel-sort-prod')?.addEventListener('click', () => {
+    if (sidebarSortMode === 'none') {
+      sidebarSortMode = 'desc';
+    } else if (sidebarSortMode === 'desc') {
+      sidebarSortMode = 'asc';
+    } else {
+      sidebarSortMode = 'none';
+    }
+    updateSidebarData();
+  });
+
+  const slider = sidebar.querySelector('#og-nexus-intel-range-slider') as HTMLInputElement | null;
+  slider?.addEventListener('input', (e) => {
+    const val = parseInt((e.target as HTMLInputElement).value, 10);
+    sessionStorage.setItem('og-nexus-intel-max-range', String(val));
+    const label = sidebar.querySelector('#og-nexus-intel-range-val');
+    if (label) {
+      label.textContent = val === 500 ? 'Unlimited' : `${val} sys`;
+    }
+    updateSidebarData();
+  });
+}
+
+function rebuildGTabs(sidebar: HTMLElement) {
+  const wrapper = sidebar.querySelector('#og-nexus-intel-tabs-wrapper');
+  if (!wrapper) return;
+
+  let tabsHTML = '<div class="og-nexus-intel-tabs-container">';
+  for (let g = 1; g <= sidebarGalaxiesCount; g++) {
+    const isActive = g === selectedGalaxyTab;
+    tabsHTML += `
+      <button class="og-nexus-intel-tab-btn ${isActive ? 'active' : ''}" data-galaxy="${g}" type="button">
+        G${g}
+      </button>
+    `;
+  }
+  tabsHTML += '</div>';
+  wrapper.innerHTML = tabsHTML;
+
+  // Bind tab buttons click
+  wrapper.querySelectorAll('.og-nexus-intel-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const g = parseInt(btn.getAttribute('data-galaxy') || '1', 10);
+      selectedGalaxyTab = g;
+      sidebarCurrentPage = 1; // Reset page on tab change
+      
+      // Update active classes immediately
+      wrapper.querySelectorAll('.og-nexus-intel-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      updateSidebarData();
+    });
+  });
+}
+
+function updateSidebarData() {
+  const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+  if (!sidebar) return;
+
+  const tbody = sidebar.querySelector('#og-nexus-intel-tbody');
+  if (!tbody) return;
+
+  // Retrieve current slider value
+  const savedRange = sessionStorage.getItem('og-nexus-intel-max-range');
+  const maxRange = savedRange ? parseInt(savedRange, 10) : 500;
+
+  const ownSystems = getOwnSystemsInGalaxy(selectedGalaxyTab);
+
+  // Update warning under range slider
+  const warningWrapper = sidebar.querySelector('#og-nexus-intel-range-warning-wrapper');
+  if (warningWrapper) {
+    if (ownSystems.length === 0 && maxRange < 500) {
+      warningWrapper.innerHTML = `<div class="og-nexus-intel-range-warning">⚠️ No owned planets in G${selectedGalaxyTab}</div>`;
+    } else {
+      warningWrapper.innerHTML = '';
+    }
+  }
+
+  // Filter inactive and longinactive targets, selected G tab, and range
+  const filteredTargets = spiedPlanetsCache.filter(p => {
+    const isInactive = p.playerStatus && (p.playerStatus.includes('inactive') || p.playerStatus.includes('longinactive'));
+    if (!isInactive) return false;
+    
+    const targetCoords = parseCoords(p.coords);
+    if (targetCoords.galaxy !== selectedGalaxyTab) return false;
+
+    // Range filter
+    if (maxRange < 500) {
+      if (ownSystems.length === 0) return false;
+      let minDistance = Infinity;
+      ownSystems.forEach(sys => {
+        const dist = Math.abs(sys - targetCoords.system);
+        if (dist < minDistance) {
+          minDistance = dist;
+        }
+      });
+      if (minDistance > maxRange) return false;
+    }
+
+    return true;
+  });
+
+  // Sort
+  const sortedTargets = [...filteredTargets];
+  if (sidebarSortMode === 'desc') {
+    sortedTargets.sort((a, b) => {
+      const prodA = a.metalPerHour + a.crystalPerHour * 1.5 + a.deuteriumPerHour * 3.0;
+      const prodB = b.metalPerHour + b.crystalPerHour * 1.5 + b.deuteriumPerHour * 3.0;
+      if (prodB !== prodA) return prodB - prodA;
+      return parseCoordsVal(a.coords) - parseCoordsVal(b.coords);
+    });
+  } else if (sidebarSortMode === 'asc') {
+    sortedTargets.sort((a, b) => {
+      const prodA = a.metalPerHour + a.crystalPerHour * 1.5 + a.deuteriumPerHour * 3.0;
+      const prodB = b.metalPerHour + b.crystalPerHour * 1.5 + b.deuteriumPerHour * 3.0;
+      if (prodA !== prodB) return prodA - prodB;
+      return parseCoordsVal(a.coords) - parseCoordsVal(b.coords);
+    });
+  } else {
+    sortedTargets.sort((a, b) => {
+      return parseCoordsVal(a.coords) - parseCoordsVal(b.coords);
+    });
+  }
+
+  // Paginate (20 targets per page)
+  const ITEMS_PER_PAGE = 20;
+  const totalPages = Math.ceil(sortedTargets.length / ITEMS_PER_PAGE) || 1;
+  if (sidebarCurrentPage > totalPages) {
+    sidebarCurrentPage = totalPages;
+  }
+  if (sidebarCurrentPage < 1) {
+    sidebarCurrentPage = 1;
+  }
+  const startIndex = (sidebarCurrentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedTargets = sortedTargets.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  // Table rows HTML
+  let rowsHTML = '';
+  if (paginatedTargets.length === 0) {
+    rowsHTML = `
+      <tr>
+        <td colspan="4" class="og-nexus-intel-no-data">No inactive targets spied in range for G${selectedGalaxyTab}.</td>
+      </tr>
+    `;
+  } else {
+    const flyingCoords = getFlyingEspionageCoords();
+    const recentlySpied = getRecentlySpied();
+
+    paginatedTargets.forEach(target => {
+      const prodMSU = target.metalPerHour + target.crystalPerHour * 1.5 + target.deuteriumPerHour * 3.0;
+      const formattedProd = formatCompactNumber(prodMSU);
+      const isLong = target.playerStatus.includes('longinactive');
+      const espionageStatus = getEspionageStatus(target.coords, flyingCoords, recentlySpied);
+      
+      rowsHTML += `
+        <tr class="og-nexus-intel-row">
+          <td class="og-nexus-intel-cell-player">
+            <span class="og-nexus-intel-player-name" title="${target.playerName}">${target.playerName}</span>
+            <span class="og-nexus-intel-player-status ${isLong ? 'status-long-inactive' : 'status-inactive'}">
+              ${isLong ? 'I' : 'i'}
+            </span>
+          </td>
+          <td style="text-align: center; vertical-align: middle;">
+            <span class="${espionageStatus.className}" title="${espionageStatus.tooltip}">
+              ${espionageStatus.text}
+            </span>
+          </td>
+          <td class="og-nexus-intel-cell-coords">
+            <a href="#" class="og-nexus-intel-coords-link" data-coords="${target.coords}">[${target.coords}]</a>
+          </td>
+          <td class="og-nexus-intel-cell-prod">
+            ${formattedProd}<span class="msu-unit">MSU/h</span>
+          </td>
+        </tr>
+      `;
+    });
+  }
+  tbody.innerHTML = rowsHTML;
+
+  // Bind coordinates click
+  tbody.querySelectorAll('.og-nexus-intel-coords-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const coordsAttr = link.getAttribute('data-coords');
+      if (coordsAttr) {
+        const parts = coordsAttr.split(':').map(Number);
+        if (parts.length === 3) {
+          navigateToSystem(parts[0], parts[1]);
+        }
+      }
+    });
+  });
+
+  // Update sort header text and direction indicator
+  const sortHeader = sidebar.querySelector('#og-nexus-intel-sort-prod');
+  if (sortHeader) {
+    let sortIcon = '↕';
+    if (sidebarSortMode === 'desc') sortIcon = '↓';
+    else if (sidebarSortMode === 'asc') sortIcon = '↑';
+    sortHeader.textContent = `Production ${sortIcon}`;
+  }
+
+  // Update total counts label
+  const totalCountLbl = sidebar.querySelector('#og-nexus-intel-total-count-lbl');
+  if (totalCountLbl) {
+    totalCountLbl.textContent = `Total targets tracked in G${selectedGalaxyTab}: ${sortedTargets.length}`;
+  }
+
+  // Build and render pagination wrapper
+  const pagWrapper = sidebar.querySelector('#og-nexus-intel-pagination-wrapper');
+  if (pagWrapper) {
+    if (totalPages > 1) {
+      pagWrapper.innerHTML = `
+        <div class="og-nexus-intel-pagination">
+          <button class="og-nexus-intel-page-btn" id="og-nexus-intel-prev-btn" ${sidebarCurrentPage === 1 ? 'disabled' : ''}>&laquo; Prev</button>
+          <span class="og-nexus-intel-page-info">Page ${sidebarCurrentPage} of ${totalPages}</span>
+          <button class="og-nexus-intel-page-btn" id="og-nexus-intel-next-btn" ${sidebarCurrentPage === totalPages ? 'disabled' : ''}>Next &raquo;</button>
+        </div>
+      `;
+      // Attach pagination click handlers
+      pagWrapper.querySelector('#og-nexus-intel-prev-btn')?.addEventListener('click', () => {
+        if (sidebarCurrentPage > 1) {
+          sidebarCurrentPage--;
+          updateSidebarData();
+        }
+      });
+      pagWrapper.querySelector('#og-nexus-intel-next-btn')?.addEventListener('click', () => {
+        if (sidebarCurrentPage < totalPages) {
+          sidebarCurrentPage++;
+          updateSidebarData();
+        }
+      });
+    } else {
+      pagWrapper.innerHTML = '';
+    }
+  }
+}
+
+
 function createSummaryBarElement(): HTMLElement {
   const bar = document.createElement('div');
   bar.id = 'og-nexus-galaxy-summary-bar';
@@ -364,11 +893,15 @@ function createSummaryBarElement(): HTMLElement {
         </div>
       </div>
       
-      <div class="og-nexus-galaxy-settings-toggle" id="og-nexus-galaxy-settings-toggle" title="Toggle settings">
-        <svg viewBox="0 0 24 24">
-          <path d="M7 10l5 5 5-5z"/>
-        </svg>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button class="og-nexus-galaxy-intel-btn" id="og-nexus-galaxy-intel-btn" type="button">Raid Helper</button>
+        <div class="og-nexus-galaxy-settings-toggle" id="og-nexus-galaxy-settings-toggle" title="Toggle settings">
+          <svg viewBox="0 0 24 24">
+            <path d="M7 10l5 5 5-5z"/>
+          </svg>
+        </div>
       </div>
+
     </div>
     
     <div class="og-nexus-galaxy-settings-panel">
@@ -403,6 +936,12 @@ function createSummaryBarElement(): HTMLElement {
   toggle?.addEventListener('click', () => {
     bar.classList.toggle('expanded');
     localStorage.setItem('og-nexus-gal-expanded', bar.classList.contains('expanded') ? 'true' : 'false');
+  });
+
+  // Attach event listener for Raid Helper button
+  const intelBtn = bar.querySelector('#og-nexus-galaxy-intel-btn');
+  intelBtn?.addEventListener('click', () => {
+    openIntelSidebar();
   });
 
   // Attach checkbox change listeners
@@ -549,54 +1088,109 @@ export function applyGalaxyRings() {
 }
 
 export function initGalaxyView() {
-  // 1. Ensure cache is loaded
-  chrome.storage.local.get('galaxyIntervals', (result) => {
-    if (result && result.galaxyIntervals) {
-      galaxyIntervals = { ...galaxyIntervals, ...result.galaxyIntervals };
+  const galaxyComponent = document.querySelector('#galaxycomponent');
+  if (!galaxyComponent) return;
+
+  const summaryBarExists = !!document.getElementById('og-nexus-galaxy-summary-bar');
+
+  if (!summaryBarExists) {
+    if (!isContextValid()) {
+      console.warn("OGame Nexus: Extension context invalidated. Please reload the page.");
+      return;
     }
 
-    if (!isCacheLoaded && !isLoadingCache) {
-      isLoadingCache = true;
-      const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
-      chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe } }, (response) => {
-        isLoadingCache = false;
-        if (response && response.success) {
-          spiedPlanetsCache = response.planets || [];
-          isCacheLoaded = true;
+    try {
+      // This is the FIRST time we are initializing this Galaxy view session
+      // Load intervals
+      chrome.storage.local.get('galaxyIntervals', (result) => {
+        if (chrome.runtime.lastError) {
+          console.warn("OGame Nexus: Extension context invalidated during storage access. Please reload the page.");
+          return;
+        }
+        if (result && result.galaxyIntervals) {
+          galaxyIntervals = { ...galaxyIntervals, ...result.galaxyIntervals };
+        }
 
-          // Setup summary bar once cache loads
-          const galaxyComponent = document.querySelector('#galaxycomponent');
-          if (galaxyComponent && !document.getElementById('og-nexus-galaxy-summary-bar')) {
+        if (isCacheLoaded) {
+          // Cache is already loaded, setup summary bar immediately
+          if (!document.getElementById('og-nexus-galaxy-summary-bar')) {
             const summaryBar = createSummaryBarElement();
             galaxyComponent.appendChild(summaryBar);
           }
+          applyGalaxyRings();
+          if (sessionStorage.getItem('og-nexus-intel-sidebar-open') === 'true') {
+            const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+            if (!sidebar || !sidebar.classList.contains('open')) {
+              openIntelSidebar();
+            }
+          }
+        } else if (!isLoadingCache) {
+          // Load cache first
+          isLoadingCache = true;
+          const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+          
+          if (!isContextValid()) {
+            isLoadingCache = false;
+            console.warn("OGame Nexus: Extension context invalidated before cache request.");
+            return;
+          }
 
-          applyGalaxyRings(); // Apply immediately once cache loads
+          chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe } }, (response) => {
+            isLoadingCache = false;
+            if (chrome.runtime.lastError) {
+              console.warn("OGame Nexus: Extension context invalidated during cache request callback. Please reload the page.");
+              return;
+            }
+            if (response && response.success) {
+              spiedPlanetsCache = response.planets || [];
+              isCacheLoaded = true;
+
+              if (!document.getElementById('og-nexus-galaxy-summary-bar')) {
+                const summaryBar = createSummaryBarElement();
+                galaxyComponent.appendChild(summaryBar);
+              }
+              applyGalaxyRings();
+              if (sessionStorage.getItem('og-nexus-intel-sidebar-open') === 'true') {
+                const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+                if (!sidebar || !sidebar.classList.contains('open')) {
+                  openIntelSidebar();
+                }
+              }
+            }
+          });
         }
       });
+    } catch (e) {
+      console.warn("OGame Nexus: Extension context invalidated during initialization setup. Please reload the page.", e);
+      return;
     }
 
-    // Setup summary bar if cache was already loaded
-    if (isCacheLoaded) {
-      const galaxyComponent = document.querySelector('#galaxycomponent');
-      if (galaxyComponent && !document.getElementById('og-nexus-galaxy-summary-bar')) {
-        const summaryBar = createSummaryBarElement();
-        galaxyComponent.appendChild(summaryBar);
-      }
-    }
+    // Add document-level listeners for dynamic positioning and espionage clicks
+    document.removeEventListener('mousemove', handleMouseMove); // Prevent duplicates
+    document.addEventListener('mousemove', handleMouseMove);
+    
+    document.removeEventListener('click', handleEspionageClick); // Prevent duplicates
+    document.addEventListener('click', handleEspionageClick);
+    
+    startTooltipTick();
 
-    // Process DOM rows
+    // Register storage listener for real-time reactivity
+    try {
+      chrome.storage.onChanged.removeListener(onStorageChanged);
+      chrome.storage.onChanged.addListener(onStorageChanged);
+    } catch (e) {
+      console.warn("OGame Nexus: Failed to register storage listener due to context invalidation.", e);
+    }
+  } else {
+    // Already initialized, just process DOM rows (idempotent and fast)
     applyGalaxyRings();
-  });
+  }
 
-  // 2. Add document-level listeners for dynamic positioning
-  document.removeEventListener('mousemove', handleMouseMove); // Prevent duplicates
-  document.addEventListener('mousemove', handleMouseMove);
-  startTooltipTick();
-
-  // 3. Register storage listener for real-time reactivity
-  chrome.storage.onChanged.removeListener(onStorageChanged);
-  chrome.storage.onChanged.addListener(onStorageChanged);
+  // Refresh live espionage/range tracking status if sidebar is currently open
+  const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+  if (sidebar && sidebar.classList.contains('open')) {
+    updateSidebarData();
+  }
 }
 
 export function cleanupGalaxyView() {
@@ -608,8 +1202,16 @@ export function cleanupGalaxyView() {
 
   // Clean up listeners
   document.removeEventListener('mousemove', handleMouseMove);
+  document.removeEventListener('click', handleEspionageClick);
   stopTooltipTick();
-  chrome.storage.onChanged.removeListener(onStorageChanged);
+
+  if (isContextValid()) {
+    try {
+      chrome.storage.onChanged.removeListener(onStorageChanged);
+    } catch (e) {
+      // Ignored
+    }
+  }
 
   // Remove tooltip from DOM
   if (tooltipElement) {
@@ -622,4 +1224,15 @@ export function cleanupGalaxyView() {
   if (summaryBar) {
     summaryBar.remove();
   }
+
+  // Remove sidebar from DOM
+  const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+  if (sidebar) {
+    sidebar.remove();
+  }
+
+  // Close sidebar state if navigating away
+  sessionStorage.setItem('og-nexus-intel-sidebar-open', 'false');
 }
+
+

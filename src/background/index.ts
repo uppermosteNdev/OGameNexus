@@ -1120,10 +1120,12 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                 } else {
                     planets = await db.spiedPlanets.toArray();
                 }
-                sendResponse({ success: true, planets });
+                const activeAccount = await db.accounts.orderBy('lastSeen').reverse().first();
+                const galaxies = activeAccount?.galaxies || 9;
+                sendResponse({ success: true, planets, galaxies });
             } catch (err) {
                 console.error("OGame Nexus: Error in GET_ALL_SPIED_PLANETS", err);
-                sendResponse({ success: false, planets: [] });
+                sendResponse({ success: false, planets: [], galaxies: 9 });
             }
         })();
         return true;
