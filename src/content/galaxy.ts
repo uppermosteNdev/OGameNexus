@@ -97,27 +97,6 @@ function markAsRecentlySpied(coords: string) {
   }
 }
 
-function handleEspionageClick(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  const spyBtn = target.closest('.espionage, .js_actionEspionage, .js_spy');
-  if (spyBtn) {
-    const row = spyBtn.closest('.galaxyRow.ctContentRow');
-    if (row) {
-      const galaxyInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
-      const systemInput = document.querySelector('input#system_input') as HTMLInputElement | null;
-      const posCell = row.querySelector('.cellPosition');
-      if (galaxyInput && systemInput && posCell) {
-        const galaxy = parseInt(galaxyInput.value, 10);
-        const system = parseInt(systemInput.value, 10);
-        const position = parseInt(posCell.textContent || '', 10);
-        if (!isNaN(galaxy) && !isNaN(system) && !isNaN(position)) {
-          const coords = `${galaxy}:${system}:${position}`;
-          markAsRecentlySpied(coords);
-        }
-      }
-    }
-  }
-}
 
 function getEspionageStatus(coords: string, flyingCoords: string[], recentlySpied: Record<string, number>): { text: string; className: string; tooltip: string } {
   if (flyingCoords.includes(coords) || recentlySpied[coords]) {
@@ -224,6 +203,7 @@ let sidebarCurrentPage = 1;
 let sidebarSortMode: 'none' | 'desc' | 'asc' = 'none';
 let selectedGalaxyTab = 1;
 let sidebarGalaxiesCount = 9;
+let lastSidebarStateKey = '';
 
 // Helpers to format numbers
 const formatCompactNumber = (num: number): string => {
@@ -498,6 +478,7 @@ function openIntelSidebar() {
   selectedGalaxyTab = galaxyInput ? (parseInt(galaxyInput.value, 10) || 1) : 1;
   sidebarCurrentPage = 1;
   sidebarSortMode = 'desc';
+  lastSidebarStateKey = ''; // Force initial update
 
   // Build basic layout once
   buildSidebarLayout(sidebar);
@@ -581,9 +562,15 @@ function buildSidebarLayout(sidebar: HTMLElement) {
   `;
 
   // Attach event listeners
-  sidebar.querySelector('#og-nexus-intel-close-btn')?.addEventListener('click', closeIntelSidebar);
+  sidebar.querySelector('#og-nexus-intel-close-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeIntelSidebar();
+  });
 
-  sidebar.querySelector('#og-nexus-intel-sort-prod')?.addEventListener('click', () => {
+  sidebar.querySelector('#og-nexus-intel-sort-prod')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (sidebarSortMode === 'none') {
       sidebarSortMode = 'desc';
     } else if (sidebarSortMode === 'desc') {
@@ -591,7 +578,7 @@ function buildSidebarLayout(sidebar: HTMLElement) {
     } else {
       sidebarSortMode = 'none';
     }
-    updateSidebarData();
+    updateSidebarData(true); // Force update since sort mode changed
   });
 
   const slider = sidebar.querySelector('#og-nexus-intel-range-slider') as HTMLInputElement | null;
@@ -603,6 +590,24 @@ function buildSidebarLayout(sidebar: HTMLElement) {
       label.textContent = val === 500 ? 'Unlimited' : `${val} sys`;
     }
     updateSidebarData();
+  });
+
+  // Delegated click event listener for coordinates links inside tbody
+  const tbody = sidebar.querySelector('#og-nexus-intel-tbody');
+  tbody?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const link = target.closest('.og-nexus-intel-coords-link');
+    if (link) {
+      e.preventDefault();
+      e.stopPropagation();
+      const coordsAttr = link.getAttribute('data-coords');
+      if (coordsAttr) {
+        const parts = coordsAttr.split(':').map(Number);
+        if (parts.length === 3) {
+          navigateToSystem(parts[0], parts[1]);
+        }
+      }
+    }
   });
 }
 
@@ -624,7 +629,9 @@ function rebuildGTabs(sidebar: HTMLElement) {
 
   // Bind tab buttons click
   wrapper.querySelectorAll('.og-nexus-intel-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       const g = parseInt(btn.getAttribute('data-galaxy') || '1', 10);
       selectedGalaxyTab = g;
       sidebarCurrentPage = 1; // Reset page on tab change
@@ -638,9 +645,26 @@ function rebuildGTabs(sidebar: HTMLElement) {
   });
 }
 
-function updateSidebarData() {
+function getSidebarStateKey(): string {
+  const savedRange = sessionStorage.getItem('og-nexus-intel-max-range');
+  const maxRange = savedRange ? parseInt(savedRange, 10) : 500;
+  
+  const flying = getFlyingEspionageCoords().join(',');
+  const recently = Object.entries(getRecentlySpied())
+    .map(([coords, ts]) => `${coords}:${ts}`)
+    .join(',');
+  return `${selectedGalaxyTab}|${sidebarCurrentPage}|${sidebarSortMode}|${maxRange}|${flying}|${recently}`;
+}
+
+function updateSidebarData(force = false) {
   const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
   if (!sidebar) return;
+
+  const stateKey = getSidebarStateKey();
+  if (!force && stateKey === lastSidebarStateKey) {
+    return; // Skip update if no data/state changed
+  }
+  lastSidebarStateKey = stateKey;
 
   const tbody = sidebar.querySelector('#og-nexus-intel-tbody');
   if (!tbody) return;
@@ -762,20 +786,6 @@ function updateSidebarData() {
   }
   tbody.innerHTML = rowsHTML;
 
-  // Bind coordinates click
-  tbody.querySelectorAll('.og-nexus-intel-coords-link').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const coordsAttr = link.getAttribute('data-coords');
-      if (coordsAttr) {
-        const parts = coordsAttr.split(':').map(Number);
-        if (parts.length === 3) {
-          navigateToSystem(parts[0], parts[1]);
-        }
-      }
-    });
-  });
-
   // Update sort header text and direction indicator
   const sortHeader = sidebar.querySelector('#og-nexus-intel-sort-prod');
   if (sortHeader) {
@@ -803,13 +813,17 @@ function updateSidebarData() {
         </div>
       `;
       // Attach pagination click handlers
-      pagWrapper.querySelector('#og-nexus-intel-prev-btn')?.addEventListener('click', () => {
+      pagWrapper.querySelector('#og-nexus-intel-prev-btn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (sidebarCurrentPage > 1) {
           sidebarCurrentPage--;
           updateSidebarData();
         }
       });
-      pagWrapper.querySelector('#og-nexus-intel-next-btn')?.addEventListener('click', () => {
+      pagWrapper.querySelector('#og-nexus-intel-next-btn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (sidebarCurrentPage < totalPages) {
           sidebarCurrentPage++;
           updateSidebarData();
@@ -1091,6 +1105,22 @@ export function initGalaxyView() {
   const galaxyComponent = document.querySelector('#galaxycomponent');
   if (!galaxyComponent) return;
 
+  // Scan flying espionage missions and record them as recently spied
+  const flyingCoords = getFlyingEspionageCoords();
+  const recentlySpied = getRecentlySpied();
+  let updatedAny = false;
+  flyingCoords.forEach(coords => {
+    if (!recentlySpied[coords]) {
+      recentlySpied[coords] = Date.now();
+      updatedAny = true;
+    }
+  });
+  if (updatedAny) {
+    try {
+      localStorage.setItem('og-nexus-recently-spied', JSON.stringify(recentlySpied));
+    } catch (e) {}
+  }
+
   const summaryBarExists = !!document.getElementById('og-nexus-galaxy-summary-bar');
 
   if (!summaryBarExists) {
@@ -1165,12 +1195,9 @@ export function initGalaxyView() {
       return;
     }
 
-    // Add document-level listeners for dynamic positioning and espionage clicks
+    // Add document-level listeners for dynamic positioning
     document.removeEventListener('mousemove', handleMouseMove); // Prevent duplicates
     document.addEventListener('mousemove', handleMouseMove);
-    
-    document.removeEventListener('click', handleEspionageClick); // Prevent duplicates
-    document.addEventListener('click', handleEspionageClick);
     
     startTooltipTick();
 
@@ -1199,10 +1226,10 @@ export function cleanupGalaxyView() {
   isCacheLoaded = false;
   lastGalaxy = null;
   lastSystem = null;
+  lastSidebarStateKey = '';
 
   // Clean up listeners
   document.removeEventListener('mousemove', handleMouseMove);
-  document.removeEventListener('click', handleEspionageClick);
   stopTooltipTick();
 
   if (isContextValid()) {

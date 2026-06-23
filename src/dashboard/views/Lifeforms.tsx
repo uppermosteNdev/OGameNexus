@@ -521,7 +521,9 @@ const Lifeforms: React.FC = () => {
         const calculateForSetup = (setup: any[], expData: any, p: any, targetObj: Record<string, number>, shipTargetObj: Record<string, Record<string, number>>, researchTargetObj: Record<string, Record<string, number>>, planetTargetObj: Record<string, { Cost: number, Time: number }>) => {
             let buildingBonus = 0;
             if (p.lifeformBuildings) {
+                const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
                 p.lifeformBuildings.forEach((b: any) => {
+                    if (activePrefix && !b.id.toString().startsWith(activePrefix)) return;
                     if (b.id === 11111) buildingBonus += b.level * 0.005;
                     else if (b.id === 13107) buildingBonus += b.level * 0.003;
                     else if (b.id === 13111) buildingBonus += b.level * 0.004;
@@ -534,7 +536,9 @@ const Lifeforms: React.FC = () => {
             let pBuildingCost = 0;
             let pBuildingTime = 0;
             if (p.lifeformBuildings) {
+                const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
                 p.lifeformBuildings.forEach((b: any) => {
+                    if (activePrefix && !b.id.toString().startsWith(activePrefix)) return;
                     if ([11103, 12103, 13103, 14103].includes(b.id)) {
                         pBuildingCost += b.level * 0.25;
                         pBuildingTime += b.level * 2;

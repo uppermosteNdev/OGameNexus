@@ -9,13 +9,31 @@ function cleanObject(obj: any) {
     return cleaned;
 }
 
-function mergeLifeformBuildings(existing: any[], incoming: any[]) {
+function mergeLifeformBuildings(existing: any[], incoming: any[], activeLifeformId?: number) {
     const result = [...existing];
+
+    // If activeLifeformId is provided, clear out buildings that do not belong to it
+    if (activeLifeformId && activeLifeformId > 0) {
+        const speciesPrefix = `1${activeLifeformId}`;
+        result.forEach(eb => {
+            if (!eb.id.toString().startsWith(speciesPrefix)) {
+                eb.level = 0;
+            }
+        });
+    }
+
     incoming.forEach(nb => {
         // Find name from static data if missing
         if (!nb.name) {
             const staticData = LIFEFORM_BUILDING_DATA.find(sb => sb.id === nb.id);
             if (staticData) nb.name = staticData.name;
+        }
+
+        if (activeLifeformId && activeLifeformId > 0) {
+            const speciesPrefix = `1${activeLifeformId}`;
+            if (!nb.id.toString().startsWith(speciesPrefix)) {
+                nb.level = 0;
+            }
         }
 
         const idx = result.findIndex(eb => eb.id === nb.id);
@@ -272,6 +290,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             const isMainPlanet = activePlanetId === p.id;
                             const empirePlanet = empire?.planets?.find((ep: any) => ep.id === p.id);
 
+                            const resolvedLifeformId = isMainPlanet
+                                ? (lifeformId || overview?.planetData?.lifeformId || empirePlanet?.lifeformId || existing?.lifeformId)
+                                : (empirePlanet?.lifeformId || existing?.lifeformId);
+
                             const updateData: any = cleanObject({
                                 ...p,
                                 ...empirePlanet,
@@ -295,13 +317,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                         jumpGate: facilities.find((f: any) => f.id === 43)?.level
                                     } : {}),
                                     crawlers: supplies?.crawlers !== undefined ? supplies.crawlers : (empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers),
-                                    lifeformId: lifeformId || overview?.planetData?.lifeformId || empirePlanet?.lifeformId || existing?.lifeformId,
+                                    lifeformId: resolvedLifeformId,
 
                                     // Security: LF Tech levels can only go up. Merge incoming with existing.
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], lifeformSetup || empirePlanet?.lifeformSetup || [], !lifeformSetup && !!empirePlanet?.lifeformSetup),
 
                                     // Merge Buildings: Keep all, update levels for those found on the page
-                                    lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], lifeformBuildings || empirePlanet?.lifeformBuildings || []),
+                                    lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], lifeformBuildings || empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
 
                                     ...(production && (production.metal > 0 || production.crystal > 0 || production.deuterium > 0) ? {
                                         production: {
@@ -316,10 +338,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     } : {})
                                 } : {
                                     // Even if not the active planet, if we have empire data for it, merge it
+                                    lifeformId: resolvedLifeformId,
                                     crawlers: empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers,
                                     ships: empirePlanet?.ships || existing?.ships,
                                     defenses: empirePlanet?.defenses || existing?.defenses,
-                                    lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || []),
+                                    lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], empirePlanet?.lifeformSetup || [], true),
                                 })
                             });

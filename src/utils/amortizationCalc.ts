@@ -162,7 +162,9 @@ function getPlanetTechMultiplier(planet: any, account: any): number {
     planet.lifeformBuildings?.forEach((b: any) => {
         const entry = AMORTIZATION_TABLE.find(e => e.id === b.id);
         if (entry && entry.effect && (entry.effect as any).type === 'tech_bonus') {
-            buildingBonus += b.level * (entry.effect as any).value;
+            if (!planet.lifeformId || entry.lifeformId === planet.lifeformId) {
+                buildingBonus += b.level * (entry.effect as any).value;
+            }
         }
     });
 
@@ -272,7 +274,9 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         const plasmaDeut = plasmaLevel * (0.33 / 100);
 
         let lfbMetal = 0, lfbCrystal = 0, lfbDeut = 0;
+        const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
         p.lifeformBuildings?.forEach((b: any) => {
+            if (activePrefix && !b.id.toString().startsWith(activePrefix)) return;
             if (b.id === 12106) lfbMetal += b.level * 0.02;
             if (b.id === 12109) lfbCrystal += b.level * 0.02;
             if (b.id === 12110) lfbDeut += b.level * 0.02;
@@ -334,18 +338,18 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
     const getReduction = (type: string, planet: any, state: EmpireState): number => {
         if (!type) return 0;
         if (type === "mineralResearchCenter") {
-            const level = planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.mineralResearchCenter)?.level || 0;
+            const level = (!planet.lifeformId || planet.lifeformId === 2) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.mineralResearchCenter)?.level || 0) : 0;
             return level * 0.005;
         }
         if (type === "megalith") {
-            const level = planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.megalith)?.level || 0;
+            const level = (!planet.lifeformId || planet.lifeformId === 2) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.megalith)?.level || 0) : 0;
             return level * 0.01;
         }
         if (type === "research_centers") {
-            const l1 = planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.researchCentre)?.level || 0;
-            const l2 = planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.runeTechnologium)?.level || 0;
-            const l3 = planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.roboticsResearchCentre)?.level || 0;
-            const l4 = planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.vortexChamber)?.level || 0;
+            const l1 = (!planet.lifeformId || planet.lifeformId === 1) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.researchCentre)?.level || 0) : 0;
+            const l2 = (!planet.lifeformId || planet.lifeformId === 2) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.runeTechnologium)?.level || 0) : 0;
+            const l3 = (!planet.lifeformId || planet.lifeformId === 3) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.roboticsResearchCentre)?.level || 0) : 0;
+            const l4 = (!planet.lifeformId || planet.lifeformId === 4) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.vortexChamber)?.level || 0) : 0;
             return (l1 + l2 + l3 + l4) * 0.0025;
         }
         if (type === "improvedStellarator") {
@@ -636,7 +640,9 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             const plasmaB = resKey === "metal" ? plasmaLevel * 0.01 : (resKey === "crystal" ? plasmaLevel * (0.66 / 100) : plasmaLevel * (0.33 / 100));
 
                             let lfbB = 0;
+                            const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
                             p.lifeformBuildings?.forEach((b: any) => {
+                                if (activePrefix && !b.id.toString().startsWith(activePrefix)) return;
                                 if (resKey === 'metal') {
                                     if (b.id === 12106) lfbB += b.level * 0.02;
                                     if (b.id === 11106) lfbB += b.level * 0.015;

@@ -1175,7 +1175,7 @@ async function toggleNexusModal() {
       syncBadge.style.cursor = 'pointer';
       syncBadge.textContent = 'Game Synced: Just now';
     } catch (err) {
-      console.error('OGame Nexus: Background sync failed', err);
+      console.warn('OGame Nexus: Background sync failed', err);
       syncBadge.style.color = '#ef4444';
       syncBadge.style.background = 'rgba(239, 68, 68, 0.08)';
       syncBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
@@ -1455,10 +1455,11 @@ function applyFleetOverlayStyling(ownFlying: number, total: number, missionCount
   const messagesCollapsed = document.getElementById('messages_collapsed');
   const eventBox = document.getElementById('eventboxFilled');
 
-  if (!messagesCollapsed || total <= 0) return;
+  if (!messagesCollapsed || (ownFlying <= 0 && total <= 0)) return;
 
+  const totalShipsAccounted = ownFlying + total;
   // Ensure percentage is at least 1% if there are own flying ships to show a visual segment
-  const percentage = ownFlying > 0 ? Math.max(1, Math.min(100, Math.round((ownFlying / total) * 100))) : 0;
+  const percentage = ownFlying > 0 ? Math.max(1, Math.min(100, Math.round((ownFlying / totalShipsAccounted) * 100))) : 0;
 
   // Determine the gradient segments based on mission type proportions
   let gradientStr = "";
@@ -2107,14 +2108,18 @@ async function checkAutoSync() {
           badge.textContent = 'Game Synced: Just now';
         }
       } catch (syncErr) {
-        console.error("OGame Nexus: Empire background sync failed, scheduling retry in 2 minutes", syncErr);
-        // Set timestamp back to 3 minutes ago, so next checkAutoSync (running every minute)
-        // will retry after 2 more minutes instead of waiting another 5 minutes
-        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 3 * 60 * 1000 });
+        console.warn("OGame Nexus: Empire background sync failed, scheduling retry in 1 minute", syncErr);
+        // Set timestamp back to 4 minutes ago, so next checkAutoSync (running every minute)
+        // will retry after 1 more minute instead of waiting another 5 minutes
+        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 4 * 60 * 1000 });
       }
     }
-  } catch (err) {
-    console.error("OGame Nexus: Error during auto-sync check", err);
+  } catch (err: any) {
+    if (err?.message?.includes("context invalidated")) {
+      console.warn("OGame Nexus: Auto-sync check skipped due to extension context invalidation.");
+    } else {
+      console.warn("OGame Nexus: Error during auto-sync check", err);
+    }
   }
 }
 
