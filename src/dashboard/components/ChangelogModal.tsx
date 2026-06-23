@@ -6,78 +6,64 @@ interface ChangelogModalProps {
     onAcknowledge: () => void;
     onDismissVersion: () => void;
     onNavigateToSettings: () => void;
+    onOpenTutorials?: () => void;
 }
 
-const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings }) => {
+const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <Radar size={22} color="#00f2ff" />,
-            title: "Raid Radar & Galaxy Projections",
-            desc: "Track inactive targets, estimate loot growth, and view color-coded hourly resource production projections with live-calculating tooltips inside the Galaxy View.",
-            customElement: (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+            icon: <Swords size={22} color="#00f2ff" />,
+            title: "Raid Helper Sidebar (Galaxy View)",
+            desc: "A slide-out panel directly integrated in Galaxy View containing spied targets, coordinate links, espionage queue status, and color-coded production projections matching System Inactives.",
+            customElement: onOpenTutorials && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
                     <button
                         onClick={() => {
                             onAcknowledge();
-                            window.dispatchEvent(new CustomEvent('ognexus_navigated', { detail: { view: 'tutorials' } }));
+                            onOpenTutorials();
                         }}
                         style={{
-                            background: 'rgba(0, 242, 255, 0.1)',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            background: 'rgba(0, 242, 255, 0.12)',
+                            border: '1px solid rgba(0, 242, 255, 0.25)',
                             color: '#00f2ff',
-                            border: '1px solid rgba(0, 242, 255, 0.3)',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            fontSize: '0.75rem',
+                            fontSize: '0.72rem',
                             fontWeight: 700,
                             cursor: 'pointer',
-                            transition: 'all 0.2s'
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            boxShadow: '0 0 10px rgba(0, 242, 255, 0.05)',
+                            transition: 'all 0.2s ease',
+                            outline: 'none'
                         }}
                         onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0, 242, 255, 0.2)';
+                            e.currentTarget.style.background = 'rgba(0, 242, 255, 0.2)';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 242, 255, 0.2)';
                         }}
                         onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0, 242, 255, 0.1)';
+                            e.currentTarget.style.background = 'rgba(0, 242, 255, 0.12)';
+                            e.currentTarget.style.boxShadow = '0 0 10px rgba(0, 242, 255, 0.05)';
                         }}
                     >
-                        See tutorial
+                        SEE TUTORIAL
                     </button>
-                    <button
-                        onClick={() => {
-                            onAcknowledge();
-                            window.dispatchEvent(new CustomEvent('ognexus_navigated', { detail: { view: 'raidRadar' } }));
-                        }}
-                        style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            color: '#fff',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.05)';
-                        }}
-                    >
-                        Take me there
-                    </button>
+                    <span style={{ fontSize: '0.72rem', color: 'rgba(255, 255, 255, 0.4)', fontWeight: 500 }}>
+                        (New Step 7)
+                    </span>
                 </div>
             )
         },
         {
-            icon: <Activity size={22} color="#ec4899" />,
-            title: "At-A-Glance Row Customization",
-            desc: "Added settings cog to customize and sort table rows. Supports HTML5 drag-and-drop ordering, row background color-coding, and storage sync."
+            icon: <Activity size={22} color="#10b981" />,
+            title: "Automated Background Sync",
+            desc: "A silent sync engine that runs every 5 minutes (retrying in 1 minute on failures) to keep your account, planets, lifeforms, and researches up-to-date without need to sync manually. Sync status can be seen in the Nexus Terminal header."
         },
         {
-            icon: <Hash size={22} color="#a855f7" />,
-            title: "Standardized Number Formatting",
-            desc: "Unified number displaying across Combats, Expeditions, Harvests, and At-A-Glance modules. Employs T/B/M/K suffixes with exactly 2 decimal places, and displays values under 1,000 as clean, rounded integers."
+            icon: <Radar size={22} color="#f59e0b" />,
+            title: "Galaxy Projections & Projections Tooltips",
+            desc: "Track inactive targets, estimate loot growth, and view color-coded hourly resource production projections with live-calculating tooltips inside the Galaxy View."
         }
     ];
 
@@ -176,7 +162,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.2
+                                v1.1.3
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

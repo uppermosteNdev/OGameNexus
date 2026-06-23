@@ -270,6 +270,11 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                     title: "Advanced Targeting",
                     text: "Inside the Raid Radar menu, you will have an ever-growing source of inactive targets and multiple ways in which you can filter and search for good targets. For example, one of these is the Best Productivity Vicinities that will show a total of inactive productivity in a configurable system range around each of your planets; this can give you a good idea about close-by areas of target finding.<br /><br />**Take note!** Raid Radar can only precisely calculate inactive planet production but the estimated resources on these planets are just that, estimates - other players may also attack these targets, stealing their resources and Raid Radar has no way of tracking that.",
                     images: ["icons/tutorials/T6/RaidRadar6.jpg"]
+                },
+                {
+                    title: "Raid Helper Sidebar",
+                    text: "The Raid Helper sidebar is a powerful overlay built directly into the Galaxy View. It displays all inactive targets in the current galaxy with detailed, color-coded hourly resource production projections. Use it to quickly analyze system productivity, check the status of your espionage queue, and quickly navigate between targets.",
+                    images: ["icons/tutorials/T6/RaidRadar7.jpg"]
                 }
             ]
         }

@@ -2108,7 +2108,7 @@ async function checkAutoSync() {
           badge.textContent = 'Game Synced: Just now';
         }
       } catch (syncErr) {
-        console.warn("OGame Nexus: Empire background sync failed, scheduling retry in 1 minute", syncErr);
+        console.log("OGame Nexus: Empire background sync failed, scheduling retry in 1 minute", syncErr);
         // Set timestamp back to 4 minutes ago, so next checkAutoSync (running every minute)
         // will retry after 1 more minute instead of waiting another 5 minutes
         await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 4 * 60 * 1000 });
@@ -2116,9 +2116,9 @@ async function checkAutoSync() {
     }
   } catch (err: any) {
     if (err?.message?.includes("context invalidated")) {
-      console.warn("OGame Nexus: Auto-sync check skipped due to extension context invalidation.");
+      console.log("OGame Nexus: Auto-sync check skipped due to extension context invalidation.");
     } else {
-      console.warn("OGame Nexus: Error during auto-sync check", err);
+      console.log("OGame Nexus: Error during auto-sync check", err);
     }
   }
 }

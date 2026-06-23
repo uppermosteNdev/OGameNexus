@@ -101,7 +101,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to get manifest version", e);
         }
-        return "1.1.2";
+        return "1.1.3";
     };
 
     const autoDismissChangelogForNewInstall = (version: string) => {
@@ -267,6 +267,10 @@ const App: React.FC = () => {
                         onNavigateToSettings={() => {
                             handleAcknowledgeChangelog();
                             setCurrentView('settings');
+                        }}
+                        onOpenTutorials={() => {
+                            handleAcknowledgeChangelog();
+                            setCurrentView('tutorials');
                         }}
                     />
                 )}

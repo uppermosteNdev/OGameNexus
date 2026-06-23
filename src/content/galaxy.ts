@@ -777,7 +777,7 @@ function updateSidebarData(force = false) {
           <td class="og-nexus-intel-cell-coords">
             <a href="#" class="og-nexus-intel-coords-link" data-coords="${target.coords}">[${target.coords}]</a>
           </td>
-          <td class="og-nexus-intel-cell-prod">
+          <td class="og-nexus-intel-cell-prod" style="color: ${getRingColor(prodMSU)}; text-shadow: 0 0 3px ${getRingColor(prodMSU)}40;">
             ${formattedProd}<span class="msu-unit">MSU/h</span>
           </td>
         </tr>
