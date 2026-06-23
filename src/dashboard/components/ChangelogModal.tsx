@@ -57,8 +57,8 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
         },
         {
             icon: <Activity size={22} color="#10b981" />,
-            title: "Automated Background Sync",
-            desc: "A silent sync engine that runs every 5 minutes (retrying in 1 minute on failures) to keep your account, planets, lifeforms, and researches up-to-date without need to sync manually. Sync status can be seen in the Nexus Terminal header."
+            title: "Smart Gameplay Synchronization",
+            desc: "A sync engine that updates your empire coordinates, researches, and lifeforms automatically during active gameplay. Runs seamlessly only when you navigate pages, eliminating the need to manually sync periodically. Manual sync can still be done in OGame Terminal."
         },
         {
             icon: <Radar size={22} color="#f59e0b" />,
@@ -162,7 +162,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.3
+                                v1.1.4
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

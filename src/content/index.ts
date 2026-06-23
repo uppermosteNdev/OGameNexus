@@ -2108,9 +2108,9 @@ async function checkAutoSync() {
           badge.textContent = 'Game Synced: Just now';
         }
       } catch (syncErr) {
-        console.log("OGame Nexus: Empire background sync failed, scheduling retry in 1 minute", syncErr);
-        // Set timestamp back to 4 minutes ago, so next checkAutoSync (running every minute)
-        // will retry after 1 more minute instead of waiting another 5 minutes
+        console.log("OGame Nexus: Empire background sync failed, scheduling retry on next navigation after 1 minute", syncErr);
+        // Set timestamp back to 4 minutes ago, so if the player navigates to another page after 1 minute,
+        // it will retry the sync instead of waiting another 5 minutes
         await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 4 * 60 * 1000 });
       }
     }
@@ -2123,8 +2123,7 @@ async function checkAutoSync() {
   }
 }
 
-// Initial check after 5 seconds, then check every 60 seconds
-setTimeout(checkAutoSync, 5000);
-setInterval(checkAutoSync, 60000);
+// Run sync check once shortly after the player loads/navigates to the page
+setTimeout(checkAutoSync, 3000);
 
 
