@@ -45,13 +45,13 @@ const PLANET_PROPERTY_NAMES: Record<string, string> = {
 function getEntityName(id: number): string {
   const ship = SHIP_DATA.find(x => x.id === id);
   if (ship) return ship.name;
-  
+
   const def = DEFENCE_DATA.find(x => x.id === id);
   if (def) return def.name;
-  
+
   const res = RESEARCH_DATA.find(x => x.id === id);
   if (res) return res.name;
-  
+
   const bld = BUILDING_DATA.find(x => x.id === id);
   if (bld) return bld.name;
 
@@ -117,9 +117,9 @@ function scrapeOfficers() {
     const checkActive = (selector: string) => {
       const el = officersEl.querySelector(selector);
       if (!el) return false;
-      
+
       if (el.classList.contains("on")) return true;
-      
+
       const title = el.getAttribute("data-tooltip-title") || "";
       const lowerTitle = title.toLowerCase();
       if (lowerTitle.includes("active") || lowerTitle.includes("still active")) {
@@ -301,114 +301,114 @@ function scrapeOverviewData() {
   // 5. Active Items & Boosters
   const activeItems: any[] = [];
   const boosters = { metal: 0, crystal: 0, deuterium: 0 };
-  
+
   const activeItemsEl = document.querySelector('.active_items');
   if (activeItemsEl) {
     const itemContainers = activeItemsEl.querySelectorAll('div[data-uuid]');
     itemContainers.forEach(container => {
       const itemEl = container.querySelector('a.active_item');
       if (!itemEl) return;
-      
+
       const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || itemEl.getAttribute('title') || '';
       const titleParts = tooltipTitle.split('|');
       const title = titleParts[0].trim();
       const bodyHtml = titleParts.slice(1).join('|');
-      
+
       const lowerTitle = title.toLowerCase();
       let type: any = 'other';
       let bonus = 0;
-      
+
       if (lowerTitle.includes('metal booster')) {
-          type = 'metal';
-          if (lowerTitle.includes('platinum')) bonus = 0.40;
-          else if (lowerTitle.includes('gold')) bonus = 0.30;
-          else if (lowerTitle.includes('silver')) bonus = 0.20;
-          else if (lowerTitle.includes('bronze')) bonus = 0.10;
+        type = 'metal';
+        if (lowerTitle.includes('platinum')) bonus = 0.40;
+        else if (lowerTitle.includes('gold')) bonus = 0.30;
+        else if (lowerTitle.includes('silver')) bonus = 0.20;
+        else if (lowerTitle.includes('bronze')) bonus = 0.10;
       } else if (lowerTitle.includes('crystal booster')) {
-          type = 'crystal';
-          if (lowerTitle.includes('platinum')) bonus = 0.40;
-          else if (lowerTitle.includes('gold')) bonus = 0.30;
-          else if (lowerTitle.includes('silver')) bonus = 0.20;
-          else if (lowerTitle.includes('bronze')) bonus = 0.10;
+        type = 'crystal';
+        if (lowerTitle.includes('platinum')) bonus = 0.40;
+        else if (lowerTitle.includes('gold')) bonus = 0.30;
+        else if (lowerTitle.includes('silver')) bonus = 0.20;
+        else if (lowerTitle.includes('bronze')) bonus = 0.10;
       } else if (lowerTitle.includes('deuterium booster')) {
-          type = 'deuterium';
-          if (lowerTitle.includes('platinum')) bonus = 0.40;
-          else if (lowerTitle.includes('gold')) bonus = 0.30;
-          else if (lowerTitle.includes('silver')) bonus = 0.20;
-          else if (lowerTitle.includes('bronze')) bonus = 0.10;
+        type = 'deuterium';
+        if (lowerTitle.includes('platinum')) bonus = 0.40;
+        else if (lowerTitle.includes('gold')) bonus = 0.30;
+        else if (lowerTitle.includes('silver')) bonus = 0.20;
+        else if (lowerTitle.includes('bronze')) bonus = 0.10;
       } else if (lowerTitle.includes('expedition resource booster')) {
-          type = 'expedition_res';
+        type = 'expedition_res';
       } else if (lowerTitle.includes('resource booster')) {
-          type = 'resource';
+        type = 'resource';
       } else if (lowerTitle.includes('expedition slots')) {
-          type = 'expedition_slots';
+        type = 'expedition_slots';
       } else if (lowerTitle.includes('fleet slots')) {
-          type = 'fleet_slots';
+        type = 'fleet_slots';
       } else if (lowerTitle.includes('planet fields')) {
-          type = 'fields';
+        type = 'fields';
       }
-      
+
       const titlePercentMatch = title.match(/\((\d+)%\)/);
       if (titlePercentMatch) {
-          bonus = parseInt(titlePercentMatch[1], 10) / 100;
+        bonus = parseInt(titlePercentMatch[1], 10) / 100;
       }
-      
+
       let rarity = '';
       const elClass = itemEl.className || '';
       const parentClass = container.className || '';
       const rarityMatch = elClass.match(/r_(\w+)/) || parentClass.match(/r_(\w+)/);
       if (rarityMatch) rarity = rarityMatch[1];
-      
+
       let timeRemaining = '';
       let expiryTimestamp: number | undefined;
       let duration = '';
       let isPermanent = false;
-      
+
       const decodedHtml = bodyHtml
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#43;/g, '+');
-      
-      const restTimeMatch = decodedHtml.match(/class="restTime"[^>]*>Time remaining:\s*([^<]+)/i) || 
-                            decodedHtml.match(/Time remaining:\s*([^<]+)/i);
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#43;/g, '+');
+
+      const restTimeMatch = decodedHtml.match(/class="restTime"[^>]*>Time remaining:\s*([^<]+)/i) ||
+        decodedHtml.match(/Time remaining:\s*([^<]+)/i);
       if (restTimeMatch) {
-          timeRemaining = restTimeMatch[1].trim();
-          const secondsRemaining = parseOgameTime(timeRemaining);
-          if (secondsRemaining > 0) {
-              expiryTimestamp = Date.now() + (secondsRemaining * 1000);
-          }
+        timeRemaining = restTimeMatch[1].trim();
+        const secondsRemaining = parseOgameTime(timeRemaining);
+        if (secondsRemaining > 0) {
+          expiryTimestamp = Date.now() + (secondsRemaining * 1000);
+        }
       }
-      
+
       const durationMatch = decodedHtml.match(/Duration:\s*([^<]+)/i);
       if (durationMatch) {
-          duration = durationMatch[1].trim();
-          if (duration.toLowerCase().includes('permanent')) {
-              isPermanent = true;
-          }
+        duration = durationMatch[1].trim();
+        if (duration.toLowerCase().includes('permanent')) {
+          isPermanent = true;
+        }
       }
-      
+
       activeItems.push({
-          name: title,
-          title,
-          rarity,
-          timeRemaining,
-          expiryTimestamp,
-          duration,
-          isPermanent,
-          bonus,
-          type
+        name: title,
+        title,
+        rarity,
+        timeRemaining,
+        expiryTimestamp,
+        duration,
+        isPermanent,
+        bonus,
+        type
       });
-      
+
       if (bonus > 0) {
-          if (type === 'metal') boosters.metal += bonus;
-          else if (type === 'crystal') boosters.crystal += bonus;
-          else if (type === 'deuterium') boosters.deuterium += bonus;
-          else if (type === 'resource') {
-              boosters.metal += bonus;
-              boosters.crystal += bonus;
-              boosters.deuterium += bonus;
-          }
+        if (type === 'metal') boosters.metal += bonus;
+        else if (type === 'crystal') boosters.crystal += bonus;
+        else if (type === 'deuterium') boosters.deuterium += bonus;
+        else if (type === 'resource') {
+          boosters.metal += bonus;
+          boosters.crystal += bonus;
+          boosters.deuterium += bonus;
+        }
       }
     });
   }
@@ -1167,7 +1167,7 @@ async function toggleNexusModal() {
       await performBackgroundEmpireSync();
       const now = Date.now();
       await chrome.storage.local.set({ 'last_empire_sync_time': now });
-      
+
       syncBadge.style.color = '#38bdf8';
       syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
       syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
@@ -1318,19 +1318,19 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
             if (lowName.includes('crystal mine')) return 'icons/resources/crystal_mine_large.jpg';
             if (lowName.includes('deuterium mine')) return 'icons/resources/deuterium_mine_large.jpg';
             if (lowName.includes('plasma technology')) return 'icons/research/plasma-tech-research-large.jpg';
-            
+
             // Lifeform Techs
             if (lowName.includes('automated transport')) return 'icons/lifeforms/mechas-tech-t6-large.jpg';
             if (lowName.includes('enhanced sensor')) return 'icons/lifeforms/kaelesh-tech-t5-large.jpg';
             if (lowName.includes('high-performance extractors')) return 'icons/lifeforms/humans-tech-t2-large.jpg';
             if (lowName.includes('acoustic scanning')) return 'icons/lifeforms/rocktal-tech-t2-large.jpg';
-            
+
             // Lifeform Buildings
             if (lowName.includes('metropolis')) return 'icons/lifeforms/humans-building-11-large.jpg';
             if (lowName.includes('chip mass production')) return 'icons/lifeforms/mechas-building-11-large.jpg';
             if (lowName.includes('high-performance transformer')) return 'icons/lifeforms/mechas-building-7-large.jpg';
             if (lowName.includes('mineral research centre')) return 'icons/lifeforms/rocktal-building-11-large.jpg';
-            
+
             return 'icons/misc/technology.png';
           };
 
@@ -1428,7 +1428,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
     container.appendChild(heading);
 
     const sub = document.createElement('p');
-    sub.innerHTML = 'Detailed breakdown of daily base production and active bonuses across your empire. <span style="color: #fbbf24; font-weight: 500;">(This section is still under construction and may not be accurate as of now)</span>';
+    sub.innerHTML = 'Detailed breakdown of daily base production and active bonuses across your empire.';
     sub.style.cssText = `color: #64748b; font-size: 14px; margin-bottom: 30px;`;
     container.appendChild(sub);
 
@@ -1505,7 +1505,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         <table class="nexus-prod-table">
           <thead class="nexus-prod-thead">
             <tr>
-              <th class="nexus-prod-th" style="text-align: center; width: 165px; border-top-left-radius: 12px;">Planet</th>
+              <th class="nexus-prod-th" style="text-align: center; width: 165px;">Planet</th>
               <th class="nexus-prod-th" style="text-align: center; width: 42px; font-size: 8px; letter-spacing: 0.2px; padding: 14px 2px; text-transform: uppercase;">Resources</th>
               <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Base / Day" style="width: 100px; text-align: center;">
                 <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
@@ -1547,7 +1547,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                 </div>
               </th>
-              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Total / Day" style="width: 130px; color: #00e5ff; font-weight: 900; border-top-right-radius: 12px; text-align: center;">
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Total / Day" style="width: 130px; color: #00e5ff; font-weight: 900; text-align: center;">
                 <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="3" style="filter: drop-shadow(0 0 4px #00e5ff);"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </div>
@@ -1654,11 +1654,11 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         totals.deuterium.total += totD;
 
         const renderBonusCell = (baseVal: number, pct: number, rowColor: string, badgeColor: string = "", extraText: string = "") => {
-          if (pct <= 0) return `<td style="padding: 12px 8px; text-align: right; color: #334155; font-weight: 700; border-right: 1px solid rgba(255, 255, 255, 0.015);">-</td>`;
+          if (pct <= 0) return `<td style="padding: 12px 8px; text-align: center; color: #334155; font-weight: 700; border-right: 1px solid rgba(255, 255, 255, 0.015);">-</td>`;
           const val = baseVal * pct;
           const formattedExtra = extraText ? `<div style="display: inline-block; font-size: 8.5px; color: ${badgeColor}; font-weight: 800; text-transform: uppercase; background: ${badgeColor}12; border: 1px solid ${badgeColor}40; padding: 1.5px 5.5px; border-radius: 4px; margin-top: 2.5px; text-shadow: 0 0 2px ${badgeColor}60;">${extraText}</div>` : "";
           return `
-            <td style="padding: 12px 8px; text-align: right; line-height: 1.35; border-right: 1px solid rgba(255, 255, 255, 0.015);">
+            <td style="padding: 12px 8px; text-align: center; line-height: 1.35; border-right: 1px solid rgba(255, 255, 255, 0.015);">
               <div style="color: ${rowColor}; font-weight: 800; font-size: 12px; text-shadow: 0 0 8px ${rowColor}20;">+${(pct * 100).toFixed(1)}%</div>
               ${formattedExtra}
               <div class="og-nexus-value" style="font-size: 10px; color: ${rowColor}bb; font-weight: 600; margin-top: 1px;">+${Math.round(val).toLocaleString()}</div>
@@ -1680,10 +1680,11 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
                 <span class="nexus-prod-coords-badge">${p.coords}</span>
               </div>
             </td>
-            <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(230, 149, 60, 0.7); width: 42px;">
-              <img src="${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 3px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Metal" />
+            <td class="nexus-prod-resource-cell" title="Metal">
+              <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}');"></div>
+              <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-metal"></div>
             </td>
-            <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 700; color: #ff8d33; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseM).toLocaleString()}</td>
+            <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #ff8d33; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseM).toLocaleString()}</td>
             ${renderBonusCell(baseM, lfbMetal, '#ff8d33', '#38bdf8')}
             ${renderBonusCell(baseM, globalEuroMetal, '#ff8d33', '#c084fc')}
             ${renderBonusCell(baseM, plasmaMetal, '#ff8d33', '#f472b6')}
@@ -1695,10 +1696,11 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           </tr>
           <!-- Crystal Row -->
           <tr class="nexus-prod-row">
-            <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(51, 178, 255, 0.7); width: 42px;">
-              <img src="${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 3px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Crystal" />
+            <td class="nexus-prod-resource-cell" title="Crystal">
+              <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}');"></div>
+              <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-crystal"></div>
             </td>
-            <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 700; color: #33b2ff; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseC).toLocaleString()}</td>
+            <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #33b2ff; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseC).toLocaleString()}</td>
             ${renderBonusCell(baseC, lfbCrystal, '#33b2ff', '#38bdf8')}
             ${renderBonusCell(baseC, globalEuroCrystal, '#33b2ff', '#c084fc')}
             ${renderBonusCell(baseC, plasmaCrystal, '#33b2ff', '#f472b6')}
@@ -1710,10 +1712,11 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           </tr>
           <!-- Deuterium Row -->
           <tr class="nexus-prod-row" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-            <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(34, 197, 94, 0.7); width: 42px;">
-              <img src="${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 3px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Deuterium" />
+            <td class="nexus-prod-resource-cell" title="Deuterium">
+              <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}');"></div>
+              <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-deuterium"></div>
             </td>
-            <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 700; color: #22c55e; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseD).toLocaleString()}</td>
+            <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #22c55e; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseD).toLocaleString()}</td>
             ${renderBonusCell(baseD, lfbDeut, '#22c55e', '#38bdf8')}
             ${renderBonusCell(baseD, globalEuroDeut, '#22c55e', '#c084fc')}
             ${renderBonusCell(baseD, plasmaDeut, '#22c55e', '#f472b6')}
@@ -1728,10 +1731,10 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
 
       // RENDER TOTALS ROW AT BOTTOM
       const renderTotalBonusCell = (totalBase: number, totalBonusVal: number, themeColor: string) => {
-        if (totalBase <= 0 || totalBonusVal <= 0) return `<td style="padding: 12px 8px; text-align: right; color: #334155; font-weight: 700; border-right: 1px solid rgba(255, 255, 255, 0.015);">-</td>`;
+        if (totalBase <= 0 || totalBonusVal <= 0) return `<td style="padding: 12px 8px; text-align: center; color: #334155; font-weight: 700; border-right: 1px solid rgba(255, 255, 255, 0.015);">-</td>`;
         const pct = totalBonusVal / totalBase;
         return `
-          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; line-height: 1.35; border-right: 1px solid rgba(255, 255, 255, 0.015);">
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; line-height: 1.35; border-right: 1px solid rgba(255, 255, 255, 0.015);">
             <div style="color: ${themeColor}; font-weight: 800; font-size: 12px; text-shadow: 0 0 8px ${themeColor}20;">+${(pct * 100).toFixed(1)}%</div>
             <div style="font-size: 10px; color: ${themeColor}bb; font-weight: 700; margin-top: 1px;">+${Math.round(totalBonusVal).toLocaleString()}</div>
           </td>
@@ -1745,13 +1748,14 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #38bdf8; box-shadow: 0 0 12px #38bdf8; z-index: 3;"></div>
             <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(56, 189, 248, 0.06) 100%); z-index: 2;"></div>
             <div style="position: relative; z-index: 3; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
-              <span style="font-weight: 1000; color: #38bdf8; font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);">Empire Totals</span>
+              <span style="font-weight: 1000; color: #38bdf8; font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 0 4px rgba(56, 189, 248, 0.45);">Empire Totals</span>
             </div>
           </td>
-          <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(230, 149, 60, 0.7); width: 42px;">
-            <img src="${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 2px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Metal" />
+          <td class="nexus-prod-resource-cell" title="Metal">
+            <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}');"></div>
+            <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-metal"></div>
           </td>
-          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 800; color: #ff8d33; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.metal.base).toLocaleString()}</td>
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 800; color: #ff8d33; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.metal.base).toLocaleString()}</td>
           ${renderTotalBonusCell(totals.metal.base, totals.metal.lfb, '#ff8d33')}
           ${renderTotalBonusCell(totals.metal.base, totals.metal.lfr, '#ff8d33')}
           ${renderTotalBonusCell(totals.metal.base, totals.metal.plasma, '#ff8d33')}
@@ -1763,10 +1767,11 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         </tr>
         <!-- Summary Crystal -->
         <tr class="nexus-totals-row">
-          <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(51, 178, 255, 0.7); width: 42px;">
-            <img src="${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 2px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Crystal" />
+          <td class="nexus-prod-resource-cell" title="Crystal">
+            <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}');"></div>
+            <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-crystal"></div>
           </td>
-          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 800; color: #33b2ff; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.crystal.base).toLocaleString()}</td>
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 800; color: #33b2ff; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.crystal.base).toLocaleString()}</td>
           ${renderTotalBonusCell(totals.crystal.base, totals.crystal.lfb, '#33b2ff')}
           ${renderTotalBonusCell(totals.crystal.base, totals.crystal.lfr, '#33b2ff')}
           ${renderTotalBonusCell(totals.crystal.base, totals.crystal.plasma, '#33b2ff')}
@@ -1778,10 +1783,11 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         </tr>
         <!-- Summary Deuterium -->
         <tr class="nexus-totals-row" style="border-bottom: 2px solid rgba(56, 189, 248, 0.2);">
-          <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(34, 197, 94, 0.7); width: 42px;">
-            <img src="${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 2px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Deuterium" />
+          <td class="nexus-prod-resource-cell" title="Deuterium">
+            <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}');"></div>
+            <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-deuterium"></div>
           </td>
-          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 800; color: #22c55e; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.deuterium.base).toLocaleString()}</td>
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 800; color: #22c55e; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.deuterium.base).toLocaleString()}</td>
           ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.lfb, '#22c55e')}
           ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.lfr, '#22c55e')}
           ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.plasma, '#22c55e')}
@@ -1839,7 +1845,7 @@ function applyFleetOverlayStyling(ownFlying: number, total: number, missionCount
   if (ownFlying > 0 && percentage > 0 && totalMissions > 0) {
     let currentStop = 0;
     const stops: string[] = [];
-    
+
     // Sort active mission types by count ascending (least missions to most missions)
     const sortedActiveMissionTypes = Object.keys(missionCounts)
       .filter(type => missionCounts[type] > 0)
@@ -1854,7 +1860,7 @@ function applyFleetOverlayStyling(ownFlying: number, total: number, missionCount
 
     let firstColor = "";
     let lastColor = "";
-    
+
     // Find the first and last colors to anchor the gradient ends
     sortedActiveMissionTypes.forEach(type => {
       const color = MISSION_COLORS[type] || DEFAULT_MISSION_COLOR;
@@ -1927,7 +1933,7 @@ function applyFleetOverlayStyling(ownFlying: number, total: number, missionCount
   // 4. Make sure eventBox background is transparent
   if (eventBox) {
     eventBox.style.background = 'transparent';
-    
+
     // 5. Update the text label in undermark to show percentage
     const undermark = eventBox.querySelector('.undermark');
     if (undermark) {
@@ -1949,7 +1955,7 @@ function applyFleetOverlayStyling(ownFlying: number, total: number, missionCount
 function updateFleetProgressOverlay() {
   const messagesCollapsed = document.getElementById('messages_collapsed');
   const eventBox = document.getElementById('eventboxFilled');
-  
+
   if (!messagesCollapsed && !eventBox) return;
 
   const playerId = getMetaContent("ogame-player-id");
@@ -1961,7 +1967,7 @@ function updateFleetProgressOverlay() {
     let ownFlyingShips = 0;
     let totalMissions = 0;
     const missionCounts: Record<string, number> = {};
-    
+
     rows.forEach(row => {
       const missionFleetImg = row.querySelector('td.missionFleet img');
       if (missionFleetImg) {
@@ -1970,7 +1976,7 @@ function updateFleetProgressOverlay() {
         const isFriendly = /Friendly fleet|Freundliche Flotte|Flotte amicale|Flota amigable|Flotta amica|Przyjazna flota|Frota amigável|Dost filo|Дружественный флот|Vriendelijke vloot|Baráti flotta|Přátelská flotila|Priateľská flotila|Venlig flåde|Vänlig flotta|Vennlig flåte|Ystävällinen laivasto|Φιλικός στόλος|Prijateljska flota|Flota amica/i.test(tooltipTitle);
         const missionType = row.getAttribute('data-mission-type') || '';
         const isOwnFleet = isOwn || (isFriendly && (missionType === '18' || missionType === '15'));
-        
+
         if (isOwnFleet) {
           const detailsTd = row.querySelector('td.detailsFleet');
           if (detailsTd) {
@@ -1992,7 +1998,7 @@ function updateFleetProgressOverlay() {
       lastParsedFlyingShips = ownFlyingShips;
       lastParsedMissionCounts = missionCounts;
       cachedTotalShipsPlayerId = playerId;
-      
+
       chrome.runtime.sendMessage({ type: "GET_TOTAL_SHIPS", playerId }, (res) => {
         if (res && res.success) {
           cachedTotalShips = res.totalShips;
@@ -2010,7 +2016,7 @@ function updateFleetProgressOverlay() {
 
 function throttle(func: (...args: any[]) => void, limit: number) {
   let inThrottle = false;
-  return function(this: any, ...args: any[]) {
+  return function (this: any, ...args: any[]) {
     if (!inThrottle) {
       func.apply(this, args);
       inThrottle = true;
@@ -2205,7 +2211,7 @@ async function performBackgroundEmpireSync() {
   // Parse using our new AJAX parser
   const planetsData = parseAjaxEmpireJson(planetsJson, false);
   const moonsData = parseAjaxEmpireJson(moonsJson, true);
-  
+
   const lfParser = new DOMParser();
   const lfDoc = lfParser.parseFromString(lfBonusesHtml, "text/html");
   const lifeformExperienceData = scrapeLifeformExperience(lfDoc);
@@ -2229,7 +2235,7 @@ async function performBackgroundEmpireSync() {
     if (p.metalStorage) supplyCount++;
     if (p.crystalStorage) supplyCount++;
     if (p.deuteriumStorage) supplyCount++;
-    
+
     // Facilities
     if (p.roboticsFactory) stationCount++;
     if (p.naniteFactory) stationCount++;
@@ -2305,7 +2311,7 @@ async function performBackgroundEmpireSync() {
   // 2. Planets & Moons details
   totalPlanets.forEach(p => {
     console.groupCollapsed(`${p.name} [${p.coords}] (${p.type === 'moon' ? 'Moon' : 'Planet'})`);
-    
+
     // Buildings & Facilities
     const bldList: string[] = [];
     Object.entries(PLANET_PROPERTY_NAMES).forEach(([propName, dispName]) => {
@@ -2468,13 +2474,13 @@ async function checkAutoSync() {
     // 5 minutes = 5 * 60 * 1000 milliseconds
     if (now - lastSync >= 5 * 60 * 1000) {
       console.log("OGame Nexus: Auto-sync triggered (5 minutes elapsed since last sync).");
-      
+
       // Update sync time immediately to prevent concurrent triggers in other tabs
       await chrome.storage.local.set({ 'last_empire_sync_time': now });
 
       try {
         await performBackgroundEmpireSync();
-        
+
         // Update badge if modal is open
         const badge = document.getElementById('og-nexus-modal-sync-badge');
         if (badge) {
