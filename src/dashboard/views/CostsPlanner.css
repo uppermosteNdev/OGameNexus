@@ -1969,3 +1969,29 @@
     margin-top: 4px;
     letter-spacing: 0.2px;
 }
+
+/* Two-column layout container for MSU and Gather Time pods */
+.summary-msu-container {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.summary-msu-container .summary-msu-pod {
+    margin-bottom: 0;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.summary-msu-container .msu-val-text {
+    font-size: 1.1rem;
+    letter-spacing: -0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+}

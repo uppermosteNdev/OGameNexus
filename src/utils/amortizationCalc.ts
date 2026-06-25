@@ -8,6 +8,7 @@ export interface Cost {
 }
 
 export interface AmortizationItem {
+    id?: number | null;
     name: string;
     type: AmortizationType;
     cost: Cost;
@@ -154,7 +155,7 @@ export function formatROI(hours: number): string {
     return parts.join(' ');
 }
 
-function getPlanetTechMultiplier(planet: any, account: any): number {
+export function getPlanetTechMultiplier(planet: any, account: any): number {
     const lfLevel = account?.lifeformExperience?.find((e: any) => e.id === planet.lifeformId || e.lifeformId === planet.lifeformId)?.level || 0;
     const lfLevelBonus = lfLevel * 0.001; // 0.1% per level
 
@@ -817,6 +818,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                     }
 
                     candidates.push({
+                        id: entry.id,
                         name: entry.name,
                         type: entry.type,
                         cost: cost,
@@ -860,12 +862,39 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
             else state.account.researches.push({ id: 122, level: 1 });
         } else if (best.type === AmortizationType.LifeformProductionBuildings || best.type === AmortizationType.LifeformResearchBuildings) {
             const pIdx = state.planets.findIndex(pl => pl.id === best.planetId);
-            const bIdx = state.planets[pIdx].lifeformBuildings?.findIndex((b: any) => b.name === best.name);
-            if (bIdx !== -1) state.planets[pIdx].lifeformBuildings[bIdx!].level++;
+            if (pIdx !== -1) {
+                if (!state.planets[pIdx].lifeformBuildings) {
+                    state.planets[pIdx].lifeformBuildings = [];
+                }
+                const bIdx = state.planets[pIdx].lifeformBuildings.findIndex((b: any) => b.id === best.id);
+                if (bIdx !== -1) {
+                    state.planets[pIdx].lifeformBuildings[bIdx].level++;
+                } else {
+                    const entry = AMORTIZATION_TABLE.find(e => e.id === best.id);
+                    state.planets[pIdx].lifeformBuildings.push({
+                        id: best.id,
+                        level: 1,
+                        name: entry?.name || best.name
+                    });
+                }
+            }
         } else if (best.type === AmortizationType.LifeformProductionResearches || best.type === AmortizationType.LifeformExpeditionResearches) {
             const pIdx = state.planets.findIndex(pl => pl.id === best.planetId);
-            const tech = state.planets[pIdx].lifeformSetup?.find((t: any) => AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId)?.name === best.name);
-            if (tech) tech.level++;
+            if (pIdx !== -1) {
+                if (!state.planets[pIdx].lifeformSetup) {
+                    state.planets[pIdx].lifeformSetup = [];
+                }
+                const tech = state.planets[pIdx].lifeformSetup.find((t: any) => t.selectedTechId === best.id);
+                if (tech) {
+                    tech.level++;
+                } else {
+                    state.planets[pIdx].lifeformSetup.push({
+                        selectedTechId: best.id,
+                        level: 1,
+                        slotNumber: 0
+                    });
+                }
+            }
         }
 
         resultItems.push(best);

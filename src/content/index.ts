@@ -3,6 +3,7 @@ console.log("OGame Nexus: Content script loaded.");
 import { trackExpeditions, injectTodaySummaryCard } from './expeditions';
 import { trackLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson } from './empire';
+import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier } from '../utils/amortizationCalc';
 import { trackDebrisHarvests } from './harvests';
 import { trackCombatReports, injectTodayCombatSummaryCard } from './combats';
 import { trackEspionageReports, trackRawEspionageReports } from './espionage';
@@ -308,7 +309,7 @@ function scrapeOverviewData() {
       const itemEl = container.querySelector('a.active_item');
       if (!itemEl) return;
       
-      const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || '';
+      const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || itemEl.getAttribute('title') || '';
       const titleParts = tooltipTitle.split('|');
       const title = titleParts[0].trim();
       const bodyHtml = titleParts.slice(1).join('|');
@@ -1061,7 +1062,7 @@ async function toggleNexusModal() {
   const tabItems = [
     { id: 'analytics', label: 'AT-A-GLANCE', active: true },
     { id: 'todo', label: 'AMORTIZATION TO-DO', active: false },
-    { id: 'blank', label: 'STRATEGY', active: false }
+    { id: 'production_overview', label: 'PRODUCTION', active: false }
   ];
 
   const contentArea = document.createElement('div');
@@ -1420,14 +1421,386 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
       }
     });
 
-  } else {
-    container.innerHTML = `
-      <div style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; opacity: 0.6;">
-        <div style="font-size: 48px; margin-bottom: 20px;">🏗️</div>
-        <h2 style="color: #f1f5f9; font-weight: 800; letter-spacing: 2px;">UNDER CONSTRUCTION</h2>
-        <p style="color: #64748b; margin-top: 10px;">This tactical overlay is currently being decrypted...</p>
-      </div>
+  } else if (tabId === 'production_overview') {
+    const heading = document.createElement('h2');
+    heading.textContent = 'Production';
+    heading.style.cssText = `font-size: 24px; color: #fff; margin-bottom: 8px; font-weight: 800;`;
+    container.appendChild(heading);
+
+    const sub = document.createElement('p');
+    sub.innerHTML = 'Detailed breakdown of daily base production and active bonuses across your empire. <span style="color: #fbbf24; font-weight: 500;">(This section is still under construction and may not be accurate as of now)</span>';
+    sub.style.cssText = `color: #64748b; font-size: 14px; margin-bottom: 30px;`;
+    container.appendChild(sub);
+
+    const spinner = document.createElement('div');
+    spinner.style.cssText = `display: flex; justify-content: center; align-items: center; height: 300px;`;
+    spinner.innerHTML = `
+      <div class="og-nexus-loading-spinner" style="border: 4px solid rgba(255,255,255,0.1); border-top-color: #38bdf8; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
     `;
+    container.appendChild(spinner);
+
+    chrome.runtime.sendMessage({ type: "GET_EMPIRE_PRODUCTION_DATA", playerId }, (response) => {
+      spinner.remove();
+      if (!response || !response.success) {
+        const err = document.createElement('div');
+        err.style.cssText = `color: #ef4444; padding: 20px; text-align: center;`;
+        err.textContent = `Failed to retrieve empire production data: ${response?.error || 'Unknown error'}`;
+        container.appendChild(err);
+        return;
+      }
+
+      const { planets: allPlanets, account } = response;
+      const planets = (allPlanets || []).filter((p: any) => p.type !== 'moon');
+      if (planets.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = `padding: 40px; text-align: center; color: #64748b;`;
+        empty.textContent = 'No planets found. Please perform a game sync first.';
+        container.appendChild(empty);
+        return;
+      }
+
+      const universeSpeed = account?.universeSpeed || 1;
+      const playerClass = account?.playerClass || 0;
+      const geologistBonus = account?.hasGeologist ? 0.1 : 0;
+      const staffBonus = (account?.hasCommander && account?.hasAdmiral && account?.hasEngineer && account?.hasGeologist && account?.hasTechnocrat) ? 0.02 : 0;
+      const allyTraderBonus = account?.allianceClass === 1 ? 0.05 : 0;
+      const plasmaLevel = account?.researches?.find((r: any) => r.id === 122)?.level || 0;
+
+      const plasmaMetal = plasmaLevel * 0.01;
+      const plasmaCrystal = plasmaLevel * (0.66 / 100);
+      const plasmaDeut = plasmaLevel * (0.33 / 100);
+
+      let globalEuroMetal = 0;
+      let globalEuroCrystal = 0;
+      let globalEuroDeut = 0;
+
+      planets.forEach((p: any) => {
+        const techMult = getPlanetTechMultiplier(p, account);
+        p.lifeformSetup?.forEach((t: any) => {
+          const level = t.level || 0;
+          const entry = AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId);
+          if (entry && entry.effect && (entry.effect as any).target === 'global') {
+            const val = (entry.effect as any).value * level * techMult;
+            if ((entry.effect as any).type === 'metal') globalEuroMetal += val;
+            if ((entry.effect as any).type === 'crystal') globalEuroCrystal += val;
+            if ((entry.effect as any).type === 'deuterium') globalEuroDeut += val;
+            if ((entry.effect as any).type === 'all') {
+              globalEuroMetal += val;
+              globalEuroCrystal += val;
+              globalEuroDeut += val;
+            }
+          }
+        });
+      });
+
+      const totals = {
+        metal: { base: 0, lfb: 0, lfr: 0, plasma: 0, crawlers: 0, items: 0, staff: 0, class: 0, total: 0 },
+        crystal: { base: 0, lfb: 0, lfr: 0, plasma: 0, crawlers: 0, items: 0, staff: 0, class: 0, total: 0 },
+        deuterium: { base: 0, lfb: 0, lfr: 0, plasma: 0, crawlers: 0, items: 0, staff: 0, class: 0, total: 0 }
+      };
+      const tableWrapper = document.createElement('div');
+      tableWrapper.className = 'nexus-prod-wrapper';
+
+      let tableHtml = `
+        <table class="nexus-prod-table">
+          <thead class="nexus-prod-thead">
+            <tr>
+              <th class="nexus-prod-th" style="text-align: center; width: 165px; border-top-left-radius: 12px;">Planet</th>
+              <th class="nexus-prod-th" style="text-align: center; width: 42px; font-size: 8px; letter-spacing: 0.2px; padding: 14px 2px; text-transform: uppercase;">Resources</th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Base / Day" style="width: 100px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Lifeform Buildings" style="width: 110px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Lifeform Research" style="width: 110px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2.5"><path d="M6 3h12M12 3v11M9 11h6M4 21h16c0-2-3-8-4-8H8c-1 0-4 6-4 8z"></path></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Plasma Technology" style="width: 95px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Crawlers" style="width: 115px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Items" style="width: 95px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Staff" style="width: 95px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Class" style="width: 95px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                </div>
+              </th>
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Total / Day" style="width: 130px; color: #00e5ff; font-weight: 900; border-top-right-radius: 12px; text-align: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="3" style="filter: drop-shadow(0 0 4px #00e5ff);"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      planets.forEach((p: any) => {
+        const m = p.metalMine || 0;
+        const c = p.crystalMine || 0;
+        const d = p.deuteriumMine || 0;
+        const temp = p.tempMax || 20;
+
+        let slot = 0;
+        try { slot = parseInt(p.coords.split(':')[2]); } catch (e) { }
+        let metalPosFactor = 1;
+        if (slot === 6 || slot === 10) metalPosFactor = 1.17;
+        else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
+        else if (slot === 8) metalPosFactor = 1.35;
+
+        let crystalPosFactor = 1;
+        if (slot === 1) crystalPosFactor = 1.4;
+        else if (slot === 2) crystalPosFactor = 1.3;
+        else if (slot === 3) crystalPosFactor = 1.2;
+
+        const baseMetalHourly = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor;
+        const baseCrystalHourly = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor;
+        const baseDeutHourly = 10 * d * Math.pow(1.1, d) * (1.44 - 0.004 * temp) * universeSpeed;
+
+        const baseM = baseMetalHourly * 24;
+        const baseC = baseCrystalHourly * 24;
+        const baseD = baseDeutHourly * 24;
+
+        // LF Buildings
+        let lfbMetal = 0, lfbCrystal = 0, lfbDeut = 0;
+        const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
+        p.lifeformBuildings?.forEach((b: any) => {
+          if (activePrefix && !b.id.toString().startsWith(activePrefix)) return;
+          if (b.id === 12106) lfbMetal += b.level * 0.02;
+          if (b.id === 12109) lfbCrystal += b.level * 0.02;
+          if (b.id === 12110) lfbDeut += b.level * 0.02;
+          if (b.id === 13110) lfbDeut += b.level * 0.02;
+          if (b.id === 11106) lfbMetal += b.level * 0.015;
+          if (b.id === 11108) { lfbCrystal += b.level * 0.015; lfbDeut += b.level * 0.01; }
+        });
+
+        // Crawlers
+        const maxCrawlers = (m + c + d) * universeSpeed;
+        const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);
+        const crawlerBonus = activeCrawlers * 0.0002;
+
+        // Boosters/Items
+        const boosterMetal = p.boosters?.metal || 0;
+        const boosterCrystal = p.boosters?.crystal || 0;
+        const boosterDeut = p.boosters?.deuterium || 0;
+
+        // Class
+        let classMetal = 0, classCrystal = 0, classDeut = 0;
+        if (playerClass === 1) {
+          classMetal = 0.25; classCrystal = 0.25; classDeut = 0.25;
+        }
+
+        // Flat base daily rate
+        const flatM = 30 * universeSpeed * 24;
+        const flatC = 15 * universeSpeed * 24;
+        const flatD = 0;
+
+        // Totals
+        const totM = (baseM * (1 + lfbMetal + globalEuroMetal + plasmaMetal + crawlerBonus + boosterMetal + geologistBonus + staffBonus + classMetal + allyTraderBonus)) + flatM;
+        const totC = (baseC * (1 + lfbCrystal + globalEuroCrystal + plasmaCrystal + crawlerBonus + boosterCrystal + geologistBonus + staffBonus + classCrystal + allyTraderBonus)) + flatC;
+        const totD = baseD * (1 + lfbDeut + globalEuroDeut + plasmaDeut + crawlerBonus + boosterDeut + geologistBonus + staffBonus + classDeut + allyTraderBonus);
+
+        // Accumulate empire totals
+        totals.metal.base += baseM;
+        totals.metal.lfb += baseM * lfbMetal;
+        totals.metal.lfr += baseM * globalEuroMetal;
+        totals.metal.plasma += baseM * plasmaMetal;
+        totals.metal.crawlers += baseM * crawlerBonus;
+        totals.metal.items += baseM * boosterMetal;
+        totals.metal.staff += baseM * (geologistBonus + staffBonus);
+        totals.metal.class += baseM * (classMetal + allyTraderBonus);
+        totals.metal.total += totM;
+
+        totals.crystal.base += baseC;
+        totals.crystal.lfb += baseC * lfbCrystal;
+        totals.crystal.lfr += baseC * globalEuroCrystal;
+        totals.crystal.plasma += baseC * plasmaCrystal;
+        totals.crystal.crawlers += baseC * crawlerBonus;
+        totals.crystal.items += baseC * boosterCrystal;
+        totals.crystal.staff += baseC * (geologistBonus + staffBonus);
+        totals.crystal.class += baseC * (classCrystal + allyTraderBonus);
+        totals.crystal.total += totC;
+
+        totals.deuterium.base += baseD;
+        totals.deuterium.lfb += baseD * lfbDeut;
+        totals.deuterium.lfr += baseD * globalEuroDeut;
+        totals.deuterium.plasma += baseD * plasmaDeut;
+        totals.deuterium.crawlers += baseD * crawlerBonus;
+        totals.deuterium.items += baseD * boosterDeut;
+        totals.deuterium.staff += baseD * (geologistBonus + staffBonus);
+        totals.deuterium.class += baseD * (classDeut + allyTraderBonus);
+        totals.deuterium.total += totD;
+
+        const renderBonusCell = (baseVal: number, pct: number, rowColor: string, badgeColor: string = "", extraText: string = "") => {
+          if (pct <= 0) return `<td style="padding: 12px 8px; text-align: right; color: #334155; font-weight: 700; border-right: 1px solid rgba(255, 255, 255, 0.015);">-</td>`;
+          const val = baseVal * pct;
+          const formattedExtra = extraText ? `<div style="display: inline-block; font-size: 8.5px; color: ${badgeColor}; font-weight: 800; text-transform: uppercase; background: ${badgeColor}12; border: 1px solid ${badgeColor}40; padding: 1.5px 5.5px; border-radius: 4px; margin-top: 2.5px; text-shadow: 0 0 2px ${badgeColor}60;">${extraText}</div>` : "";
+          return `
+            <td style="padding: 12px 8px; text-align: right; line-height: 1.35; border-right: 1px solid rgba(255, 255, 255, 0.015);">
+              <div style="color: ${rowColor}; font-weight: 800; font-size: 12px; text-shadow: 0 0 8px ${rowColor}20;">+${(pct * 100).toFixed(1)}%</div>
+              ${formattedExtra}
+              <div class="og-nexus-value" style="font-size: 10px; color: ${rowColor}bb; font-weight: 600; margin-top: 1px;">+${Math.round(val).toLocaleString()}</div>
+            </td>
+          `;
+        };
+
+        const pImgUrl = p.imgUrl || chrome.runtime.getURL('icons/resources/metal_mine_large.jpg');
+
+        tableHtml += `
+          <!-- Metal Row -->
+          <tr class="nexus-prod-row">
+            <td rowspan="3" class="nexus-prod-planet-cell">
+              <div class="nexus-prod-planet-bg" style="background-image: url('${pImgUrl}');"></div>
+              <div class="nexus-prod-planet-overlay"></div>
+              <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #38bdf8; box-shadow: 0 0 8px #38bdf8; z-index: 3;"></div>
+              <div style="position: relative; z-index: 3; padding: 22px 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px;">
+                <span style="font-weight: 900; color: #f8fafc; font-size: 12.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 125px; letter-spacing: 0.2px;">${p.name || 'Planet'}</span>
+                <span class="nexus-prod-coords-badge">${p.coords}</span>
+              </div>
+            </td>
+            <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(230, 149, 60, 0.7); width: 42px;">
+              <img src="${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 3px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Metal" />
+            </td>
+            <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 700; color: #ff8d33; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseM).toLocaleString()}</td>
+            ${renderBonusCell(baseM, lfbMetal, '#ff8d33', '#38bdf8')}
+            ${renderBonusCell(baseM, globalEuroMetal, '#ff8d33', '#c084fc')}
+            ${renderBonusCell(baseM, plasmaMetal, '#ff8d33', '#f472b6')}
+            ${renderBonusCell(baseM, crawlerBonus, '#ff8d33', '#fbbf24', activeCrawlers > 0 ? `${activeCrawlers} cr` : "")}
+            ${renderBonusCell(baseM, boosterMetal, '#ff8d33', '#34d399')}
+            ${renderBonusCell(baseM, geologistBonus + staffBonus, '#ff8d33', '#22d3ee')}
+            ${renderBonusCell(baseM, classMetal + allyTraderBonus, '#ff8d33', '#fb923c')}
+            <td class="og-nexus-value nexus-total-cell nexus-total-cell-metal">${Math.round(totM).toLocaleString()}</td>
+          </tr>
+          <!-- Crystal Row -->
+          <tr class="nexus-prod-row">
+            <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(51, 178, 255, 0.7); width: 42px;">
+              <img src="${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 3px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Crystal" />
+            </td>
+            <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 700; color: #33b2ff; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseC).toLocaleString()}</td>
+            ${renderBonusCell(baseC, lfbCrystal, '#33b2ff', '#38bdf8')}
+            ${renderBonusCell(baseC, globalEuroCrystal, '#33b2ff', '#c084fc')}
+            ${renderBonusCell(baseC, plasmaCrystal, '#33b2ff', '#f472b6')}
+            ${renderBonusCell(baseC, crawlerBonus, '#33b2ff', '#fbbf24', activeCrawlers > 0 ? `${activeCrawlers} cr` : "")}
+            ${renderBonusCell(baseC, boosterCrystal, '#33b2ff', '#34d399')}
+            ${renderBonusCell(baseC, geologistBonus + staffBonus, '#33b2ff', '#22d3ee')}
+            ${renderBonusCell(baseC, classCrystal + allyTraderBonus, '#33b2ff', '#fb923c')}
+            <td class="og-nexus-value nexus-total-cell nexus-total-cell-crystal">${Math.round(totC).toLocaleString()}</td>
+          </tr>
+          <!-- Deuterium Row -->
+          <tr class="nexus-prod-row" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+            <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(34, 197, 94, 0.7); width: 42px;">
+              <img src="${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 3px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Deuterium" />
+            </td>
+            <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 700; color: #22c55e; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseD).toLocaleString()}</td>
+            ${renderBonusCell(baseD, lfbDeut, '#22c55e', '#38bdf8')}
+            ${renderBonusCell(baseD, globalEuroDeut, '#22c55e', '#c084fc')}
+            ${renderBonusCell(baseD, plasmaDeut, '#22c55e', '#f472b6')}
+            ${renderBonusCell(baseD, crawlerBonus, '#22c55e', '#fbbf24', activeCrawlers > 0 ? `${activeCrawlers} cr` : "")}
+            ${renderBonusCell(baseD, boosterDeut, '#22c55e', '#34d399')}
+            ${renderBonusCell(baseD, geologistBonus + staffBonus, '#22c55e', '#22d3ee')}
+            ${renderBonusCell(baseD, classDeut + allyTraderBonus, '#22c55e', '#fb923c')}
+            <td class="og-nexus-value nexus-total-cell nexus-total-cell-deuterium">${Math.round(totD).toLocaleString()}</td>
+          </tr>
+        `;
+      });
+
+      // RENDER TOTALS ROW AT BOTTOM
+      const renderTotalBonusCell = (totalBase: number, totalBonusVal: number, themeColor: string) => {
+        if (totalBase <= 0 || totalBonusVal <= 0) return `<td style="padding: 12px 8px; text-align: right; color: #334155; font-weight: 700; border-right: 1px solid rgba(255, 255, 255, 0.015);">-</td>`;
+        const pct = totalBonusVal / totalBase;
+        return `
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; line-height: 1.35; border-right: 1px solid rgba(255, 255, 255, 0.015);">
+            <div style="color: ${themeColor}; font-weight: 800; font-size: 12px; text-shadow: 0 0 8px ${themeColor}20;">+${(pct * 100).toFixed(1)}%</div>
+            <div style="font-size: 10px; color: ${themeColor}bb; font-weight: 700; margin-top: 1px;">+${Math.round(totalBonusVal).toLocaleString()}</div>
+          </td>
+        `;
+      };
+
+      tableHtml += `
+        <!-- Summary Metal -->
+        <tr class="nexus-totals-row">
+          <td rowspan="3" style="position: relative; padding: 0; border-right: 1px solid rgba(56, 189, 248, 0.15); vertical-align: middle; overflow: hidden;">
+            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #38bdf8; box-shadow: 0 0 12px #38bdf8; z-index: 3;"></div>
+            <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(56, 189, 248, 0.06) 100%); z-index: 2;"></div>
+            <div style="position: relative; z-index: 3; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+              <span style="font-weight: 1000; color: #38bdf8; font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);">Empire Totals</span>
+            </div>
+          </td>
+          <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(230, 149, 60, 0.7); width: 42px;">
+            <img src="${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 2px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Metal" />
+          </td>
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 800; color: #ff8d33; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.metal.base).toLocaleString()}</td>
+          ${renderTotalBonusCell(totals.metal.base, totals.metal.lfb, '#ff8d33')}
+          ${renderTotalBonusCell(totals.metal.base, totals.metal.lfr, '#ff8d33')}
+          ${renderTotalBonusCell(totals.metal.base, totals.metal.plasma, '#ff8d33')}
+          ${renderTotalBonusCell(totals.metal.base, totals.metal.crawlers, '#ff8d33')}
+          ${renderTotalBonusCell(totals.metal.base, totals.metal.items, '#ff8d33')}
+          ${renderTotalBonusCell(totals.metal.base, totals.metal.staff, '#ff8d33')}
+          ${renderTotalBonusCell(totals.metal.base, totals.metal.class, '#ff8d33')}
+          <td class="og-nexus-value nexus-total-cell nexus-total-cell-metal" style="font-size: 14.5px; background: rgba(255, 141, 51, 0.04); text-shadow: 0 0 10px rgba(255, 141, 51, 0.25);">${Math.round(totals.metal.total).toLocaleString()}</td>
+        </tr>
+        <!-- Summary Crystal -->
+        <tr class="nexus-totals-row">
+          <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(51, 178, 255, 0.7); width: 42px;">
+            <img src="${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 2px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Crystal" />
+          </td>
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 800; color: #33b2ff; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.crystal.base).toLocaleString()}</td>
+          ${renderTotalBonusCell(totals.crystal.base, totals.crystal.lfb, '#33b2ff')}
+          ${renderTotalBonusCell(totals.crystal.base, totals.crystal.lfr, '#33b2ff')}
+          ${renderTotalBonusCell(totals.crystal.base, totals.crystal.plasma, '#33b2ff')}
+          ${renderTotalBonusCell(totals.crystal.base, totals.crystal.crawlers, '#33b2ff')}
+          ${renderTotalBonusCell(totals.crystal.base, totals.crystal.items, '#33b2ff')}
+          ${renderTotalBonusCell(totals.crystal.base, totals.crystal.staff, '#33b2ff')}
+          ${renderTotalBonusCell(totals.crystal.base, totals.crystal.class, '#33b2ff')}
+          <td class="og-nexus-value nexus-total-cell nexus-total-cell-crystal" style="font-size: 14.5px; background: rgba(51, 178, 255, 0.04); text-shadow: 0 0 10px rgba(51, 178, 255, 0.25);">${Math.round(totals.crystal.total).toLocaleString()}</td>
+        </tr>
+        <!-- Summary Deuterium -->
+        <tr class="nexus-totals-row" style="border-bottom: 2px solid rgba(56, 189, 248, 0.2);">
+          <td style="padding: 2px; text-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; background: rgba(34, 197, 94, 0.7); width: 42px;">
+            <img src="${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}" style="width: 16px; height: 16px; border-radius: 2px; display: block; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,0.4);" title="Deuterium" />
+          </td>
+          <td class="og-nexus-value" style="padding: 12px 8px; text-align: right; font-weight: 800; color: #22c55e; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.deuterium.base).toLocaleString()}</td>
+          ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.lfb, '#22c55e')}
+          ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.lfr, '#22c55e')}
+          ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.plasma, '#22c55e')}
+          ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.crawlers, '#22c55e')}
+          ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.items, '#22c55e')}
+          ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.staff, '#22c55e')}
+          ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.class, '#22c55e')}
+          <td class="og-nexus-value nexus-total-cell nexus-total-cell-deuterium" style="font-size: 14.5px; background: rgba(34, 197, 94, 0.04); text-shadow: 0 0 10px rgba(34, 197, 94, 0.25);">${Math.round(totals.deuterium.total).toLocaleString()}</td>
+        </tr>
+      `;
+
+      tableHtml += `
+          </tbody>
+        </table>
+      `;
+
+      tableWrapper.innerHTML = tableHtml;
+      container.appendChild(tableWrapper);
+    });
   }
 }
 

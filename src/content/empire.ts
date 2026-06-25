@@ -161,7 +161,7 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
         
         const itemEls = planetDiv.querySelectorAll('.empireItems .item_img');
         itemEls.forEach(itemEl => {
-            const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || '';
+            const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || itemEl.getAttribute('title') || '';
             const titleParts = tooltipTitle.split('|');
             const title = titleParts[0].trim();
             const bodyHtml = titleParts.slice(1).join('|');
@@ -500,7 +500,7 @@ export function parseAjaxEmpireJson(
             const boosters = { metal: 0, crystal: 0, deuterium: 0 };
             
             itemEls.forEach(itemEl => {
-                const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || '';
+                const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || itemEl.getAttribute('title') || '';
                 const titleParts = tooltipTitle.split('|');
                 const title = titleParts[0].trim();
                 const bodyHtml = titleParts.slice(1).join('|');

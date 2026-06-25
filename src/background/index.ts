@@ -325,6 +325,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     // Merge Buildings: Keep all, update levels for those found on the page
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], lifeformBuildings || empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
 
+                                    // Active items and boosters mapping
+                                    activeItems: (overview?.planetData?.activeItems !== undefined)
+                                        ? overview.planetData.activeItems
+                                        : (empirePlanet ? (empirePlanet.activeItems || []) : existing?.activeItems),
+                                    boosters: (overview?.planetData?.boosters !== undefined)
+                                        ? overview.planetData.boosters
+                                        : (empirePlanet ? (empirePlanet.boosters || { metal: 0, crystal: 0, deuterium: 0 }) : existing?.boosters),
+
                                     ...(production && (production.metal > 0 || production.crystal > 0 || production.deuterium > 0) ? {
                                         production: {
                                             metal: production.metal,
@@ -344,6 +352,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     defenses: empirePlanet?.defenses || existing?.defenses,
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], empirePlanet?.lifeformSetup || [], true),
+                                    activeItems: empirePlanet ? (empirePlanet.activeItems || []) : existing?.activeItems,
+                                    boosters: empirePlanet ? (empirePlanet.boosters || { metal: 0, crystal: 0, deuterium: 0 }) : existing?.boosters,
                                 })
                             });
 
@@ -770,6 +780,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             .then(response => response.json())
             .then(data => sendResponse({ success: true, data }))
             .catch(error => sendResponse({ success: false, error: error.message }));
+        return true;
+    }
+
+    if (message.type === "GET_EMPIRE_PRODUCTION_DATA") {
+        (async () => {
+            try {
+                let playerId = String(message.playerId || '').trim();
+                if (!playerId) {
+                    const lastAccount = await db.accounts.orderBy('lastSeen').reverse().first();
+                    playerId = lastAccount?.playerId || "";
+                }
+                const planets = await db.planets.where('playerId').equals(playerId).toArray();
+                const account = await db.accounts.get(playerId);
+                sendResponse({ success: true, planets, account });
+            } catch (err) {
+                console.error("OGame Nexus: Error fetching empire production data", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
         return true;
     }
 

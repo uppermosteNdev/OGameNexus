@@ -4,7 +4,7 @@ import {
     ShoppingCart, Plus, Minus, Trash2, Globe, ChevronUp, ChevronDown,
     Database, Wrench, Sparkles, Calculator, Dna, Box, Ship, Shield,
     Coins, RotateCcw, Check, CheckCircle2, AlertTriangle, ArrowRight, HelpCircle,
-    Info, FlaskConical, Crown
+    Info, FlaskConical, Crown, Clock
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -412,6 +412,21 @@ const CostsPlanner: React.FC = () => {
         [activeAccount]
     ) || [];
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
+
+    const expeditions = useLiveQuery(
+        () => activeAccount ? db.expeditions.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    ) || [];
+
+    const combatReports = useLiveQuery(
+        () => activeAccount ? db.combatReports.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    ) || [];
+
+    const debrisHarvests = useLiveQuery(
+        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray() : [],
+        [activeAccount]
+    ) || [];
 
     const rates = useMemo(() => {
         return settings || { metal: 3, crystal: 2, deuterium: 1 };
@@ -1304,6 +1319,139 @@ const CostsPlanner: React.FC = () => {
             deuteriumPacksNeeded
         };
     }, [dailyProduction, cartSummary.msu, rates]);
+
+    // Dynamic multipliers for daily yield MSU calculation
+    const mMultiplier = 1;
+    const cMultiplier = useMemo(() => rates.metal / rates.crystal, [rates]);
+    const dMultiplier = useMemo(() => rates.metal / rates.deuterium, [rates]);
+
+    const totalEmpireDailyYieldMSU = useMemo(() => {
+        let metalHourly = 0;
+        let crystalHourly = 0;
+        let deuteriumHourly = 0;
+        if (calcResults) {
+            planets.forEach(p => {
+                const prod = calcResults.planets[p.id]?.total;
+                if (prod) {
+                    metalHourly += prod.metal || 0;
+                    crystalHourly += prod.crystal || 0;
+                    deuteriumHourly += prod.deuterium || 0;
+                }
+            });
+        }
+        const mineDailyMSU = ((metalHourly * mMultiplier) + (crystalHourly * cMultiplier) + (deuteriumHourly * dMultiplier)) * 24;
+
+        let expResMsu7d = 0;
+        let expShipMsu7d = 0;
+        if (expeditions.length > 0) {
+            const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+            const recentExps = expeditions.filter(e => e.timestamp >= last7Days);
+
+            const shipCostMap: Record<number, any> = {};
+            SHIP_DATA.forEach(s => shipCostMap[s.id] = s.metadata?.cost || { metal: 0, crystal: 0, deuterium: 0 });
+
+            recentExps.forEach(e => {
+                const res = (e.result || '').toLowerCase();
+                if (e.resultDetails) {
+                    const m = Number(e.resultDetails.metal) || 0;
+                    const c = Number(e.resultDetails.crystal) || 0;
+                    const d = Number(e.resultDetails.deuterium) || 0;
+
+                    expResMsu7d += (m * mMultiplier) + (c * cMultiplier) + (d * dMultiplier);
+
+                    if (res.includes('ship') || res.includes('wreck')) {
+                        Object.entries(e.resultDetails).forEach(([id, data]: [string, any]) => {
+                            const sid = parseInt(id);
+                            const cost = shipCostMap[sid];
+                            if (cost) {
+                                const amount = data.amount || data;
+                                const amt = typeof amount === 'number' ? amount : amount.amount || 0;
+                                const sm = (cost.metal || 0) * amt;
+                                const sc = (cost.crystal || 0) * amt;
+                                const sd = (cost.deuterium || 0) * amt;
+
+                                expShipMsu7d += (sm * mMultiplier) + (sc * cMultiplier) + (sd * dMultiplier);
+                            }
+                        });
+                    }
+                }
+            });
+        }
+        const expResDailyMSU = expResMsu7d / 7;
+        const expShipDailyMSU = expShipMsu7d / 7;
+
+        let combatMsu7d = 0;
+        if (combatReports.length > 0) {
+            const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+            const recentCombats = combatReports.filter(c => c.timestamp >= last7Days && c.winner === 'attacker');
+
+            recentCombats.forEach(c => {
+                if (c.loot) {
+                    const m = c.loot.metal || 0;
+                    const cr = c.loot.crystal || 0;
+                    const d = c.loot.deuterium || 0;
+                    combatMsu7d += (m * mMultiplier) + (cr * cMultiplier) + (d * dMultiplier);
+                }
+            });
+        }
+        const combatDailyMSU = combatMsu7d / 7;
+
+        let debrisMsu7d = 0;
+        if (debrisHarvests.length > 0) {
+            const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+            const recentDebris = debrisHarvests.filter(d => d.timestamp >= last7Days && d.recycledResources);
+
+            recentDebris.forEach(d => {
+                const m = d.recycledResources?.metal || 0;
+                const cr = d.recycledResources?.crystal || 0;
+                const det = d.recycledResources?.deuterium || 0;
+                debrisMsu7d += (m * mMultiplier) + (cr * cMultiplier) + (det * dMultiplier);
+            });
+        }
+        const debrisDailyMSU = debrisMsu7d / 7;
+
+        return mineDailyMSU + expResDailyMSU + combatDailyMSU + debrisDailyMSU || 1;
+    }, [planets, calcResults, expeditions, combatReports, debrisHarvests, mMultiplier, cMultiplier, dMultiplier, rates]);
+
+    const formatGatherTime = (days: number): string => {
+        if (days <= 0 || isNaN(days) || !isFinite(days)) return 'Instant';
+
+        let remainingMinutes = Math.round(days * 24 * 60);
+        
+        const minutesInYear = 365 * 24 * 60;
+        const minutesInMonth = 30 * 24 * 60;
+        const minutesInDay = 24 * 60;
+        const minutesInHour = 60;
+
+        const years = Math.floor(remainingMinutes / minutesInYear);
+        remainingMinutes %= minutesInYear;
+
+        const months = Math.floor(remainingMinutes / minutesInMonth);
+        remainingMinutes %= minutesInMonth;
+
+        const targetDays = Math.floor(remainingMinutes / minutesInDay);
+        remainingMinutes %= minutesInDay;
+
+        const hours = Math.floor(remainingMinutes / minutesInHour);
+        const minutes = remainingMinutes % minutesInHour;
+
+        const parts: string[] = [];
+        if (years > 0) parts.push(`${years}y`);
+        if (months > 0) parts.push(`${months}m`);
+        if (targetDays > 0) parts.push(`${targetDays}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+
+        return parts.slice(0, 3).join(' ');
+    };
+
+    const daysToGather = useMemo(() => {
+        return cartSummary.msu / totalEmpireDailyYieldMSU;
+    }, [cartSummary.msu, totalEmpireDailyYieldMSU]);
+
+    const gatherTimeText = useMemo(() => {
+        return formatGatherTime(daysToGather);
+    }, [daysToGather]);
 
     const groupedCart = useMemo(() => {
         const groups: Record<string, { name: string; coords: string; isEmpire: boolean; planetImg?: string; items: CartItem[] }> = {};
@@ -2505,12 +2653,21 @@ const CostsPlanner: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="summary-msu-pod">
-                                <div className="msu-label-group">
-                                    <Coins size={16} color="var(--primary)" />
-                                    <span>TOTAL METAL STRUCTURE UNITS (MSU)</span>
+                            <div className="summary-msu-container">
+                                <div className="summary-msu-pod">
+                                    <div className="msu-label-group">
+                                        <Coins size={16} color="var(--primary)" />
+                                        <span>TOTAL MSU</span>
+                                    </div>
+                                    <div className="msu-val-text">{formatFullNumber(cartSummary.msu)}</div>
                                 </div>
-                                <div className="msu-val-text">{formatFullNumber(cartSummary.msu)}</div>
+                                <div className="summary-msu-pod">
+                                    <div className="msu-label-group">
+                                        <Clock size={16} color="#43D159" />
+                                        <span>EST. GATHER TIME</span>
+                                    </div>
+                                    <div className="msu-val-text" style={{ color: '#43D159', textShadow: '0 0 10px rgba(67, 209, 89, 0.25)' }}>{gatherTimeText}</div>
+                                </div>
                             </div>
 
                             <div className="summary-packages-grid">
