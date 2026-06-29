@@ -13,23 +13,18 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
     const changes = [
         {
             icon: <TrendingUp size={22} color="#00f2ff" />,
-            title: "New Production Tab inside Nexus Terminal",
-            desc: "Detailed breakdown of daily base production and active bonuses across your empire. Visualizes Metal, Crystal, and Deuterium inputs with hover effects, sticky layout headers, and centered metrics."
-        },
-        {
-            icon: <ShoppingCart size={22} color="#10b981" />,
-            title: "Improvements to the Costs Planner",
-            desc: "The planner now dynamically calculates and displays the time required to gather the necessary resources to purchase all items currently in your shopping cart."
+            title: "Combat Report Loot Summaries",
+            desc: "Combat reports now display clear, integrated summaries of looted resources (Metal, Crystal, Deuterium) in a dedicated visual pill right alongside the debris field."
         },
         {
             icon: <Sparkles size={22} color="#c084fc" />,
-            title: "Stability Improvements and fixes to the amortization",
-            desc: "Enhanced accuracy of the amortization formulas, corrected edge-case math calculations, and improved rendering stability of the upgrade recommendations."
+            title: "Production Tab Calculations",
+            desc: "Adjusted resource formulas inside the Nexus Terminal Production tab to align with advanced settings for highly accurate calculations."
         },
         {
-            icon: <RefreshCw size={22} color="#fb923c" />,
-            title: "Stability Improvements and fixes for the background sync",
-            desc: "Optimized intervals, state validation, and error recovery for the automated background synchronization engine to prevent failures and state fragmentation."
+            icon: <RefreshCw size={22} color="#10b981" />,
+            title: "Background Sync Bugfixes",
+            desc: "Resolved background synchronization errors and improved stability of automated data refreshes."
         }
     ];
 
@@ -128,7 +123,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.5
+                                v1.1.6
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

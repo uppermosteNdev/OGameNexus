@@ -173,6 +173,16 @@ export async function trackCombatReports(playerId: string) {
     const combatData = scrapeCombatMessages();
     if (combatData.length === 0) return;
 
+    let removeOGLight = true;
+    try {
+        const localData = await chrome.storage.local.get("globalSettings");
+        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
+            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
+        }
+    } catch (e) {
+        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
+    }
+
     chrome.runtime.sendMessage({
         type: "TRACK_COMBATS",
         data: { combats: combatData, playerId }
@@ -181,7 +191,7 @@ export async function trackCombatReports(playerId: string) {
             response.data.forEach((combat: any) => {
                 const msgElement = document.querySelector(`.msg[data-msg-id="${combat.messageId}"]`) as HTMLElement;
                 if (msgElement) {
-                    updateCombatVisuals(msgElement, combat);
+                    updateCombatVisuals(msgElement, combat, removeOGLight);
 
                     if (combat.isNew) {
                         setTimeout(() => {
@@ -205,8 +215,14 @@ export async function trackCombatReports(playerId: string) {
     });
 }
 
-export function updateCombatVisuals(msgElement: HTMLElement, combat: any) {
+export function updateCombatVisuals(msgElement: HTMLElement, combat: any, removeOGLight: boolean = true) {
     if (!isExtensionStillValid()) return;
+
+    // 0. Remove OGLight duplicates if configured
+    if (removeOGLight) {
+        const duplicates = msgElement.querySelectorAll('.ogl_battle');
+        duplicates.forEach(el => el.remove());
+    }
 
     // 1. Add tracked icon in footer
     const footerActions = msgElement.querySelector('message-footer-actions') || msgElement.querySelector('.msg_actions');
@@ -229,38 +245,35 @@ export function updateCombatVisuals(msgElement: HTMLElement, combat: any) {
         footerActions.appendChild(trackedWrapper);
     }
 
-    // 2. Add debris summary pill
-    if (combat.debris && !msgElement.querySelector('.og-nexus-combat-debris-summary')) {
-        const container = document.createElement('div');
-        container.className = 'og-nexus-combat-debris-summary og-nexus-result-container';
-        container.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin: 8px 0;
-            gap: 6px;
-            position: relative;
-            z-index: 1;
-        `;
+    // 2. Add debris and loot summary pills container
+    const hasLoot = combat.loot && (combat.loot.metal > 0 || combat.loot.crystal > 0 || combat.loot.deuterium > 0);
+    
+    if (combat.debris || hasLoot) {
+        let container = msgElement.querySelector('.og-nexus-combat-debris-summary') as HTMLElement;
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'og-nexus-combat-debris-summary og-nexus-result-container';
+            container.style.cssText = `
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                margin: 8px 0;
+                gap: 6px;
+                position: relative;
+                z-index: 1;
+            `;
+            const head = msgElement.querySelector('.msgHead');
+            if (head && head.nextSibling) {
+                msgElement.insertBefore(container, head.nextSibling);
+            } else {
+                msgElement.appendChild(container);
+            }
+        } else {
+            container.innerHTML = '';
+        }
 
-        const layoutWrapper = document.createElement('div');
-        layoutWrapper.className = 'nexus-tooltip rarity-pill-common';
-        layoutWrapper.setAttribute('data-nexus-tooltip', `Created Debris: ${formatExactNumber(combat.debris.metal)} Metal, ${formatExactNumber(combat.debris.crystal)} Crystal`);
-        layoutWrapper.style.cssText = `
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 16px;
-            background-color: rgba(10, 15, 20, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 4px;
-            padding: 4px 16px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-            cursor: default;
-        `;
-
-        const addResourceItem = (resName: string, resAmount: number, iconUrl: string, color: string) => {
+        const addResourceItem = (wrapper: HTMLElement, resAmount: number, iconUrl: string, color: string) => {
             const isZero = resAmount === 0;
             const item = document.createElement('div');
             item.style.cssText = `
@@ -292,19 +305,56 @@ export function updateCombatVisuals(msgElement: HTMLElement, combat: any) {
 
             item.appendChild(icon);
             item.appendChild(amountLabel);
-            layoutWrapper.appendChild(item);
+            wrapper.appendChild(item);
         };
 
-        addResourceItem('metal', combat.debris.metal, 'icons/resources/metal-icon-medium.jpg', '#E6953C');
-        addResourceItem('crystal', combat.debris.crystal, 'icons/resources/crystal-icon-medium.jpg', '#4CAEE6');
+        // Add Loot Pill
+        if (hasLoot) {
+            const lootWrapper = document.createElement('div');
+            lootWrapper.className = 'nexus-tooltip rarity-pill-common';
+            lootWrapper.setAttribute('data-nexus-tooltip', `Looted: ${formatExactNumber(combat.loot.metal)} Metal, ${formatExactNumber(combat.loot.crystal)} Crystal, ${formatExactNumber(combat.loot.deuterium)} Deuterium`);
+            lootWrapper.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 16px;
+                background-color: rgba(10, 15, 20, 0.85);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 4px 16px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+                cursor: default;
+            `;
 
-        container.appendChild(layoutWrapper);
+            addResourceItem(lootWrapper, combat.loot.metal, 'icons/resources/metal-icon-medium.jpg', '#E6953C');
+            addResourceItem(lootWrapper, combat.loot.crystal, 'icons/resources/crystal-icon-medium.jpg', '#4CAEE6');
+            addResourceItem(lootWrapper, combat.loot.deuterium, 'icons/resources/deuterium-icon-medium.jpg', '#43D159');
 
-        const head = msgElement.querySelector('.msgHead');
-        if (head && head.nextSibling) {
-            msgElement.insertBefore(container, head.nextSibling);
-        } else {
-            msgElement.appendChild(container);
+            container.appendChild(lootWrapper);
+        }
+
+        // Add Debris Pill
+        if (combat.debris) {
+            const debrisWrapper = document.createElement('div');
+            debrisWrapper.className = 'nexus-tooltip rarity-pill-common';
+            debrisWrapper.setAttribute('data-nexus-tooltip', `Created Debris: ${formatExactNumber(combat.debris.metal)} Metal, ${formatExactNumber(combat.debris.crystal)} Crystal`);
+            debrisWrapper.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 16px;
+                background-color: rgba(10, 15, 20, 0.85);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 4px;
+                padding: 4px 16px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+                cursor: default;
+            `;
+
+            addResourceItem(debrisWrapper, combat.debris.metal, 'icons/resources/metal-icon-medium.jpg', '#E6953C');
+            addResourceItem(debrisWrapper, combat.debris.crystal, 'icons/resources/crystal-icon-medium.jpg', '#4CAEE6');
+
+            container.appendChild(debrisWrapper);
         }
     }
 }
