@@ -52,6 +52,20 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
             if (coordsText) planet.coords = coordsText.replace(/[\[\]]/g, '');
         }
 
+        // Scrape current resources
+        const metalEl = planetDiv.querySelector('.values.metal');
+        if (metalEl) {
+            planet.metal = getEntityLevel(metalEl);
+        }
+        const crystalEl = planetDiv.querySelector('.values.crystal');
+        if (crystalEl) {
+            planet.crystal = getEntityLevel(crystalEl);
+        }
+        const deuteriumEl = planetDiv.querySelector('.values.deuterium');
+        if (deuteriumEl) {
+            planet.deuterium = getEntityLevel(deuteriumEl);
+        }
+
         // Scrape Buildings and Facilities
         const supplyValues = planetDiv.querySelectorAll('.values.supply div');
         supplyValues.forEach(val => {
@@ -154,6 +168,19 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
 
         if (lfBuildings.length > 0) planet.lifeformBuildings = lfBuildings;
         if (lfSetup.length > 0) planet.lifeformSetup = lfSetup;
+
+        // Infer active lifeformId from building levels (second digit of techId e.g. 13101: 3=Mechas)
+        let inferredLifeformId = 0;
+        const firstLfBuilding = lfBuildings.find(b => b.level > 0);
+        if (firstLfBuilding) {
+            const techStr = firstLfBuilding.id.toString();
+            if (techStr.length === 5 && techStr.startsWith('1')) {
+                inferredLifeformId = parseInt(techStr[1], 10);
+            }
+        }
+        if (inferredLifeformId > 0) {
+            planet.lifeformId = inferredLifeformId;
+        }
 
         // Scrape Active Boosters / Items
         const activeItems: ActiveItem[] = [];
@@ -374,6 +401,17 @@ export function parseAjaxEmpireJson(
             };
         }
 
+        // Parse current resources
+        if (p.metal !== undefined) {
+            planet.metal = typeof p.metal === 'number' ? p.metal : parseInt(p.metal);
+        }
+        if (p.crystal !== undefined) {
+            planet.crystal = typeof p.crystal === 'number' ? p.crystal : parseInt(p.crystal);
+        }
+        if (p.deuterium !== undefined) {
+            planet.deuterium = typeof p.deuterium === 'number' ? p.deuterium : parseInt(p.deuterium);
+        }
+
         // Parse storage capacities
         if (p.metalStorage !== undefined) {
             planet.metalCapacity = typeof p.metalStorage === 'number' ? p.metalStorage : parseInt(p.metalStorage);
@@ -474,16 +512,6 @@ export function parseAjaxEmpireJson(
             const techStr = firstLfBuilding.id.toString();
             if (techStr.length === 5 && techStr.startsWith('1')) {
                 inferredLifeformId = parseInt(techStr[1], 10);
-            }
-        }
-        // Fallback to active tech research selection
-        if (!inferredLifeformId && lfSetup.length > 0) {
-            const firstLfTech = lfSetup.find(t => t.level > 0);
-            if (firstLfTech && firstLfTech.selectedTechId) {
-                const techData = LIFEFORM_TECH_DATA.find(t => t.id === firstLfTech.selectedTechId);
-                if (techData) {
-                    inferredLifeformId = techData.lifeformId;
-                }
             }
         }
         if (inferredLifeformId > 0) {

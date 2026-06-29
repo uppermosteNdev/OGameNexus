@@ -1453,6 +1453,32 @@ const CostsPlanner: React.FC = () => {
         return formatGatherTime(daysToGather);
     }, [daysToGather]);
 
+    const allPlanetsAndMoons = useLiveQuery(
+        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    ) || [];
+
+    const totalCurrentResourcesMSU = useMemo(() => {
+        let metal = 0;
+        let crystal = 0;
+        let deuterium = 0;
+        allPlanetsAndMoons.forEach(p => {
+            metal += p.metal || 0;
+            crystal += p.crystal || 0;
+            deuterium += p.deuterium || 0;
+        });
+        return (metal * mMultiplier) + (crystal * cMultiplier) + (deuterium * dMultiplier);
+    }, [allPlanetsAndMoons, mMultiplier, cMultiplier, dMultiplier]);
+
+    const remainingDaysToGather = useMemo(() => {
+        const remainingMSU = Math.max(0, cartSummary.msu - totalCurrentResourcesMSU);
+        return remainingMSU / totalEmpireDailyYieldMSU;
+    }, [cartSummary.msu, totalCurrentResourcesMSU, totalEmpireDailyYieldMSU]);
+
+    const remainingGatherTimeText = useMemo(() => {
+        return formatGatherTime(remainingDaysToGather);
+    }, [remainingDaysToGather]);
+
     const groupedCart = useMemo(() => {
         const groups: Record<string, { name: string; coords: string; isEmpire: boolean; planetImg?: string; items: CartItem[] }> = {};
 
@@ -1482,6 +1508,7 @@ const CostsPlanner: React.FC = () => {
     }, [cart, planets]);
 
     const formatNumber = (num: number) => {
+        if (num >= 1000000000000) return (num / 1000000000000).toFixed(2) + 'T';
         if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
         if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
         if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
@@ -2628,43 +2655,50 @@ const CostsPlanner: React.FC = () => {
                             <div className="summary-title">ESTIMATED INVESTMENT REQUIRED</div>
 
                             <div className="summary-resources-grid">
-                                <div className="summary-res-pod">
+                                <div className="summary-res-pod" title={formatFullNumber(cartSummary.cost.metal)}>
                                     <div className="pod-header">
                                         <img src="icons/resources/metal-icon-medium.jpg" alt="" />
                                         <span>METAL</span>
                                     </div>
-                                    <div className="pod-value" style={{ color: '#ff8d33' }}>{formatFullNumber(cartSummary.cost.metal)}</div>
+                                    <div className="pod-value" style={{ color: '#ff8d33' }}>{formatNumber(cartSummary.cost.metal)}</div>
                                 </div>
 
-                                <div className="summary-res-pod">
+                                <div className="summary-res-pod" title={formatFullNumber(cartSummary.cost.crystal)}>
                                     <div className="pod-header">
                                         <img src="icons/resources/crystal-icon-medium.jpg" alt="" />
                                         <span>CRYSTAL</span>
                                     </div>
-                                    <div className="pod-value" style={{ color: '#33b2ff' }}>{formatFullNumber(cartSummary.cost.crystal)}</div>
+                                    <div className="pod-value" style={{ color: '#33b2ff' }}>{formatNumber(cartSummary.cost.crystal)}</div>
                                 </div>
 
-                                <div className="summary-res-pod">
+                                <div className="summary-res-pod" title={formatFullNumber(cartSummary.cost.deuterium)}>
                                     <div className="pod-header">
                                         <img src="icons/resources/deuterium-icon-medium.jpg" alt="" />
                                         <span>DEUTERIUM</span>
                                     </div>
-                                    <div className="pod-value" style={{ color: '#33ff8d' }}>{formatFullNumber(cartSummary.cost.deuterium)}</div>
+                                    <div className="pod-value" style={{ color: '#33ff8d' }}>{formatNumber(cartSummary.cost.deuterium)}</div>
                                 </div>
                             </div>
 
                             <div className="summary-msu-container">
-                                <div className="summary-msu-pod">
+                                <div className="summary-msu-pod" title={formatFullNumber(cartSummary.msu)}>
                                     <div className="msu-label-group">
                                         <Coins size={16} color="var(--primary)" />
                                         <span>TOTAL MSU</span>
                                     </div>
-                                    <div className="msu-val-text">{formatFullNumber(cartSummary.msu)}</div>
+                                    <div className="msu-val-text">{formatNumber(cartSummary.msu)}</div>
                                 </div>
-                                <div className="summary-msu-pod">
+                                <div className="summary-msu-pod" title={`Calculated by subtracting total planet and moon resources (${formatFullNumber(totalCurrentResourcesMSU)} MSU) from total cost`}>
+                                    <div className="msu-label-group">
+                                        <Clock size={16} color="#38bdf8" />
+                                        <span>EST. GATHER TIME</span>
+                                    </div>
+                                    <div className="msu-val-text" style={{ color: '#38bdf8', textShadow: '0 0 10px rgba(56, 189, 248, 0.25)' }}>{remainingGatherTimeText}</div>
+                                </div>
+                                <div className="summary-msu-pod" title="Calculated from 0 resources">
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#43D159" />
-                                        <span>EST. GATHER TIME</span>
+                                        <span>TOTAL GATHER TIME</span>
                                     </div>
                                     <div className="msu-val-text" style={{ color: '#43D159', textShadow: '0 0 10px rgba(67, 209, 89, 0.25)' }}>{gatherTimeText}</div>
                                 </div>

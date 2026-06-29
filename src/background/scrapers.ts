@@ -10,6 +10,15 @@ export interface ScrapedProduction {
     metalCapacity?: number;
     crystalCapacity?: number;
     deuteriumCapacity?: number;
+    productionSettings?: {
+        metalMine?: number;
+        crystalMine?: number;
+        deuteriumMine?: number;
+        solarPlant?: number;
+        fusionReactor?: number;
+        solarSatellites?: number;
+        crawlers?: number;
+    };
     lastUpdated: number;
 }
 
@@ -119,6 +128,37 @@ export function parseProduction(html: string): ScrapedProduction | null {
         }
     } else {
         console.warn('Background: Storage capacity row not found in HTML');
+    }
+
+    // Extract production settings percentages
+    const mapTechIdToSettingKey = (techId: number): string | null => {
+        switch (techId) {
+            case 1: return 'metalMine';
+            case 2: return 'crystalMine';
+            case 3: return 'deuteriumMine';
+            case 4: return 'solarPlant';
+            case 12: return 'fusionReactor';
+            case 212: return 'solarSatellites';
+            case 217: return 'crawlers';
+            default: return null;
+        }
+    };
+
+    const settings: Record<string, number> = {};
+    const selectRegex = /<select[^>]*?name=["']last(\d+)["'][^>]*>([\s\S]*?)<\/select>/gi;
+    let sMatch;
+    while ((sMatch = selectRegex.exec(html)) !== null) {
+        const techId = parseInt(sMatch[1], 10);
+        const optionsHtml = sMatch[2];
+        const selectedMatch = optionsHtml.match(/<option[^>]*?value=["'](\d+)["'][^>]*?selected/i) || 
+                              optionsHtml.match(/selected[^>]*?value=["'](\d+)["']/i);
+        const key = mapTechIdToSettingKey(techId);
+        if (key && selectedMatch) {
+            settings[key] = parseInt(selectedMatch[1], 10);
+        }
+    }
+    if (Object.keys(settings).length > 0) {
+        data.productionSettings = settings;
     }
 
     return data;

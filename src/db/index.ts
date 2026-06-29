@@ -87,6 +87,9 @@ export interface Planet {
     fieldsTotal?: number;
     tempMin?: number;
     tempMax?: number;
+    metal?: number;
+    crystal?: number;
+    deuterium?: number;
     // Resource Buildings
     metalMine?: number;
     crystalMine?: number;
@@ -106,6 +109,15 @@ export interface Planet {
         crystal: number;
         deuterium: number;
         lastUpdated: number;
+    };
+    productionSettings?: {
+        metalMine?: number;
+        crystalMine?: number;
+        deuteriumMine?: number;
+        solarPlant?: number;
+        fusionReactor?: number;
+        solarSatellites?: number;
+        crawlers?: number;
     };
     lifeformId?: number; // 1-4
     sandboxSetup?: { slotNumber: number, selectedTechId: number | null, level: number }[];

@@ -1,4 +1,3 @@
-console.log("OGame Nexus: Content script loaded.");
 
 import { trackExpeditions, injectTodaySummaryCard } from './expeditions';
 import { trackLifeformDiscoveries } from './lifeforms';
@@ -139,8 +138,8 @@ function scrapeOfficers() {
 }
 
 function scrapeAllianceClass() {
-  const url = window.location.href;
-  if (!url.includes("page=ingame") || !url.includes("component=resourcesettings")) return undefined;
+  const url = window.location.href.toLowerCase();
+  if (!url.includes("resourcesettings")) return undefined;
 
   const allyRow = document.querySelector('tr[data-techid="1005"]');
   if (!allyRow) return undefined;
@@ -431,9 +430,76 @@ function scrapeOverviewData() {
   };
 }
 
+function parseResourceSettings(doc: Document | HTMLElement) {
+  const settings: Record<string, number> = {};
+  
+  const mapTechIdToSettingKey = (techId: number): string | null => {
+      switch (techId) {
+          case 1: return 'metalMine';
+          case 2: return 'crystalMine';
+          case 3: return 'deuteriumMine';
+          case 4: return 'solarPlant';
+          case 12: return 'fusionReactor';
+          case 212: return 'solarSatellites';
+          case 217: return 'crawlers';
+          default: return null;
+      }
+  };
+
+  const elements = doc.querySelectorAll('select, input');
+  
+  elements.forEach(el => {
+    const name = el.getAttribute('name') || '';
+    const idAttr = el.getAttribute('id') || '';
+    const classAttr = el.getAttribute('class') || '';
+    const typeAttr = el.getAttribute('type') || '';
+    
+    let techId: number | null = null;
+
+    // Try name match first: e.g. last1, last[1], 1
+    const nameMatch = name.match(/\d+/);
+    if (nameMatch) {
+      techId = parseInt(nameMatch[0], 10);
+    }
+
+    // Try id match: e.g. last1, 1
+    if (!techId) {
+      const idMatch = idAttr.match(/\d+/);
+      if (idMatch) {
+        techId = parseInt(idMatch[0], 10);
+      }
+    }
+
+    // Try parent row data-technology or data-techid
+    if (!techId) {
+      const parentRow = el.closest('tr, li, div');
+      if (parentRow) {
+        const rowTech = parentRow.getAttribute('data-technology') || 
+                        parentRow.getAttribute('data-techid') || 
+                        parentRow.getAttribute('data-tech');
+        if (rowTech) {
+          techId = parseInt(rowTech, 10);
+        }
+      }
+    }
+
+    if (techId) {
+      const key = mapTechIdToSettingKey(techId);
+      if (key) {
+        const val = parseInt((el as HTMLSelectElement | HTMLInputElement).value || '100', 10);
+        if (!isNaN(val)) {
+          settings[key] = val;
+        }
+      }
+    }
+  });
+
+  return settings;
+}
+
 function scrapeProductionData() {
-  const url = window.location.href;
-  if (!url.includes("page=ingame") || !url.includes("component=resourcesettings")) return null;
+  const url = window.location.href.toLowerCase();
+  if (!url.includes("resourcesettings")) return null;
 
   // Hourly production row is usually after the table. 
   // Based on OGame structure, we can target the data-resourceidx cells in the summaryHourly row
@@ -579,6 +645,8 @@ function scrapeProductionData() {
     }
   }
 
+  const settings = parseResourceSettings(document);
+
   return {
     metal: metalVal || 0,
     crystal: crystalVal || 0,
@@ -586,7 +654,8 @@ function scrapeProductionData() {
     metalCapacity: metalStorage,
     crystalCapacity: crystalStorage,
     deuteriumCapacity: deuteriumStorage,
-    lastUpdated: Date.now()
+    lastUpdated: Date.now(),
+    ...(Object.keys(settings).length > 0 ? { productionSettings: settings } : {})
   };
 }
 
@@ -872,6 +941,18 @@ function scrapeFacilitiesData() {
   return buildings.length > 0 ? buildings : null;
 }
 
+function scrapeHeaderResources() {
+  const metalEl = document.querySelector("#resources_metal");
+  const crystalEl = document.querySelector("#resources_crystal");
+  const deuteriumEl = document.querySelector("#resources_deuterium");
+
+  return {
+    metal: metalEl ? parseInt(metalEl.textContent?.replace(/\./g, '').replace(/,/g, '') || "0", 10) : undefined,
+    crystal: crystalEl ? parseInt(crystalEl.textContent?.replace(/\./g, '').replace(/,/g, '') || "0", 10) : undefined,
+    deuterium: deuteriumEl ? parseInt(deuteriumEl.textContent?.replace(/\./g, '').replace(/,/g, '') || "0", 10) : undefined
+  };
+}
+
 function scrapeAndSync() {
   const playerId = getMetaContent("ogame-player-id");
   const playerName = getMetaContent("ogame-player-name");
@@ -910,6 +991,17 @@ function scrapeAndSync() {
       lastUpdated: Date.now()
     }));
   }
+
+  // Inject current header resources for the active planet/moon
+  const activePlanetId = getActivePlanetId();
+  const headerRes = scrapeHeaderResources();
+  planets.forEach(p => {
+    if (p.id === activePlanetId) {
+      if (headerRes.metal !== undefined) p.metal = headerRes.metal;
+      if (headerRes.crystal !== undefined) p.crystal = headerRes.crystal;
+      if (headerRes.deuterium !== undefined) p.deuterium = headerRes.deuterium;
+    }
+  });
 
   const data = {
     isFullPlanetList: hasPlanetList,
@@ -1575,9 +1667,16 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         else if (slot === 2) crystalPosFactor = 1.3;
         else if (slot === 3) crystalPosFactor = 1.2;
 
-        const baseMetalHourly = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor;
-        const baseCrystalHourly = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor;
-        const baseDeutHourly = 10 * d * Math.pow(1.1, d) * (1.44 - 0.004 * temp) * universeSpeed;
+        const prodSettings = p.productionSettings || {};
+        const metalMineSettingsFactor = (prodSettings.metalMine !== undefined ? prodSettings.metalMine : 100) / 100;
+        const crystalMineSettingsFactor = (prodSettings.crystalMine !== undefined ? prodSettings.crystalMine : 100) / 100;
+        const deuteriumMineSettingsFactor = (prodSettings.deuteriumMine !== undefined ? prodSettings.deuteriumMine : 100) / 100;
+        const fusionReactorSettingsFactor = (prodSettings.fusionReactor !== undefined ? prodSettings.fusionReactor : 100) / 100;
+        const crawlersSettingsFactor = (prodSettings.crawlers !== undefined ? prodSettings.crawlers : 100) / 100;
+
+        const baseMetalHourly = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor * metalMineSettingsFactor;
+        const baseCrystalHourly = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor * crystalMineSettingsFactor;
+        const baseDeutHourly = 10 * d * Math.pow(1.1, d) * (1.44 - 0.004 * temp) * universeSpeed * deuteriumMineSettingsFactor;
 
         const baseM = baseMetalHourly * 24;
         const baseC = baseCrystalHourly * 24;
@@ -1599,7 +1698,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         // Crawlers
         const maxCrawlers = (m + c + d) * universeSpeed;
         const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);
-        const crawlerBonus = activeCrawlers * 0.0002;
+        const crawlerBonus = activeCrawlers * 0.0002 * crawlersSettingsFactor;
 
         // Boosters/Items
         const boosterMetal = p.boosters?.metal || 0;
@@ -1617,10 +1716,13 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         const flatC = 15 * universeSpeed * 24;
         const flatD = 0;
 
+        const fusionLevel = p.fusionReactor || 0;
+        const fusionDailyConsumption = 10 * universeSpeed * fusionLevel * Math.pow(1.1, fusionLevel) * fusionReactorSettingsFactor * 24;
+
         // Totals
         const totM = (baseM * (1 + lfbMetal + globalEuroMetal + plasmaMetal + crawlerBonus + boosterMetal + geologistBonus + staffBonus + classMetal + allyTraderBonus)) + flatM;
         const totC = (baseC * (1 + lfbCrystal + globalEuroCrystal + plasmaCrystal + crawlerBonus + boosterCrystal + geologistBonus + staffBonus + classCrystal + allyTraderBonus)) + flatC;
-        const totD = baseD * (1 + lfbDeut + globalEuroDeut + plasmaDeut + crawlerBonus + boosterDeut + geologistBonus + staffBonus + classDeut + allyTraderBonus);
+        const totD = (baseD * (1 + lfbDeut + globalEuroDeut + plasmaDeut + crawlerBonus + boosterDeut + geologistBonus + staffBonus + classDeut + allyTraderBonus)) - fusionDailyConsumption;
 
         // Accumulate empire totals
         totals.metal.base += baseM;
@@ -2033,7 +2135,7 @@ const throttledObserverLogic = throttle(() => {
     window.location.href.includes("component=facilities") ||
     window.location.href.includes("component=supplies") ||
     window.location.href.includes("component=empire") ||
-    window.location.href.includes("component=resourcesettings");
+    window.location.href.toLowerCase().includes("resourcesettings");
 
   // Check if the URL has changed since last scrape to handle AJAX navigation
   const currentUrl = window.location.href;
@@ -2167,7 +2269,6 @@ injectButton();
 
 
 async function performBackgroundEmpireSync() {
-  console.log("OGame Nexus: Starting background Empire sync (fetching planets and moons)...");
   const playerId = getMetaContent("ogame-player-id");
   const playerName = getMetaContent("ogame-player-name");
 
@@ -2204,9 +2305,6 @@ async function performBackgroundEmpireSync() {
   if (!lfBonusesRes.ok) throw new Error("Failed to fetch lifeform bonuses");
   const lfBonusesHtml = await lfBonusesRes.text();
 
-  console.log("OGame Nexus: Planets AJAX raw JSON:", planetsJson);
-  console.log("OGame Nexus: Moons AJAX raw JSON:", moonsJson);
-  console.log("OGame Nexus: Lifeform Bonuses AJAX raw HTML length:", lfBonusesHtml.length);
 
   // Parse using our new AJAX parser
   const planetsData = parseAjaxEmpireJson(planetsJson, false);
@@ -2269,109 +2367,6 @@ async function performBackgroundEmpireSync() {
 
   const researchCount = Object.keys(planetsData.research).length;
 
-  console.log(`OGame Nexus: Background Sync - Parsed ${planetsData.planets.length} planets and ${moonsData.planets.length} moons.`);
-  console.log(`OGame Nexus: Background Sync Details:
-    - Standard Buildings/Facilities: ${supplyCount + stationCount} levels across planets
-    - Researches: ${researchCount} techs parsed
-    - Combat Ships: ${shipCount} ships total
-    - Defense Structures: ${defenseCount} units total
-    - Lifeform Buildings: ${lfBuildingsCount} structures
-    - Lifeform Technologies: ${lfTechsCount} slots
-    - Lifeform Experience: ${lifeformExperienceData ? lifeformExperienceData.length : 0} lifeforms parsed`);
-
-  // Detailed group logs about synced items
-  console.groupCollapsed(`OGame Nexus: Detailed Sync Log (Ships, Buildings, Techs, LF XP)`);
-
-  // 1. Researches (Global)
-  if (researchCount > 0) {
-    console.groupCollapsed(`Researches Synced (${researchCount})`);
-    const researchesList: string[] = [];
-    Object.entries(planetsData.research).forEach(([techIdStr, level]) => {
-      const techId = parseInt(techIdStr);
-      if (level > 0) {
-        researchesList.push(`${getEntityName(techId)} (Lvl ${level})`);
-      }
-    });
-    console.log(researchesList.join(', ') || 'None');
-    console.groupEnd();
-  }
-
-  // 1.5 Lifeform Experience (Global)
-  if (lifeformExperienceData && lifeformExperienceData.length > 0) {
-    console.groupCollapsed(`Lifeform Experience Synced (${lifeformExperienceData.length})`);
-    const lfExpNames = ["Humans", "Rock'tal", "Mechas", "Kaelesh"];
-    const expList = lifeformExperienceData.map((e: any) => {
-      const name = lfExpNames[e.lifeformId - 1] || `LF #${e.lifeformId}`;
-      return `${name} (Lvl ${e.level}, XP: ${e.currentExp}/${e.nextLevelExp})`;
-    });
-    console.log(expList.join(', '));
-    console.groupEnd();
-  }
-
-  // 2. Planets & Moons details
-  totalPlanets.forEach(p => {
-    console.groupCollapsed(`${p.name} [${p.coords}] (${p.type === 'moon' ? 'Moon' : 'Planet'})`);
-
-    // Buildings & Facilities
-    const bldList: string[] = [];
-    Object.entries(PLANET_PROPERTY_NAMES).forEach(([propName, dispName]) => {
-      const val = (p as any)[propName];
-      if (val !== undefined && val > 0) {
-        bldList.push(`${dispName}: Lvl ${val}`);
-      }
-    });
-    if (bldList.length > 0) {
-      console.log(`%cBuildings & Facilities:`, 'font-weight: bold; color: #4fc3f7;', bldList.join(', '));
-    }
-
-    // Ships
-    if (p.ships) {
-      const shipList: string[] = [];
-      Object.entries(p.ships).forEach(([techIdStr, count]) => {
-        const techId = parseInt(techIdStr);
-        if (count > 0) {
-          shipList.push(`${getEntityName(techId)}: ${count.toLocaleString()}`);
-        }
-      });
-      if (shipList.length > 0) {
-        console.log(`%cShips:`, 'font-weight: bold; color: #81c784;', shipList.join(', '));
-      }
-    }
-
-    // Defenses
-    if (p.defenses) {
-      const defList: string[] = [];
-      Object.entries(p.defenses).forEach(([techIdStr, count]) => {
-        const techId = parseInt(techIdStr);
-        if (count > 0) {
-          defList.push(`${getEntityName(techId)}: ${count.toLocaleString()}`);
-        }
-      });
-      if (defList.length > 0) {
-        console.log(`%cDefenses:`, 'font-weight: bold; color: #e57373;', defList.join(', '));
-      }
-    }
-
-    // Lifeform Buildings
-    if (p.lifeformBuildings && p.lifeformBuildings.length > 0) {
-      const lfBldList = p.lifeformBuildings.map(b => `${getEntityName(b.id)}: Lvl ${b.level}`);
-      console.log(`%cLifeform Buildings:`, 'font-weight: bold; color: #ffb74d;', lfBldList.join(', '));
-    }
-
-    // Lifeform Technologies
-    if (p.lifeformSetup && p.lifeformSetup.length > 0) {
-      const lfTechList = p.lifeformSetup
-        .filter(t => t.selectedTechId !== null && t.level > 0)
-        .map(t => `${getEntityName(t.selectedTechId!)} (Slot ${t.slotNumber}): Lvl ${t.level}`);
-      if (lfTechList.length > 0) {
-        console.log(`%cLifeform Technologies:`, 'font-weight: bold; color: #ba68c8;', lfTechList.join(', '));
-      }
-    }
-
-    console.groupEnd();
-  });
-
-  console.groupEnd();
 
   // Scrape the active sidebar planet list to verify existence/order
   const planetsList = scrapePlanetList();
@@ -2504,5 +2499,31 @@ async function checkAutoSync() {
 
 // Run sync check once shortly after the player loads/navigates to the page
 setTimeout(checkAutoSync, 3000);
+
+document.addEventListener('change', (e) => {
+  const target = e.target as HTMLElement;
+  if (target && (target.tagName === 'SELECT' || target.tagName === 'INPUT')) {
+    if (window.location.href.toLowerCase().includes("resourcesettings")) {
+      scrapeAndSync();
+    }
+  }
+});
+
+document.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  const isCalcBtn = target && (
+    target.id === 'recalculate' || 
+    target.classList.contains('button') || 
+    target.classList.contains('btn_blue') ||
+    target.textContent?.toLowerCase().includes('recalculate') ||
+    target.textContent?.toLowerCase().includes('calculate') ||
+    target.textContent?.toLowerCase().includes('berechnen')
+  );
+  if (isCalcBtn) {
+    if (window.location.href.toLowerCase().includes("resourcesettings")) {
+      setTimeout(scrapeAndSync, 500);
+    }
+  }
+});
 
 

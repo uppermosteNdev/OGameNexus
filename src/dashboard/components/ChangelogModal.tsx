@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Radar, Swords, Activity, Compass, ArrowRight, Sparkles, ShieldCheck, Hash } from 'lucide-react';
+import { ArrowRight, Sparkles, ShieldCheck, TrendingUp, ShoppingCart, RefreshCw } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -12,58 +12,24 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <Swords size={22} color="#00f2ff" />,
-            title: "Raid Helper Sidebar (Galaxy View)",
-            desc: "A slide-out panel directly integrated in Galaxy View containing spied targets, coordinate links, espionage queue status, and color-coded production projections matching System Inactives.",
-            customElement: onOpenTutorials && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-                    <button
-                        onClick={() => {
-                            onAcknowledge();
-                            onOpenTutorials();
-                        }}
-                        style={{
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            background: 'rgba(0, 242, 255, 0.12)',
-                            border: '1px solid rgba(0, 242, 255, 0.25)',
-                            color: '#00f2ff',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            boxShadow: '0 0 10px rgba(0, 242, 255, 0.05)',
-                            transition: 'all 0.2s ease',
-                            outline: 'none'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 242, 255, 0.2)';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 242, 255, 0.2)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 242, 255, 0.12)';
-                            e.currentTarget.style.boxShadow = '0 0 10px rgba(0, 242, 255, 0.05)';
-                        }}
-                    >
-                        SEE TUTORIAL
-                    </button>
-                    <span style={{ fontSize: '0.72rem', color: 'rgba(255, 255, 255, 0.4)', fontWeight: 500 }}>
-                        (New Step 7)
-                    </span>
-                </div>
-            )
+            icon: <TrendingUp size={22} color="#00f2ff" />,
+            title: "New Production Tab inside Nexus Terminal",
+            desc: "Detailed breakdown of daily base production and active bonuses across your empire. Visualizes Metal, Crystal, and Deuterium inputs with hover effects, sticky layout headers, and centered metrics."
         },
         {
-            icon: <Activity size={22} color="#10b981" />,
-            title: "Smart Gameplay Synchronization",
-            desc: "A sync engine that updates your empire coordinates, researches, and lifeforms automatically during active gameplay. Runs seamlessly only when you navigate pages, eliminating the need to manually sync periodically. Manual sync can still be done in OGame Terminal."
+            icon: <ShoppingCart size={22} color="#10b981" />,
+            title: "Improvements to the Costs Planner",
+            desc: "The planner now dynamically calculates and displays the time required to gather the necessary resources to purchase all items currently in your shopping cart."
         },
         {
-            icon: <Radar size={22} color="#f59e0b" />,
-            title: "Galaxy Projections & Projections Tooltips",
-            desc: "Track inactive targets, estimate loot growth, and view color-coded hourly resource production projections with live-calculating tooltips inside the Galaxy View."
+            icon: <Sparkles size={22} color="#c084fc" />,
+            title: "Stability Improvements and fixes to the amortization",
+            desc: "Enhanced accuracy of the amortization formulas, corrected edge-case math calculations, and improved rendering stability of the upgrade recommendations."
+        },
+        {
+            icon: <RefreshCw size={22} color="#fb923c" />,
+            title: "Stability Improvements and fixes for the background sync",
+            desc: "Optimized intervals, state validation, and error recovery for the automated background synchronization engine to prevent failures and state fragmentation."
         }
     ];
 
@@ -162,7 +128,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.4
+                                v1.1.5
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

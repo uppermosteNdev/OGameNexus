@@ -208,7 +208,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                 crystal: scraped.crystal,
                                 deuterium: scraped.deuterium,
                                 lastUpdated: scraped.lastUpdated
-                            }
+                            },
+                            ...(scraped.productionSettings ? { productionSettings: scraped.productionSettings } : {})
                         });
                         sendResponse({ success: true });
                         return;
@@ -298,6 +299,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                 ...p,
                                 ...empirePlanet,
                                 playerId: account.playerId,
+                                productionSettings: production?.productionSettings || empirePlanet?.productionSettings || existing?.productionSettings,
                                 ...(isMainPlanet ? {
                                     ...(overview?.planetData || {}),
                                     ...supplies,

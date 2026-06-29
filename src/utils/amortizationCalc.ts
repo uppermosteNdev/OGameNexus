@@ -261,9 +261,16 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         else if (slot === 2) crystalPosFactor = 1.3;
         else if (slot === 3) crystalPosFactor = 1.2;
 
-        const baseMetal = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor;
-        const baseCrystal = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor;
-        const baseDeut = 10 * d * Math.pow(1.1, d) * (1.44 - 0.004 * temp) * universeSpeed;
+        const prodSettings = p.productionSettings || {};
+        const metalMineSettingsFactor = (prodSettings.metalMine !== undefined ? prodSettings.metalMine : 100) / 100;
+        const crystalMineSettingsFactor = (prodSettings.crystalMine !== undefined ? prodSettings.crystalMine : 100) / 100;
+        const deuteriumMineSettingsFactor = (prodSettings.deuteriumMine !== undefined ? prodSettings.deuteriumMine : 100) / 100;
+        const fusionReactorSettingsFactor = (prodSettings.fusionReactor !== undefined ? prodSettings.fusionReactor : 100) / 100;
+        const crawlersSettingsFactor = (prodSettings.crawlers !== undefined ? prodSettings.crawlers : 100) / 100;
+
+        const baseMetal = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor * metalMineSettingsFactor;
+        const baseCrystal = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor * crystalMineSettingsFactor;
+        const baseDeut = 10 * d * Math.pow(1.1, d) * (1.44 - 0.004 * temp) * universeSpeed * deuteriumMineSettingsFactor;
 
         results.empireBase.metal += baseMetal;
         results.empireBase.crystal += baseCrystal;
@@ -297,7 +304,7 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
 
         const maxCrawlers = (m + c + d) * universeSpeed;
         const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);
-        const crawlerBonus = activeCrawlers * 0.0002;
+        const crawlerBonus = activeCrawlers * 0.0002 * crawlersSettingsFactor;
 
         const boosterMetal = p.boosters?.metal || 0;
         const boosterCrystal = p.boosters?.crystal || 0;
@@ -307,13 +314,16 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal + boosterCrystal + geologistBonus + staffBonus + allyTraderBonus + crawlerBonus;
         const multDeut = 1 + plasmaDeut + lfbDeut + globalEuroDeut + classDeut + boosterDeut + geologistBonus + staffBonus + allyTraderBonus + crawlerBonus;
 
+        const fusionLevel = p.fusionReactor || 0;
+        const fusionConsumption = 10 * universeSpeed * fusionLevel * Math.pow(1.1, fusionLevel) * fusionReactorSettingsFactor;
+
         results.planets[p.id] = {
             base: { metal: baseMetal, crystal: baseCrystal, deuterium: baseDeut },
             mult: { metal: multMetal, crystal: multCrystal, deuterium: multDeut },
             total: { 
                 metal: (baseMetal * multMetal) + (30 * universeSpeed), 
                 crystal: (baseCrystal * multCrystal) + (15 * universeSpeed), 
-                deuterium: baseDeut * multDeut 
+                deuterium: (baseDeut * multDeut) - fusionConsumption
             }
         };
     });
