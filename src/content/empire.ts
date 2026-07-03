@@ -169,18 +169,7 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
         if (lfBuildings.length > 0) planet.lifeformBuildings = lfBuildings;
         if (lfSetup.length > 0) planet.lifeformSetup = lfSetup;
 
-        // Infer active lifeformId from building levels (second digit of techId e.g. 13101: 3=Mechas)
-        let inferredLifeformId = 0;
-        const firstLfBuilding = lfBuildings.find(b => b.level > 0);
-        if (firstLfBuilding) {
-            const techStr = firstLfBuilding.id.toString();
-            if (techStr.length === 5 && techStr.startsWith('1')) {
-                inferredLifeformId = parseInt(techStr[1], 10);
-            }
-        }
-        if (inferredLifeformId > 0) {
-            planet.lifeformId = inferredLifeformId;
-        }
+
 
         // Scrape Active Boosters / Items
         const activeItems: ActiveItem[] = [];
@@ -505,18 +494,7 @@ export function parseAjaxEmpireJson(
         });
         if (lfSetup.length > 0) planet.lifeformSetup = lfSetup;
 
-        // Infer active lifeformId from building levels (second digit of techId e.g. 13101: 3=Mechas)
-        let inferredLifeformId = 0;
-        const firstLfBuilding = lfBuildings.find(b => b.level > 0);
-        if (firstLfBuilding) {
-            const techStr = firstLfBuilding.id.toString();
-            if (techStr.length === 5 && techStr.startsWith('1')) {
-                inferredLifeformId = parseInt(techStr[1], 10);
-            }
-        }
-        if (inferredLifeformId > 0) {
-            planet.lifeformId = inferredLifeformId;
-        }
+
 
         // Parse Active Items / Boosters from equipment_html
         if (p.equipment_html) {

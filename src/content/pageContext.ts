@@ -55,3 +55,43 @@ window.addEventListener('ogame-nexus-navigate-galaxy', (e: any) => {
         console.warn('OGame Nexus: Error navigating galaxy in page context', err);
     }
 });
+
+// Hook jQuery AJAX requests to detect message list loads
+function hookJQueryAjax() {
+    // @ts-ignore
+    if (typeof $ === 'function' && $.fn && typeof $(document).on === 'function') {
+        // @ts-ignore
+        $(document).on("ajaxSuccess", (event, xhr, settings) => {
+            if (settings) {
+                const url = typeof settings.url === 'string' ? settings.url : '';
+                let data = '';
+                if (typeof settings.data === 'string') {
+                    data = settings.data;
+                } else if (settings.data && typeof settings.data === 'object') {
+                    try {
+                        // @ts-ignore
+                        if (typeof $ === 'function' && $.param) {
+                            // @ts-ignore
+                            data = $.param(settings.data);
+                        } else {
+                            data = JSON.stringify(settings.data);
+                        }
+                    } catch (e) {
+                        try {
+                            data = Object.keys(settings.data).map(k => `${k}=${(settings.data as any)[k]}`).join('&');
+                        } catch (e2) {}
+                    }
+                }
+                if (url.includes('action=getMessagesList') || data.includes('action=getMessagesList')) {
+                    // If it's not a trash tab / delete operation
+                    if (!data.includes('showTrash=true') && !url.includes('showTrash=true')) {
+                        window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-messages-loaded'));
+                    }
+                }
+            }
+        });
+    } else {
+        setTimeout(hookJQueryAjax, 50);
+    }
+}
+hookJQueryAjax();

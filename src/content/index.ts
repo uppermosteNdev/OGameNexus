@@ -232,13 +232,18 @@ function getActivePlanetId() {
 }
 
 function scrapeLifeformId() {
+  const url = window.location.href;
+  if (!url.includes("component=overview")) {
+    return null;
+  }
+
   const lfIconNode = document.querySelector("#lifeform .lifeform-item-icon");
   if (lfIconNode) {
     const classList = lfIconNode.className;
     const match = classList.match(/lifeform(\d+)/);
-    if (match) return parseInt(match[1]);
+    if (match) return parseInt(match[1], 10);
   }
-  return null;
+  return 0; // If none of these are present then it means the planet has no lifeform
 }
 
 function scrapeOverviewData() {
@@ -412,6 +417,14 @@ function scrapeOverviewData() {
     });
   }
 
+  let lifeformId = 0;
+  const lfIconNode = document.querySelector("#lifeform .lifeform-item-icon");
+  if (lfIconNode) {
+    const classList = lfIconNode.className;
+    const match = classList.match(/lifeform(\d+)/);
+    if (match) lifeformId = parseInt(match[1], 10);
+  }
+
   return {
     planetData: {
       diameter,
@@ -419,6 +432,7 @@ function scrapeOverviewData() {
       fieldsTotal,
       tempMin,
       tempMax,
+      lifeformId,
       ...(activeItemsEl ? { activeItems, boosters } : {})
     },
     accountData: {
@@ -1226,59 +1240,71 @@ async function toggleNexusModal() {
   `;
   syncBadge.textContent = 'Game Synced: ...';
 
-  syncBadge.addEventListener('mouseenter', () => {
-    if (!syncBadge.classList.contains('syncing')) {
-      syncBadge.style.background = 'rgba(56, 189, 248, 0.15)';
-      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.2)';
-    }
-  });
+  const officers = scrapeOfficers();
 
-  syncBadge.addEventListener('mouseleave', () => {
-    if (!syncBadge.classList.contains('syncing')) {
-      syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
-      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
-      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
-    }
-  });
-
-  syncBadge.addEventListener('click', async (e) => {
-    e.preventDefault();
-    if (syncBadge.classList.contains('syncing')) return;
-
-    syncBadge.classList.add('syncing');
+  if (!officers.hasCommander) {
+    syncBadge.textContent = 'Manual Sync Only';
     syncBadge.style.color = '#94a3b8';
-    syncBadge.style.background = 'rgba(148, 163, 184, 0.08)';
-    syncBadge.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+    syncBadge.style.background = 'rgba(148, 163, 184, 0.05)';
+    syncBadge.style.borderColor = 'rgba(148, 163, 184, 0.1)';
     syncBadge.style.textShadow = 'none';
     syncBadge.style.boxShadow = 'none';
     syncBadge.style.cursor = 'default';
-    syncBadge.textContent = 'Game Synced: Syncing...';
+  } else {
+    syncBadge.addEventListener('mouseenter', () => {
+      if (!syncBadge.classList.contains('syncing')) {
+        syncBadge.style.background = 'rgba(56, 189, 248, 0.15)';
+        syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.2)';
+      }
+    });
 
-    try {
-      await performBackgroundEmpireSync();
-      const now = Date.now();
-      await chrome.storage.local.set({ 'last_empire_sync_time': now });
+    syncBadge.addEventListener('mouseleave', () => {
+      if (!syncBadge.classList.contains('syncing')) {
+        syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+        syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
+        syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
+      }
+    });
 
-      syncBadge.style.color = '#38bdf8';
-      syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
-      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
-      syncBadge.style.textShadow = '0 0 8px rgba(56, 189, 248, 0.4)';
-      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
-      syncBadge.style.cursor = 'pointer';
-      syncBadge.textContent = 'Game Synced: Just now';
-    } catch (err) {
-      console.warn('OGame Nexus: Background sync failed', err);
-      syncBadge.style.color = '#ef4444';
-      syncBadge.style.background = 'rgba(239, 68, 68, 0.08)';
-      syncBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-      syncBadge.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.4)';
-      syncBadge.style.cursor = 'pointer';
-      syncBadge.textContent = 'Game Synced: Failed (Retry)';
-    } finally {
-      syncBadge.classList.remove('syncing');
-    }
-  });
+    syncBadge.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (syncBadge.classList.contains('syncing')) return;
+
+      syncBadge.classList.add('syncing');
+      syncBadge.style.color = '#94a3b8';
+      syncBadge.style.background = 'rgba(148, 163, 184, 0.08)';
+      syncBadge.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+      syncBadge.style.textShadow = 'none';
+      syncBadge.style.boxShadow = 'none';
+      syncBadge.style.cursor = 'default';
+      syncBadge.textContent = 'Game Synced: Syncing...';
+
+      try {
+        await performBackgroundEmpireSync();
+        const now = Date.now();
+        await chrome.storage.local.set({ 'last_empire_sync_time': now });
+
+        syncBadge.style.color = '#38bdf8';
+        syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+        syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
+        syncBadge.style.textShadow = '0 0 8px rgba(56, 189, 248, 0.4)';
+        syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
+        syncBadge.style.cursor = 'pointer';
+        syncBadge.textContent = 'Game Synced: Just now';
+      } catch (err) {
+        console.warn('OGame Nexus: Background sync failed', err);
+        syncBadge.style.color = '#ef4444';
+        syncBadge.style.background = 'rgba(239, 68, 68, 0.08)';
+        syncBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+        syncBadge.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.4)';
+        syncBadge.style.cursor = 'pointer';
+        syncBadge.textContent = 'Game Synced: Failed (Retry)';
+      } finally {
+        syncBadge.classList.remove('syncing');
+      }
+    });
+  }
 
   const closeBtn = document.createElement('div');
   closeBtn.innerHTML = '&#x2715;';
@@ -1290,6 +1316,10 @@ async function toggleNexusModal() {
   rightGroup.appendChild(closeBtn);
 
   const updateHeaderBadge = async () => {
+    if (!officers.hasCommander) {
+      syncBadge.textContent = 'Manual Sync Only';
+      return;
+    }
     try {
       const res = await chrome.storage.local.get('last_empire_sync_time');
       const timestamp = res.last_empire_sync_time;
@@ -2174,7 +2204,37 @@ const throttledObserverLogic = throttle(() => {
     (window as any)._contentScraped = false;
   }
 
-  // Check if we're on the messages page
+  // Fallback: If we're on the messages page and there are unprocessed raw messages, process them
+  if (window.location.href.includes('page=ingame&component=messages')) {
+    const hasUnprocessed = !!document.querySelector('div.rawMessageData:not([data-og-nexus-processed="true"])');
+    if (hasUnprocessed) {
+      processActiveMessages();
+    }
+  }
+
+  updateFleetProgressOverlay();
+
+  // OGame Galaxy View integration
+  if (document.querySelector("#galaxycomponent")) {
+    initGalaxyView();
+  } else {
+    cleanupGalaxyView();
+  }
+}, 50);
+
+const observer = new MutationObserver((mutations) => {
+  if (document.querySelector("#menuTable")) {
+    injectButton();
+  }
+
+  throttledObserverLogic();
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+
+function processActiveMessages() {
+  if (!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id)) return;
+
   if (window.location.href.includes('page=ingame&component=messages')) {
     const playerId = getMetaContent("ogame-player-id");
     if (playerId) {
@@ -2211,7 +2271,11 @@ const throttledObserverLogic = throttle(() => {
       }
 
       // 2. Ensure we only track if the "Fleets" tab (data-category-id="2") is active
-      const isFleetTabActive = !!document.querySelector('div.singleTab.marker[data-category-id="2"]');
+      const isFleetTabActive = !!document.querySelector('div.singleTab.marker[data-category-id="2"]') ||
+                               !!document.querySelector('div.singleTab.active[data-category-id="2"]') ||
+                               !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]') ||
+                               !!document.querySelector('div.innerTabItem.active[data-subtab-id="21"]') ||
+                               !!document.querySelector('div.innerTabItem.active[data-subtab-id="24"]');
 
       if (isFleetTabActive) {
         // 3. Specialized tracking for expedition messages (Type 41)
@@ -2243,29 +2307,26 @@ const throttledObserverLogic = throttle(() => {
       }
     }
   }
+}
 
-  updateFleetProgressOverlay();
+let messagesProcessTimeout: any = null;
+let messagesBackupTimeout: any = null;
+window.addEventListener('ogame-nexus-ajax-messages-loaded', () => {
+  if (messagesProcessTimeout) clearTimeout(messagesProcessTimeout);
+  if (messagesBackupTimeout) clearTimeout(messagesBackupTimeout);
 
-  // OGame Galaxy View integration
-  if (document.querySelector("#galaxycomponent")) {
-    initGalaxyView();
-  } else {
-    cleanupGalaxyView();
-  }
-}, 50);
+  messagesProcessTimeout = setTimeout(() => {
+    processActiveMessages();
+  }, 50);
 
-const observer = new MutationObserver((mutations) => {
-  if (document.querySelector("#menuTable")) {
-    injectButton();
-  }
-
-  throttledObserverLogic();
+  messagesBackupTimeout = setTimeout(() => {
+    processActiveMessages();
+  }, 250);
 });
-
-observer.observe(document.body, { childList: true, subtree: true });
 
 scrapeAndSync();
 injectButton();
+processActiveMessages();
 
 
 async function performBackgroundEmpireSync() {
@@ -2274,6 +2335,11 @@ async function performBackgroundEmpireSync() {
 
   if (!playerId || !playerName) {
     throw new Error("Player context not found");
+  }
+
+  const officers = scrapeOfficers();
+  if (!officers.hasCommander) {
+    throw new Error("Background sync requires Commander active");
   }
 
   // Fetch planetType=0 (Planets)
@@ -2461,6 +2527,12 @@ async function checkAutoSync() {
     const playerName = getMetaContent("ogame-player-name");
     // Only attempt sync if player has an active session/context loaded
     if (!playerId || !playerName) return;
+
+    // Only auto-sync if player has Commander active
+    const officers = scrapeOfficers();
+    if (!officers.hasCommander) {
+      return;
+    }
 
     const res = await chrome.storage.local.get('last_empire_sync_time');
     const lastSync = res.last_empire_sync_time || 0;

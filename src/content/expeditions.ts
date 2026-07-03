@@ -998,6 +998,10 @@ function formatNumber(num: number): string {
     if (n >= 1000000000) return (n / 1000000000).toFixed(d) + 'B';
     if (n >= 1000000) return (n / 1000000).toFixed(d) + 'M';
     if (n >= 1000) return (n / 1000).toFixed(d) + 'K';
+    if (n % 1 !== 0) {
+        // Keep up to 2 decimal places and strip trailing zeros
+        return Number(n.toFixed(2)).toString();
+    }
     return Math.round(n).toString();
 }
 

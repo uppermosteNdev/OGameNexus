@@ -86,18 +86,26 @@ message-footer-actions .nexus-tooltip::before {
 }
 
 /* Discovery Rarity Card Styles */
-.og-nexus-common-card {
-  background: rgba(10, 15, 20, 0.3) !important;
+.msg:has(.rawMessageData[data-raw-messagetype="41"]),
+.msg:has(.rawMessageData[data-raw-messagetype="61"]),
+.og-nexus-common-card,
+.og-nexus-rare-card,
+.og-nexus-epic-card,
+.og-nexus-black-hole-main {
+  background: rgba(30, 41, 59, 0.45) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-left: 3px solid #6b7280 !important;
 }
 
-.og-nexus-common-card {
+.og-nexus-common-card,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-size="2"]):not(:has(.rawMessageData[data-raw-expeditionresult="fleetloss"])):not(:has(.rawMessageData[data-raw-expeditionresult="fleetlost"])),
+.msg:has(.rawMessageData[data-raw-messagetype="41"]):not(:has(.rawMessageData[data-raw-size="0"])):not(:has(.rawMessageData[data-raw-size="1"])):not(:has(.rawMessageData[data-raw-size="2"])):not(:has(.rawMessageData[data-raw-expeditionresult="fleetloss"])):not(:has(.rawMessageData[data-raw-expeditionresult="fleetlost"])) {
+  border-left: 3px solid #6b7280 !important;
   color: #D1D1D1 !important;
 }
 
-.og-nexus-rare-card {
-  background: rgba(10, 15, 20, 0.3) !important;
+.og-nexus-rare-card,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-size="1"]),
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-artifactssize="big"]) {
   backdrop-filter: blur(8px) !important;
   border: 1px solid transparent !important;
   border-left: 3px solid #06b6d4 !important;
@@ -105,7 +113,9 @@ message-footer-actions .nexus-tooltip::before {
 }
 
 /* Linear Gradient Border Replacement for Rare */
-.og-nexus-rare-card::after {
+.og-nexus-rare-card::after,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-size="1"])::after,
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-artifactssize="big"])::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -123,8 +133,9 @@ message-footer-actions .nexus-tooltip::before {
   pointer-events: none;
 }
 
-.og-nexus-epic-card {
-  background: rgba(10, 15, 20, 0.3) !important;
+.og-nexus-epic-card,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-size="0"]):not(:has(.rawMessageData[data-raw-expeditionresult="fleetloss"])):not(:has(.rawMessageData[data-raw-expeditionresult="fleetlost"])),
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-artifactssize="huge"]) {
   position: relative !important;
   border: none !important;
   box-shadow: 0 0 25px rgba(236, 72, 153, 0.2) !important;
@@ -132,12 +143,15 @@ message-footer-actions .nexus-tooltip::before {
   color: #ffffff !important;
 }
 
-.og-nexus-epic-card .amount-glow {
+.og-nexus-epic-card .amount-glow,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-size="0"]) .amount-glow,
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-artifactssize="huge"]) .amount-glow {
   text-shadow: none !important;
 }
 
-.og-nexus-black-hole-main {
-  background: rgba(10, 15, 20, 0.3) !important;
+.og-nexus-black-hole-main,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-expeditionresult="fleetloss"]),
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-expeditionresult="fleetlost"]) {
   position: relative !important;
   border: none !important;
   box-shadow: 0 0 25px rgba(239, 68, 68, 0.15) !important;
@@ -145,7 +159,9 @@ message-footer-actions .nexus-tooltip::before {
   color: #ffffff !important;
 }
 
-.og-nexus-black-hole-main::after {
+.og-nexus-black-hole-main::after,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-expeditionresult="fleetloss"])::after,
+.msg:has(.rawMessageData[data-raw-messagetype="41"][data-raw-expeditionresult="fleetlost"])::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -161,6 +177,37 @@ message-footer-actions .nexus-tooltip::before {
     linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
+}
+
+/* Discovery Lifeforms Color Coding border left rules */
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-lifeform="1"]) {
+  border-left: 3px solid #22c55e !important;
+}
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-lifeform="2"]) {
+  border-left: 3px solid #991b1b !important;
+}
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-lifeform="3"]) {
+  border-left: 3px solid #06b6d4 !important;
+}
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-lifeform="4"]) {
+  border-left: 3px solid #a855f7 !important;
+}
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-discoverytype="lifeform-xp"]):not(:has(.rawMessageData[data-raw-lifeform])) {
+  border-left: 3px solid #3b82f6 !important;
+}
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-discoverytype="nothing"]),
+.msg:has(.rawMessageData[data-raw-messagetype="61"][data-raw-discoverytype="ship-lost"]) {
+  border-left: 3px solid #ef4444 !important;
+}
+
+/* Espionage reports border left */
+.msg:has(.rawMessageData[data-raw-hashcode^="sr-"]) {
+  border-left: 3px solid #f59e0b !important;
+}
+
+/* Debris harvests border left */
+.msg:has(.rawMessageData[data-raw-messagetype="32"]) {
+  border-left: 3px solid #10b981 !important;
 }
 
 /* Animations & Utility */

@@ -50,12 +50,49 @@ interface AnalyticsDataAggregate {
     trackingDays: number;
 }
 
+const SHIP_COSTS: Record<number, { metal: number; crystal: number; deuterium: number }> = {};
+SHIP_DATA.forEach(s => {
+    if (s.metadata?.cost) {
+        SHIP_COSTS[s.id] = {
+            metal: s.metadata.cost.metal || 0,
+            crystal: s.metadata.cost.crystal || 0,
+            deuterium: s.metadata.cost.deuterium || 0
+        };
+    }
+});
+
+function getExpeditionShipsResources(shipsMap: Record<number, number>) {
+    let metal = 0;
+    let crystal = 0;
+    let deuterium = 0;
+    
+    Object.keys(shipsMap).forEach(k => {
+        const id = parseInt(k);
+        const amount = shipsMap[id] || 0;
+        const cost = SHIP_COSTS[id];
+        if (cost && amount > 0) {
+            metal += cost.metal * amount;
+            crystal += cost.crystal * amount;
+            deuterium += cost.deuterium * amount;
+        }
+    });
+    
+    const msu = metal + crystal * 1.5 + deuterium * 3;
+    
+    return { metal, crystal, deuterium, msu };
+}
+
 interface OptionalRowConfig {
     id: string;
     enabled: boolean;
 }
 
 const DEFAULT_ROWS_CONFIG: OptionalRowConfig[] = [
+    { id: 'expoResources', enabled: true },
+    { id: 'expoShips', enabled: true },
+    { id: 'expoTotal', enabled: true },
+    { id: 'combats', enabled: true },
+    { id: 'debrisFields', enabled: true },
     { id: 'totalToday', enabled: true },
     { id: 'avgExpo', enabled: true },
     { id: 'avgExpo7D', enabled: false },
@@ -884,49 +921,6 @@ function renderTotalsTable(
     });
     t.appendChild(tr);
 
-    // Render fixed rows
-    const expedRow = document.createElement('tr');
-    expedRow.style.background = 'rgba(0, 242, 255, 0.08)';
-    expedRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.03);">Expeditions</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.03); font-weight: bold;">${formatNumber(ag.totalExpeditions) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.metal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.crystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.deuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.msu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.darkMatter) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.expeditionsResources.artifacts) || '-'}</td>
-    `;
-    t.appendChild(expedRow);
-
-    const combatRow = document.createElement('tr');
-    combatRow.style.background = 'rgba(239, 68, 68, 0.08)';
-    combatRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.03);">Combats</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.03); font-weight: bold;">${formatNumber(ag.totalCombats) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.metal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.crystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.deuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.combatsResources.msu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
-    `;
-    t.appendChild(combatRow);
-
-    const debrisRow = document.createElement('tr');
-    debrisRow.style.background = 'rgba(34, 197, 94, 0.08)';
-    debrisRow.innerHTML = `
-        <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.03);">Debris Fields</td>
-        <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.03); font-weight: bold;">${formatNumber(ag.totalDebris) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.metal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.crystal) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #43D159; border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.deuterium) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); border-bottom: 1px solid rgba(255,255,255,0.03);">${formatNumber(ag.debrisResources.msu) || '-'}</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #a855f7; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
-        <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #fbbf24; border-bottom: 1px solid rgba(255,255,255,0.03);">-</td>
-    `;
-    t.appendChild(debrisRow);
-
     // 7D and 30D aggregate setups
     const ts7D = Date.now() / 1000 - 7 * 24 * 3600;
     const ts30D = Date.now() / 1000 - 30 * 24 * 3600;
@@ -978,6 +972,11 @@ function renderTotalsTable(
 
 function getRowName(id: string): string {
     switch (id) {
+        case 'expoResources': return 'Expedition Resources';
+        case 'expoShips': return 'Expedition Ships';
+        case 'expoTotal': return 'Expeditions Total';
+        case 'combats': return 'Combats';
+        case 'debrisFields': return 'Debris Fields';
         case 'totalToday': return '∑ Today';
         case 'avgExpo': return 'Average Expo Events';
         case 'avgExpo7D': return 'Average Expo Events (7D)';
@@ -993,6 +992,11 @@ function getRowName(id: string): string {
 }
 
 function getRowColor(id: string): string {
+    if (id === 'expoResources') return '#00f2ff';
+    if (id === 'expoShips') return '#10b981';
+    if (id === 'expoTotal') return '#38bdf8';
+    if (id === 'combats') return '#ef4444';
+    if (id === 'debrisFields') return '#22c55e';
     if (id === 'totalToday') return '#ec4899';
     if (id.startsWith('avgExpo')) return '#00f2ff';
     if (id.startsWith('avgCombat')) return '#ef4444';
@@ -1027,6 +1031,75 @@ function getRowMetadata(
     const globalArtifacts = globalAg.expeditionsResources.artifacts;
 
     switch (rowId) {
+        case 'expoResources':
+            return {
+                title: 'Expedition Resources',
+                bg: 'rgba(0, 242, 255, 0.08)',
+                color: '#00f2ff',
+                events: ag.categories['Resources'] || 0,
+                metal: ag.expeditionsResources.metal,
+                crystal: ag.expeditionsResources.crystal,
+                deuterium: ag.expeditionsResources.deuterium,
+                msu: ag.expeditionsResources.msu,
+                dm: ag.expeditionsResources.darkMatter,
+                artifacts: ag.expeditionsResources.artifacts
+            };
+        case 'expoShips': {
+            const shipRes = getExpeditionShipsResources(ag.shipsMap);
+            return {
+                title: 'Expedition Ships',
+                bg: 'rgba(16, 185, 129, 0.08)',
+                color: '#10b981',
+                events: ag.categories['Ships'] || 0,
+                metal: shipRes.metal,
+                crystal: shipRes.crystal,
+                deuterium: shipRes.deuterium,
+                msu: shipRes.msu,
+                dm: null,
+                artifacts: null
+            };
+        }
+        case 'expoTotal': {
+            const shipRes = getExpeditionShipsResources(ag.shipsMap);
+            return {
+                title: 'Expeditions Total',
+                bg: 'rgba(56, 189, 248, 0.08)',
+                color: '#38bdf8',
+                events: (ag.categories['Resources'] || 0) + (ag.categories['Ships'] || 0),
+                metal: ag.expeditionsResources.metal + shipRes.metal,
+                crystal: ag.expeditionsResources.crystal + shipRes.crystal,
+                deuterium: ag.expeditionsResources.deuterium + shipRes.deuterium,
+                msu: ag.expeditionsResources.msu + shipRes.msu,
+                dm: ag.expeditionsResources.darkMatter,
+                artifacts: ag.expeditionsResources.artifacts
+            };
+        }
+        case 'combats':
+            return {
+                title: 'Combats',
+                bg: 'rgba(239, 68, 68, 0.08)',
+                color: '#ef4444',
+                events: ag.totalCombats,
+                metal: ag.combatsResources.metal,
+                crystal: ag.combatsResources.crystal,
+                deuterium: ag.combatsResources.deuterium,
+                msu: ag.combatsResources.msu,
+                dm: null,
+                artifacts: null
+            };
+        case 'debrisFields':
+            return {
+                title: 'Debris Fields',
+                bg: 'rgba(34, 197, 94, 0.08)',
+                color: '#22c55e',
+                events: ag.totalDebris,
+                metal: ag.debrisResources.metal,
+                crystal: ag.debrisResources.crystal,
+                deuterium: ag.debrisResources.deuterium,
+                msu: ag.debrisResources.msu,
+                dm: null,
+                artifacts: null
+            };
         case 'totalToday':
             return {
                 title: '∑ Today',
@@ -1247,7 +1320,7 @@ function toggleSettingsModal(
     combats: any[],
     debrisHarvests: any[]
 ) {
-    const existing = card.querySelector('.og-nexus-totals-settings-modal');
+    const existing = document.querySelector('.og-nexus-totals-settings-modal');
     if (existing) {
         existing.remove();
         isSettingsModalOpen = false;
@@ -1256,18 +1329,26 @@ function toggleSettingsModal(
 
     isSettingsModalOpen = true;
 
+    const cog = card.querySelector('.og-nexus-totals-settings-cog');
+    const rect = cog ? cog.getBoundingClientRect() : { left: 100, bottom: 200 };
+    let leftPos = rect.left;
+    if (leftPos + 320 > window.innerWidth) {
+        leftPos = window.innerWidth - 340;
+    }
+    if (leftPos < 20) leftPos = 20;
+
     const modal = document.createElement('div');
     modal.className = 'og-nexus-totals-settings-modal';
     modal.style.cssText = `
-        position: absolute;
-        left: 12px;
-        top: 48px;
+        position: fixed;
+        left: ${leftPos}px;
+        top: ${rect.bottom + 8}px;
         background: rgba(10, 16, 27, 0.98);
         backdrop-filter: blur(16px);
         border: 1px solid rgba(0, 242, 255, 0.25);
         border-radius: 12px;
         padding: 16px;
-        z-index: 1000;
+        z-index: 9999999;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(0, 242, 255, 0.15);
         width: 320px;
         display: flex;
@@ -1334,11 +1415,51 @@ function toggleSettingsModal(
     listContainer.className = 'custom-scrollbar';
     modal.appendChild(listContainer);
 
+    // Auto-scroll while dragging
+    let scrollSpeed = 0;
+    let scrollInterval: any = null;
+
+    listContainer.addEventListener('dragover', (e) => {
+        const r = listContainer.getBoundingClientRect();
+        const relativeY = e.clientY - r.top;
+        if (relativeY < 40) {
+            scrollSpeed = -6;
+        } else if (relativeY > r.height - 40) {
+            scrollSpeed = 6;
+        } else {
+            scrollSpeed = 0;
+        }
+
+        if (scrollSpeed !== 0) {
+            if (!scrollInterval) {
+                scrollInterval = setInterval(() => {
+                    listContainer.scrollTop += scrollSpeed;
+                }, 16);
+            }
+        } else {
+            if (scrollInterval) {
+                clearInterval(scrollInterval);
+                scrollInterval = null;
+            }
+        }
+    });
+
+    const stopScroll = () => {
+        if (scrollInterval) {
+            clearInterval(scrollInterval);
+            scrollInterval = null;
+        }
+        scrollSpeed = 0;
+    };
+
+    listContainer.addEventListener('dragend', stopScroll);
+    listContainer.addEventListener('drop', stopScroll);
+
     const updateList = (newConfig: OptionalRowConfig[]) => {
         cachedRowsConfig = newConfig;
         renderDragList(listContainer, cachedRowsConfig, updateList);
     };
 
     renderDragList(listContainer, cachedRowsConfig || DEFAULT_ROWS_CONFIG, updateList);
-    card.appendChild(modal);
+    document.body.appendChild(modal);
 }

@@ -10,30 +10,28 @@ function cleanObject(obj: any) {
 }
 
 function mergeLifeformBuildings(existing: any[], incoming: any[], activeLifeformId?: number) {
-    const result = [...existing];
-
-    // If activeLifeformId is provided, clear out buildings that do not belong to it
-    if (activeLifeformId && activeLifeformId > 0) {
-        const speciesPrefix = `1${activeLifeformId}`;
-        result.forEach(eb => {
-            if (!eb.id.toString().startsWith(speciesPrefix)) {
-                eb.level = 0;
-            }
-        });
+    if (activeLifeformId === 0) {
+        return [];
     }
 
-    incoming.forEach(nb => {
+    const speciesPrefix = activeLifeformId ? `1${activeLifeformId}` : null;
+
+    // Filter existing and incoming to only include buildings of the active lifeform
+    const filteredExisting = speciesPrefix 
+        ? existing.filter(eb => eb.id.toString().startsWith(speciesPrefix))
+        : [...existing];
+
+    const filteredIncoming = speciesPrefix
+        ? incoming.filter(nb => nb.id.toString().startsWith(speciesPrefix))
+        : [...incoming];
+
+    const result = [...filteredExisting];
+
+    filteredIncoming.forEach(nb => {
         // Find name from static data if missing
         if (!nb.name) {
             const staticData = LIFEFORM_BUILDING_DATA.find(sb => sb.id === nb.id);
             if (staticData) nb.name = staticData.name;
-        }
-
-        if (activeLifeformId && activeLifeformId > 0) {
-            const speciesPrefix = `1${activeLifeformId}`;
-            if (!nb.id.toString().startsWith(speciesPrefix)) {
-                nb.level = 0;
-            }
         }
 
         const idx = result.findIndex(eb => eb.id === nb.id);
@@ -292,8 +290,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             const empirePlanet = empire?.planets?.find((ep: any) => ep.id === p.id);
 
                             const resolvedLifeformId = isMainPlanet
-                                ? (lifeformId || overview?.planetData?.lifeformId || empirePlanet?.lifeformId || existing?.lifeformId)
-                                : (empirePlanet?.lifeformId || existing?.lifeformId);
+                                ? (lifeformId ?? overview?.planetData?.lifeformId ?? existing?.lifeformId)
+                                : existing?.lifeformId;
 
                             const updateData: any = cleanObject({
                                 ...p,
