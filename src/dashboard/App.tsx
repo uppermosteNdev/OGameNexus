@@ -20,6 +20,8 @@ import WelcomeModal from './components/WelcomeModal';
 import ChangelogModal from './components/ChangelogModal';
 import Tutorials from './views/Tutorials';
 import RaidRadar from './views/RaidRadar';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db';
 import './index.css';
 import '../content/styles.css';
 
@@ -28,6 +30,20 @@ const App: React.FC = () => {
     const [showWelcome, setShowWelcome] = useState(false);
     const [showChangelog, setShowChangelog] = useState(false);
     const [lowAnimationEnabled, setLowAnimationEnabled] = useState(false);
+
+    const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+
+    useEffect(() => {
+        if (activeAccount) {
+            const playerName = activeAccount.playerName || 'Unknown Player';
+            const universeName = activeAccount.universeName && activeAccount.universeName !== 'unknown'
+                ? activeAccount.universeName
+                : (activeAccount.universe || 'unknown');
+            document.title = `${universeName} › ${playerName} • OGNexus`;
+        } else {
+            document.title = "OGame Nexus Dashboard";
+        }
+    }, [activeAccount]);
 
     useEffect(() => {
         const loadLowAnimationSetting = async () => {
@@ -101,7 +117,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to get manifest version", e);
         }
-        return "1.1.6";
+        return "1.1.7";
     };
 
     const autoDismissChangelogForNewInstall = (version: string) => {

@@ -985,6 +985,20 @@ export function applyGalaxyRings() {
   const system = parseInt(systemInput.value, 10);
   if (isNaN(galaxy) || isNaN(system)) return;
 
+  // Precaution: Ensure the galaxy page is fully loaded and coordinates match what OGame is displaying
+  const loadingEl = document.getElementById("galaxyLoading");
+  if (!loadingEl) return;
+  const isLoaded = window.getComputedStyle(loadingEl).display === "none" || loadingEl.style.display === "none";
+  if (!isLoaded) return;
+
+  const currentPos = loadingEl.getAttribute("data-currentposition");
+  if (!currentPos) return;
+  const parts = currentPos.split(":");
+  if (parts.length !== 2) return;
+  const posGalaxy = parseInt(parts[0], 10);
+  const posSystem = parseInt(parts[1], 10);
+  if (posGalaxy !== galaxy || posSystem !== system) return;
+
   // If system or galaxy changed, hide any active tooltip
   if (lastGalaxy !== null && lastSystem !== null && (lastGalaxy !== galaxy || lastSystem !== system)) {
     handleMouseLeave();
@@ -992,20 +1006,22 @@ export function applyGalaxyRings() {
   lastGalaxy = galaxy;
   lastSystem = system;
 
-  // Read current checkbox filter settings
-  const showG4 = localStorage.getItem('og-nexus-gal-show-g4') !== 'false';
-  const showG3 = localStorage.getItem('og-nexus-gal-show-g3') !== 'false';
-  const showG2 = localStorage.getItem('og-nexus-gal-show-g2') !== 'false';
-  const showG1 = localStorage.getItem('og-nexus-gal-show-g1') !== 'false';
-  const showG0 = localStorage.getItem('og-nexus-gal-show-g0') !== 'false';
+  // Read current checkbox filter settings for the 5 highlight groups (Tiers 0 to 4 based on production)
+  const showGroup4 = localStorage.getItem('og-nexus-gal-show-g4') !== 'false';
+  const showGroup3 = localStorage.getItem('og-nexus-gal-show-g3') !== 'false';
+  const showGroup2 = localStorage.getItem('og-nexus-gal-show-g2') !== 'false';
+  const showGroup1 = localStorage.getItem('og-nexus-gal-show-g1') !== 'false';
+  const showGroup0 = localStorage.getItem('og-nexus-gal-show-g0') !== 'false';
 
-  let countG4 = 0;
-  let countG3 = 0;
-  let countG2 = 0;
-  let countG1 = 0;
-  let countG0 = 0;
+  let countGroup4 = 0;
+  let countGroup3 = 0;
+  let countGroup2 = 0;
+  let countGroup1 = 0;
+  let countGroup0 = 0;
 
   const rows = document.querySelectorAll('.galaxyRow.ctContentRow');
+  if (rows.length < 15) return; // Precaution: Ensure system table is fully loaded with all 15 coordinate slots + deep space
+
   rows.forEach(row => {
     const posCell = row.querySelector('.cellPosition');
     const playerCell = row.querySelector('.cellPlayerName') as HTMLElement | null;
@@ -1028,6 +1044,39 @@ export function applyGalaxyRings() {
       (playerCell as any)._ogNexusMouseEnter = null;
     }
 
+    // Soft-delete/remove inactive planets that are now empty slots in galaxy view
+    const playerText = playerCell?.textContent?.trim() || "";
+    if (row.classList.contains('empty_filter') && !playerText) {
+      const targetCoords = `${galaxy}:${system}:${position}`;
+      const cachedPlanet = spiedPlanetsCache.find(p => p.coords === targetCoords);
+      if (cachedPlanet) {
+        console.log(`OGame Nexus: Detected empty slot at ${targetCoords} where database expected spied planet. Soft-deleting target.`, cachedPlanet);
+        
+        chrome.runtime.sendMessage({
+          type: "DELETE_SPIED_PLANET",
+          data: { planetKey: cachedPlanet.planetKey }
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.warn("OGame Nexus: Extension context invalidated during DELETE_SPIED_PLANET sendMessage.");
+            return;
+          }
+          if (response && response.success) {
+            console.log(`OGame Nexus: Successfully deleted spied planet at ${targetCoords} (Key: ${cachedPlanet.planetKey}) from DB.`);
+            // Update local cache to prevent redundant deletion calls
+            spiedPlanetsCache = spiedPlanetsCache.filter(p => p.planetKey !== cachedPlanet.planetKey);
+            // Refresh sidebar if it is currently open
+            const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+            if (sidebar && sidebar.classList.contains('open')) {
+              updateSidebarData(true);
+            }
+          } else {
+            console.error(`OGame Nexus: Failed to delete spied planet at ${targetCoords}:`, response?.error);
+          }
+        });
+      }
+      return;
+    }
+
     // Check if the player cell actually has inactive markers and is not in vacation mode
     const isInactive = row.classList.contains('inactive_filter') && !row.classList.contains('vacation_filter');
     if (!isInactive) return;
@@ -1043,28 +1092,28 @@ export function applyGalaxyRings() {
     let group = 0;
     if (!planet || msuPerHour < galaxyIntervals.t0) {
       group = 0;
-      countG0++;
+      countGroup0++;
     } else if (msuPerHour > galaxyIntervals.t3) {
       group = 4;
-      countG4++;
+      countGroup4++;
     } else if (msuPerHour > galaxyIntervals.t2) {
       group = 3;
-      countG3++;
+      countGroup3++;
     } else if (msuPerHour > galaxyIntervals.t1) {
       group = 2;
-      countG2++;
+      countGroup2++;
     } else {
       group = 1;
-      countG1++;
+      countGroup1++;
     }
 
     // Determine if we should show/hide
     let shouldShow = true;
-    if (group === 4) shouldShow = showG4;
-    else if (group === 3) shouldShow = showG3;
-    else if (group === 2) shouldShow = showG2;
-    else if (group === 1) shouldShow = showG1;
-    else shouldShow = showG0;
+    if (group === 4) shouldShow = showGroup4;
+    else if (group === 3) shouldShow = showGroup3;
+    else if (group === 2) shouldShow = showGroup2;
+    else if (group === 1) shouldShow = showGroup1;
+    else shouldShow = showGroup0;
 
     if (!shouldShow) {
       rowEl.style.opacity = '0.35';
@@ -1094,11 +1143,11 @@ export function applyGalaxyRings() {
   const valG2 = document.getElementById('og-nexus-val-g2');
   const valG1 = document.getElementById('og-nexus-val-g1');
   const valG0 = document.getElementById('og-nexus-val-g0');
-  if (valG4) valG4.textContent = String(countG4);
-  if (valG3) valG3.textContent = String(countG3);
-  if (valG2) valG2.textContent = String(countG2);
-  if (valG1) valG1.textContent = String(countG1);
-  if (valG0) valG0.textContent = String(countG0);
+  if (valG4) valG4.textContent = String(countGroup4);
+  if (valG3) valG3.textContent = String(countGroup3);
+  if (valG2) valG2.textContent = String(countGroup2);
+  if (valG1) valG1.textContent = String(countGroup1);
+  if (valG0) valG0.textContent = String(countGroup0);
 }
 
 export function initGalaxyView() {

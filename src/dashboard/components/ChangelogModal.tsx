@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Sparkles, ShieldCheck, TrendingUp, ShoppingCart, RefreshCw } from 'lucide-react';
+import { Sparkles, ShieldCheck, Trash2, Database, Layout, Gauge, ArrowRight } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -12,19 +12,24 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <TrendingUp size={22} color="#00f2ff" />,
-            title: "Combat Report Loot Summaries",
-            desc: "Combat reports now display clear, integrated summaries of looted resources (Metal, Crystal, Deuterium) in a dedicated visual pill right alongside the debris field."
+            icon: <Trash2 size={22} color="#f43f5e" />,
+            title: "Dynamic Raid Radar Cleaning",
+            desc: "Relocated, deleted, or disappeared inactive planets are now automatically detected and soft-deleted/cleared from the database and Raid Radar list as you scroll through the galaxy."
         },
         {
-            icon: <Sparkles size={22} color="#c084fc" />,
-            title: "Production Tab Calculations",
-            desc: "Adjusted resource formulas inside the Nexus Terminal Production tab to align with advanced settings for highly accurate calculations."
+            icon: <Database size={22} color="#00f2ff" />,
+            title: "Galaxies & Storage Limits",
+            desc: "Resolved the 5-galaxy limit bug to support up to 9 galaxies based on server data. Added storage capacity limits and database tracking for flying resources."
         },
         {
-            icon: <RefreshCw size={22} color="#10b981" />,
-            title: "Background Sync Bugfixes",
-            desc: "Resolved background synchronization errors and improved stability of automated data refreshes."
+            icon: <Layout size={22} color="#c084fc" />,
+            title: "UI Visualization Overhaul",
+            desc: "Redesigned visual containers for expedition, lifeform, and combat reports. Added At-A-Glance row dragging configurations and fixed trader expedition message glitches."
+        },
+        {
+            icon: <Gauge size={22} color="#10b981" />,
+            title: "Faster Background Sync & Item IDs",
+            desc: "Reduced background synchronization delays from 5 minutes to 1 minute for faster reactivity. Transitioned static items mapping to use robust item IDs instead of string names."
         }
     ];
 
@@ -123,7 +128,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.6
+                                v1.1.7
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

@@ -1182,6 +1182,24 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
         })();
         return true;
     }
+
+    if (message.type === "DELETE_SPIED_PLANET") {
+        const { planetKey } = message.data || {};
+        (async () => {
+            try {
+                if (planetKey) {
+                    await db.spiedPlanets.delete(planetKey);
+                    sendResponse({ success: true });
+                } else {
+                    sendResponse({ success: false, error: "Missing planetKey" });
+                }
+            } catch (err) {
+                console.error("OGame Nexus: Error in DELETE_SPIED_PLANET", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
 });
 
 chrome.action.onClicked.addListener(() => {
