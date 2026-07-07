@@ -1,5 +1,6 @@
 
 const DEBUG_AMORTIZATION = false;
+import { getProductionBoosters } from './items';
 
 export interface Cost {
     metal: number;
@@ -306,9 +307,10 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);
         const crawlerBonus = activeCrawlers * 0.0002 * crawlersSettingsFactor;
 
-        const boosterMetal = p.boosters?.metal || 0;
-        const boosterCrystal = p.boosters?.crystal || 0;
-        const boosterDeut = p.boosters?.deuterium || 0;
+        const dynamicBoosters = getProductionBoosters(p.activeItems);
+        const boosterMetal = dynamicBoosters.metal;
+        const boosterCrystal = dynamicBoosters.crystal;
+        const boosterDeut = dynamicBoosters.deuterium;
 
         const multMetal = 1 + plasmaMetal + lfbMetal + globalEuroMetal + classMetal + boosterMetal + geologistBonus + staffBonus + allyTraderBonus + crawlerBonus;
         const multCrystal = 1 + plasmaCrystal + lfbCrystal + globalEuroCrystal + classCrystal + boosterCrystal + geologistBonus + staffBonus + allyTraderBonus + crawlerBonus;

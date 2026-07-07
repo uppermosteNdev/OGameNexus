@@ -344,13 +344,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     // Merge Buildings: Keep all, update levels for those found on the page
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], lifeformBuildings || empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
 
-                                    // Active items and boosters mapping
+                                    // Active items mapping
                                     activeItems: (overview?.planetData?.activeItems !== undefined)
                                         ? overview.planetData.activeItems
                                         : (empirePlanet ? (empirePlanet.activeItems || []) : existing?.activeItems),
-                                    boosters: (overview?.planetData?.boosters !== undefined)
-                                        ? overview.planetData.boosters
-                                        : (empirePlanet ? (empirePlanet.boosters || { metal: 0, crystal: 0, deuterium: 0 }) : existing?.boosters),
 
                                     ...(production && (production.metal > 0 || production.crystal > 0 || production.deuterium > 0) ? {
                                         production: {
@@ -372,7 +369,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], empirePlanet?.lifeformSetup || [], true),
                                     activeItems: empirePlanet ? (empirePlanet.activeItems || []) : existing?.activeItems,
-                                    boosters: empirePlanet ? (empirePlanet.boosters || { metal: 0, crystal: 0, deuterium: 0 }) : existing?.boosters,
                                 })
                             });
 
@@ -415,25 +411,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     const activeCount = pl.activeItems.length;
                                     const remainingItems = pl.activeItems.filter(item => !item.expiryTimestamp || item.expiryTimestamp > now);
                                     
-                                    // If any items were removed, re-calculate the cumulative boosters object
                                     if (remainingItems.length < activeCount) {
-                                        const boosters = { metal: 0, crystal: 0, deuterium: 0 };
-                                        remainingItems.forEach(item => {
-                                            if (item.bonus && item.bonus > 0) {
-                                                if (item.type === 'metal') boosters.metal += item.bonus;
-                                                else if (item.type === 'crystal') boosters.crystal += item.bonus;
-                                                else if (item.type === 'deuterium') boosters.deuterium += item.bonus;
-                                                else if (item.type === 'resource') {
-                                                    boosters.metal += item.bonus;
-                                                    boosters.crystal += item.bonus;
-                                                    boosters.deuterium += item.bonus;
-                                                }
-                                            }
-                                        });
                                         pl.activeItems = remainingItems;
-                                        pl.boosters = boosters;
-                                        // Save corrected boosters/items in DB
-                                        await db.planets.update(pl.id, { activeItems: pl.activeItems, boosters: pl.boosters });
+                                        // Save corrected items in DB
+                                        await db.planets.update(pl.id, { activeItems: pl.activeItems });
                                     }
                                 }
                             }

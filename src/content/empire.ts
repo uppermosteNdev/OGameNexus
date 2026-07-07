@@ -1,5 +1,6 @@
 import { Planet, ActiveItem } from '../db';
 import { LIFEFORM_TECH_DATA } from '../db/lifeformTechData';
+import { findItemByStyle, findItemByName, getLegacyTypeAndBonus } from '../utils/items';
 
 function getEntityLevel(el: Element): number {
     const link = el.querySelector('a');
@@ -173,7 +174,6 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
 
         // Scrape Active Boosters / Items
         const activeItems: ActiveItem[] = [];
-        const boosters = { metal: 0, crystal: 0, deuterium: 0 };
         
         const itemEls = planetDiv.querySelectorAll('.empireItems .item_img');
         itemEls.forEach(itemEl => {
@@ -182,43 +182,53 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
             const title = titleParts[0].trim();
             const bodyHtml = titleParts.slice(1).join('|');
             
-            const lowerTitle = title.toLowerCase();
+            const style = itemEl.getAttribute('style');
+            const mappedItem = findItemByStyle(style) || findItemByName(title);
+            
+            const ref = mappedItem?.ref || '';
             let type: ActiveItem['type'] = 'other';
             let bonus = 0;
             
-            if (lowerTitle.includes('metal booster')) {
-                type = 'metal';
-                if (lowerTitle.includes('platinum')) bonus = 0.40;
-                else if (lowerTitle.includes('gold')) bonus = 0.30;
-                else if (lowerTitle.includes('silver')) bonus = 0.20;
-                else if (lowerTitle.includes('bronze')) bonus = 0.10;
-            } else if (lowerTitle.includes('crystal booster')) {
-                type = 'crystal';
-                if (lowerTitle.includes('platinum')) bonus = 0.40;
-                else if (lowerTitle.includes('gold')) bonus = 0.30;
-                else if (lowerTitle.includes('silver')) bonus = 0.20;
-                else if (lowerTitle.includes('bronze')) bonus = 0.10;
-            } else if (lowerTitle.includes('deuterium booster')) {
-                type = 'deuterium';
-                if (lowerTitle.includes('platinum')) bonus = 0.40;
-                else if (lowerTitle.includes('gold')) bonus = 0.30;
-                else if (lowerTitle.includes('silver')) bonus = 0.20;
-                else if (lowerTitle.includes('bronze')) bonus = 0.10;
-            } else if (lowerTitle.includes('expedition resource booster')) {
-                type = 'expedition_res';
-            } else if (lowerTitle.includes('resource booster')) {
-                type = 'resource';
-            } else if (lowerTitle.includes('expedition slots')) {
-                type = 'expedition_slots';
-            } else if (lowerTitle.includes('fleet slots')) {
-                type = 'fleet_slots';
-            } else if (lowerTitle.includes('planet fields')) {
-                type = 'fields';
-            }
-            
-            const titlePercentMatch = title.match(/\((\d+)%\)/);
-            if (titlePercentMatch) {
-                bonus = parseInt(titlePercentMatch[1], 10) / 100;
+            if (mappedItem) {
+                const legacy = getLegacyTypeAndBonus(mappedItem);
+                type = legacy.type;
+                bonus = legacy.bonus;
+            } else {
+                const lowerTitle = title.toLowerCase();
+                if (lowerTitle.includes('metal booster')) {
+                    type = 'metal';
+                    if (lowerTitle.includes('platinum')) bonus = 0.40;
+                    else if (lowerTitle.includes('gold')) bonus = 0.30;
+                    else if (lowerTitle.includes('silver')) bonus = 0.20;
+                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                } else if (lowerTitle.includes('crystal booster')) {
+                    type = 'crystal';
+                    if (lowerTitle.includes('platinum')) bonus = 0.40;
+                    else if (lowerTitle.includes('gold')) bonus = 0.30;
+                    else if (lowerTitle.includes('silver')) bonus = 0.20;
+                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                } else if (lowerTitle.includes('deuterium booster')) {
+                    type = 'deuterium';
+                    if (lowerTitle.includes('platinum')) bonus = 0.40;
+                    else if (lowerTitle.includes('gold')) bonus = 0.30;
+                    else if (lowerTitle.includes('silver')) bonus = 0.20;
+                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                } else if (lowerTitle.includes('expedition resource booster')) {
+                    type = 'expedition_res';
+                } else if (lowerTitle.includes('resource booster')) {
+                    type = 'resource';
+                } else if (lowerTitle.includes('expedition slots')) {
+                    type = 'expedition_slots';
+                } else if (lowerTitle.includes('fleet slots')) {
+                    type = 'fleet_slots';
+                } else if (lowerTitle.includes('planet fields')) {
+                    type = 'fields';
+                }
+                
+                const titlePercentMatch = title.match(/\((\d+)%\)/);
+                if (titlePercentMatch) {
+                    bonus = parseInt(titlePercentMatch[1], 10) / 100;
+                }
             }
             
             let rarity = '';
@@ -256,6 +266,7 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
             }
             
             activeItems.push({
+                ref,
                 name: title,
                 title,
                 rarity,
@@ -266,22 +277,10 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
                 bonus,
                 type
             });
-            
-            if (bonus > 0) {
-                if (type === 'metal') boosters.metal += bonus;
-                else if (type === 'crystal') boosters.crystal += bonus;
-                else if (type === 'deuterium') boosters.deuterium += bonus;
-                else if (type === 'resource') {
-                    boosters.metal += bonus;
-                    boosters.crystal += bonus;
-                    boosters.deuterium += bonus;
-                }
-            }
         });
         
         if (activeItems.length > 0) {
             planet.activeItems = activeItems;
-            planet.boosters = boosters;
         }
 
         planets.push(planet);
@@ -503,7 +502,6 @@ export function parseAjaxEmpireJson(
             const itemEls = doc.querySelectorAll('.item_img');
             
             const activeItems: ActiveItem[] = [];
-            const boosters = { metal: 0, crystal: 0, deuterium: 0 };
             
             itemEls.forEach(itemEl => {
                 const tooltipTitle = itemEl.getAttribute('data-tooltip-title') || itemEl.getAttribute('title') || '';
@@ -511,43 +509,53 @@ export function parseAjaxEmpireJson(
                 const title = titleParts[0].trim();
                 const bodyHtml = titleParts.slice(1).join('|');
                 
-                const lowerTitle = title.toLowerCase();
+                const style = itemEl.getAttribute('style');
+                const mappedItem = findItemByStyle(style) || findItemByName(title);
+                
+                const ref = mappedItem?.ref || '';
                 let type: ActiveItem['type'] = 'other';
                 let bonus = 0;
                 
-                if (lowerTitle.includes('metal booster')) {
-                    type = 'metal';
-                    if (lowerTitle.includes('platinum')) bonus = 0.40;
-                    else if (lowerTitle.includes('gold')) bonus = 0.30;
-                    else if (lowerTitle.includes('silver')) bonus = 0.20;
-                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
-                } else if (lowerTitle.includes('crystal booster')) {
-                    type = 'crystal';
-                    if (lowerTitle.includes('platinum')) bonus = 0.40;
-                    else if (lowerTitle.includes('gold')) bonus = 0.30;
-                    else if (lowerTitle.includes('silver')) bonus = 0.20;
-                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
-                } else if (lowerTitle.includes('deuterium booster')) {
-                    type = 'deuterium';
-                    if (lowerTitle.includes('platinum')) bonus = 0.40;
-                    else if (lowerTitle.includes('gold')) bonus = 0.30;
-                    else if (lowerTitle.includes('silver')) bonus = 0.20;
-                    else if (lowerTitle.includes('bronze')) bonus = 0.10;
-                } else if (lowerTitle.includes('expedition resource booster')) {
-                    type = 'expedition_res';
-                } else if (lowerTitle.includes('resource booster')) {
-                    type = 'resource';
-                } else if (lowerTitle.includes('expedition slots')) {
-                    type = 'expedition_slots';
-                } else if (lowerTitle.includes('fleet slots')) {
-                    type = 'fleet_slots';
-                } else if (lowerTitle.includes('planet fields')) {
-                    type = 'fields';
-                }
-                
-                const titlePercentMatch = title.match(/\((\d+)%\)/);
-                if (titlePercentMatch) {
-                    bonus = parseInt(titlePercentMatch[1], 10) / 100;
+                if (mappedItem) {
+                    const legacy = getLegacyTypeAndBonus(mappedItem);
+                    type = legacy.type;
+                    bonus = legacy.bonus;
+                } else {
+                    const lowerTitle = title.toLowerCase();
+                    if (lowerTitle.includes('metal booster')) {
+                        type = 'metal';
+                        if (lowerTitle.includes('platinum')) bonus = 0.40;
+                        else if (lowerTitle.includes('gold')) bonus = 0.30;
+                        else if (lowerTitle.includes('silver')) bonus = 0.20;
+                        else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                    } else if (lowerTitle.includes('crystal booster')) {
+                        type = 'crystal';
+                        if (lowerTitle.includes('platinum')) bonus = 0.40;
+                        else if (lowerTitle.includes('gold')) bonus = 0.30;
+                        else if (lowerTitle.includes('silver')) bonus = 0.20;
+                        else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                    } else if (lowerTitle.includes('deuterium booster')) {
+                        type = 'deuterium';
+                        if (lowerTitle.includes('platinum')) bonus = 0.40;
+                        else if (lowerTitle.includes('gold')) bonus = 0.30;
+                        else if (lowerTitle.includes('silver')) bonus = 0.20;
+                        else if (lowerTitle.includes('bronze')) bonus = 0.10;
+                    } else if (lowerTitle.includes('expedition resource booster')) {
+                        type = 'expedition_res';
+                    } else if (lowerTitle.includes('resource booster')) {
+                        type = 'resource';
+                    } else if (lowerTitle.includes('expedition slots')) {
+                        type = 'expedition_slots';
+                    } else if (lowerTitle.includes('fleet slots')) {
+                        type = 'fleet_slots';
+                    } else if (lowerTitle.includes('planet fields')) {
+                        type = 'fields';
+                    }
+                    
+                    const titlePercentMatch = title.match(/\((\d+)%\)/);
+                    if (titlePercentMatch) {
+                        bonus = parseInt(titlePercentMatch[1], 10) / 100;
+                    }
                 }
                 
                 let rarity = '';
@@ -585,6 +593,7 @@ export function parseAjaxEmpireJson(
                 }
                 
                 activeItems.push({
+                    ref,
                     name: title,
                     title,
                     rarity,
@@ -595,22 +604,10 @@ export function parseAjaxEmpireJson(
                     bonus,
                     type
                 });
-                
-                if (bonus > 0) {
-                    if (type === 'metal') boosters.metal += bonus;
-                    else if (type === 'crystal') boosters.crystal += bonus;
-                    else if (type === 'deuterium') boosters.deuterium += bonus;
-                    else if (type === 'resource') {
-                        boosters.metal += bonus;
-                        boosters.crystal += bonus;
-                        boosters.deuterium += bonus;
-                    }
-                }
             });
             
             if (activeItems.length > 0) {
                 planet.activeItems = activeItems;
-                planet.boosters = boosters;
             }
         }
 

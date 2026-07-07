@@ -1952,8 +1952,17 @@ body.low-animation .og-nexus-epic-pulse {
   transition: background-color 0.2s ease;
 }
 
+.nexus-prod-row td {
+  position: relative;
+  z-index: 1;
+}
+
 .nexus-prod-row:hover {
   background-color: rgba(255, 255, 255, 0.015);
+}
+
+.nexus-prod-row:hover td {
+  z-index: 20;
 }
 
 .nexus-resource-badge {

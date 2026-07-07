@@ -8,6 +8,7 @@ import {
     MapPin, Thermometer, Database, HelpCircle
 } from 'lucide-react';
 import { calculateEmpireProduction, DEFAULT_RATES, Cost } from '../../utils/amortizationCalc';
+import { getProductionBoosters } from '../../utils/items';
 
 const formatLargeNumber = (num: number) => {
     return Math.floor(num).toLocaleString('en-US');
@@ -126,9 +127,10 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
     const allyTraderC = account?.allianceClass === 1 ? 0.05 : 0;
     const allyTraderD = account?.allianceClass === 1 ? 0.05 : 0;
 
-    const boostM = planet.boosters?.metal || 0;
-    const boostC = planet.boosters?.crystal || 0;
-    const boostD = planet.boosters?.deuterium || 0;
+    const dynamicBoosters = getProductionBoosters(planet.activeItems);
+    const boostM = dynamicBoosters.metal;
+    const boostC = dynamicBoosters.crystal;
+    const boostD = dynamicBoosters.deuterium;
 
     const globalM = calcData?.globalBonuses?.metal ?? 0;
     const globalC = calcData?.globalBonuses?.crystal ?? 0;

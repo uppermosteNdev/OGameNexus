@@ -148,14 +148,10 @@ export interface Planet {
     defenses?: Record<number, number>;
     lastUpdated: number;
     activeItems?: ActiveItem[];
-    boosters?: {
-        metal: number;
-        crystal: number;
-        deuterium: number;
-    };
 }
 
 export interface ActiveItem {
+    ref?: string;
     name: string;
     title: string;
     rarity?: string;
