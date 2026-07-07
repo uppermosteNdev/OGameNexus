@@ -291,9 +291,9 @@ function updateTooltipContent(planetOrCoords: SpiedPlanet | string) {
   const crystalAccumulated = planet.crystalPerHour * dT;
   const deuteriumAccumulated = planet.deuteriumPerHour * dT;
 
-  const metalCap = planet.metalCapacity || 10000;
-  const crystalCap = planet.crystalCapacity || 10000;
-  const deuteriumCap = planet.deuteriumCapacity || 10000;
+  const metalCap = planet.metalCapacity !== undefined && planet.metalCapacity !== null ? planet.metalCapacity : Infinity;
+  const crystalCap = planet.crystalCapacity !== undefined && planet.crystalCapacity !== null ? planet.crystalCapacity : Infinity;
+  const deuteriumCap = planet.deuteriumCapacity !== undefined && planet.deuteriumCapacity !== null ? planet.deuteriumCapacity : Infinity;
 
   const metalTotal = Math.max(planet.lastSpiedMetal, Math.min(metalCap, planet.lastSpiedMetal + metalAccumulated));
   const crystalTotal = Math.max(planet.lastSpiedCrystal, Math.min(crystalCap, planet.lastSpiedCrystal + crystalAccumulated));

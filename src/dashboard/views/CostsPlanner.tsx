@@ -1467,8 +1467,15 @@ const CostsPlanner: React.FC = () => {
             crystal += p.crystal || 0;
             deuterium += p.deuterium || 0;
         });
+
+        if (activeAccount?.flyingResources) {
+            metal += activeAccount.flyingResources.metal || 0;
+            crystal += activeAccount.flyingResources.crystal || 0;
+            deuterium += activeAccount.flyingResources.deuterium || 0;
+        }
+
         return (metal * mMultiplier) + (crystal * cMultiplier) + (deuterium * dMultiplier);
-    }, [allPlanetsAndMoons, mMultiplier, cMultiplier, dMultiplier]);
+    }, [allPlanetsAndMoons, activeAccount, mMultiplier, cMultiplier, dMultiplier]);
 
     const remainingDaysToGather = useMemo(() => {
         const remainingMSU = Math.max(0, cartSummary.msu - totalCurrentResourcesMSU);
@@ -2688,7 +2695,7 @@ const CostsPlanner: React.FC = () => {
                                     </div>
                                     <div className="msu-val-text">{formatNumber(cartSummary.msu)}</div>
                                 </div>
-                                <div className="summary-msu-pod" title={`Calculated by subtracting total planet and moon resources (${formatFullNumber(totalCurrentResourcesMSU)} MSU) from total cost`}>
+                                <div className="summary-msu-pod" title={`Calculated by subtracting total planet, moon, and flying resources (${formatFullNumber(totalCurrentResourcesMSU)} MSU) from total cost`}>
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#38bdf8" />
                                         <span>EST. GATHER TIME</span>

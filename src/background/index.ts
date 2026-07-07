@@ -222,6 +222,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (message.type === "UPDATE_FLYING_RESOURCES") {
+        const { playerId, flyingResources } = message;
+        (async () => {
+            try {
+                const existing = await db.accounts.get(playerId);
+                if (existing) {
+                    await db.accounts.update(playerId, { flyingResources });
+                    sendResponse({ success: true });
+                } else {
+                    sendResponse({ success: false, error: "Account not found" });
+                }
+            } catch (err) {
+                console.error("OGame Nexus: Error in UPDATE_FLYING_RESOURCES", err);
+                sendResponse({ success: false });
+            }
+        })();
+        return true;
+    }
+
     if (message.type === "SYNC_SESSION") {
         const { account, planets, overview, supplies, facilities, production, activePlanetId, lifeformId, researches, lifeformSetup, lifeformExperience, lifeformBuildings, empire } = message.data;
         const syncData = async () => {
@@ -945,9 +964,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                         const crystalAccumulated = spiedPlanet.crystalPerHour * dT;
                                         const deuteriumAccumulated = spiedPlanet.deuteriumPerHour * dT;
 
-                                        const metalCap = spiedPlanet.metalCapacity || 10000;
-                                        const crystalCap = spiedPlanet.crystalCapacity || 10000;
-                                        const deuteriumCap = spiedPlanet.deuteriumCapacity || 10000;
+                                        const metalCap = spiedPlanet.metalCapacity !== undefined ? spiedPlanet.metalCapacity : Infinity;
+                                        const crystalCap = spiedPlanet.crystalCapacity !== undefined ? spiedPlanet.crystalCapacity : Infinity;
+                                        const deuteriumCap = spiedPlanet.deuteriumCapacity !== undefined ? spiedPlanet.deuteriumCapacity : Infinity;
 
                                         // Total resources accumulated on the planet right before plundering
                                         const metalTotalAtCombat = Math.max(spiedPlanet.lastSpiedMetal, Math.min(metalCap, spiedPlanet.lastSpiedMetal + metalAccumulated));
@@ -1002,9 +1021,9 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                     if (!existing) {
                         // First spy report: create baseline
                         const hasTraderClass = report.hasTraderClass || false;
-                        const metalStorageLevel = report.metalStorageLevel || 0;
-                        const crystalStorageLevel = report.crystalStorageLevel || 0;
-                        const deuteriumStorageLevel = report.deuteriumStorageLevel || 0;
+                        const metalStorageLevel = report.metalStorageLevel;
+                        const crystalStorageLevel = report.crystalStorageLevel;
+                        const deuteriumStorageLevel = report.deuteriumStorageLevel;
 
                         const newPlanet = {
                             planetKey,
@@ -1030,9 +1049,9 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                             metalStorageLevel,
                             crystalStorageLevel,
                             deuteriumStorageLevel,
-                            metalCapacity: calculateStorageCapacity(metalStorageLevel, hasTraderClass),
-                            crystalCapacity: calculateStorageCapacity(crystalStorageLevel, hasTraderClass),
-                            deuteriumCapacity: calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass)
+                            metalCapacity: metalStorageLevel !== undefined ? calculateStorageCapacity(metalStorageLevel, hasTraderClass) : undefined,
+                            crystalCapacity: crystalStorageLevel !== undefined ? calculateStorageCapacity(crystalStorageLevel, hasTraderClass) : undefined,
+                            deuteriumCapacity: deuteriumStorageLevel !== undefined ? calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass) : undefined
                         };
                         await db.spiedPlanets.put(newPlanet);
                         finalResults.push({
@@ -1073,9 +1092,9 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                         }
 
                         const hasTraderClass = report.hasTraderClass !== undefined ? report.hasTraderClass : (existing.hasTraderClass || false);
-                        const metalStorageLevel = report.metalStorageLevel !== undefined ? report.metalStorageLevel : (existing.metalStorageLevel || 0);
-                        const crystalStorageLevel = report.crystalStorageLevel !== undefined ? report.crystalStorageLevel : (existing.crystalStorageLevel || 0);
-                        const deuteriumStorageLevel = report.deuteriumStorageLevel !== undefined ? report.deuteriumStorageLevel : (existing.deuteriumStorageLevel || 0);
+                        const metalStorageLevel = report.metalStorageLevel !== undefined ? report.metalStorageLevel : existing.metalStorageLevel;
+                        const crystalStorageLevel = report.crystalStorageLevel !== undefined ? report.crystalStorageLevel : existing.crystalStorageLevel;
+                        const deuteriumStorageLevel = report.deuteriumStorageLevel !== undefined ? report.deuteriumStorageLevel : existing.deuteriumStorageLevel;
 
                         await db.spiedPlanets.put({
                             ...existing,
@@ -1099,9 +1118,9 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                             metalStorageLevel,
                             crystalStorageLevel,
                             deuteriumStorageLevel,
-                            metalCapacity: calculateStorageCapacity(metalStorageLevel, hasTraderClass),
-                            crystalCapacity: calculateStorageCapacity(crystalStorageLevel, hasTraderClass),
-                            deuteriumCapacity: calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass)
+                            metalCapacity: metalStorageLevel !== undefined ? calculateStorageCapacity(metalStorageLevel, hasTraderClass) : undefined,
+                            crystalCapacity: crystalStorageLevel !== undefined ? calculateStorageCapacity(crystalStorageLevel, hasTraderClass) : undefined,
+                            deuteriumCapacity: deuteriumStorageLevel !== undefined ? calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass) : undefined
                         });
 
                         finalResults.push({

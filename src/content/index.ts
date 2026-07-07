@@ -1946,6 +1946,7 @@ let lastParsedFlyingShips = -1;
 let lastParsedMissionCounts: Record<string, number> = {};
 let cachedTotalShips = -1;
 let cachedTotalShipsPlayerId = "";
+let lastParsedFlyingResources: { metal: number; crystal: number; deuterium: number; food: number } | null = null;
 
 const MISSION_COLORS: Record<string, string> = {
   "15": "rgba(56, 189, 248, 0.28)", // Expedition (blue)
@@ -2100,6 +2101,12 @@ function updateFleetProgressOverlay() {
     let totalMissions = 0;
     const missionCounts: Record<string, number> = {};
 
+    const isOverviewPage = window.location.href.includes('component=overview');
+    let flyingMetal = 0;
+    let flyingCrystal = 0;
+    let flyingDeuterium = 0;
+    let flyingFood = 0;
+
     rows.forEach(row => {
       const missionFleetImg = row.querySelector('td.missionFleet img');
       if (missionFleetImg) {
@@ -2121,9 +2128,70 @@ function updateFleetProgressOverlay() {
               totalMissions += 1;
             }
           }
+
+          // Parse shipment resources ONLY on component=overview page
+          if (isOverviewPage) {
+            const tooltipSpan = row.querySelector('td.icon_movement_reserve span.tooltip');
+            if (tooltipSpan) {
+              const tooltipHtml = tooltipSpan.getAttribute('data-tooltip-title') || '';
+              if (tooltipHtml) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(tooltipHtml, 'text/html');
+                const infoRows = doc.querySelectorAll('table.fleetinfo tr');
+                let isParsingShipment = false;
+                infoRows.forEach(tr => {
+                  const th = tr.querySelector('th');
+                  if (th) {
+                    const text = th.textContent?.trim().toLowerCase();
+                    if (text?.includes('shipment')) {
+                      isParsingShipment = true;
+                    }
+                  } else if (isParsingShipment) {
+                    const labelTd = tr.querySelector('td:not(.value)');
+                    const valueTd = tr.querySelector('td.value');
+                    if (labelTd && valueTd) {
+                      const label = labelTd.textContent?.trim().toLowerCase().replace(':', '');
+                      const valText = valueTd.textContent?.replace(/[,.]/g, '').trim() || '0';
+                      const val = parseInt(valText, 10) || 0;
+                      if (label === 'metal') flyingMetal += val;
+                      else if (label === 'crystal') flyingCrystal += val;
+                      else if (label === 'deuterium') flyingDeuterium += val;
+                      else if (label === 'food') flyingFood += val;
+                    }
+                  }
+                });
+              }
+            }
+          }
         }
       }
     });
+
+    if (isOverviewPage) {
+      const resourcesChanged = !lastParsedFlyingResources ||
+        lastParsedFlyingResources.metal !== flyingMetal ||
+        lastParsedFlyingResources.crystal !== flyingCrystal ||
+        lastParsedFlyingResources.deuterium !== flyingDeuterium ||
+        lastParsedFlyingResources.food !== flyingFood;
+
+      if (resourcesChanged) {
+        lastParsedFlyingResources = {
+          metal: flyingMetal,
+          crystal: flyingCrystal,
+          deuterium: flyingDeuterium,
+          food: flyingFood
+        };
+
+        safeSendMessage({
+          type: "UPDATE_FLYING_RESOURCES",
+          playerId,
+          flyingResources: {
+            ...lastParsedFlyingResources,
+            lastUpdated: Date.now()
+          }
+        });
+      }
+    }
 
     const countsChanged = JSON.stringify(missionCounts) !== JSON.stringify(lastParsedMissionCounts);
     if (ownFlyingShips !== lastParsedFlyingShips || countsChanged || cachedTotalShipsPlayerId !== playerId) {
@@ -2170,6 +2238,12 @@ const throttledObserverLogic = throttle(() => {
   // Check if the URL has changed since last scrape to handle AJAX navigation
   const currentUrl = window.location.href;
   const urlChanged = (window as any)._lastScrapedUrl !== currentUrl;
+
+  const syncUrlChanged = (window as any)._lastSyncUrl !== currentUrl;
+  if (syncUrlChanged) {
+    (window as any)._lastSyncUrl = currentUrl;
+    checkAutoSync();
+  }
 
   if (isObservablePage) {
     const hasTechList = !!document.querySelector("#technologies li.technology");
@@ -2538,9 +2612,9 @@ async function checkAutoSync() {
     const lastSync = res.last_empire_sync_time || 0;
     const now = Date.now();
 
-    // 5 minutes = 5 * 60 * 1000 milliseconds
-    if (now - lastSync >= 5 * 60 * 1000) {
-      console.log("OGame Nexus: Auto-sync triggered (5 minutes elapsed since last sync).");
+    // 1 minute = 1 * 60 * 1000 milliseconds
+    if (now - lastSync >= 1 * 60 * 1000) {
+      console.log("OGame Nexus: Auto-sync triggered (1 minute elapsed since last sync).");
 
       // Update sync time immediately to prevent concurrent triggers in other tabs
       await chrome.storage.local.set({ 'last_empire_sync_time': now });
@@ -2554,10 +2628,10 @@ async function checkAutoSync() {
           badge.textContent = 'Game Synced: Just now';
         }
       } catch (syncErr) {
-        console.log("OGame Nexus: Empire background sync failed, scheduling retry on next navigation after 1 minute", syncErr);
-        // Set timestamp back to 4 minutes ago, so if the player navigates to another page after 1 minute,
-        // it will retry the sync instead of waiting another 5 minutes
-        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 4 * 60 * 1000 });
+        console.log("OGame Nexus: Empire background sync failed, scheduling retry on next navigation after 15 seconds", syncErr);
+        // Set timestamp back to 45 seconds ago, so if the player navigates to another page after 15 seconds,
+        // it will retry the sync instead of waiting another 1 minute
+        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 45 * 1000 });
       }
     }
   } catch (err: any) {

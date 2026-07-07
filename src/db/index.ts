@@ -72,6 +72,13 @@ export interface Account {
         currentExp: number,
         nextLevelExp: number
     }[];
+    flyingResources?: {
+        metal: number;
+        crystal: number;
+        deuterium: number;
+        food: number;
+        lastUpdated: number;
+    };
 }
 
 export interface Planet {

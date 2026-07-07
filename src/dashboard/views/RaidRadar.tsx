@@ -249,24 +249,19 @@ const RaidRadar: React.FC = () => {
         const lfLargeCargoBonus = lifeformCargoBonuses[203] || 0;
         const largeCargoCapacity = 25000 * (1 + (hypLevel * cargoHyperspaceTechMultiplier) / 100 + (lfLargeCargoBonus / 100)) * (isCollector ? 1.25 : 1);
         
-        // Only display players who have a calculated storage capacity cap spied
-        const spiedPlanetsWithCap = spiedPlanets.filter(planet => 
-            planet.metalCapacity !== undefined && 
-            planet.crystalCapacity !== undefined && 
-            planet.deuteriumCapacity !== undefined
-        );
+        const spiedPlanetsWithCap = spiedPlanets;
         
         return spiedPlanetsWithCap.map(planet => {
             const dT = Math.max(0, now - planet.lastSpiedTimestamp) / 3600; // time elapsed in hours
 
-            // Resource accumulation projection with capacity caps (default baseline of 10,000)
+            // Resource accumulation projection with capacity caps (default baseline of Infinity if not spied)
             const metalAccumulated = planet.metalPerHour * dT;
             const crystalAccumulated = planet.crystalPerHour * dT;
             const deuteriumAccumulated = planet.deuteriumPerHour * dT;
 
-            const metalCap = planet.metalCapacity || 10000;
-            const crystalCap = planet.crystalCapacity || 10000;
-            const deuteriumCap = planet.deuteriumCapacity || 10000;
+            const metalCap = planet.metalCapacity !== undefined && planet.metalCapacity !== null ? planet.metalCapacity : Infinity;
+            const crystalCap = planet.crystalCapacity !== undefined && planet.crystalCapacity !== null ? planet.crystalCapacity : Infinity;
+            const deuteriumCap = planet.deuteriumCapacity !== undefined && planet.deuteriumCapacity !== null ? planet.deuteriumCapacity : Infinity;
 
             const metalTotal = Math.max(planet.lastSpiedMetal, Math.min(metalCap, planet.lastSpiedMetal + metalAccumulated));
             const crystalTotal = Math.max(planet.lastSpiedCrystal, Math.min(crystalCap, planet.lastSpiedCrystal + crystalAccumulated));

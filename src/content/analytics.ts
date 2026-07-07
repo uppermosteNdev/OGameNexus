@@ -1014,19 +1014,21 @@ function getRowMetadata(
     trackingDays7D: number,
     trackingDays30D: number
 ) {
+    const shipRes = getExpeditionShipsResources(ag.shipsMap);
     const totalEvents = ag.totalExpeditions + ag.totalCombats + ag.totalDebris;
-    const totalMetal = ag.expeditionsResources.metal + ag.combatsResources.metal + ag.debrisResources.metal;
-    const totalCrystal = ag.expeditionsResources.crystal + ag.combatsResources.crystal + ag.debrisResources.crystal;
-    const totalDeuterium = ag.expeditionsResources.deuterium + ag.combatsResources.deuterium + ag.debrisResources.deuterium;
-    const totalMsu = ag.expeditionsResources.msu + ag.combatsResources.msu + ag.debrisResources.msu;
+    const totalMetal = ag.expeditionsResources.metal + shipRes.metal + ag.combatsResources.metal + ag.debrisResources.metal;
+    const totalCrystal = ag.expeditionsResources.crystal + shipRes.crystal + ag.combatsResources.crystal + ag.debrisResources.crystal;
+    const totalDeuterium = ag.expeditionsResources.deuterium + shipRes.deuterium + ag.combatsResources.deuterium + ag.debrisResources.deuterium;
+    const totalMsu = ag.expeditionsResources.msu + shipRes.msu + ag.combatsResources.msu + ag.debrisResources.msu;
     const totalDarkMatter = ag.expeditionsResources.darkMatter;
     const totalArtifacts = ag.expeditionsResources.artifacts;
 
+    const globalShipRes = getExpeditionShipsResources(globalAg.shipsMap);
     const globalEvents = globalAg.totalExpeditions + globalAg.totalCombats + globalAg.totalDebris;
-    const globalMetal = globalAg.expeditionsResources.metal + globalAg.combatsResources.metal + globalAg.debrisResources.metal;
-    const globalCrystal = globalAg.expeditionsResources.crystal + globalAg.combatsResources.crystal + globalAg.debrisResources.crystal;
-    const globalDeuterium = globalAg.expeditionsResources.deuterium + globalAg.combatsResources.deuterium + globalAg.debrisResources.deuterium;
-    const globalMsu = globalAg.expeditionsResources.msu + globalAg.combatsResources.msu + globalAg.debrisResources.msu;
+    const globalMetal = globalAg.expeditionsResources.metal + globalShipRes.metal + globalAg.combatsResources.metal + globalAg.debrisResources.metal;
+    const globalCrystal = globalAg.expeditionsResources.crystal + globalShipRes.crystal + globalAg.combatsResources.crystal + globalAg.debrisResources.crystal;
+    const globalDeuterium = globalAg.expeditionsResources.deuterium + globalShipRes.deuterium + globalAg.combatsResources.deuterium + globalAg.debrisResources.deuterium;
+    const globalMsu = globalAg.expeditionsResources.msu + globalShipRes.msu + globalAg.combatsResources.msu + globalAg.debrisResources.msu;
     const globalDarkMatter = globalAg.expeditionsResources.darkMatter;
     const globalArtifacts = globalAg.expeditionsResources.artifacts;
 
@@ -1204,32 +1206,36 @@ function getRowMetadata(
                 dm: globalDarkMatter / avgDenominator,
                 artifacts: globalArtifacts / avgDenominator
             };
-        case 'avgAll7D':
+        case 'avgAll7D': {
+            const shipRes7D = getExpeditionShipsResources(ag7D.shipsMap);
             return {
                 title: 'Average All Events (7D)',
                 bg: 'rgba(234, 179, 8, 0.08)',
                 color: '#eab308',
                 events: (ag7D.totalExpeditions + ag7D.totalCombats + ag7D.totalDebris) / trackingDays7D,
-                metal: (ag7D.expeditionsResources.metal + ag7D.combatsResources.metal + ag7D.debrisResources.metal) / trackingDays7D,
-                crystal: (ag7D.expeditionsResources.crystal + ag7D.combatsResources.crystal + ag7D.debrisResources.crystal) / trackingDays7D,
-                deuterium: (ag7D.expeditionsResources.deuterium + ag7D.combatsResources.deuterium + ag7D.debrisResources.deuterium) / trackingDays7D,
-                msu: (ag7D.expeditionsResources.msu + ag7D.combatsResources.msu + ag7D.debrisResources.msu) / trackingDays7D,
+                metal: (ag7D.expeditionsResources.metal + shipRes7D.metal + ag7D.combatsResources.metal + ag7D.debrisResources.metal) / trackingDays7D,
+                crystal: (ag7D.expeditionsResources.crystal + shipRes7D.crystal + ag7D.combatsResources.crystal + ag7D.debrisResources.crystal) / trackingDays7D,
+                deuterium: (ag7D.expeditionsResources.deuterium + shipRes7D.deuterium + ag7D.combatsResources.deuterium + ag7D.debrisResources.deuterium) / trackingDays7D,
+                msu: (ag7D.expeditionsResources.msu + shipRes7D.msu + ag7D.combatsResources.msu + ag7D.debrisResources.msu) / trackingDays7D,
                 dm: ag7D.expeditionsResources.darkMatter / trackingDays7D,
                 artifacts: ag7D.expeditionsResources.artifacts / trackingDays7D
             };
-        case 'avgAll30D':
+        }
+        case 'avgAll30D': {
+            const shipRes30D = getExpeditionShipsResources(ag30D.shipsMap);
             return {
                 title: 'Average All Events (30D)',
                 bg: 'rgba(234, 179, 8, 0.08)',
                 color: '#eab308',
                 events: (ag30D.totalExpeditions + ag30D.totalCombats + ag30D.totalDebris) / trackingDays30D,
-                metal: (ag30D.expeditionsResources.metal + ag30D.combatsResources.metal + ag30D.debrisResources.metal) / trackingDays30D,
-                crystal: (ag30D.expeditionsResources.crystal + ag30D.combatsResources.crystal + ag30D.debrisResources.crystal) / trackingDays30D,
-                deuterium: (ag30D.expeditionsResources.deuterium + ag30D.combatsResources.deuterium + ag30D.debrisResources.deuterium) / trackingDays30D,
-                msu: (ag30D.expeditionsResources.msu + ag30D.combatsResources.msu + ag30D.debrisResources.msu) / trackingDays30D,
+                metal: (ag30D.expeditionsResources.metal + shipRes30D.metal + ag30D.combatsResources.metal + ag30D.debrisResources.metal) / trackingDays30D,
+                crystal: (ag30D.expeditionsResources.crystal + shipRes30D.crystal + ag30D.combatsResources.crystal + ag30D.debrisResources.crystal) / trackingDays30D,
+                deuterium: (ag30D.expeditionsResources.deuterium + shipRes30D.deuterium + ag30D.combatsResources.deuterium + ag30D.debrisResources.deuterium) / trackingDays30D,
+                msu: (ag30D.expeditionsResources.msu + shipRes30D.msu + ag30D.combatsResources.msu + ag30D.debrisResources.msu) / trackingDays30D,
                 dm: ag30D.expeditionsResources.darkMatter / trackingDays30D,
                 artifacts: ag30D.expeditionsResources.artifacts / trackingDays30D
             };
+        }
         default:
             return null;
     }
@@ -1266,11 +1272,31 @@ function renderDragList(listContainer: HTMLElement, config: OptionalRowConfig[],
         rowItem.addEventListener('dragend', () => {
             rowItem.style.opacity = item.enabled ? '1' : '0.45';
         });
+        rowItem.addEventListener('dragenter', () => {
+            if (dragSourceIndex !== -1 && dragSourceIndex !== idx) {
+                if (dragSourceIndex > idx) {
+                    rowItem.style.boxShadow = '0 -3px 0 0 #00f2ff, 0 -3px 8px 0 rgba(0, 242, 255, 0.4)';
+                } else {
+                    rowItem.style.boxShadow = '0 3px 0 0 #00f2ff, 0 3px 8px 0 rgba(0, 242, 255, 0.4)';
+                }
+            }
+        });
         rowItem.addEventListener('dragover', (e) => {
             e.preventDefault();
+            if (dragSourceIndex !== -1 && dragSourceIndex !== idx) {
+                if (dragSourceIndex > idx) {
+                    rowItem.style.boxShadow = '0 -3px 0 0 #00f2ff, 0 -3px 8px 0 rgba(0, 242, 255, 0.4)';
+                } else {
+                    rowItem.style.boxShadow = '0 3px 0 0 #00f2ff, 0 3px 8px 0 rgba(0, 242, 255, 0.4)';
+                }
+            }
+        });
+        rowItem.addEventListener('dragleave', () => {
+            rowItem.style.boxShadow = 'none';
         });
         rowItem.addEventListener('drop', (e) => {
             e.preventDefault();
+            rowItem.style.boxShadow = 'none';
             if (dragSourceIndex !== -1 && dragSourceIndex !== idx) {
                 const updated = [...config];
                 const draggedItem = updated[dragSourceIndex];
@@ -1450,6 +1476,9 @@ function toggleSettingsModal(
             scrollInterval = null;
         }
         scrollSpeed = 0;
+        listContainer.querySelectorAll('.nexus-cog-row-item').forEach(el => {
+            (el as HTMLElement).style.boxShadow = 'none';
+        });
     };
 
     listContainer.addEventListener('dragend', stopScroll);
