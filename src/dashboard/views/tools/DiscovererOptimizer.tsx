@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Info, ArrowRight, TrendingUp, Calculator, CheckCircle2, Globe, HelpCircle } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../db';
-import { calculateMSU, DEFAULT_RATES } from '../../../utils/amortizationCalc';
+import { calculateMSU, DEFAULT_RATES, getResearchLevel, getLifeformExpLevel, safeArray } from '../../../utils/amortizationCalc';
 
 const TECH_72_ID = 72; // Kaelesh Discoverer Enhancement
 const TECH_72_BASE = { metal: 300000, crystal: 180000, deuterium: 120000, factor: 1.7 };
@@ -64,41 +64,40 @@ const DiscovererOptimizer: React.FC = () => {
 
     // Prepare planet data
     const basePlanetStats = useMemo(() => {
-        return planets.filter(p => {
-            const setup = p.lifeformSetup || [];
-            return setup.some((t: any) => t.selectedTechId === TECH_72_ID);
-        }).map(p => {
-            const setup = p.lifeformSetup || [];
-            const buildings = p.lifeformBuildings || [];
+        return planets.filter((p: any) => p.type !== 'moon').map(p => {
+            const setup = safeArray(p.lifeformSetup);
+            const buildings = safeArray(p.lifeformBuildings);
 
             // Get LF Level from user overrides or fallback to db
-            const lfExp = activeAccount?.lifeformExperience?.find((e: any) => e.lifeformId === p.lifeformId);
-            const lfLevel = lfLevels[p.lifeformId] !== undefined ? lfLevels[p.lifeformId] : (lfExp?.level || 0);
+            const planetLfId = Number(p.lifeformId) || 4;
+            const lfLevel = lfLevels[planetLfId] !== undefined ? lfLevels[planetLfId] : getLifeformExpLevel(activeAccount, planetLfId);
 
-            const tech72Level = setup.find((t: any) => t.selectedTechId === TECH_72_ID)?.level || 0;
+            const tech72Entry: any = setup.find((t: any) => Number(t.selectedTechId || t.id) === TECH_72_ID);
+            const tech72Level = tech72Entry ? (tech72Entry.level || 0) : 0;
+            const hasTech72Equipped = !!tech72Entry;
 
             // Find lab building
             let currentLabLevel = 0;
             let labId = 0;
-            const activeLab = LAB_BUILDINGS.find(lb => buildings.some((b: any) => b.id === lb.id));
+            const activeLab = LAB_BUILDINGS.find(lb => buildings.some((b: any) => b && Number(b.id) === lb.id));
             if (activeLab) {
-                currentLabLevel = buildings.find((b: any) => b.id === activeLab.id)?.level || 0;
+                const foundLab: any = buildings.find((b: any) => b && Number(b.id) === activeLab.id);
+                currentLabLevel = foundLab?.level || 0;
                 labId = activeLab.id;
-            } else if (p.lifeformId) {
-                // If they don't have it built but we know their lf id, get the corresponding lab
-                const mappedId = { 1: 11103, 2: 12103, 3: 13103, 4: 14103 }[p.lifeformId as 1|2|3|4];
+            } else {
+                const mappedId = { 1: 11103, 2: 12103, 3: 13103, 4: 14103 }[planetLfId as 1|2|3|4];
                 if (mappedId) labId = mappedId;
             }
 
             // Find tech buildings we can actively upgrade based on current lifeform
-            const currentLfId = Number(p.lifeformId);
             let upgradeableIds: number[] = [];
-            if (currentLfId === 1) upgradeableIds = [11111];
-            else if (currentLfId === 3) upgradeableIds = [13111, 13107];
+            if (planetLfId === 1) upgradeableIds = [11111];
+            else if (planetLfId === 3) upgradeableIds = [13111, 13107];
             
             let upgradeableTechBuildings = upgradeableIds.map(id => {
                 const bDef = TECH_BUILDINGS.find(t => t.id === id);
-                const existingLevel = buildings.find((b: any) => Number(b.id) === id)?.level || 0;
+                const foundB: any = buildings.find((b: any) => b && Number(b.id) === id);
+                const existingLevel = foundB?.level || 0;
                 return {
                     id,
                     name: bDef?.name || '',
@@ -110,19 +109,21 @@ const DiscovererOptimizer: React.FC = () => {
             // Include all OTHER tech buildings that exist on the planet as a static bonus
             let staticTechBonus = 0;
             buildings.forEach((b: any) => {
-                const tb = TECH_BUILDINGS.find(t => t.id === b.id);
-                if (tb && !upgradeableIds.includes(b.id)) {
-                    staticTechBonus += b.level * tb.effect;
+                if (!b || !b.id) return;
+                const tb = TECH_BUILDINGS.find(t => t.id === Number(b.id));
+                if (tb && !upgradeableIds.includes(Number(b.id))) {
+                    staticTechBonus += (b.level || 0) * tb.effect;
                 }
             });
 
             return {
                 id: p.id,
-                name: p.name,
-                coords: p.coords,
-                imgUrl: p.imgUrl,
+                name: p.name || 'Colony',
+                coords: p.coords || '?:?:?',
+                imgUrl: p.imgUrl || '/icons/planets/dry-large.jpg',
                 lfLevel,
                 baseTech72Level: tech72Level,
+                hasTech72Equipped,
                 baseLabLevel: currentLabLevel,
                 labId,
                 upgradeableTechBuildings,
@@ -178,8 +179,10 @@ const DiscovererOptimizer: React.FC = () => {
         let bestResult: any = null;
         let lowestTotalCost = Infinity;
 
-        // Try 0, 1, 2, 3 virtual colonies
-        for (let vc = 0; vc <= 3; vc++) {
+        // Evaluate virtual colonies up to a total upper bound of 25 colonies
+        const maxVc = Math.max(0, 25 - basePlanetStats.length);
+
+        for (let vc = 0; vc <= maxVc; vc++) {
             // Initialize state clone
             const state: any[] = basePlanetStats.map(p => ({
                 ...p,
@@ -194,16 +197,16 @@ const DiscovererOptimizer: React.FC = () => {
             let astroLevelsAdded = 0;
 
             if (vc > 0) {
-                let currentAstro = activeAccount?.researches?.find((r: any) => r.id === 124)?.level || 0;
-                if (currentAstro === 0 && planets.length > 0) {
-                    currentAstro = Math.max(1, (planets.length - 1) * 2 - 1);
+                let currentAstro = getResearchLevel(activeAccount, 124);
+                if (currentAstro === 0 && basePlanetStats.length > 0) {
+                    currentAstro = basePlanetStats.length === 1 ? 0 : Math.max(1, (basePlanetStats.length - 1) * 2 - 1);
                 }
 
                 let nextAstro = currentAstro;
                 let mSum = 0; let cSum = 0; let dSum = 0;
                 
                 for (let i = 0; i < vc; i++) {
-                    let targetAstro = nextAstro + 2;
+                    const targetAstro = nextAstro === 0 ? 1 : nextAstro + 2;
                     for (let lvl = nextAstro + 1; lvl <= targetAstro; lvl++) {
                         mSum += 4000 * Math.pow(1.75, lvl - 1);
                         cSum += 8000 * Math.pow(1.75, lvl - 1);
@@ -234,7 +237,7 @@ const DiscovererOptimizer: React.FC = () => {
                         name: `New Colony`,
                         coords: '?-?',
                         imgUrl: `/icons/planets/dry-large.jpg`,
-                        lfLevel: lfLevels[currentRaceNum] !== undefined ? lfLevels[currentRaceNum] : (activeAccount?.lifeformExperience?.find((e: any) => Number(e.id) === currentRaceNum || Number(e.lifeformId) === currentRaceNum)?.level || 0),
+                        lfLevel: lfLevels[currentRaceNum] !== undefined ? lfLevels[currentRaceNum] : getLifeformExpLevel(activeAccount, currentRaceNum),
                         baseTech72Level: 0,
                         baseLabLevel: 0,
                         targetTech72Level: 0,
@@ -243,7 +246,8 @@ const DiscovererOptimizer: React.FC = () => {
                         upgradeableTechBuildings,
                         staticTechBonus: 0,
                         costMSU: 0,
-                        isVirtual: true
+                        isVirtual: true,
+                        hasTech72Equipped: true
                     });
                 }
                 
@@ -309,20 +313,12 @@ const DiscovererOptimizer: React.FC = () => {
                 // 3. Evaluate upgrading Lab
                 if (p.labId) {
                     const labDef = LAB_BUILDINGS.find(l => l.id === p.labId);
-                    if (labDef && p.targetLabLevel < 200) { // Max out at reasonable level like 200 (50% reduction)
+                    if (labDef && p.targetLabLevel < 60) {
                         const nextLabLevel = p.targetLabLevel + 1;
                         if (nextLabLevel * 0.0025 <= 0.5) { // Strict 50% cap
                             const labCostObj = getBuildingCost(labDef.base, nextLabLevel, labDef.factor);
                             const labCostMSU = calculateMSU(labCostObj, rates);
 
-                            // Lab doesn't give immediate bonus %, but reduces future Tech 72 costs.
-                            // To value it, look at how much it saves on the *next immediate* Tech 72 upgrade?
-                            // Or better: Assume we will build the next Tech 72 upgrade anyway.
-                            // What if we upgrade Lab first? The cost of next Tech 72 drops by BaseCost * 0.0025
-                            // So 'gain' is the cost saved. If labCostMSU < savings, it's worth it essentially "for free" in the long run.
-                            // But keeping it unified: Effective cost of (Lab + Next Tech 72) vs (Next Tech 72).
-                            
-                            // Let's compute the MSU cost of reaching (Lab+1, Tech72+1)
                             const nextTech72LevelD = p.targetTech72Level + 1;
                             const currentLabReduction = p.targetLabLevel * 0.0025;
                             const nextLabReduction = nextLabLevel * 0.0025;
@@ -342,13 +338,9 @@ const DiscovererOptimizer: React.FC = () => {
                             const totalPackageCost = labCostMSU + costT72WithLab;
                             
                             if (totalPackageCost < costT72WithoutLab) {
-                                // Upgrading the lab pays for itself IMMEDIATELY on the very next tech upgrade.
-                                // It should have extremely high priority.
-                                // We can represent this by making its 'cost' effectively negative/0 or extremely small ratio.
-                                const immediateGainRatio = totalPackageCost / gainT72; // The gain is purely the tech 72 gain.
+                                const immediateGainRatio = totalPackageCost / gainT72;
                                 if (immediateGainRatio < lowestCostPerBonus) {
                                     lowestCostPerBonus = immediateGainRatio;
-                                    // Make sure we increment Lab
                                     bestUpgrade = { type: 'lab', planetIndex: idx, cost: labCostMSU, gain: 0 };
                                 }
                             }
@@ -454,7 +446,7 @@ const DiscovererOptimizer: React.FC = () => {
                     </div>
 
                     <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0, 242, 255, 0.05)', border: '1px solid rgba(0, 242, 255, 0.1)', fontSize: '0.75rem', lineHeight: 1.4, color: 'var(--primary)' }}>
-                        <p style={{ margin: 0 }}>Dynamically calculates cheapest path across Techs, Lab Buildings, and New Colonies (Astrophysics) to reach target %.</p>
+                        <p style={{ margin: 0 }}>Evaluates all existing colonies and up to 25 total colonies (via Astrophysics) to find the cheapest path across Tech 72, Lifeform Labs, and Tech Boosters.</p>
                     </div>
                 </div>
 
@@ -572,7 +564,10 @@ const DiscovererOptimizer: React.FC = () => {
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '0.95rem', fontWeight: 800, color: p.isVirtual ? '#a855f7' : '#fff' }}>
-                                        {p.coords} • {p.name} {p.isVirtual && <span style={{ fontSize: '0.65rem', background: 'rgba(168, 85, 247, 0.2)', padding: '2px 6px', borderRadius: '4px', marginLeft: '4px' }}>NEW</span>}
+                                        {p.coords} • {p.name} {p.isVirtual && <span style={{ fontSize: '0.65rem', background: 'rgba(168, 85, 247, 0.2)', color: '#a855f7', padding: '2px 6px', borderRadius: '4px', marginLeft: '4px' }}>NEW</span>}
+                                        {!p.isVirtual && !p.hasTech72Equipped && (
+                                            <span style={{ fontSize: '0.65rem', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px' }} title="This planet does not currently have Kaelesh Discoverer Enhancement selected in slot 18. Switch to Tech #72 to apply upgrades.">EQUIP TECH</span>
+                                        )}
                                     </div>
                                     <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 700, marginTop: '2px' }}>
                                         Base Bonus {(calcCurrentBonusForPlanet(p, p.baseTech72Level, p.upgradeableTechBuildings.map((t: any) => t.baseLevel)) * 100).toFixed(2)}%
@@ -632,7 +627,7 @@ const DiscovererOptimizer: React.FC = () => {
                     ))}
                     {optimizationData?.planetStats.length === 0 && (
                         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                            No planets found with Kaelesh Discoverer Enhancement selected.
+                            No colonies found. Please perform a game sync first.
                         </div>
                     )}
                 </div>

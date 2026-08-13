@@ -1,3 +1,36 @@
+export function getLfTech(rawId: number | null | undefined) {
+    if (!rawId) return null;
+    let tech = LIFEFORM_TECH_DATA.find(t => t.id === rawId || t.gkId === rawId);
+    if (!tech && rawId > 10000) {
+        const species = Math.floor(rawId / 1000) % 10;
+        const slot = rawId % 100;
+        const mappedId = (slot - 1) * 4 + species;
+        tech = LIFEFORM_TECH_DATA.find(t => t.id === mappedId);
+    }
+    return tech || null;
+}
+
+export function isLifeformBuilding(id: number | null | undefined): boolean {
+    if (!id || typeof id !== 'number') return false;
+    const str = id.toString();
+    if (str.length !== 5) return false;
+    const species = parseInt(str[1], 10);
+    const typeDigit = str[2];
+    const buildingNum = parseInt(str.substring(3, 5), 10);
+    return species >= 1 && species <= 4 && typeDigit === '1' && buildingNum >= 1 && buildingNum <= 12;
+}
+
+export function isLifeformResearch(id: number | null | undefined): boolean {
+    if (!id || typeof id !== 'number') return false;
+    if (id >= 1 && id <= 72) return true;
+    const str = id.toString();
+    if (str.length !== 5) return false;
+    const species = parseInt(str[1], 10);
+    const typeDigit = str[2];
+    const techNum = parseInt(str.substring(3, 5), 10);
+    return species >= 1 && species <= 4 && typeDigit === '2' && techNum >= 1 && techNum <= 18;
+}
+
 export const LIFEFORM_TECH_DATA = [
         {
                 "id": 1,

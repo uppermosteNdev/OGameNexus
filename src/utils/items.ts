@@ -118,3 +118,95 @@ export function getProductionBoosters(activeItems: ActiveItem[] | undefined) {
 
     return boosters;
 }
+
+// Resolves official OGame CDN image URL for any active item
+export function getItemIconUrl(item: Partial<ActiveItem> | null | undefined, serverUrl: string = 'https://s267-en.ogame.gameforge.com'): string | null {
+    if (!item) return null;
+
+    const host = serverUrl.startsWith('http') ? serverUrl.replace(/\/$/, '') : `https://${serverUrl.replace(/\/$/, '')}`;
+
+    // 1. Try matching by ref or itemUuid or id in items_mapping.json
+    const searchRef = item.ref || item.itemUuid || (typeof item.id === 'string' ? item.id : undefined);
+    let mapped = searchRef ? itemsMapping.find(m => m.ref === searchRef) : null;
+
+    // 2. Try matching by name (e.g. "Platinum Crystal Booster", "Expedition Computer Bronze", etc.)
+    if (!mapped && item.name) {
+        mapped = findItemByName(item.name);
+        
+        // Dynamic name matching for placeholders like "Expedition Resource Booster (10%) Bronze"
+        if (!mapped) {
+            const cleanName = item.name.replace(/\(\d+%\)/, '').trim().toLowerCase();
+            mapped = itemsMapping.find(m => {
+                const mClean = m.name.replace(/\(\d+%\)/, '').trim().toLowerCase();
+                return mClean === cleanName || m.name.toLowerCase().includes(cleanName);
+            }) || null;
+        }
+    }
+
+    if (mapped && (mapped.small_image || mapped.large_image)) {
+        const imgPath = mapped.small_image || mapped.large_image;
+        return imgPath.startsWith('http') ? imgPath : `${host}${imgPath}`;
+    }
+
+    return null;
+}
+
+// Format human-readable remaining duration from item expiryTimestamp or timeRemaining fallback
+export function getItemDurationText(item: { expiryTimestamp?: number; timeRemaining?: string; isPermanent?: boolean }): string {
+    if (item.expiryTimestamp && item.expiryTimestamp > Date.now()) {
+        const diffMs = item.expiryTimestamp - Date.now();
+        const totalSec = Math.floor(diffMs / 1000);
+        const days = Math.floor(totalSec / 86400);
+        const hours = Math.floor((totalSec % 86400) / 3600);
+        const minutes = Math.floor((totalSec % 3600) / 60);
+        const seconds = totalSec % 60;
+
+        if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+        if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+        if (minutes > 0) return `${minutes}m ${seconds}s`;
+        return `${seconds}s`;
+    }
+    if (item.timeRemaining) return item.timeRemaining;
+    if (item.isPermanent) return 'Permanent';
+    return 'Active';
+}
+
+// Cleans up legacy '#amount#' or '#amount#%' placeholders in item titles
+export function sanitizeItemTitle(title: string, bonus?: number): string {
+    if (!title) return '';
+    if (title.includes('#amount#')) {
+        const pctStr = (bonus && bonus > 0) ? ` (${Math.round(bonus * 100)}%) ` : ' ';
+        return title.replace(/\(#amount#%\)/g, pctStr)
+                    .replace(/#amount#%?/g, pctStr)
+                    .replace(/\s+/g, ' ')
+                    .trim();
+    }
+    return title;
+}
+
+// Sanitizes an active item object by resolving missing bonuses and replacing title placeholders
+export function sanitizeActiveItem(item: any): any {
+    if (!item) return item;
+    let title = item.title || item.name || '';
+    let bonus = item.bonus;
+
+    if ((!bonus || bonus === 0) && item.ref) {
+        const mapped = itemsMapping.find(m => m.ref === item.ref);
+        if (mapped) {
+            const legacy = getLegacyTypeAndBonus(mapped);
+            if (legacy.bonus > 0) bonus = legacy.bonus;
+        }
+    }
+
+    if (title.includes('#amount#')) {
+        title = sanitizeItemTitle(title, bonus);
+    }
+
+    return {
+        ...item,
+        title,
+        name: title,
+        bonus
+    };
+}
+

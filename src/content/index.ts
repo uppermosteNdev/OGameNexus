@@ -1,9 +1,10 @@
 
-import { trackExpeditions, injectTodaySummaryCard } from './expeditions';
+import { Planet } from '../db';
+import { trackExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
 import { trackLifeformDiscoveries } from './lifeforms';
-import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson } from './empire';
-import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier } from '../utils/amortizationCalc';
-import { findItemByStyle, findItemByName, getLegacyTypeAndBonus, getProductionBoosters } from '../utils/items';
+import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson, parseExternalDataExportJson } from './empire';
+import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier, getAmortizationEntry } from '../utils/amortizationCalc';
+import { findItemByStyle, findItemByName, getLegacyTypeAndBonus, getProductionBoosters, sanitizeItemTitle } from '../utils/items';
 import itemsMapping from '../db/items_mapping.json';
 import { trackDebrisHarvests } from './harvests';
 import { trackCombatReports, injectTodayCombatSummaryCard } from './combats';
@@ -96,6 +97,15 @@ function scrapePlayerClass() {
   const classNode = document.querySelector("#characterclass a.tooltipHTML");
   if (!classNode) return undefined;
 
+  // Language-independent check using classList of the child sprite element
+  const spriteEl = classNode.querySelector(".sprite");
+  if (spriteEl) {
+    if (spriteEl.classList.contains("miner")) return 1;    // Collector
+    if (spriteEl.classList.contains("warrior")) return 2;  // General/Warrior
+    if (spriteEl.classList.contains("explorer")) return 3; // Discoverer/Researcher
+  }
+
+  // Fallback to English tooltip check if sprite is not present
   const tooltipTitle = classNode.getAttribute("data-tooltip-title") || "";
   if (tooltipTitle.includes("Collector")) return 1;
   if (tooltipTitle.includes("Warrior")) return 2;
@@ -235,11 +245,41 @@ function getActivePlanetId() {
 
 function scrapeLifeformId() {
   const url = window.location.href;
-  if (!url.includes("component=overview")) {
+  const supportedComponents = [
+    "component=overview",
+    "component=supplies",
+    "component=lfbuildings",
+    "component=facilities",
+    "component=research",
+    "component=lfresearch"
+  ];
+
+  const hasSupportedComponent = supportedComponents.some(comp => url.includes(comp));
+  if (!hasSupportedComponent) {
     return null;
   }
 
-  const lfIconNode = document.querySelector("#lifeform .lifeform-item-icon");
+  // Fail-safe: Check if the resource header is loaded and present
+  const resourcesHeader = document.querySelector("#resources_metal") || document.querySelector("#header");
+  if (!resourcesHeader) {
+    return null;
+  }
+
+  // Moons can't have lifeforms, so do not scrape/overwrite for moons
+  const planetType = getMetaContent("ogame-planet-type");
+  const isMoon = planetType === "3" || !!document.querySelector("#planetList .smallplanet .moonlink.active");
+  if (isMoon) {
+    return null;
+  }
+
+  // Check for the lifeform container element in the header
+  const lfContainer = document.querySelector("#lifeform");
+  if (!lfContainer) {
+    // If the #lifeform container itself is missing, return null to avoid corruption
+    return null;
+  }
+
+  const lfIconNode = lfContainer.querySelector(".lifeform-item-icon");
   if (lfIconNode) {
     const classList = lfIconNode.className;
     const match = classList.match(/lifeform(\d+)/);
@@ -403,10 +443,11 @@ function scrapeOverviewData() {
         }
       }
 
+      const cleanTitle = sanitizeItemTitle(title, bonus);
       activeItems.push({
         ref,
-        name: title,
-        title,
+        name: cleanTitle,
+        title: cleanTitle,
         rarity,
         timeRemaining,
         expiryTimestamp,
@@ -466,27 +507,31 @@ function parseResourceSettings(doc: Document | HTMLElement) {
   elements.forEach(el => {
     const name = el.getAttribute('name') || '';
     const idAttr = el.getAttribute('id') || '';
-    const classAttr = el.getAttribute('class') || '';
     const typeAttr = el.getAttribute('type') || '';
     
-    let techId: number | null = null;
-
-    // Try name match first: e.g. last1, last[1], 1
-    const nameMatch = name.match(/\d+/);
-    if (nameMatch) {
-      techId = parseInt(nameMatch[0], 10);
+    // Ignore hidden inputs, submit buttons, etc. that do not represent settings
+    if (typeAttr === 'hidden' || typeAttr === 'submit' || typeAttr === 'button') {
+      // Only keep 'last' hidden inputs (e.g. disabled fields placeholders)
+      if (!name.startsWith('last') && !idAttr.startsWith('last')) return;
     }
 
-    // Try id match: e.g. last1, 1
-    if (!techId) {
+    let techId: number | null = null;
+
+    // Must start with 'last' to match the actual settings select/input
+    if (name.startsWith('last')) {
+      const nameMatch = name.match(/\d+/);
+      if (nameMatch) {
+        techId = parseInt(nameMatch[0], 10);
+      }
+    } else if (idAttr.startsWith('last')) {
       const idMatch = idAttr.match(/\d+/);
       if (idMatch) {
         techId = parseInt(idMatch[0], 10);
       }
     }
 
-    // Try parent row data-technology or data-techid
-    if (!techId) {
+    // Try parent row data-technology or data-techid as fallback (only if element name/id doesn't conflict)
+    if (!techId && (name.startsWith('last') || idAttr.startsWith('last'))) {
       const parentRow = el.closest('tr, li, div');
       if (parentRow) {
         const rowTech = parentRow.getAttribute('data-technology') || 
@@ -1037,13 +1082,13 @@ function scrapeAndSync() {
     planets,
     activePlanetId: getActivePlanetId(),
     lifeformId: scrapeLifeformId(),
-    researches: scrapeResearchLevels(),
-    lifeformSetup: scrapeLifeformSetup(),
+    researches: undefined,
+    lifeformSetup: undefined,
     lifeformExperience: undefined,
-    lifeformBuildings: scrapeLifeformBuildings(),
+    lifeformBuildings: undefined,
     overview: scrapeOverviewData(),
     supplies: scrapeSuppliesData(),
-    facilities: scrapeFacilitiesData(),
+    facilities: undefined,
     production: scrapeProductionData(),
     empire: empire
   };
@@ -1391,8 +1436,12 @@ const renderItemColumnCell = (activeItems: any[] | undefined, resourceType: 'met
     if (item.ref) {
       mappedItem = itemsMapping.find(m => m.ref === item.ref);
     }
-    if (!mappedItem) {
+    if (!mappedItem && item.name) {
       mappedItem = itemsMapping.find(m => m.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+    }
+    if (!mappedItem && item.name) {
+      const cleanName = item.name.toLowerCase().trim();
+      mappedItem = itemsMapping.find(m => m.name.toLowerCase().includes(cleanName) || cleanName.includes(m.name.toLowerCase()));
     }
 
     if (mappedItem) {
@@ -1402,10 +1451,22 @@ const renderItemColumnCell = (activeItems: any[] | undefined, resourceType: 'met
           bonusPct += eff.value / 100;
         }
       });
-    } else {
-      if (item.type === resourceType || (item.type === 'resource' && (resourceType === 'metal' || resourceType === 'crystal' || resourceType === 'deuterium'))) {
-        affectsResource = true;
-        bonusPct += item.bonus || 0;
+    }
+
+    if (!affectsResource) {
+      const lowerName = (item.name || item.title || '').toLowerCase();
+      if (item.type === resourceType || lowerName.includes(resourceType)) {
+        let bPct = item.bonus || 0;
+        if (bPct === 0) {
+          if (lowerName.includes('platinum')) bPct = 0.40;
+          else if (lowerName.includes('gold')) bPct = 0.30;
+          else if (lowerName.includes('silver')) bPct = 0.20;
+          else if (lowerName.includes('bronze')) bPct = 0.10;
+        }
+        if (bPct > 0) {
+          affectsResource = true;
+          bonusPct += bPct;
+        }
       }
     }
 
@@ -1424,15 +1485,16 @@ const renderItemColumnCell = (activeItems: any[] | undefined, resourceType: 'met
 
   const iconsHtml = matchingItems.map(mi => {
     const name = mi.item.name || mi.item.title || 'Booster';
-    const imgPath = mi.item.small_image || '';
+    const imgPath = mi.item.iconUrl || mi.item.small_image || '';
+    const rarityClass = mi.item.rarityClass || (mi.item.rarity ? `r_${mi.item.rarity}` : 'r_common');
     const formattedPct = `+${(mi.bonusPct * 100).toFixed(0)}%`;
     const tooltipText = `${name} (${formattedPct})`;
 
     if (imgPath) {
       return `
-        <div class="nexus-tooltip" data-nexus-tooltip="${tooltipText}" style="position: relative; width: 36px; height: 36px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; cursor: help;">
+        <a href="javascript:void(0);" class="detail_button active_item ${rarityClass} border3px nexus-tooltip" data-nexus-tooltip="${tooltipText}" style="position: relative; width: 32px; height: 32px; display: inline-block; text-decoration: none; cursor: help; margin: 1px; vertical-align: middle;">
           <img src="${imgPath}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 3px;" />
-        </div>
+        </a>
       `;
     } else {
       return `
@@ -1684,7 +1746,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         const techMult = getPlanetTechMultiplier(p, account);
         p.lifeformSetup?.forEach((t: any) => {
           const level = t.level || 0;
-          const entry = AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId);
+          const entry = getAmortizationEntry(t);
           if (entry && entry.effect && (entry.effect as any).target === 'global') {
             const val = (entry.effect as any).value * level * techMult;
             if ((entry.effect as any).type === 'metal') globalEuroMetal += val;
@@ -1699,6 +1761,11 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         });
       });
 
+      const planetCount = planets.length || 1;
+      const avgMetalMine = (planets.reduce((sum: number, p: any) => sum + (p.metalMine || 0), 0) / planetCount).toFixed(1).replace(/\.0$/, '');
+      const avgCrystalMine = (planets.reduce((sum: number, p: any) => sum + (p.crystalMine || 0), 0) / planetCount).toFixed(1).replace(/\.0$/, '');
+      const avgDeutMine = (planets.reduce((sum: number, p: any) => sum + (p.deuteriumMine || 0), 0) / planetCount).toFixed(1).replace(/\.0$/, '');
+
       const totals = {
         metal: { base: 0, lfb: 0, lfr: 0, plasma: 0, crawlers: 0, items: 0, staff: 0, class: 0, total: 0 },
         crystal: { base: 0, lfb: 0, lfr: 0, plasma: 0, crawlers: 0, items: 0, staff: 0, class: 0, total: 0 },
@@ -1712,7 +1779,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           <thead class="nexus-prod-thead">
             <tr>
               <th class="nexus-prod-th" style="text-align: center; width: 165px;">Planet</th>
-              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Resources" style="width: 42px; text-align: center;">
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Resource Mine Levels" style="width: 48px; text-align: center;">
                 <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
                 </div>
@@ -1903,9 +1970,10 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
                 <span class="nexus-prod-coords-badge">${p.coords}</span>
               </div>
             </td>
-            <td class="nexus-prod-resource-cell" title="Metal">
+            <td class="nexus-prod-resource-cell" title="Metal Mine Level: ${m}">
               <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}');"></div>
               <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-metal"></div>
+              <div class="nexus-prod-mine-level nexus-prod-mine-level-metal">${m}</div>
             </td>
             <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #ff8d33; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseM).toLocaleString()}</td>
             ${renderBonusCell(baseM, lfbMetal, '#ff8d33', '#38bdf8')}
@@ -1919,9 +1987,10 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           </tr>
           <!-- Crystal Row -->
           <tr class="nexus-prod-row">
-            <td class="nexus-prod-resource-cell" title="Crystal">
+            <td class="nexus-prod-resource-cell" title="Crystal Mine Level: ${c}">
               <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}');"></div>
               <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-crystal"></div>
+              <div class="nexus-prod-mine-level nexus-prod-mine-level-crystal">${c}</div>
             </td>
             <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #33b2ff; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseC).toLocaleString()}</td>
             ${renderBonusCell(baseC, lfbCrystal, '#33b2ff', '#38bdf8')}
@@ -1935,9 +2004,10 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           </tr>
           <!-- Deuterium Row -->
           <tr class="nexus-prod-row" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-            <td class="nexus-prod-resource-cell" title="Deuterium">
+            <td class="nexus-prod-resource-cell" title="Deuterium Synthesizer Level: ${d}">
               <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}');"></div>
               <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-deuterium"></div>
+              <div class="nexus-prod-mine-level nexus-prod-mine-level-deuterium">${d}</div>
             </td>
             <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #22c55e; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseD).toLocaleString()}</td>
             ${renderBonusCell(baseD, lfbDeut, '#22c55e', '#38bdf8')}
@@ -1975,9 +2045,10 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
               <span style="font-weight: 1000; color: #38bdf8; font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.9);">Empire Totals</span>
             </div>
           </td>
-          <td class="nexus-prod-resource-cell" title="Metal">
+          <td class="nexus-prod-resource-cell" title="Average Metal Mine Level: ${avgMetalMine}">
             <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}');"></div>
             <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-metal"></div>
+            <div class="nexus-prod-mine-level nexus-prod-mine-level-metal">${avgMetalMine}</div>
           </td>
           <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 800; color: #ff8d33; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.metal.base).toLocaleString()}</td>
           ${renderTotalBonusCell(totals.metal.base, totals.metal.lfb, '#ff8d33')}
@@ -1991,9 +2062,10 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         </tr>
         <!-- Summary Crystal -->
         <tr class="nexus-totals-row">
-          <td class="nexus-prod-resource-cell" title="Crystal">
+          <td class="nexus-prod-resource-cell" title="Average Crystal Mine Level: ${avgCrystalMine}">
             <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}');"></div>
             <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-crystal"></div>
+            <div class="nexus-prod-mine-level nexus-prod-mine-level-crystal">${avgCrystalMine}</div>
           </td>
           <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 800; color: #33b2ff; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.crystal.base).toLocaleString()}</td>
           ${renderTotalBonusCell(totals.crystal.base, totals.crystal.lfb, '#33b2ff')}
@@ -2007,9 +2079,10 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         </tr>
         <!-- Summary Deuterium -->
         <tr class="nexus-totals-row" style="border-bottom: 2px solid rgba(56, 189, 248, 0.2);">
-          <td class="nexus-prod-resource-cell" title="Deuterium">
+          <td class="nexus-prod-resource-cell" title="Average Deuterium Synthesizer Level: ${avgDeutMine}">
             <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}');"></div>
             <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-deuterium"></div>
+            <div class="nexus-prod-mine-level nexus-prod-mine-level-deuterium">${avgDeutMine}</div>
           </td>
           <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 800; color: #22c55e; font-size: 12.5px; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(totals.deuterium.base).toLocaleString()}</td>
           ${renderTotalBonusCell(totals.deuterium.base, totals.deuterium.lfb, '#22c55e')}
@@ -2225,7 +2298,7 @@ function updateFleetProgressOverlay() {
 
           // Parse shipment resources ONLY on component=overview page
           if (isOverviewPage) {
-            const tooltipSpan = row.querySelector('td.icon_movement_reserve span.tooltip');
+            const tooltipSpan = row.querySelector('td.icon_movement span.tooltip, td.icon_movement_reserve span.tooltip');
             if (tooltipSpan) {
               const tooltipHtml = tooltipSpan.getAttribute('data-tooltip-title') || '';
               if (tooltipHtml) {
@@ -2233,24 +2306,39 @@ function updateFleetProgressOverlay() {
                 const doc = parser.parseFromString(tooltipHtml, 'text/html');
                 const infoRows = doc.querySelectorAll('table.fleetinfo tr');
                 let isParsingShipment = false;
+                let thCount = 0;
+                let resourceIndex = 0;
                 infoRows.forEach(tr => {
                   const th = tr.querySelector('th');
                   if (th) {
-                    const text = th.textContent?.trim().toLowerCase();
-                    if (text?.includes('shipment')) {
+                    thCount++;
+                    if (thCount >= 2) {
                       isParsingShipment = true;
                     }
                   } else if (isParsingShipment) {
                     const labelTd = tr.querySelector('td:not(.value)');
                     const valueTd = tr.querySelector('td.value');
                     if (labelTd && valueTd) {
-                      const label = labelTd.textContent?.trim().toLowerCase().replace(':', '');
+                      const label = labelTd.textContent?.trim().toLowerCase().replace(':', '') || '';
                       const valText = valueTd.textContent?.replace(/[,.]/g, '').trim() || '0';
                       const val = parseInt(valText, 10) || 0;
-                      if (label === 'metal') flyingMetal += val;
-                      else if (label === 'crystal') flyingCrystal += val;
-                      else if (label === 'deuterium') flyingDeuterium += val;
-                      else if (label === 'food') flyingFood += val;
+
+                      const isMetal = label.includes('metal') || label.includes('metall') || label.includes('métal') || label.includes('металл') || resourceIndex === 0;
+                      const isCrystal = label.includes('crystal') || label.includes('kristall') || label.includes('cristal') || label.includes('кристалл') || label.includes('krysz') || resourceIndex === 1;
+                      const isDeuterium = label.includes('deuter') || label.includes('дейтерий') || resourceIndex === 2;
+                      const isFood = label.includes('food') || label.includes('nahr') || label.includes('nourr') || label.includes('comid') || label.includes('пища') || label.includes('żyw') || label.includes('zyw') || label.includes('popul') || resourceIndex === 3;
+
+                      if (isMetal) {
+                        flyingMetal += val;
+                      } else if (isCrystal) {
+                        flyingCrystal += val;
+                      } else if (isDeuterium) {
+                        flyingDeuterium += val;
+                      } else if (isFood) {
+                        flyingFood += val;
+                      }
+
+                      resourceIndex++;
                     }
                   }
                 });
@@ -2412,17 +2500,20 @@ function processActiveMessages() {
 
       if (isExpeditionsTabActive) {
         injectTodaySummaryCard(playerId, false);
+        updateExpeditionViewDisplay();
         const combatWrapper = document.querySelector('.og-nexus-combat-summary-wrapper') as HTMLElement;
         if (combatWrapper) combatWrapper.style.display = 'none';
       } else if (isCombatsTabActive) {
         injectTodayCombatSummaryCard(playerId, false);
         const expWrapper = document.querySelector('.og-nexus-summary-wrapper') as HTMLElement;
         if (expWrapper) expWrapper.style.display = 'none';
+        updateExpeditionViewDisplay();
       } else {
         const expWrapper = document.querySelector('.og-nexus-summary-wrapper') as HTMLElement;
         if (expWrapper) expWrapper.style.display = 'none';
         const combatWrapper = document.querySelector('.og-nexus-combat-summary-wrapper') as HTMLElement;
         if (combatWrapper) combatWrapper.style.display = 'none';
+        updateExpeditionViewDisplay();
       }
 
       // Trigger a request to the page context to get all raw messages from window.ogame.messages.content
@@ -2505,48 +2596,122 @@ async function performBackgroundEmpireSync() {
     throw new Error("Player context not found");
   }
 
-  const officers = scrapeOfficers();
-  if (!officers.hasCommander) {
-    throw new Error("Background sync requires Commander active");
+  let planetsData: { planets: Partial<Planet>[], research: Record<number, number> } = { planets: [], research: {} };
+  let moonsData: { planets: Partial<Planet>[], research: Record<number, number> } = { planets: [], research: {} };
+  let lifeformExperienceData: any = {};
+  let syncedViaAccountInfo = false;
+
+  // 1. Primary: Try OGame v13+ externaldataexport accountInfo GET endpoint
+  try {
+    const accRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      redirect: 'manual'
+    });
+    if (accRes.ok && accRes.type !== 'opaqueredirect') {
+      const accText = await accRes.text();
+      const trimmed = accText ? accText.trim() : '';
+      if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        const accJson = JSON.parse(trimmed);
+        const parsedExt = parseExternalDataExportJson(accJson);
+        planetsData = { planets: parsedExt.planets, research: parsedExt.research };
+        moonsData = { planets: parsedExt.moons, research: parsedExt.research };
+        if (parsedExt.speciesExperience) {
+          lifeformExperienceData = parsedExt.speciesExperience;
+        }
+        syncedViaAccountInfo = true;
+      }
+    }
+  } catch (err) {
+    // Quiet fallback to legacy empire AJAX
   }
 
-  // Fetch planetType=0 (Planets)
-  const planetsRes = await fetch('/game/index.php?page=ajax&component=empire&ajax=1&planetType=0&asJson=1', {
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  });
-  if (!planetsRes.ok) throw new Error("Failed to fetch planets");
-  const planetsText = await planetsRes.text();
-  if (planetsText.trim().startsWith('<')) {
-    throw new Error("Invalid response: Received HTML redirect/login page instead of JSON");
+  // Fallback to legacy empire AJAX endpoints if externaldataexport is unavailable
+  if (!syncedViaAccountInfo) {
+    const officers = scrapeOfficers();
+    if (!officers.hasCommander) {
+      throw new Error("Background sync requires Commander active");
+    }
+
+    const fetchEmpireJson = async (planetType: number) => {
+      let res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        redirect: 'manual'
+      });
+
+      if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
+        res = await fetch(`/game/index.php?page=ajax&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          redirect: 'manual'
+        });
+      }
+
+      if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
+        res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          redirect: 'manual'
+        });
+      }
+
+      if (!res.ok || res.type === 'opaqueredirect') throw new Error(`Failed to fetch empire data for planetType ${planetType} (HTTP ${res.status})`);
+
+      const text = await res.text();
+      const trimmed = text ? text.trim() : '';
+      if (!trimmed || trimmed.startsWith('<')) {
+        throw new Error("Invalid response: Received HTML redirect/login page instead of JSON");
+      }
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+        throw new Error(`Invalid JSON format from Empire AJAX endpoint`);
+      }
+      return JSON.parse(trimmed);
+    };
+
+    const planetsJson = await fetchEmpireJson(0);
+    const moonsJson = await fetchEmpireJson(1);
+
+    planetsData = parseAjaxEmpireJson(planetsJson, false);
+    moonsData = parseAjaxEmpireJson(moonsJson, true);
   }
-  const planetsJson = JSON.parse(planetsText);
 
-  // Fetch planetType=1 (Moons)
-  const moonsRes = await fetch('/game/index.php?page=ajax&component=empire&ajax=1&planetType=1&asJson=1', {
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  });
-  if (!moonsRes.ok) throw new Error("Failed to fetch moons");
-  const moonsText = await moonsRes.text();
-  if (moonsText.trim().startsWith('<')) {
-    throw new Error("Invalid response: Received HTML redirect/login page instead of JSON");
+  // 2. Fetch Lifeform Bonuses (Experience & species data)
+  try {
+    const sbRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=speciesBonuses&asJson=1', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      redirect: 'manual'
+    });
+    if (sbRes.ok && sbRes.type !== 'opaqueredirect') {
+      const sbText = await sbRes.text();
+      const trimmed = sbText ? sbText.trim() : '';
+      if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        const sbJson = JSON.parse(trimmed);
+        if (sbJson?.species) {
+          lifeformExperienceData = sbJson.species;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // HTML fallback for lifeform bonuses if needed
+  if (!lifeformExperienceData || Object.keys(lifeformExperienceData).length === 0) {
+    try {
+      let lfBonusesRes = await fetch('/game/index.php?page=ajax&component=lfbonuses&ajax=1', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      if (lfBonusesRes.status === 405 || !lfBonusesRes.ok) {
+        lfBonusesRes = await fetch('/game/index.php?page=ingame&component=lfbonuses&ajax=1', {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+      }
+      if (lfBonusesRes.ok) {
+        const lfBonusesHtml = await lfBonusesRes.text();
+        const lfParser = new DOMParser();
+        const lfDoc = lfParser.parseFromString(lfBonusesHtml, "text/html");
+        lifeformExperienceData = scrapeLifeformExperience(lfDoc);
+      }
+    } catch (e) {}
   }
-  const moonsJson = JSON.parse(moonsText);
-
-  // Fetch Lifeform Bonuses (Experience)
-  const lfBonusesRes = await fetch('/game/index.php?page=ajax&component=lfbonuses&ajax=1', {
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  });
-  if (!lfBonusesRes.ok) throw new Error("Failed to fetch lifeform bonuses");
-  const lfBonusesHtml = await lfBonusesRes.text();
-
-
-  // Parse using our new AJAX parser
-  const planetsData = parseAjaxEmpireJson(planetsJson, false);
-  const moonsData = parseAjaxEmpireJson(moonsJson, true);
-
-  const lfParser = new DOMParser();
-  const lfDoc = lfParser.parseFromString(lfBonusesHtml, "text/html");
-  const lifeformExperienceData = scrapeLifeformExperience(lfDoc);
 
   // Count standard buildings, ships, defenses, and lifeform tech for logging
   let totalPlanets = [...planetsData.planets, ...moonsData.planets];
@@ -2582,20 +2747,20 @@ async function performBackgroundEmpireSync() {
 
     // Ships
     if (p.ships) {
-      Object.values(p.ships).forEach(count => { if (count > 0) shipCount += count; });
+      Object.values(p.ships).forEach((count: any) => { if (Number(count) > 0) shipCount += Number(count); });
     }
 
     // Defenses
     if (p.defenses) {
-      Object.values(p.defenses).forEach(count => { if (count > 0) defenseCount += count; });
+      Object.values(p.defenses).forEach((count: any) => { if (Number(count) > 0) defenseCount += Number(count); });
     }
 
     // Lifeforms
     if (p.lifeformBuildings) {
-      p.lifeformBuildings.forEach(b => { if (b.level > 0) lfBuildingsCount++; });
+      p.lifeformBuildings.forEach((b: any) => { if (b.level > 0) lfBuildingsCount++; });
     }
     if (p.lifeformSetup) {
-      p.lifeformSetup.forEach(t => { if (t.level > 0) lfTechsCount++; });
+      p.lifeformSetup.forEach((t: any) => { if (t.level > 0) lfTechsCount++; });
     }
   });
 
@@ -2643,6 +2808,32 @@ async function performBackgroundEmpireSync() {
       }
     }
   });
+
+  console.log(
+    `%c[OGame Nexus Sync] Background Sync Complete:`,
+    'color: #00f2ff; font-weight: bold; font-size: 12px;',
+    {
+      playerId,
+      playerName,
+      playerClass: scrapePlayerClass(),
+      allianceClass: scrapeAllianceClass(),
+      officers: scrapeOfficers(),
+      syncedVia: syncedViaAccountInfo ? 'externaldataexport' : 'empire AJAX',
+      planetsCount: totalPlanets.length,
+      researchesCount: researchCount,
+      lifeformTechsCount: lfTechsCount,
+      lifeformBuildingsCount: lfBuildingsCount,
+      planets: totalPlanets.map(p => ({
+        id: p.id,
+        name: p.name,
+        coords: p.coords,
+        lifeformId: p.lifeformId,
+        activeItems: p.activeItems || [],
+        lifeformSetup: p.lifeformSetup,
+        lifeformBuildings: p.lifeformBuildings
+      }))
+    }
+  );
 }
 
 

@@ -50,6 +50,7 @@ export default defineConfig({
       browser: target,
       watchFilePaths: ["package.json"],
       additionalInputs: ["dashboard.html"],
+      skipManifestValidation: true,
     }),
   ],
   build: {

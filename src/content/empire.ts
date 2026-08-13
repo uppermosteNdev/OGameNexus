@@ -1,6 +1,6 @@
 import { Planet, ActiveItem } from '../db';
-import { LIFEFORM_TECH_DATA } from '../db/lifeformTechData';
-import { findItemByStyle, findItemByName, getLegacyTypeAndBonus } from '../utils/items';
+import { LIFEFORM_TECH_DATA, getLfTech, isLifeformBuilding, isLifeformResearch } from '../db/lifeformTechData';
+import { findItemByStyle, findItemByName, getLegacyTypeAndBonus, getItemIconUrl, sanitizeItemTitle } from '../utils/items';
 
 function getEntityLevel(el: Element): number {
     const link = el.querySelector('a');
@@ -265,10 +265,11 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
                 }
             }
             
+            const cleanTitle = sanitizeItemTitle(title, bonus);
             activeItems.push({
                 ref,
-                name: title,
-                title,
+                name: cleanTitle,
+                title: cleanTitle,
                 rarity,
                 timeRemaining,
                 expiryTimestamp,
@@ -334,6 +335,288 @@ function mapTechToPlanet(planet: Partial<Planet>, techId: number, level: number)
     }
 }
 
+export function parseExternalDataExportJson(data: any): {
+    planets: Partial<Planet>[],
+    moons: Partial<Planet>[],
+    research: Record<number, number>,
+    officers?: any,
+    playerClass?: number,
+    allianceClass?: number,
+    speciesExperience?: Record<string, any>
+} {
+    const planets: Partial<Planet>[] = [];
+    const moons: Partial<Planet>[] = [];
+    const research: Record<number, number> = {};
+
+    if (!data) return { planets, moons, research };
+
+    // 1. Global Researches
+    if (data.researches && typeof data.researches === 'object') {
+        Object.entries(data.researches).forEach(([techIdStr, lvl]) => {
+            const techId = parseInt(techIdStr);
+            const level = Number(lvl);
+            if (!isNaN(techId)) {
+                research[techId] = level;
+            }
+        });
+    }
+
+    // 2. Space Objects map (type 1 = planet, type 3 = moon)
+    const typeMap: Record<number, 'planet' | 'moon'> = {};
+    if (Array.isArray(data.spaceObjects)) {
+        data.spaceObjects.forEach((so: any) => {
+            if (so && so.id) {
+                typeMap[Number(so.id)] = so.type === 3 ? 'moon' : 'planet';
+            }
+        });
+    }
+
+    // 3. Species Experience
+    const speciesExp: Record<string, any> = {};
+    if (data.species && data.species.values && typeof data.species.values === 'object') {
+        Object.entries(data.species.values).forEach(([spId, info]: [string, any]) => {
+            speciesExp[spId] = info;
+        });
+    }
+
+    // 4. Planets & Moons
+    if (data.planets && typeof data.planets === 'object' && !Array.isArray(data.planets)) {
+        Object.values(data.planets).forEach((rawP: any) => {
+            if (!rawP || !rawP.id) return;
+
+            const objectId = Number(rawP.id);
+            const isMoon = typeMap[objectId] === 'moon';
+
+            const planet: Partial<Planet> = {
+                id: String(rawP.id),
+                name: rawP.name || (isMoon ? "Moon" : "Planet"),
+                coords: `${rawP.galaxy}:${rawP.system}:${rawP.position}`,
+                type: isMoon ? 'moon' : 'planet',
+                ships: {},
+                defenses: {},
+                lifeformBuildings: [],
+                lifeformSetup: [],
+                lastUpdated: Date.now()
+            };
+
+            // Resources
+            if (rawP.resources) {
+                planet.metal = Number(rawP.resources.metal || 0);
+                planet.crystal = Number(rawP.resources.crystal || 0);
+                planet.deuterium = Number(rawP.resources.deuterium || 0);
+            }
+
+            // Production rates
+            if (rawP.production) {
+                planet.production = {
+                    metal: Number(rawP.production.metal || 0),
+                    crystal: Number(rawP.production.crystal || 0),
+                    deuterium: Number(rawP.production.deuterium || 0),
+                    lastUpdated: Date.now()
+                };
+            }
+
+            // Buildings
+            if (rawP.buildings && typeof rawP.buildings === 'object') {
+                Object.entries(rawP.buildings).forEach(([techIdStr, lvl]) => {
+                    const techId = parseInt(techIdStr);
+                    const level = Number(lvl);
+                    if (!isNaN(techId)) {
+                        mapTechToPlanet(planet, techId, level);
+                    }
+                });
+            }
+
+            // Ships
+            if (rawP.ships && typeof rawP.ships === 'object') {
+                Object.entries(rawP.ships).forEach(([shipIdStr, count]) => {
+                    const shipId = parseInt(shipIdStr);
+                    const cnt = Number(count);
+                    if (!isNaN(shipId) && cnt > 0) {
+                        planet.ships![shipId] = cnt;
+                    }
+                });
+            }
+
+            // Defenses
+            if (rawP.defenses && typeof rawP.defenses === 'object') {
+                Object.entries(rawP.defenses).forEach(([defIdStr, count]) => {
+                    const defId = parseInt(defIdStr);
+                    const cnt = Number(count);
+                    if (!isNaN(defId) && cnt > 0) {
+                        planet.defenses![defId] = cnt;
+                    }
+                });
+            }
+
+            // Active Lifeform Species (701 -> 1, 702 -> 2, 703 -> 3, 704 -> 4)
+            if (rawP.selectedSpeciesId) {
+                const spId = Number(rawP.selectedSpeciesId);
+                planet.lifeformId = spId > 700 ? spId - 700 : spId;
+            }
+
+            // Lifeform Buildings & Techs from selectedSpeciesTechnologyIds
+            const selectedTechIds = Array.isArray(rawP.selectedSpeciesTechnologyIds) ? rawP.selectedSpeciesTechnologyIds : [];
+            const activeBuildingIds = selectedTechIds.filter((id: number) => isLifeformBuilding(id));
+            const activeTechIds = selectedTechIds.filter((id: number) => isLifeformResearch(id));
+
+            // Lifeform Buildings
+            if (activeBuildingIds.length > 0 && rawP.speciesBuildings) {
+                planet.lifeformBuildings = activeBuildingIds
+                    .map((bId: number) => {
+                        const level = Number(rawP.speciesBuildings[bId] ?? rawP.speciesBuildings[String(bId)] ?? 0);
+                        return { id: bId, level };
+                    })
+                    .filter((b: { id: number; level: number }) => b.level > 0);
+            } else if (rawP.speciesBuildings && typeof rawP.speciesBuildings === 'object') {
+                Object.entries(rawP.speciesBuildings).forEach(([bIdStr, lvl]) => {
+                    const bId = parseInt(bIdStr);
+                    const level = Number(lvl);
+                    if (isLifeformBuilding(bId) && level > 0) {
+                        planet.lifeformBuildings!.push({ id: bId, level });
+                    }
+                });
+            }
+
+            // Lifeform Techs
+            if (activeTechIds.length > 0 && rawP.speciesResearches) {
+                const rawSetup = activeTechIds.map((techId: number) => {
+                    const techObj = getLfTech(techId);
+                    const mappedId = techObj ? techObj.id : techId;
+                    const slotNumber = techObj ? Math.floor((techObj.id - 1) / 4) + 1 : (techId % 100);
+                    const level = Number(rawP.speciesResearches[techId] ?? rawP.speciesResearches[String(techId)] ?? 0);
+                    return { slotNumber, selectedTechId: mappedId, level };
+                });
+
+                const slotMap = new Map<number, { slotNumber: number; selectedTechId: number | null; level: number }>();
+                rawSetup.forEach((item: { slotNumber: number; selectedTechId: number | null; level: number }) => {
+                    if (!item || !item.selectedTechId) return;
+                    const existing = slotMap.get(item.slotNumber);
+                    if (existing && existing.level > 0 && item.level === 0) return;
+                    slotMap.set(item.slotNumber, item);
+                });
+                planet.lifeformSetup = Array.from(slotMap.values()).sort((a, b) => a.slotNumber - b.slotNumber);
+            } else if (rawP.speciesResearches && typeof rawP.speciesResearches === 'object') {
+                const rawSetup: { slotNumber: number; selectedTechId: number | null; level: number }[] = [];
+                Object.entries(rawP.speciesResearches).forEach(([techIdStr, lvl]) => {
+                    const techId = parseInt(techIdStr);
+                    const level = Number(lvl);
+                    const techObj = getLfTech(techId);
+                    if (techObj) {
+                        const slotNumber = Math.floor((techObj.id - 1) / 4) + 1;
+                        rawSetup.push({ slotNumber, selectedTechId: techObj.id, level });
+                    }
+                });
+                const slotMap = new Map<number, { slotNumber: number; selectedTechId: number | null; level: number }>();
+                rawSetup.forEach((item: { slotNumber: number; selectedTechId: number | null; level: number }) => {
+                    if (!item || !item.selectedTechId) return;
+                    const existing = slotMap.get(item.slotNumber);
+                    if (existing && existing.level > 0 && item.level === 0) return;
+                    slotMap.set(item.slotNumber, item);
+                });
+                planet.lifeformSetup = Array.from(slotMap.values()).sort((a, b) => a.slotNumber - b.slotNumber);
+            }
+
+            // Active Item Buffs
+            const rawBuffs = rawP.buffs || rawP.activeItems || rawP.items;
+            if (Array.isArray(rawBuffs) && rawBuffs.length > 0) {
+                planet.activeItems = [];
+                const now = Date.now();
+
+                rawBuffs.forEach((buff: any) => {
+                    if (!buff) return;
+                    const name = buff.name || buff.title || buff.nameSlug || '';
+                    if (!name) return;
+
+                    const isPermanent = buff.buffEnd === null || buff.effectEnd === null || buff.isPermanent === true;
+                    let expiryTimestamp: number | undefined = undefined;
+                    
+                    const rawEnd = buff.effectEnd ?? buff.buffEnd ?? buff.expiryTimestamp ?? buff.expiry;
+                    if (rawEnd !== undefined && rawEnd !== null) {
+                        const numEnd = Number(rawEnd);
+                        if (!isNaN(numEnd) && numEnd > 0) {
+                            expiryTimestamp = numEnd > 1e11 ? numEnd : numEnd * 1000;
+                        }
+                    }
+
+                    // Skip if expired
+                    if (expiryTimestamp && expiryTimestamp <= now) return;
+
+                    const mappedItem = findItemByName(name);
+                    let type: ActiveItem['type'] = 'other';
+                    let bonus = 0;
+
+                    if (mappedItem) {
+                        const legacyInfo = getLegacyTypeAndBonus(mappedItem);
+                        type = legacyInfo.type;
+                        bonus = legacyInfo.bonus;
+                    } else {
+                        const lowerName = name.toLowerCase();
+                        if (lowerName.includes('metal')) type = 'metal';
+                        else if (lowerName.includes('crystal')) type = 'crystal';
+                        else if (lowerName.includes('deuterium')) type = 'deuterium';
+                        else if (lowerName.includes('expedition resource booster')) type = 'expedition_res';
+                        else if (lowerName.includes('expedition slot') || lowerName.includes('expedition computer')) type = 'expedition_slots';
+                        else if (lowerName.includes('fleet slot')) type = 'fleet_slots';
+                        else if (lowerName.includes('fields')) type = 'fields';
+
+                        // Try parsing percentage bonus from name or title
+                        const bonusMatch = (buff.title || name).match(/(\d+)\s*%/);
+                        if (bonusMatch) {
+                            bonus = Number(bonusMatch[1]) / 100;
+                        } else if (buff.amount || buff.value) {
+                            bonus = Number(buff.amount || buff.value);
+                        }
+
+                        if (bonus === 0) {
+                            const lower = (buff.title || name).toLowerCase();
+                            if (lower.includes('platinum')) bonus = 0.40;
+                            else if (lower.includes('gold')) bonus = 0.30;
+                            else if (lower.includes('silver')) bonus = 0.20;
+                            else if (lower.includes('bronze')) bonus = 0.10;
+                        }
+                    }
+
+                    const itemId = buff.itemUuid || buff.uuid || buff.id || buff.itemId || buff.ref;
+                    const itemRef = buff.ref || buff.itemUuid || buff.uuid;
+                    const iconUrl = getItemIconUrl({ name, ref: itemRef, itemUuid: buff.itemUuid || buff.uuid, id: itemId }, window.location.origin);
+
+                    const cleanItemTitle = sanitizeItemTitle(buff.title || name, bonus);
+                    planet.activeItems!.push({
+                        id: itemId,
+                        itemUuid: buff.itemUuid || buff.uuid,
+                        ref: itemRef,
+                        iconUrl: iconUrl || undefined,
+                        name: cleanItemTitle,
+                        title: cleanItemTitle,
+                        rarity: buff.rarity || 'common',
+                        isPermanent,
+                        expiryTimestamp,
+                        type,
+                        bonus
+                    });
+                });
+            }
+
+            if (isMoon) {
+                moons.push(planet);
+            } else {
+                planets.push(planet);
+            }
+        });
+    }
+
+    return {
+        planets,
+        moons,
+        research,
+        officers: data.officers,
+        playerClass: data.characterClassId,
+        allianceClass: data.allianceClassId,
+        speciesExperience: speciesExp
+    };
+}
+
 export function parseAjaxEmpireJson(
     ajaxData: any,
     isMoonView: boolean
@@ -348,6 +631,14 @@ export function parseAjaxEmpireJson(
         } catch (e) {
             console.error("OGame Nexus: Failed to parse mergedArray from AJAX response", e);
         }
+    }
+
+    if (data && data.planets && !Array.isArray(data.planets) && typeof data.planets === 'object') {
+        const extResult = parseExternalDataExportJson(data);
+        return {
+            planets: isMoonView ? extResult.moons : extResult.planets,
+            research: extResult.research
+        };
     }
 
     const rawPlanets = data?.planets || [];

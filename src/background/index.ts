@@ -1,7 +1,9 @@
 import { db } from "../db";
 import { parseProduction, parseOverview, parsePlayerDataXml, parseSupplies, parseResearches, parseLifeformResearch, parseLifeformBuildings, parseLifeformBonuses, parseServerDataXml } from "./scrapers";
 import { LIFEFORM_BUILDING_DATA } from "../db/staticData";
+import { LIFEFORM_TECH_DATA, getLfTech, isLifeformBuilding } from "../db/lifeformTechData";
 import { AMORTIZATION_TABLE, calculateEmpireProduction } from "../utils/amortizationCalc";
+import { sanitizeActiveItem } from "../utils/items";
 
 function cleanObject(obj: any) {
     const cleaned = { ...obj };
@@ -14,75 +16,76 @@ function mergeLifeformBuildings(existing: any[], incoming: any[], activeLifeform
         return [];
     }
 
-    const speciesPrefix = activeLifeformId ? `1${activeLifeformId}` : null;
+    const safeExisting = Array.isArray(existing) ? existing : [];
+    const safeIncoming = Array.isArray(incoming) ? incoming : [];
 
-    // Filter existing and incoming to only include buildings of the active lifeform
-    const filteredExisting = speciesPrefix 
-        ? existing.filter(eb => eb.id.toString().startsWith(speciesPrefix))
-        : [...existing];
+    const speciesPrefix = activeLifeformId ? `1${activeLifeformId}1` : null;
 
-    const filteredIncoming = speciesPrefix
-        ? incoming.filter(nb => nb.id.toString().startsWith(speciesPrefix))
-        : [...incoming];
+    const buildingMap = new Map<number, { id: number; name?: string; level: number }>();
 
-    const result = [...filteredExisting];
-
-    filteredIncoming.forEach(nb => {
-        // Find name from static data if missing
-        if (!nb.name) {
-            const staticData = LIFEFORM_BUILDING_DATA.find(sb => sb.id === nb.id);
-            if (staticData) nb.name = staticData.name;
+    safeExisting.forEach(eb => {
+        if (!eb || !isLifeformBuilding(eb.id)) return;
+        if (speciesPrefix && !eb.id.toString().startsWith(speciesPrefix)) return;
+        
+        let name = eb.name;
+        if (!name) {
+            const staticData = LIFEFORM_BUILDING_DATA.find(sb => sb.id === eb.id);
+            if (staticData) name = staticData.name;
         }
-
-        const idx = result.findIndex(eb => eb.id === nb.id);
-        if (idx !== -1) {
-            result[idx] = {
-                ...result[idx],
-                name: nb.name || result[idx].name,
-                level: nb.level
-            };
-        } else {
-            result.push(nb);
-        }
+        buildingMap.set(eb.id, { id: eb.id, name, level: eb.level });
     });
-    return result;
+
+    safeIncoming.forEach(nb => {
+        if (!nb || !isLifeformBuilding(nb.id)) return;
+        if (speciesPrefix && !nb.id.toString().startsWith(speciesPrefix)) return;
+
+        let name = nb.name;
+        if (!name) {
+            const staticData = LIFEFORM_BUILDING_DATA.find(sb => sb.id === nb.id);
+            if (staticData) name = staticData.name;
+        }
+
+        const current = buildingMap.get(nb.id);
+        if (current && current.level > 0 && nb.level === 0) return;
+        buildingMap.set(nb.id, { id: nb.id, name: name || current?.name, level: nb.level });
+    });
+
+    return Array.from(buildingMap.values()).sort((a, b) => a.id - b.id);
 }
 
 function mergeLifeformSetup(existing: any[], incoming: any[], fromEmpire: boolean = false) {
-    const result = [...existing];
-    incoming.forEach(ns => {
-        if (fromEmpire) {
-            // When scraping from Empire, we get ALL tech levels (up to 72). 
-            // We ONLY want to update the level if this specific tech is CURRENTLY the active one in the slot.
-            // We absolutely DO NOT want to overwrite the active selection (selectedTechId) with another species' tech just because they share a slot.
-            const idx = result.findIndex(es => es.slotNumber === ns.slotNumber && es.selectedTechId === ns.selectedTechId);
-            if (idx !== -1) {
-                result[idx].level = ns.level;
-            }
-        } else {
-            // Normal behavior (from lfresearch page where we only get the active setup)
-            // Find existing by slot if provided, or by techId
-            const idx = result.findIndex(es =>
-                (ns.slotNumber > 0 && es.slotNumber === ns.slotNumber) ||
-                (ns.slotNumber === 0 && es.selectedTechId === ns.selectedTechId)
-            );
+    const safeExisting = Array.isArray(existing) ? existing : [];
+    const safeIncoming = Array.isArray(incoming) ? incoming : [];
 
-            if (idx !== -1) {
-                // Keep slot number if existing has it and incoming doesn't
-                const slotNumber = ns.slotNumber > 0 ? ns.slotNumber : result[idx].slotNumber;
+    const slotMap = new Map<number, { slotNumber: number; selectedTechId: number | null; level: number }>();
 
-                result[idx] = {
-                    ...result[idx],
-                    slotNumber,
-                    selectedTechId: ns.selectedTechId,
-                    level: ns.level
-                };
-            } else {
-                result.push(ns);
-            }
+    safeExisting.forEach(es => {
+        if (!es) return;
+        const techObj = getLfTech(es.selectedTechId);
+        if (!techObj) return;
+        const mappedTechId = techObj.id;
+        const slotNum = es.slotNumber > 0 ? es.slotNumber : Math.floor((techObj.id - 1) / 4) + 1;
+        if (slotNum >= 1 && slotNum <= 18) {
+            const current = slotMap.get(slotNum);
+            if (current && current.level > 0 && es.level === 0) return;
+            slotMap.set(slotNum, { slotNumber: slotNum, selectedTechId: mappedTechId, level: es.level });
         }
     });
-    return result;
+
+    safeIncoming.forEach(ns => {
+        if (!ns) return;
+        const techObj = getLfTech(ns.selectedTechId);
+        if (!techObj) return;
+        const mappedTechId = techObj.id;
+        const slotNum = ns.slotNumber > 0 ? ns.slotNumber : Math.floor((techObj.id - 1) / 4) + 1;
+        if (slotNum >= 1 && slotNum <= 18) {
+            const current = slotMap.get(slotNum);
+            if (current && current.level > 0 && ns.level === 0) return;
+            slotMap.set(slotNum, { slotNumber: slotNum, selectedTechId: mappedTechId, level: ns.level });
+        }
+    });
+
+    return Array.from(slotMap.values()).sort((a, b) => a.slotNumber - b.slotNumber);
 }
 
 async function fetchPlanetProduction(serverUrl: string, planetId: string) {
@@ -250,7 +253,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     const existing = await db.accounts.get(account.playerId);
 
                     // Security: Standard Research levels can only go up. Compare and keep max.
-                    let mergedResearches = existing?.researches || [];
+                    let mergedResearches = Array.isArray(existing?.researches) ? existing.researches : [];
+                    if (!Array.isArray(mergedResearches) && existing?.researches && typeof existing.researches === 'object') {
+                        mergedResearches = Object.entries(existing.researches).map(([id, level]) => ({ id: parseInt(id), level: Number(level) }));
+                    }
                     const incomingResearches = researches || (empire?.research ? Object.entries(empire.research).map(([id, level]) => ({ id: parseInt(id), level })) : null);
 
                     if (incomingResearches) {
@@ -275,13 +281,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         if (scraped) serverData = scraped;
                     }
 
+                    let rawLfExp = lifeformExperience || existing?.lifeformExperience;
+                    let mergedLifeformExp = Array.isArray(rawLfExp) ? rawLfExp : [];
+                    if (!Array.isArray(rawLfExp) && rawLfExp && typeof rawLfExp === 'object') {
+                        mergedLifeformExp = Object.entries(rawLfExp).map(([id, val]: [string, any]) => {
+                            const specId = parseInt(id);
+                            const lifeformId = specId > 700 ? specId - 700 : specId;
+                            if (typeof val === 'object' && val !== null) {
+                                return { id: specId, lifeformId, ...val };
+                            }
+                            return { id: specId, lifeformId, level: Number(val) };
+                        });
+                    }
+
                     await db.accounts.put(cleanObject({
                         ...existing,
                         ...account,
                         ...serverData,
                         ...(overview?.accountData || {}),
                         researches: mergedResearches,
-                        ...(lifeformExperience ? { lifeformExperience } : {}),
+                        lifeformExperience: mergedLifeformExp,
                         lastSeen: Date.now()
                     }));
                 }
@@ -306,34 +325,106 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         for (const p of planets) {
                             const existing = existingPlanets.find(ep => ep.id === p.id);
                             const isMainPlanet = activePlanetId === p.id;
-                            const empirePlanet = empire?.planets?.find((ep: any) => ep.id === p.id);
+                            
+                            let empirePlanet: any = undefined;
+                            if (empire && empire.planets) {
+                                if (Array.isArray(empire.planets)) {
+                                    empirePlanet = empire.planets.find((ep: any) => String(ep.id) === String(p.id));
+                                } else if (typeof empire.planets === 'object') {
+                                    empirePlanet = empire.planets[p.id] || Object.values(empire.planets).find((ep: any) => ep && String((ep as any).id) === String(p.id));
+                                }
+                            }
 
                             const resolvedLifeformId = isMainPlanet
                                 ? (lifeformId ?? overview?.planetData?.lifeformId ?? existing?.lifeformId)
                                 : existing?.lifeformId;
 
+                            const resolvedName = (p.name && p.name !== 'Planet' && p.name !== 'Moon')
+                                ? p.name
+                                : (empirePlanet?.name && empirePlanet.name !== 'Planet' && empirePlanet.name !== 'Moon'
+                                    ? empirePlanet.name
+                                    : (existing?.name || p.name || (p.type === 'moon' ? 'Moon' : 'Planet')));
+
+                            const resolvedActiveItems = ((): any[] => {
+                                const now = Date.now();
+                                const filterValid = (arr: any[] | undefined) => Array.isArray(arr) ? arr.filter(i => !i.expiryTimestamp || i.expiryTimestamp > now) : [];
+
+                                let items: any[] = [];
+                                if (Array.isArray(p.activeItems)) {
+                                    items = filterValid(p.activeItems);
+                                } else if (isMainPlanet && Array.isArray(overview?.planetData?.activeItems)) {
+                                    items = filterValid(overview.planetData.activeItems);
+                                } else if (Array.isArray(empirePlanet?.activeItems)) {
+                                    items = filterValid(empirePlanet.activeItems);
+                                } else if (Array.isArray(existing?.activeItems)) {
+                                    items = filterValid(existing.activeItems);
+                                }
+
+                                // Enrich active items with iconUrl & rarityClass from overview activeItemsMap (parsed from overview active items bar HTML)
+                                const activeItemsMap = overview?.activeItemsMap || overview?.planetData?.activeItemsMap;
+                                const serverUrl = account?.serverUrl || '';
+                                if (activeItemsMap && Array.isArray(items)) {
+                                    items = items.map(item => {
+                                        const uuid = item.itemUuid || item.ref || item.id;
+                                        if (uuid && activeItemsMap[uuid]) {
+                                            const info = activeItemsMap[uuid];
+                                            const fullImgUrl = info.iconUrl.startsWith('http') ? info.iconUrl : (serverUrl ? `${serverUrl.replace(/\/$/, '')}${info.iconUrl}` : info.iconUrl);
+                                            return {
+                                                ...item,
+                                                iconUrl: fullImgUrl,
+                                                rarityClass: info.rarityClass || (item.rarity ? `r_${item.rarity}` : 'r_common')
+                                            };
+                                        }
+                                        return item;
+                                    });
+                                }
+
+                                // Deduplicate items of same type on the planet (keeping higher bonus / later expiry)
+                                const itemMap = new Map<string, any>();
+                                items.forEach(rawItem => {
+                                    const item = sanitizeActiveItem(rawItem);
+                                    const title = (item.title || item.name || '').toLowerCase();
+                                    let key = item.ref || item.itemUuid || item.id || title;
+                                    if (title.includes('expedition resource booster')) {
+                                        key = 'expedition_resource_booster';
+                                    }
+                                    const existingItem = itemMap.get(key);
+                                    if (!existingItem || (item.bonus || 0) > (existingItem.bonus || 0) || ((item.bonus || 0) === (existingItem.bonus || 0) && (item.expiryTimestamp || 0) > (existingItem.expiryTimestamp || 0))) {
+                                        itemMap.set(key, item);
+                                    }
+                                });
+
+                                return Array.from(itemMap.values());
+                            })();
+
+                            const safeFacilities = Array.isArray(facilities) ? facilities : undefined;
+
                             const updateData: any = cleanObject({
                                 ...p,
                                 ...empirePlanet,
                                 playerId: account.playerId,
+                                name: resolvedName,
+                                activeItems: resolvedActiveItems,
                                 productionSettings: production?.productionSettings || empirePlanet?.productionSettings || existing?.productionSettings,
                                 ...(isMainPlanet ? {
                                     ...(overview?.planetData || {}),
                                     ...supplies,
-                                    ...(facilities ? {
-                                        facilities,
+                                    name: resolvedName,
+                                    activeItems: resolvedActiveItems,
+                                    ...(safeFacilities ? {
+                                        facilities: safeFacilities,
                                         // Also map array back to individual fields for compatibility
-                                        roboticsFactory: facilities.find((f: any) => f.id === 14)?.level,
-                                        shipyard: facilities.find((f: any) => f.id === 21)?.level,
-                                        researchLab: facilities.find((f: any) => f.id === 31)?.level,
-                                        allianceDepot: facilities.find((f: any) => f.id === 34)?.level,
-                                        missileSilo: facilities.find((f: any) => f.id === 44)?.level,
-                                        naniteFactory: facilities.find((f: any) => f.id === 15)?.level,
-                                        terraformer: facilities.find((f: any) => f.id === 33)?.level,
-                                        spaceDock: facilities.find((f: any) => f.id === 36)?.level,
-                                        lunarBase: facilities.find((f: any) => f.id === 41)?.level,
-                                        sensorPhalanx: facilities.find((f: any) => f.id === 42)?.level,
-                                        jumpGate: facilities.find((f: any) => f.id === 43)?.level
+                                        roboticsFactory: safeFacilities.find((f: any) => f.id === 14)?.level,
+                                        shipyard: safeFacilities.find((f: any) => f.id === 21)?.level,
+                                        researchLab: safeFacilities.find((f: any) => f.id === 31)?.level,
+                                        allianceDepot: safeFacilities.find((f: any) => f.id === 34)?.level,
+                                        missileSilo: safeFacilities.find((f: any) => f.id === 44)?.level,
+                                        naniteFactory: safeFacilities.find((f: any) => f.id === 15)?.level,
+                                        terraformer: safeFacilities.find((f: any) => f.id === 33)?.level,
+                                        spaceDock: safeFacilities.find((f: any) => f.id === 36)?.level,
+                                        lunarBase: safeFacilities.find((f: any) => f.id === 41)?.level,
+                                        sensorPhalanx: safeFacilities.find((f: any) => f.id === 42)?.level,
+                                        jumpGate: safeFacilities.find((f: any) => f.id === 43)?.level
                                     } : {}),
                                     crawlers: supplies?.crawlers !== undefined ? supplies.crawlers : (empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers),
                                     lifeformId: resolvedLifeformId,
@@ -343,11 +434,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                                     // Merge Buildings: Keep all, update levels for those found on the page
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], lifeformBuildings || empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
-
-                                    // Active items mapping
-                                    activeItems: (overview?.planetData?.activeItems !== undefined)
-                                        ? overview.planetData.activeItems
-                                        : (empirePlanet ? (empirePlanet.activeItems || []) : existing?.activeItems),
 
                                     ...(production && (production.metal > 0 || production.crystal > 0 || production.deuterium > 0) ? {
                                         production: {
@@ -362,13 +448,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     } : {})
                                 } : {
                                     // Even if not the active planet, if we have empire data for it, merge it
+                                    name: resolvedName,
+                                    activeItems: resolvedActiveItems,
                                     lifeformId: resolvedLifeformId,
                                     crawlers: empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers,
                                     ships: empirePlanet?.ships || existing?.ships,
                                     defenses: empirePlanet?.defenses || existing?.defenses,
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], empirePlanet?.lifeformSetup || [], true),
-                                    activeItems: empirePlanet ? (empirePlanet.activeItems || []) : existing?.activeItems,
                                 })
                             });
 
@@ -398,6 +485,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     lifeformSetup: []
                                 });
                             }
+
+                            console.log(
+                                `%c[OGame Nexus Sync] Synced Planet "${resolvedName}" (${p.coords || existing?.coords}):`,
+                                'color: #00f2ff; font-weight: bold; font-size: 11px;',
+                                {
+                                    planetId: p.id,
+                                    name: resolvedName,
+                                    coords: p.coords || existing?.coords,
+                                    lifeformId: resolvedLifeformId,
+                                    lifeformSetup: updateData.lifeformSetup,
+                                    lifeformBuildings: updateData.lifeformBuildings,
+                                    activeItems: resolvedActiveItems,
+                                    production: updateData.production
+                                }
+                            );
                         }
 
                         // Fetch the fully merged and updated list of planets to compute accurate global production
@@ -408,14 +510,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             const now = Date.now();
                             for (const pl of updatedPlanets) {
                                 if (pl.activeItems && pl.activeItems.length > 0) {
-                                    const activeCount = pl.activeItems.length;
-                                    const remainingItems = pl.activeItems.filter(item => !item.expiryTimestamp || item.expiryTimestamp > now);
-                                    
-                                    if (remainingItems.length < activeCount) {
-                                        pl.activeItems = remainingItems;
-                                        // Save corrected items in DB
-                                        await db.planets.update(pl.id, { activeItems: pl.activeItems });
-                                    }
+                                    const itemMap = new Map<string, any>();
+                                    pl.activeItems.forEach(rawItem => {
+                                        if (rawItem.expiryTimestamp && rawItem.expiryTimestamp <= now) return;
+                                        const item = sanitizeActiveItem(rawItem);
+                                        const title = (item.title || item.name || '').toLowerCase();
+                                        let key = item.ref || item.itemUuid || item.id || title;
+                                        if (title.includes('expedition resource booster')) {
+                                            key = 'expedition_resource_booster';
+                                        }
+                                        const existingItem = itemMap.get(key);
+                                        if (!existingItem || (item.bonus || 0) > (existingItem.bonus || 0) || ((item.bonus || 0) === (existingItem.bonus || 0) && (item.expiryTimestamp || 0) > (existingItem.expiryTimestamp || 0))) {
+                                            itemMap.set(key, item);
+                                        }
+                                    });
+                                    const sanitized = Array.from(itemMap.values());
+                                    pl.activeItems = sanitized;
+                                    await db.planets.update(pl.id, { activeItems: pl.activeItems });
                                 }
                             }
 

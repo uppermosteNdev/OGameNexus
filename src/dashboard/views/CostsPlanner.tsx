@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { calculateEmpireProduction } from '../../utils/amortizationCalc';
-import { LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';
+import { calculateEmpireProduction, getLifeformExpLevel, safeArray } from '../../utils/amortizationCalc';
+import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA, BUILDING_DATA, RESEARCH_DATA, DEFENCE_DATA, LIFEFORM_BUILDING_DATA } from '../../db/staticData';
 import './CostsPlanner.css';
 
@@ -97,7 +97,7 @@ const LIFEFORM_BUILDINGS_COSTS: Record<number, { base: ResourceCost; factor: num
     12108: { base: { metal: 75000, crystal: 35000, deuterium: 20000 }, factor: 1.4 },
     12109: { base: { metal: 85000, crystal: 44000, deuterium: 25000 }, factor: 1.4 },
     12110: { base: { metal: 120000, crystal: 50000, deuterium: 20000 }, factor: 1.4 },
-    12111: { base: { metal: 150000, crystal: 60000, deuterium: 30000 }, factor: 1.4 },
+    12111: { base: { metal: 250000, crystal: 150000, deuterium: 100000 }, factor: 1.8 },
     12112: { base: { metal: 600000, crystal: 450000, deuterium: 250000 }, factor: 1.3 },
 
     // Mechas
@@ -354,17 +354,17 @@ const getEmpireResearchDiscount = (
         sourceLevels[t.name] = { level: 0, boostedLevel: 0 };
     });
 
-    planets.forEach((pl: any) => {
-        const setup = pl.lifeformSetup || [];
+    safeArray(planets).forEach((pl: any) => {
+        const setup = safeArray(pl.lifeformSetup);
         targetTechs.forEach(t => {
             const foundTech = setup.find((tech: any) => tech.selectedTechId === t.id || tech.selectedTechId === t.normId);
             if (foundTech && foundTech.level > 0) {
                 const lvl = foundTech.level;
-                const lfLevel = account?.lifeformExperience?.find((e: any) => e.id === pl.lifeformId || e.lifeformId === pl.lifeformId)?.level || 0;
+                const lfLevel = getLifeformExpLevel(account, pl.lifeformId);
                 const lfLevelBonus = lfLevel * 0.001;
 
                 let buildingBonus = 0;
-                pl.lifeformBuildings?.forEach((b: any) => {
+                safeArray(pl.lifeformBuildings).forEach((b: any) => {
                     if (b.id === 11111) buildingBonus += b.level * 0.005;
                     if (b.id === 13107) buildingBonus += b.level * 0.003;
                     if (b.id === 13111) buildingBonus += b.level * 0.004;
@@ -583,7 +583,7 @@ const CostsPlanner: React.FC = () => {
                         cost = applyDiscount(cost, multiplier);
                     }
                 } else if (item.category === 'LF Research' && realPlanet) {
-                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === item.itemId);
+                    const tech = getLfTech(item.itemId);
                     if (tech) {
                         cost = calculateCumulativeTechCost(
                             { metal: tech.metalBaseCost, crystal: tech.crystalBaseCost, deuterium: tech.deutBaseCost },
@@ -694,7 +694,7 @@ const CostsPlanner: React.FC = () => {
     // Lifeform technology matrix helper (renders slot icons correctly)
     const getLfTechIconPath = (techId: number | null) => {
         if (techId === null) return '';
-        const tech = LIFEFORM_TECH_DATA.find(t => t.id === techId);
+        const tech = getLfTech(techId);
         if (!tech) return '';
         const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
         const lfName = lfNames[tech.lifeformId - 1];
@@ -1096,7 +1096,7 @@ const CostsPlanner: React.FC = () => {
 
         activeSetup.forEach((slot) => {
             if (slot.selectedTechId === null || slot.selectedTechId === undefined) return;
-            const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+            const tech = getLfTech(slot.selectedTechId);
             if (!tech) return;
 
             const current = slot.level || 0;
@@ -2285,7 +2285,7 @@ const CostsPlanner: React.FC = () => {
                                                                                 const slot = activeSetup[idx];
                                                                                 if (!slot) return <div key={idx} className="tech-slot empty" />;
 
-                                                                                const tech = slot.selectedTechId !== null ? LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId) : null;
+                                                                                const tech = slot.selectedTechId !== null ? getLfTech(slot.selectedTechId) : null;
                                                                                 const targetLvl = lfResearchTargetLevels[slot.selectedTechId || 0] ?? (slot.level || 0);
                                                                                 const hasIncrease = targetLvl > (slot.level || 0);
                                                                                 const speciesBorderColor = tech ? ['#22c55e', '#ef4444', '#3b82f6', '#a855f7'][tech.lifeformId - 1] : 'rgba(255, 255, 255, 0.1)';

@@ -20,6 +20,7 @@ const Settings: React.FC = () => {
     const [scrapPercent, setScrapPercent] = useState(35);
     const [removeOGLight, setRemoveOGLight] = useState(true);
     const [lowAnimationMode, setLowAnimationMode] = useState(false);
+    const [enableExpeditionHorizontalView, setEnableExpeditionHorizontalView] = useState(false);
 
     useEffect(() => {
         const fetchAccount = async () => {
@@ -42,6 +43,9 @@ const Settings: React.FC = () => {
                     if (settings.lowAnimationMode !== undefined) {
                         setLowAnimationMode(settings.lowAnimationMode);
                     }
+                    if (settings.enableExpeditionHorizontalView !== undefined) {
+                        setEnableExpeditionHorizontalView(settings.enableExpeditionHorizontalView);
+                    }
                 } else {
                     const globalSettings = localStorage.getItem('og-nexus-global-settings');
                     if (globalSettings) {
@@ -52,6 +56,9 @@ const Settings: React.FC = () => {
                         }
                         if (parsed.lowAnimationMode !== undefined) {
                             setLowAnimationMode(parsed.lowAnimationMode);
+                        }
+                        if (parsed.enableExpeditionHorizontalView !== undefined) {
+                            setEnableExpeditionHorizontalView(parsed.enableExpeditionHorizontalView);
                         }
                     }
                 }
@@ -138,6 +145,20 @@ const Settings: React.FC = () => {
         try {
             const current = JSON.parse(localStorage.getItem('og-nexus-global-settings') || '{}');
             current.lowAnimationMode = val;
+            localStorage.setItem('og-nexus-global-settings', JSON.stringify(current));
+
+            // Sync to chrome.storage.local
+            await chrome.storage.local.set({ globalSettings: current });
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const saveEnableExpeditionHorizontalView = async (val: boolean) => {
+        setEnableExpeditionHorizontalView(val);
+        try {
+            const current = JSON.parse(localStorage.getItem('og-nexus-global-settings') || '{}');
+            current.enableExpeditionHorizontalView = val;
             localStorage.setItem('og-nexus-global-settings', JSON.stringify(current));
 
             // Sync to chrome.storage.local
@@ -331,7 +352,7 @@ const Settings: React.FC = () => {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <div style={{ marginRight: '16px' }}>
                             <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Low Animation Mode</span>
                             <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Disables all page and transition animations, twinkling starfield, and heavy CSS effects to maximize performance.</span>
@@ -352,6 +373,34 @@ const Settings: React.FC = () => {
                                 }}>
                                     <span style={{
                                         position: 'absolute', content: '""', height: '18px', width: '18px', left: lowAnimationMode ? '24px' : '4px', bottom: '3px',
+                                        backgroundColor: '#0f172a', transition: '.3s', borderRadius: '50%'
+                                    }} />
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ marginRight: '16px' }}>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>10-Fit Horizontal View for Expeditions</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Enables the 10-column horizontal card grid view and layout switcher toggle in the Expeditions tab. Default is OFF.</span>
+                        </div>
+                        <div>
+                            <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={enableExpeditionHorizontalView} 
+                                    onChange={(e) => saveEnableExpeditionHorizontalView(e.target.checked)}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span className="slider" style={{
+                                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                                    backgroundColor: enableExpeditionHorizontalView ? 'var(--primary)' : '#334155',
+                                    transition: '.3s', borderRadius: '24px',
+                                    boxShadow: enableExpeditionHorizontalView ? '0 0 10px rgba(56, 189, 248, 0.4)' : 'none'
+                                }}>
+                                    <span style={{
+                                        position: 'absolute', content: '""', height: '18px', width: '18px', left: enableExpeditionHorizontalView ? '24px' : '4px', bottom: '3px',
                                         backgroundColor: '#0f172a', transition: '.3s', borderRadius: '50%'
                                     }} />
                                 </span>

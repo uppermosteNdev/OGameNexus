@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Planet, LifeformSavedSetup } from '../../db';
-import { LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';
+import { safeArray } from '../../utils/amortizationCalc';
+import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from '../../db/lifeformBonusData';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, Check, ChevronUp, ChevronDown, RotateCcw, Download, Info, Globe, Trash2, AlertTriangle, BarChart3, Radio, FlaskConical, RefreshCw, HelpCircle, Zap, ArrowRight, Target } from 'lucide-react';
@@ -101,9 +102,9 @@ const Lifeforms: React.FC = () => {
         const iMap: Record<string, string> = {};
         gameKnowledge?.forEach(k => {
             kMap[k.id] = k.name;
-            if (k.category === 'ships') {
-                const shipNameSlug = k.name.toLowerCase().replace(/ /g, '-');
-                iMap[k.name] = `/icons/ships/${shipNameSlug}-large.jpg`;
+            if (k.category === 'ships' || k.category === 'defence') {
+                const nameSlug = k.name.toLowerCase().replace(/ /g, '-');
+                iMap[k.name] = `/icons/ships/${nameSlug}-large.jpg`;
             } else if (k.category === 'research') {
                 const resMap: Record<string, string> = {
                     'Energy Technology': '/icons/research/energy-research-large.jpg',
@@ -155,7 +156,7 @@ const Lifeforms: React.FC = () => {
 
     const activeTech = useMemo(() => {
         if (!slots || slots.length === 0 || !slots[activeSlotIndex] || slots[activeSlotIndex].selectedTechId === null) return null;
-        return LIFEFORM_TECH_DATA.find(t => t.id === slots[activeSlotIndex].selectedTechId);
+        return getLfTech(slots[activeSlotIndex].selectedTechId);
     }, [slots, activeSlotIndex]);
 
     useEffect(() => {
@@ -431,7 +432,7 @@ const Lifeforms: React.FC = () => {
 
     const getIconPath = (techId: number | null) => {
         if (techId === null) return '';
-        const tech = LIFEFORM_TECH_DATA.find(t => t.id === techId);
+        const tech = getLfTech(techId);
         if (!tech) return '';
         const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
         const lfName = lfNames[tech.lifeformId - 1];
@@ -482,23 +483,21 @@ const Lifeforms: React.FC = () => {
 
     const totalBonuses = useMemo(() => {
         const bonuses: Record<string, number> = {};
-        const planet = planets?.find(p => p.id === selectedPlanetId);
-        const expData = activeAccount?.lifeformExperience?.find(e => e.lifeformId === planet?.lifeformId);
+        const planet = safeArray(planets).find((p: any) => p.id === selectedPlanetId);
+        const expData = safeArray(activeAccount?.lifeformExperience).find((e: any) => e.lifeformId === planet?.lifeformId || e.id === planet?.lifeformId);
 
         let buildingBonus = 0;
-        if (planet?.lifeformBuildings) {
-            planet.lifeformBuildings.forEach(b => {
-                if (b.id === 11111) buildingBonus += b.level * 0.005;
-                else if (b.id === 13107) buildingBonus += b.level * 0.003;
-                else if (b.id === 13111) buildingBonus += b.level * 0.004;
-            });
-        }
+        safeArray(planet?.lifeformBuildings).forEach((b: any) => {
+            if (b.id === 11111) buildingBonus += b.level * 0.005;
+            else if (b.id === 13107) buildingBonus += b.level * 0.003;
+            else if (b.id === 13111) buildingBonus += b.level * 0.004;
+        });
 
         const totalBonusMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
 
         slots.forEach(slot => {
             if (!slot) return;
-            const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+            const tech = getLfTech(slot.selectedTechId);
             if (!tech) return;
 
             const techBonuses = getTechBonuses(tech, slot.level);
@@ -550,7 +549,7 @@ const Lifeforms: React.FC = () => {
 
             setup.forEach(slot => {
                 if (!slot) return;
-                const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                const tech = getLfTech(slot.selectedTechId);
                 if (!tech) return;
                 const techBonuses = getTechBonuses(tech, slot.level);
                 techBonuses.forEach(b => {
@@ -596,8 +595,8 @@ const Lifeforms: React.FC = () => {
             });
         };
 
-        planets.forEach(p => {
-            const expData = activeAccount?.lifeformExperience?.find(e => e.lifeformId === p.lifeformId);
+        safeArray(planets).forEach(p => {
+            const expData = safeArray(activeAccount?.lifeformExperience).find((e: any) => e.lifeformId === p.lifeformId || e.id === p.lifeformId);
             calculateForSetup(p.sandboxSetup || p.lifeformSetup || [], expData, p, sandbox, ships.sandbox, researches.sandbox, planetResearches.sandbox);
             calculateForSetup(p.lifeformSetup || [], expData, p, live, ships.live, researches.live, planetResearches.live);
         });
@@ -608,9 +607,9 @@ const Lifeforms: React.FC = () => {
         if (!planets) return {};
         const breakdown: Record<string, { planetName: string, value: number, coords: string, imgUrl?: string, techValue: number, levelBonus: number, buildingBonus: number }[]> = {};
 
-        planets.forEach(p => {
+        safeArray(planets).forEach(p => {
             const setup = p.sandboxSetup || p.lifeformSetup || [];
-            const expData = activeAccount?.lifeformExperience?.find(e => e.lifeformId === p.lifeformId);
+            const expData = safeArray(activeAccount?.lifeformExperience).find((e: any) => e.lifeformId === p.lifeformId || e.id === p.lifeformId);
 
             let buildingBonus = 0;
             if (p.lifeformBuildings) {
@@ -624,9 +623,9 @@ const Lifeforms: React.FC = () => {
             const lfLevelBonusPercentage = (expData?.level || 0) * 0.1; // Percentage display
             const totalMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
 
-            setup.forEach(slot => {
+            safeArray(setup).forEach((slot: any) => {
                 if (!slot) return;
-                const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                const tech = getLfTech(slot.selectedTechId);
                 if (!tech) return;
 
                 const techBonuses = getTechBonuses(tech, slot.level);
@@ -797,7 +796,7 @@ const Lifeforms: React.FC = () => {
                         const slot = slots[idx];
                         if (!slot) return <div key={idx} className="tech-slot empty" />;
 
-                        const tech = slot.selectedTechId !== null ? LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId) : null;
+                        const tech = slot.selectedTechId !== null ? getLfTech(slot.selectedTechId) : null;
                         const speciesBorderColor = tech ? ['#22c55e', '#ef4444', '#3b82f6', '#a855f7'][tech.lifeformId - 1] : 'rgba(255, 255, 255, 0.1)';
 
                         return (
@@ -1027,7 +1026,7 @@ const Lifeforms: React.FC = () => {
                                     </div>
                                     <div className="lifeform-experience-dashboard">
                                         {[1, 2, 3, 4].map(id => {
-                                            const expData = activeAccount?.lifeformExperience?.find(e => e.lifeformId === id);
+                                            const expData = safeArray(activeAccount?.lifeformExperience).find((e: any) => e.lifeformId === id || e.id === id);
                                             const level = expData?.level || 0;
                                             const hasTechs = planets?.some(p => p.lifeformId === id);
                                             const progress = expData ? (expData.currentExp / expData.nextLevelExp) * 100 : 0;
@@ -1159,7 +1158,7 @@ const Lifeforms: React.FC = () => {
                                                     else if (accountClass === 2) techId = 71; // General (Lifeform 3, slot 18)
                                                     else if (accountClass === 3) techId = 72; // Discoverer (Lifeform 4, slot 18)
 
-                                                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === techId);
+                                                    const tech = getLfTech(techId);
                                                     if (!tech) return null;
 
                                                     const targetBonusId = tech.target[0].bonusBreakdownId;
@@ -2069,7 +2068,7 @@ const Lifeforms: React.FC = () => {
                                     <div className="picker-grid">
                                         {[1, 2, 3, 4].map(lfId => {
                                             const techId = (pickerSlotIndex * 4) + lfId;
-                                            const tech = LIFEFORM_TECH_DATA.find(t => t.id === techId);
+                                            const tech = getLfTech(techId);
                                             if (!tech) return null;
                                             const isActive = tempSelectedTechId === techId;
                                             return (
@@ -2092,7 +2091,7 @@ const Lifeforms: React.FC = () => {
 
                                 <div className="picker-details-section">
                                     {(() => {
-                                        const tech = LIFEFORM_TECH_DATA.find(t => t.id === tempSelectedTechId);
+                                        const tech = getLfTech(tempSelectedTechId);
                                         if (!tech) return null;
                                         return (
                                             <motion.div

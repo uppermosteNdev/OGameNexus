@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Suppress known Recharts ResponsiveContainer sizing warning during mount transitions
 const _origWarn = console.warn;
@@ -13,7 +14,9 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
     ReactDOM.createRoot(rootElement).render(
         <React.StrictMode>
-            <App />
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
         </React.StrictMode>
     );
 }

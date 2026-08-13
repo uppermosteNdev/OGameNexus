@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { SHIP_DATA } from '../../../db/staticData';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../db';
+import { calculateMSU, DEFAULT_RATES, getResearchLevel, getLifeformExpLevel, safeArray } from '../../../utils/amortizationCalc';
 import {
     Calculator,
     Trophy,
@@ -17,7 +18,8 @@ import {
     Shield
 } from 'lucide-react';
 import { calculateExpeditionFinds, ExpoCalcConfig } from '../../utils/expoCalculator';
-import { LIFEFORM_TECH_DATA } from '../../../db/lifeformTechData';
+import { LIFEFORM_TECH_DATA, getLfTech } from '../../../db/lifeformTechData';
+import { sanitizeActiveItem } from '../../../utils/items';
 
 const THEME_CYAN = '#0062ff';
 
@@ -41,9 +43,6 @@ const SHIP_ITEMS = [
     { id: 213, label: 'Destroyer', color: '#f97316' },
     { id: 218, label: 'Reaper', color: '#14b8a6' },
     { id: 210, label: 'Espionage Probe', color: '#8b5cf6' },
-    { id: 208, label: 'Colony Ship', color: '#fca5a5' },
-    { id: 209, label: 'Recycler', color: '#dc2626' },
-    { id: 214, label: 'Deathstar', color: '#fffb00' },
 ];
 
 const TOP_SCORE_THRESHOLD_OPTIONS = [
@@ -130,20 +129,19 @@ const ExpeditionCalculator: React.FC = () => {
 
         const getBonus = (breakdownId: number) => {
             let total = 0;
-            planets.filter(p => p.type === 'planet').forEach(p => {
-                const setup = p.lifeformSetup || [];
-                const expData = activeAccount.lifeformExperience?.find((e: any) => e.lifeformId === p.lifeformId);
+            safeArray(planets).filter((p: any) => p && p.type === 'planet').forEach((p: any) => {
+                const setup = safeArray(p.lifeformSetup);
+                const expLevel = getLifeformExpLevel(activeAccount, p.lifeformId);
                 let buildingBonus = 0;
-                if (p.lifeformBuildings) {
-                    p.lifeformBuildings.forEach((b: any) => {
-                        if (b.id === 11111) buildingBonus += b.level * 0.005;
-                        else if (b.id === 13107) buildingBonus += b.level * 0.003;
-                        else if (b.id === 13111) buildingBonus += b.level * 0.004;
-                    });
-                }
-                const totalMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
+                safeArray(p.lifeformBuildings).forEach((b: any) => {
+                    if (!b || !b.id) return;
+                    if (b.id === 11111) buildingBonus += b.level * 0.005;
+                    else if (b.id === 13107) buildingBonus += b.level * 0.003;
+                    else if (b.id === 13111) buildingBonus += b.level * 0.004;
+                });
+                const totalMultiplier = 1 + expLevel * 0.001 + buildingBonus;
                 setup.forEach((slot: any) => {
-                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                    const tech = getLfTech(slot.selectedTechId || slot.id);
                     if (!tech || !tech.target) return;
                     const bonusContribution = tech.target
                         .filter(t => t.bonusBreakdownId === breakdownId)
@@ -163,21 +161,20 @@ const ExpeditionCalculator: React.FC = () => {
         const getCargoBonuses = () => {
             const shipCargoObj: Record<number, number> = {};
 
-            planets.filter(p => p.type === 'planet').forEach(p => {
-                const setup = p.lifeformSetup || [];
-                const expData = activeAccount.lifeformExperience?.find((e: any) => e.lifeformId === p.lifeformId);
+            safeArray(planets).filter((p: any) => p && p.type === 'planet').forEach((p: any) => {
+                const setup = safeArray(p.lifeformSetup);
+                const expLevel = getLifeformExpLevel(activeAccount, p.lifeformId);
                 let buildingBonus = 0;
-                if (p.lifeformBuildings) {
-                    p.lifeformBuildings.forEach((b: any) => {
-                        if (b.id === 11111) buildingBonus += b.level * 0.005;
-                        else if (b.id === 13107) buildingBonus += b.level * 0.003;
-                        else if (b.id === 13111) buildingBonus += b.level * 0.004;
-                    });
-                }
-                const totalMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
+                safeArray(p.lifeformBuildings).forEach((b: any) => {
+                    if (!b || !b.id) return;
+                    if (b.id === 11111) buildingBonus += b.level * 0.005;
+                    else if (b.id === 13107) buildingBonus += b.level * 0.003;
+                    else if (b.id === 13111) buildingBonus += b.level * 0.004;
+                });
+                const totalMultiplier = 1 + expLevel * 0.001 + buildingBonus;
 
                 setup.forEach((slot: any) => {
-                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                    const tech = getLfTech(slot.selectedTechId);
                     if (!tech || !tech.target) return;
 
                     const uniqueBonusIds: number[] = [];
@@ -262,7 +259,7 @@ const ExpeditionCalculator: React.FC = () => {
         else if (ts < 75000000) tp = 3600000;
         else if (ts < 100000000) tp = 4200000;
 
-        const hypLevel = activeAccount.researches?.find(r => r.id === 114)?.level || 0;
+        const hypLevel = getResearchLevel(activeAccount, 114);
         const resBonusPercent = Number(lifeformExpeditionBonuses.resBonus.toFixed(4));
         const shipBonusPercent = Number(lifeformExpeditionBonuses.shipBonus.toFixed(4));
         const lifeformDiscovererBonusPercent = Number(lifeformExpeditionBonuses.classBonus.toFixed(4));
@@ -273,14 +270,18 @@ const ExpeditionCalculator: React.FC = () => {
         // Calculate account-wide active expedition resource booster percentage
         let activeBoosterPercent = 0;
         const boosterMap = new Map<string, any>();
+        const now = Date.now();
         planets.forEach(p => {
             if (p.activeItems && p.activeItems.length > 0) {
-                p.activeItems.forEach(item => {
+                p.activeItems.forEach(rawItem => {
+                    if (rawItem.expiryTimestamp && rawItem.expiryTimestamp <= now) return;
+                    const item = sanitizeActiveItem(rawItem);
                     const title = (item.title || item.name || '').toLowerCase();
                     if (title.includes('expedition resource booster')) {
-                        const existing = boosterMap.get(title);
-                        if (!existing || (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0)) {
-                            boosterMap.set(title, item);
+                        const mapKey = 'expedition_resource_booster';
+                        const existing = boosterMap.get(mapKey);
+                        if (!existing || (item.bonus || 0) > (existing.bonus || 0) || ((item.bonus || 0) === (existing.bonus || 0) && (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0))) {
+                            boosterMap.set(mapKey, item);
                         }
                     }
                 });
@@ -337,6 +338,7 @@ const ExpeditionCalculator: React.FC = () => {
             203: [202, 204, 203, 210, 205],
             204: [202, 203, 204, 210],
             205: [202, 203, 204, 205, 206, 210],
+            206: [202, 203, 204, 205, 206, 210, 219, 207],
             219: [202, 203, 204, 205, 206, 210, 219, 207],
             207: [202, 203, 204, 205, 206, 210, 219, 207, 215],
             215: [202, 203, 204, 205, 206, 210, 219, 207, 215, 211],
@@ -344,6 +346,9 @@ const ExpeditionCalculator: React.FC = () => {
             213: [202, 203, 204, 205, 206, 210, 219, 207, 215, 211, 213, 218],
             218: [202, 203, 204, 205, 206, 210, 219, 207, 215, 211, 213, 218],
             208: [],
+            209: [],
+            210: [202, 204, 210],
+            214: [],
         };
 
         fleet.forEach(s => {

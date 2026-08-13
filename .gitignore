@@ -103,3 +103,11 @@ vite.config.ts.timestamp-*
 
 # Project temporary analysis/split folders
 temp_acs_split/
+scratch/
+
+# Agents & Skills
+.agents/
+skills/
+SKILL.md
+skills.json
+

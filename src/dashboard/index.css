@@ -201,6 +201,74 @@ h1.view-title {
     flex-shrink: 0;
 }
 
+/* Expeditions Mode Switcher */
+.expedition-mode-switcher {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(8, 14, 28, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    margin-bottom: 4px;
+}
+
+.expedition-mode-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 9px 4px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    min-height: 52px;
+    gap: 4px;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid transparent;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+}
+
+.expedition-mode-btn.active-standard {
+    background: linear-gradient(135deg, #0284c7 0%, #0062ff 50%, #38bdf8 100%);
+    color: #ffffff;
+    border: 1px solid rgba(56, 189, 248, 0.6);
+    box-shadow: 0 0 14px rgba(0, 98, 255, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.expedition-mode-btn.active-lifeform {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+    color: #ffffff;
+    border: 1px solid rgba(236, 72, 153, 0.6);
+    box-shadow: 0 0 14px rgba(168, 85, 247, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.expedition-mode-btn.inactive {
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.expedition-mode-btn.inactive:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+}
+
+.expedition-mode-btn:active {
+    transform: scale(0.96);
+}
+
 .expeditions-sidebar-secondary {
     display: flex;
     flex-direction: column;

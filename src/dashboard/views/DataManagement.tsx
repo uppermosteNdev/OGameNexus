@@ -19,7 +19,8 @@ import {
     ArrowLeft,
     Loader2,
     ShieldAlert,
-    Download
+    Download,
+    Search
 } from 'lucide-react';
 import { db } from '../../db';
 
@@ -57,13 +58,15 @@ const DataManagement: React.FC = () => {
             const p = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
             const pIds = p.map(x => x.id);
             const tCount = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).count();
+            const spiedCount = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(x => x.userPlayerId === activeAccount.playerId).count();
             return {
                 planets: p.length,
                 expeditions: await db.expeditions.where('playerId').equals(activeAccount.playerId).count(),
                 lifeforms: await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).count(),
                 debris: await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).count(),
                 combats: await db.combatReports.where('playerId').equals(activeAccount.playerId).count(),
-                todos: tCount
+                todos: tCount,
+                spiedPlanets: spiedCount
             };
         } catch (e) {
             console.error("Failed to query metrics", e);
@@ -166,6 +169,7 @@ const DataManagement: React.FC = () => {
 
             const pIds = planets.map(p => p.id);
             const todoProjects = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).toArray();
+            const spiedPlanets = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(p => p.userPlayerId === activeAccount.playerId).toArray();
 
             // Construct secure backup JSON payload
             const backupPayload = {
@@ -183,7 +187,8 @@ const DataManagement: React.FC = () => {
                     lifeformDiscoveries,
                     debrisHarvests,
                     combatReports,
-                    todoProjects
+                    todoProjects,
+                    spiedPlanets
                 }
             };
 
@@ -276,6 +281,7 @@ const DataManagement: React.FC = () => {
             (backup.debrisHarvests?.length || 0) +
             (backup.combatReports?.length || 0) +
             (backup.todoProjects?.length || 0) +
+            (backup.spiedPlanets?.length || 0) +
             1; // +1 for the account record itself
 
         setNexusStats({
@@ -352,6 +358,13 @@ const DataManagement: React.FC = () => {
                 }
                 await db.todoProjects.bulkPut(backup.todoProjects);
                 setNexusStats(s => ({ ...s, processed: s.processed + backup.todoProjects.length, imported: s.imported + backup.todoProjects.length }));
+            }
+
+            // 8. Spied Planets (Raid Radar)
+            if (backup.spiedPlanets && backup.spiedPlanets.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.spiedPlanets.length} spied targets for Raid Radar...`]);
+                await db.spiedPlanets.bulkPut(backup.spiedPlanets);
+                setNexusStats(s => ({ ...s, processed: s.processed + backup.spiedPlanets.length, imported: s.imported + backup.spiedPlanets.length }));
             }
 
             setNexusImportLog(prev => [...prev, '✓ Restore sequence completed successfully.', 'All data components verified.']);
@@ -445,6 +458,7 @@ const DataManagement: React.FC = () => {
                                     { label: 'Debris field harvests', count: nexusStatsSummary?.debris || 0, icon: <Rocket size={14} /> },
                                     { label: 'Lifeform Discoveries', count: nexusStatsSummary?.lifeforms || 0, icon: <Activity size={14} /> },
                                     { label: 'Saved Build Orders', count: nexusStatsSummary?.todos || 0, icon: <Clock size={14} /> },
+                                    { label: 'Raid Radar Targets', count: nexusStatsSummary?.spiedPlanets || 0, icon: <Search size={14} /> },
                                 ].map((item, index) => (
                                     <div key={index} style={{
                                         padding: '12px 16px', borderRadius: '14px',
@@ -771,6 +785,7 @@ const DataManagement: React.FC = () => {
                         { label: 'Debris Harvest History', count: stats.debrisHarvests?.length || 0, icon: <Rocket size={16} /> },
                         { label: 'Lifeform Discoveries', count: stats.lifeformDiscoveries?.length || 0, icon: <Activity size={16} /> },
                         { label: 'Saved Build Orders', count: stats.todoProjects?.length || 0, icon: <Clock size={16} /> },
+                        { label: 'Raid Radar Targets', count: stats.spiedPlanets?.length || 0, icon: <Search size={16} /> },
                     ].map((item, index) => (
                         <div key={index} style={{
                             padding: '16px 20px', borderRadius: '16px',

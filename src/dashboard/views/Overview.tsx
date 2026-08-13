@@ -27,7 +27,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { SHIP_DATA } from '../../db/staticData';
 import { renderAnalyticsTab } from '../../content/analytics';
-import { calculateEmpireProduction } from '../../utils/amortizationCalc';
+import { calculateEmpireProduction, safeArray } from '../../utils/amortizationCalc';
 
 import {
     ResponsiveContainer,
@@ -447,11 +447,12 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
         const speciesCounts: Record<number, number> = {};
         let totalBuildings = 0;
 
-        planets.forEach(p => {
+        safeArray(planets).forEach(p => {
             if (p.lifeformId) {
                 speciesCounts[p.lifeformId] = (speciesCounts[p.lifeformId] || 0) + 1;
             }
-            totalBuildings += p.lifeformBuildings?.reduce((s, b) => s + b.level, 0) || 0;
+            const safeBuildings = safeArray(p.lifeformBuildings);
+            totalBuildings += safeBuildings.reduce((s: number, b: any) => s + (b?.level || 0), 0);
         });
 
         const dominant = Object.entries(speciesCounts).sort((a, b) => b[1] - a[1])[0];
@@ -1008,8 +1009,8 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                 <div style={{ fontSize: '0.65rem', fontWeight: 900, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '4px' }}>SPECIES EVOLUTION & PROGRESS</div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
                                     {[1, 2, 3, 4].map(id => {
-                                        const species = lifeformSpecies.find(s => s.lifeformId === id);
-                                        const experience = activeAccount?.lifeformExperience?.find(e => e.lifeformId === id);
+                                        const species = safeArray(lifeformSpecies).find((s: any) => s.lifeformId === id);
+                                        const experience = safeArray(activeAccount?.lifeformExperience).find((e: any) => e.lifeformId === id || e.id === id);
                                         const name = species?.lifeformName || (id === 1 ? 'Humans' : id === 2 ? "Rock'tal" : id === 3 ? 'Mechas' : 'Kaelesh');
 
                                         const level = experience?.level || 0;

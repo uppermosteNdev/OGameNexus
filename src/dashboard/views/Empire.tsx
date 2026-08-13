@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';
+import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from '../../db/lifeformBonusData';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Globe, Zap, Layers, Box, Cpu, Swords, Activity, Target, Orbit, Dna, Compass, Info, ShieldCheck, Sparkles, Calculator } from 'lucide-react';
@@ -82,7 +82,7 @@ const Empire: React.FC = () => {
     };
 
     const getTechIconPath = (techId: number) => {
-        const tech = LIFEFORM_TECH_DATA.find(t => t.id === techId);
+        const tech = getLfTech(techId);
         if (!tech) return '';
         const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
         const lfName = lfNames[tech.lifeformId - 1];
@@ -304,7 +304,7 @@ const Empire: React.FC = () => {
                                                                 if (tier === 2) return s.slotNumber > 6 && s.slotNumber <= 12;
                                                                 return s.slotNumber > 12;
                                                             }).sort((a, b) => a.slotNumber - b.slotNumber).map((s) => {
-                                                                const lfId = s.selectedTechId ? (LIFEFORM_TECH_DATA.find(t => t.id === s.selectedTechId)?.lifeformId) : undefined;
+                                                                const lfId = s.selectedTechId ? (getLfTech(s.selectedTechId)?.lifeformId) : undefined;
                                                                 const techColor = getLfColor(lfId);
 
                                                                 return (
@@ -495,7 +495,7 @@ const Empire: React.FC = () => {
             {/* Floating Sleek Tooltip */}
             <AnimatePresence>
                 {hoveredTech && (() => {
-                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === hoveredTech.techId);
+                    const tech = getLfTech(hoveredTech.techId);
                     if (!tech) return null;
 
                     const TOOLTIP_WIDTH = 380;
@@ -575,7 +575,7 @@ const Empire: React.FC = () => {
                                 </div>
                                 <div style={{ display: 'flex', gap: '20px' }}>
                                     {alternatives.map(id => {
-                                        const altTech = LIFEFORM_TECH_DATA.find(t => t.id === id);
+                                        const altTech = getLfTech(id);
                                         const altColor = getLfColor(altTech?.lifeformId);
                                         return (
                                             <div key={id} style={{ flex: 1, position: 'relative' }}>

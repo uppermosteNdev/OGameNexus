@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Zap, Info, ArrowRight, Globe, TrendingUp, Calculator, CheckCircle2, Activity } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../db';
-import { calculateMSU, DEFAULT_RATES } from '../../../utils/amortizationCalc';
+import { calculateMSU, DEFAULT_RATES, getResearchLevel, getLifeformExpLevel, safeArray } from '../../../utils/amortizationCalc';
 
 // Constants
 const PLASMA_TECH_ID = 122;
@@ -28,7 +28,7 @@ const PlasmaTechOptimizer: React.FC = () => {
     const rates: any = useLiveQuery(() => db.settings.get('conversion_rates')) || DEFAULT_RATES;
 
     const currentPlasmaLevel = useMemo(() => {
-        return (activeAccount?.researches as any[])?.find((r: any) => r.id === PLASMA_TECH_ID)?.level || 0;
+        return getResearchLevel(activeAccount, PLASMA_TECH_ID);
     }, [activeAccount]);
 
     const [targetLevel, setTargetLevel] = useState(1);
@@ -45,7 +45,7 @@ const PlasmaTechOptimizer: React.FC = () => {
     React.useEffect(() => {
         if (planets.length > 0 && selectedPlanetIds.length === 0) {
             const initial = planets
-                .filter((p: any) => (p.lifeformSetup as any[])?.some((t: any) => t.selectedTechId === STELLARATOR_ID))
+                .filter((p: any) => safeArray(p.lifeformSetup).some((t: any) => t.selectedTechId === STELLARATOR_ID || t.id === STELLARATOR_ID))
                 .map((p: any) => p.id);
             setSelectedPlanetIds(initial);
         }
@@ -85,12 +85,12 @@ const PlasmaTechOptimizer: React.FC = () => {
             const isSelected = selectedPlanetIds.includes(p.id);
             
             // Tech Multiplier (from amortizationCalc.ts getPlanetTechMultiplier)
-            const lfExp = activeAccount?.lifeformExperience?.find((e: any) => e.id === p.lifeformId || e.lifeformId === p.lifeformId);
-            const lfLevel = lfExp?.level || 0;
+            const lfLevel = getLifeformExpLevel(activeAccount, p.lifeformId);
             let techMult = 1 + (lfLevel * 0.001); // 0.1% per LF level
             
             let buildingBonus = 0;
-            p.lifeformBuildings?.forEach((b: any) => {
+            safeArray(p.lifeformBuildings).forEach((b: any) => {
+                if (!b || !b.id) return;
                 // We use the same IDs and values as in AMORTIZATION_TABLE
                 if (b.id === 11111) buildingBonus += b.level * 0.005; // Metropolis
                 if (b.id === 13111) buildingBonus += b.level * 0.004; // Chip Mass Production
@@ -101,11 +101,12 @@ const PlasmaTechOptimizer: React.FC = () => {
             // Stellarator Cost Reduction (from Labs)
             let labReduction = 0;
             const labIds = [11103, 12103, 13103, 14103];
-            p.lifeformBuildings?.forEach((b: any) => {
+            safeArray(p.lifeformBuildings).forEach((b: any) => {
+                if (!b || !b.id) return;
                 if (labIds.includes(b.id)) labReduction += b.level * 0.0025; // 0.25% per level
             });
 
-            const currentStellaratorLevel = (p.lifeformSetup as any[])?.find((t: any) => t.selectedTechId === STELLARATOR_ID)?.level || 0;
+            const currentStellaratorLevel = (safeArray(p.lifeformSetup).find((t: any) => t.selectedTechId === STELLARATOR_ID || t.id === STELLARATOR_ID) as any)?.level || 0;
 
             return {
                 ...p,

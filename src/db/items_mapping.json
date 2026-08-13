@@ -1,1322 +1,2304 @@
 [
-    {
-        "name": "Complete Resource Package",
-        "description": "Upon activation you receive a daily production of all resources.",
-        "duration": "now",
-        "price": "360,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "c1d0232604872f899ea15a9772baf76880f55c5f",
-        "large_image": "/cdn/img/item-images/18145145a76b71f151ba97b7c17891a5389ceeb5.png",
-        "small_image": "/cdn/img/item-images/baf833b54bdb312d955cbf323d810bc6b24578d0.png",
-        "effects": [
-            {
-                "type": "resource_package",
-                "resource": "all",
-                "value": 1,
-                "unit": "daily_production"
-            }
-        ]
-    },
-    {
-        "name": "Deuterium Package",
-        "description": "Upon activation you receive a daily production of deuterium.",
-        "duration": "now",
-        "price": "180,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "cb72ed207dd871832a850ee29f1c1f83aa3f4f36",
-        "large_image": "/cdn/img/item-images/c7e79db86d95d22b033627c706cb47d9342f5ec1.png",
-        "small_image": "/cdn/img/item-images/d4971620d3a2605afaac00736793fd942cd3ad35.png",
-        "effects": [
-            {
-                "type": "resource_package",
-                "resource": "deuterium",
-                "value": 1,
-                "unit": "daily_production"
-            }
-        ]
-    },
-    {
-        "name": "Metal Package",
-        "description": "Upon activation you receive a daily production of metal.",
-        "duration": "now",
-        "price": "60,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "859d82d316b83848f7365d21949b3e1e63c7841f",
-        "large_image": "/cdn/img/item-images/0bd67f2ea31a389bfd33629b4e611e9261597c81.png",
-        "small_image": "/cdn/img/item-images/4077be1c061371b031604a0212611965c363a0b2.png",
-        "effects": [
-            {
-                "type": "resource_package",
-                "resource": "metal",
-                "value": 1,
-                "unit": "daily_production"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Metal Booster",
-        "description": "+40% more Metal Mine extraction on one planet",
-        "duration": "1w",
-        "price": "30,000 Dark Matter",
-        "inInventory": "1",
-        "ref": "a83cfdc15b8dba27c82962d57e50d8101d263cfb",
-        "large_image": "/cdn/img/item-images/34752e40512a574a74464006d326bd6aebecb1f1.png",
-        "small_image": "/cdn/img/item-images/b29918a7d1f313fd91d788c9c444dfbe996640ee.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Crystal Package",
-        "description": "Upon activation you receive a daily production of crystal.",
-        "duration": "now",
-        "price": "120,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "bb2f6843226ef598f0b567b92c51b283de90aa48",
-        "large_image": "/cdn/img/item-images/c48c8ca23fb22d8860962109799a1f2e0285a64e.png",
-        "small_image": "/cdn/img/item-images/0b42850ea2014b8ace8db5b69bcee1475a881291.png",
-        "effects": [
-            {
-                "type": "resource_package",
-                "resource": "crystal",
-                "value": 1,
-                "unit": "daily_production"
-            }
-        ]
-    },
-    {
-        "name": "Gold Metal Booster",
-        "description": "+30% more Metal Mine extraction on one planet",
-        "duration": "1w",
-        "price": "20,000 Dark Matter",
-        "inInventory": "1",
-        "ref": "05294270032e5dc968672425ab5611998c409166",
-        "large_image": "/cdn/img/item-images/3d0e872a750a6dae2f2a5a7011ec79794bb0e676.png",
-        "small_image": "/cdn/img/item-images/780aa9d6619ae572a318dacc29e7bb77ad980380.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Metal Booster",
-        "description": "+20% more Metal Mine extraction on one planet",
-        "duration": "1w",
-        "price": "7,500 Dark Matter",
-        "inInventory": "2",
-        "ref": "ba85cc2b8a5d986bbfba6954e2164ef71af95d4a",
-        "large_image": "/cdn/img/item-images/db8f26a29991086cadd9db7deff044d89cd47dea.png",
-        "small_image": "/cdn/img/item-images/1ab70d0954b4ebbb91e020c60afbaacb28707e5d.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Crystal Booster",
-        "description": "+20% more Crystal Mine production on one planet",
-        "duration": "1w",
-        "price": "7,500 Dark Matter",
-        "inInventory": "5",
-        "ref": "422db99aac4ec594d483d8ef7faadc5d40d6f7d3",
-        "large_image": "/cdn/img/item-images/6e1d20e739c143784d10e58ddb4c50c52122a40a.png",
-        "small_image": "/cdn/img/item-images/a703be5a40a8fe8128466721f5f925ae1e86d13a.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Deuterium Booster",
-        "description": "+20% more Deuterium Synthesizer harvest on one planet",
-        "duration": "1w",
-        "price": "7,500 Dark Matter",
-        "inInventory": "3",
-        "ref": "e4b78acddfa6fd0234bcb814b676271898b0dbb3",
-        "large_image": "/cdn/img/item-images/7d3064415ec1a60100db024471fb0c1fa8ab3726.png",
-        "small_image": "/cdn/img/item-images/d5c2ed6852d80e61359aef62171ec7c932fc3bd7.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Crystal Booster",
-        "description": "+40% more Crystal Mine production on one planet",
-        "duration": "1w",
-        "price": "30,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "35d96e441c21ef112a84c618934d9d0f026998fd",
-        "large_image": "/cdn/img/item-images/9952055cf47d116eedeec429a469b61abdf6ce72.png",
-        "small_image": "/cdn/img/item-images/5650071c78c9fcf9681fc2c780694de96de29c1b.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Deuterium Booster",
-        "description": "+40% more Deuterium Synthesizer harvest on one planet",
-        "duration": "1w",
-        "price": "30,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "4b51d903560edd102467b110586000bd64fdb954",
-        "large_image": "/cdn/img/item-images/2d1d4247ba12a3185bfd423023b7b551cf841ac3.png",
-        "small_image": "/cdn/img/item-images/7a10926f00a92b563713ade10f89777a98efd96c.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Planet Fields",
-        "description": "+20 additional fields on a planet.",
-        "duration": "Permanent",
-        "price": "350,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "f3d9b82e10f2e969209c1a5ad7d22181c703bb36",
-        "large_image": "/cdn/img/item-images/9771e15c04acfadc55cbd513efc8235ccfe5205d.png",
-        "small_image": "/cdn/img/item-images/180da4a7942369943d5a7ef8ce155276ff66b64f.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "planet",
-                "value": 20,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Crystal Booster",
-        "description": "+30% more Crystal Mine production on one planet",
-        "duration": "1w",
-        "price": "20,000 Dark Matter",
-        "inInventory": "1",
-        "ref": "118d34e685b5d1472267696d1010a393a59aed03",
-        "large_image": "/cdn/img/item-images/bdb4508609de1df58bf4a6108fff73078c89f777.png",
-        "small_image": "/cdn/img/item-images/206bc65589c10c31b645c34991c12fc8556165b2.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Deuterium Booster",
-        "description": "+30% more Deuterium Synthesizer harvest on one planet",
-        "duration": "1w",
-        "price": "20,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "5560a1580a0330e8aadf05cb5bfe6bc3200406e2",
-        "large_image": "/cdn/img/item-images/d52a66ed7b32cf220746cc3618a885876fce520e.png",
-        "small_image": "/cdn/img/item-images/db408084e3b2b7b0e1fe13d9f234d2ebd76f11c5.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Planet Fields",
-        "description": "+15 additional fields on a planet.",
-        "duration": "Permanent",
-        "price": "300,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "04e58444d6d0beb57b3e998edc34c60f8318825a",
-        "large_image": "/cdn/img/item-images/ddc59021e1e5cec24be946c7f2dcc55721a540fa.png",
-        "small_image": "/cdn/img/item-images/ea8aa572c703894eba463a0961065fabafcac334.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "planet",
-                "value": 15,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Planet Fields",
-        "description": "+9 additional fields on a planet.",
-        "duration": "Permanent",
-        "price": "150,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "0e41524dc46225dca21c9119f2fb735fd7ea5cb3",
-        "large_image": "/cdn/img/item-images/67c8a380625953698ae109c3af85075419c8fe36.png",
-        "small_image": "/cdn/img/item-images/6f2193f9f8714cdf9f15b6cdfed791fd8fc1de0a.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "planet",
-                "value": 9,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Moon Fields",
-        "description": "+6 additional fields on a moon",
-        "duration": "Permanent or rather until the moon is destroyed",
-        "price": "100,000 Dark Matter",
-        "inInventory": "1",
-        "ref": "05ee9654bd11a261f1ff0e5d0e49121b5e7e4401",
-        "large_image": "/cdn/img/item-images/5dbf1cc479110bc65469477c127b81870e4af9a2.png",
-        "small_image": "/cdn/img/item-images/993278c3354e17af9e24a4b681770552518b27a6.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "moon",
-                "value": 6,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold M.O.O.N.S.",
-        "description": "Start an attack on your planet to create a moon.",
-        "duration": "30m",
-        "price": "100,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "45d6660308689c65d97f3c27327b0b31f880ae75",
-        "large_image": "/cdn/img/item-images/6a9a75066da0a9fb929def1f2c6cd3a9bcf84afa.png",
-        "small_image": "/cdn/img/item-images/35cba6d3db1f6e55e1d74f7ef7510e84c00d01b3.png",
-        "effects": [
-            {
-                "type": "moon_chance",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Planet Fields",
-        "description": "+4 additional fields on a planet.",
-        "duration": "Permanent",
-        "price": "75,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "16768164989dffd819a373613b5e1a52e226a5b0",
-        "large_image": "/cdn/img/item-images/34b21de1e58cdcfe271ac19798c6a877dfd7bc16.png",
-        "small_image": "/cdn/img/item-images/ed1fc6b04d67c9e6058018c76f5ed3f325a0e1f1.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "planet",
-                "value": 4,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Moon Fields",
-        "description": "+4 additional fields on a moon",
-        "duration": "Permanent or rather until the moon is destroyed",
-        "price": "50,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "c21ff33ba8f0a7eadb6b7d1135763366f0c4b8bf",
-        "large_image": "/cdn/img/item-images/f3c070b68fcc9a9fb5189056cfcbc657daafe34e.png",
-        "small_image": "/cdn/img/item-images/61534566b7942eb2669163cc26232bd449b3f8f0.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "moon",
-                "value": 4,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver M.O.O.N.S.",
-        "description": "Start an attack on your planet to create a moon.",
-        "duration": "1h",
-        "price": "50,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "fd895a5c9fd978b9c5c7b65158099773ba0eccef",
-        "large_image": "/cdn/img/item-images/68522d45e2962071dd7ad69d36e5835e6c537170.png",
-        "small_image": "/cdn/img/item-images/5fcb68729c6ec78b05d7c20e6d09a9fe41dba537.png",
-        "effects": [
-            {
-                "type": "moon_chance",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Moon Fields",
-        "description": "+8 additional fields on a moon",
-        "duration": "Permanent or rather until the moon is destroyed",
-        "price": "130,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "8a426241572b2fea57844acd99bc326fe40e35cf",
-        "large_image": "/cdn/img/item-images/d25f5ba50e9b154aba44bd5616019450b9165b4a.png",
-        "small_image": "/cdn/img/item-images/69e30e56b80972e492b9becda4ef429724e9913f.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "moon",
-                "value": 8,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Moon Fields",
-        "description": "+2 additional fields on a moon",
-        "duration": "Permanent or rather until the moon is destroyed",
-        "price": "30,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "be67e009a5894f19bbf3b0c9d9b072d49040a2cc",
-        "large_image": "/cdn/img/item-images/fc59d4cb4bb28d6b9f43a8dd8bdd8ff9bb36674c.png",
-        "small_image": "/cdn/img/item-images/5676f99ae9818560720d97d0061fd480ca632837.png",
-        "effects": [
-            {
-                "type": "fields",
-                "target": "moon",
-                "value": 2,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Bronze M.O.O.N.S.",
-        "description": "Start an attack on your planet to create a moon.",
-        "duration": "1h 30m",
-        "price": "30,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "485a6d5624d9de836d3eb52b181b13423f795770",
-        "large_image": "/cdn/img/item-images/65f9589a497c3613d22e000e807329c34ad42077.png",
-        "small_image": "/cdn/img/item-images/a0dd8b12aa51f3f59b4897bd5f56ad3c999a69db.png",
-        "effects": [
-            {
-                "type": "moon_chance",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Crystal Booster",
-        "description": "+40% more Crystal Mine production on one planet",
-        "duration": "12w 6d",
-        "price": "300,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "7c2edf40c5cd54ad11c6439398b83020c0a7a6be",
-        "large_image": "/cdn/img/item-images/5a16b583800c72b8eef5585fd5aa0bbd8e5c2c0f.png",
-        "small_image": "/cdn/img/item-images/5e33a2cfb73e9054540c5172f66b770b28765475.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Crystal Booster",
-        "description": "+40% more Crystal Mine production on one planet",
-        "duration": "4w 2d",
-        "price": "110,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "6bf45fcba8a6a68158273d04a924452eca75cf39",
-        "large_image": "/cdn/img/item-images/d4e203516d95ae28081a3d985818e2df5a2475d4.png",
-        "small_image": "/cdn/img/item-images/d3f3321fcd999f657e9dc4ccf9cb34731524123f.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Deuterium Booster",
-        "description": "+40% more Deuterium Synthesizer harvest on one planet",
-        "duration": "12w 6d",
-        "price": "300,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "831c3ea8d868eb3601536f4d5e768842988a1ba9",
-        "large_image": "/cdn/img/item-images/55a877e91716da736ccec66817e611a61c9a1e4a.png",
-        "small_image": "/cdn/img/item-images/55966a0911221acfc9b7a88791a2846f659a1e29.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Crystal Booster",
-        "description": "+30% more Crystal Mine production on one planet",
-        "duration": "12w 6d",
-        "price": "200,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "d45f00e8b909f5293a83df4f369737ea7d69c684",
-        "large_image": "/cdn/img/item-images/efdf5966695a147aaa26442f811346e8b749ec6d.png",
-        "small_image": "/cdn/img/item-images/11d508fc74f136dde21fe9506cad6db3d43149d5.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Crystal Booster",
-        "description": "+30% more Crystal Mine production on one planet",
-        "duration": "4w 2d",
-        "price": "75,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "36fb611e71d42014f5ebd0aa5a52bc0c81a0c1cb",
-        "large_image": "/cdn/img/item-images/5b84505319073e6b71900cfd059657750317ae23.png",
-        "small_image": "/cdn/img/item-images/627957046e2d5315bf13104e258ca0ea37ca7489.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Deuterium Booster",
-        "description": "+30% more Deuterium Synthesizer harvest on one planet",
-        "duration": "12w 6d",
-        "price": "200,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "dc5896bed3311434224d511fa7ced6fdbe41b4e8",
-        "large_image": "/cdn/img/item-images/b4abecddc518baa61d2f2004687cfbd89d34e7c7.png",
-        "small_image": "/cdn/img/item-images/4c7de7803df3ccb01d546ebce9e71379b1c49719.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Crystal Booster",
-        "description": "+20% more Crystal Mine production on one planet",
-        "duration": "12w 6d",
-        "price": "80,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "04d8afd5936976e32ce894b765ea8bd168aa07ef",
-        "large_image": "/cdn/img/item-images/23f7d50e917ed39c5b755b95786e8cf4c4141279.png",
-        "small_image": "/cdn/img/item-images/60a0fee6f82b2b4cec6928c1b052ac586f0b2a0d.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Crystal Booster",
-        "description": "+20% more Crystal Mine production on one planet",
-        "duration": "4w 2d",
-        "price": "28,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "5b69663e3ba09a1fe77cf72c5094e246cfe954d6",
-        "large_image": "/cdn/img/item-images/4cb9628975e286b2cf4949ef4d216bccc1813a77.png",
-        "small_image": "/cdn/img/item-images/2746f4d2372da032f4daa294606ee88e5ca7a46a.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "crystal",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Deuterium Booster",
-        "description": "+20% more Deuterium Synthesizer harvest on one planet",
-        "duration": "12w 6d",
-        "price": "80,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "6f0952a919fd2ab9c009e9ccd83c1745f98f758f",
-        "large_image": "/cdn/img/item-images/c7850b988587f08689f6d2d8e579bfde146525dd.png",
-        "small_image": "/cdn/img/item-images/b4c6a0e05891b6bfd9509bd92b6653d61fdae8e5.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Deuterium Booster",
-        "description": "+40% more Deuterium Synthesizer harvest on one planet",
-        "duration": "4w 2d",
-        "price": "110,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "620f779dbffa1011aded69b091239727910a3d03",
-        "large_image": "/cdn/img/item-images/8245a9d21fb27088b25d48ae024e9382fcea1448.png",
-        "small_image": "/cdn/img/item-images/d9b86d155a459c658cb7bfca594ce4b48e24546b.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Metal Booster",
-        "description": "+40% more Metal Mine extraction on one planet",
-        "duration": "12w 6d",
-        "price": "300,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "ca7f903a65467b70411e513b0920d66c417aa3a2",
-        "large_image": "/cdn/img/item-images/ff96652e498d26f8d2621b0599808860f11ee31c.png",
-        "small_image": "/cdn/img/item-images/e17ff7930eb79c7207502348180a2b4a437474d4.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Platinum Metal Booster",
-        "description": "+40% more Metal Mine extraction on one planet",
-        "duration": "4w 2d",
-        "price": "110,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "c690f492cffe5f9f2952337e8eed307a8a62d6cf",
-        "large_image": "/cdn/img/item-images/ff1ad1a6d5879cb0ea720199c9eb6518584f0922.png",
-        "small_image": "/cdn/img/item-images/ce3bb161706f1788c893b3196834d67102318866.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Deuterium Booster",
-        "description": "+30% more Deuterium Synthesizer harvest on one planet",
-        "duration": "4w 2d",
-        "price": "75,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "300493ddc756869578cb2888a3a1bc0c3c66765f",
-        "large_image": "/cdn/img/item-images/b5d2db0f5428b76ce91a51daea5959426053e973.png",
-        "small_image": "/cdn/img/item-images/9f8eab23fd888c7d3c5a07e0d250a66f017ecec7.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Metal Booster",
-        "description": "+30% more Metal Mine extraction on one planet",
-        "duration": "12w 6d",
-        "price": "200,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "21c1a65ca6aecf54ffafb94c01d0c60d821b325d",
-        "large_image": "/cdn/img/item-images/b5ed0c10e3396c3cbab4dff2a778e2676f7b936a.png",
-        "small_image": "/cdn/img/item-images/a0cba1aa5de23e877b10b196f40855bafc91256c.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Gold Metal Booster",
-        "description": "+30% more Metal Mine extraction on one planet",
-        "duration": "4w 2d",
-        "price": "75,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "6fecb993169fe918d9c63cd37a2e541cc067664e",
-        "large_image": "/cdn/img/item-images/eacc8d23eef74f5dd4b91b99a654e0d63450fa07.png",
-        "small_image": "/cdn/img/item-images/9132f52e224e6ba87677e5ccc5cd1391320cf7d2.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 30,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Deuterium Booster",
-        "description": "+20% more Deuterium Synthesizer harvest on one planet",
-        "duration": "4w 2d",
-        "price": "28,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "26416a3cdb94613844b1d3ca78b9057fd6ae9b15",
-        "large_image": "/cdn/img/item-images/7c48195115d4b4c97ac5b651b0cd766463631b7a.png",
-        "small_image": "/cdn/img/item-images/14a51990fe394912463be7a591b8c3fd41a47aad.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "deuterium",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Metal Booster",
-        "description": "+20% more Metal Mine extraction on one planet",
-        "duration": "12w 6d",
-        "price": "80,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "6f44dcd2bd84875527abba69158b4e976c308bbc",
-        "large_image": "/cdn/img/item-images/6b4ea2ced99211b1b9f0b84fb8a312f0f053a366.png",
-        "small_image": "/cdn/img/item-images/2e4d16cdaec1ea8ba2af28c914bb80f4d0939ce3.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Silver Metal Booster",
-        "description": "+20% more Metal Mine extraction on one planet",
-        "duration": "4w 2d",
-        "price": "28,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "742743b3b0ae1f0b8a1e01921042810b58f12f39",
-        "large_image": "/cdn/img/item-images/2bd0b5df51b77a3cb65d01568171cb991e047ac5.png",
-        "small_image": "/cdn/img/item-images/5e62926be58e94ebb28a231ecad87f8e852d0f6d.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "metal",
-                "value": 20,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Silver",
-        "description": "+40% more energy production on a planet",
-        "duration": "1w",
-        "price": "7,500 Dark Matter",
-        "inInventory": "0",
-        "ref": "c2bad58fcec374d709099d11d0549e59ea7e233e",
-        "large_image": "/cdn/img/item-images/78277dabf424cfe6d902fcb67c10d7a81686a51f.png",
-        "small_image": "/cdn/img/item-images/162edd06c200f8eb655f31e5c6b98c89fabd7f82.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Gold",
-        "description": "+60% more energy production on a planet",
-        "duration": "1w",
-        "price": "20,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "55b52cbfb148ec80cd4e5b0580f7bed01149d643",
-        "large_image": "/cdn/img/item-images/8c59dc4096d4cbddfc83a3a29ed6a64fa4696388.png",
-        "small_image": "/cdn/img/item-images/a1fd30dc5e5a3d0c68bb0116a45e1303ae8d3d70.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 60,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Platinum",
-        "description": "+80% more energy production on a planet",
-        "duration": "1w",
-        "price": "30,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "77c36199102e074dca46f5f26ef57ce824d044dd",
-        "large_image": "/cdn/img/item-images/a09b4c480b8b6971d73cc6d5102e4c2d217f51aa.png",
-        "small_image": "/cdn/img/item-images/253e0610c53379ce1c99410b23be2d49ee869d45.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 80,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Silver",
-        "description": "+40% more energy production on a planet",
-        "duration": "4w 2d",
-        "price": "28,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "bedd248aaf288c27e9351cfacfa6be03f1dbb898",
-        "large_image": "/cdn/img/item-images/009ba047272acf73dfacca91dbef8e9c3b8d5a29.png",
-        "small_image": "/cdn/img/item-images/24e7e9df03218996c2bc8fd7629bce7bb735e083.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Gold",
-        "description": "+60% more energy production on a planet",
-        "duration": "4w 2d",
-        "price": "75,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "4fa9a2273ee446284d5177fd9d60a22de01e932b",
-        "large_image": "/cdn/img/item-images/76bc563f528108c6d65b8f3a75789d929e2eae2b.png",
-        "small_image": "/cdn/img/item-images/067d550b6153abc635b3c1dc5455ce2b75957758.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 60,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Platinum",
-        "description": "+80% more energy production on a planet",
-        "duration": "4w 2d",
-        "price": "110,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "dfe86378f8c3d7f3ee0790ea64603bc44e83ca47",
-        "large_image": "/cdn/img/item-images/9d13f9cd483fe22e01f33ada7511677fa8556e4e.png",
-        "small_image": "/cdn/img/item-images/9acaa2896f0e6750d121d4b2263dc772dd36ad60.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 80,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Silver",
-        "description": "+40% more energy production on a planet",
-        "duration": "12w 6d",
-        "price": "80,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "e05aa5b9e3df5be3857b43da8403eafbf5ad3b96",
-        "large_image": "/cdn/img/item-images/0b9e7bcf137a106982345e37a33127400e201ffa.png",
-        "small_image": "/cdn/img/item-images/3f1c1c7bec997542f706afab4e3e31e89473875a.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 40,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Gold",
-        "description": "+60% more energy production on a planet",
-        "duration": "12w 6d",
-        "price": "200,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "5ad783dcfce3655ef97b36197425718a0dad6b66",
-        "large_image": "/cdn/img/item-images/e7153f5de2c83321c908c2c3fcb76fb874547b5d.png",
-        "small_image": "/cdn/img/item-images/ad67e4e7cc75c80a9d4e4424e2e44808312d1bbf.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 60,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Energy Booster Platinum",
-        "description": "+80% more energy production on a planet",
-        "duration": "12w 6d",
-        "price": "300,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "c39aa972a971e94b1d9b4d7a8f734b3d8be12534",
-        "large_image": "/cdn/img/item-images/b1013d0e9eea34419d4b2acd05c4adcd15868417.png",
-        "small_image": "/cdn/img/item-images/bcf756fab39cd83c5975c9aa7dfbc087ec0dbb3b.png",
-        "effects": [
-            {
-                "type": "production",
-                "resource": "energy",
-                "value": 80,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Expedition Slots",
-        "description": "+1 additional Expedition slots",
-        "duration": "1w",
-        "price": "15,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "e54ecc0416d6e96b4165f24238b03a1b32c1df47",
-        "large_image": "/cdn/img/item-images/40224d1fb7b7d7a244b2f40d3cf281dcf484cfd3.png",
-        "small_image": "/cdn/img/item-images/0b8fc29be235051208ea31248a0861b2f89e3f4f.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 1,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Expedition Slots",
-        "description": "+2 additional Expedition slots",
-        "duration": "1w",
-        "price": "30,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "b2bc9789df7c1ef5e058f72d61380b696dde54e8",
-        "large_image": "/cdn/img/item-images/dbaa137369a212345f0ab33e18f8bb2335f9bedf.png",
-        "small_image": "/cdn/img/item-images/7ce87a5a3875a7dd5e2a98cf5047cdbb9b1d6a41.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 2,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Expedition Slots",
-        "description": "+3 additional Expedition slots",
-        "duration": "1w",
-        "price": "45,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "9336b9f29d36e3f69b0619c9523d8bec5e09ab8e",
-        "large_image": "/cdn/img/item-images/ea4ec7669692e5b91dde58fc5fa606b7e1f22578.png",
-        "small_image": "/cdn/img/item-images/641f4b83c91f51f7bb3b884d883e70776953fcef.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 3,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Expedition Slots",
-        "description": "+1 additional Expedition slots",
-        "duration": "4w 2d",
-        "price": "56,250 Dark Matter",
-        "inInventory": "0",
-        "ref": "8c1f6c6849d1a5e4d9de6ae9bb1b861f6f7b5d4d",
-        "large_image": "/cdn/img/item-images/a59682857b7a632c4bef319f0ef79f0c3bdba5c9.png",
-        "small_image": "/cdn/img/item-images/a229f220ebffccbb9325817261b32fcbe5d38e80.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 1,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Expedition Slots",
-        "description": "+2 additional Expedition slots",
-        "duration": "4w 2d",
-        "price": "112,500 Dark Matter",
-        "inInventory": "0",
-        "ref": "31a504be1195149a3bef05b9cc6e3af185d24ef2",
-        "large_image": "/cdn/img/item-images/2f3ee731849024bfef85eb8c7389bb65e8f6be61.png",
-        "small_image": "/cdn/img/item-images/6d8d8b7a1b99bb14868646abfe8fab38d13451f5.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 2,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Expedition Slots",
-        "description": "+3 additional Expedition slots",
-        "duration": "4w 2d",
-        "price": "168,750 Dark Matter",
-        "inInventory": "0",
-        "ref": "fd7d35e73d0e09e83e30812b738ef966ea9ef790",
-        "large_image": "/cdn/img/item-images/1ba0e8436af518f0014af352af7d20c8d174fb53.png",
-        "small_image": "/cdn/img/item-images/ce43c48b7ef200236ce251a8c89f9214262deebe.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 3,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Expedition Slots",
-        "description": "+1 additional Expedition slots",
-        "duration": "12w 6d",
-        "price": "157,500 Dark Matter",
-        "inInventory": "0",
-        "ref": "a5784c685c0e1e6111d9c18aeaf80af2e0777ab4",
-        "large_image": "/cdn/img/item-images/dcd22251b799c72a98bf4c425166335165f95a9f.png",
-        "small_image": "/cdn/img/item-images/8d70a785cd10a9ecc7ba2523e434ad7e2f421dd4.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 1,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Expedition Slots",
-        "description": "+2 additional Expedition slots",
-        "duration": "12w 6d",
-        "price": "315,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "4f6f941bbf2a8527b0424b3ad11014502d8f4fb8",
-        "large_image": "/cdn/img/item-images/4d5123202c051020a7341d2ea3599b4869945319.png",
-        "small_image": "/cdn/img/item-images/5adfefb8220ab03007a0ada97b493a89ba97faae.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 2,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Expedition Slots",
-        "description": "+3 additional Expedition slots",
-        "duration": "12w 6d",
-        "price": "472,500 Dark Matter",
-        "inInventory": "0",
-        "ref": "540410439514ac09363c5c47cf47117a8b8ae79a",
-        "large_image": "/cdn/img/item-images/aede22854d3e8e46cb93dad726ad2b7edf9d235f.png",
-        "small_image": "/cdn/img/item-images/db28835101052547db777287667853d0a465b207.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "expedition",
-                "value": 3,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Fleet Slots",
-        "description": "+2 additional Fleet slots",
-        "duration": "1w",
-        "price": "5,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "0684c6a5a42acbb3cd134913d421fc28dae6b90d",
-        "large_image": "/cdn/img/item-images/446d0d01503f8b845c3d3330c4dab673166570e1.png",
-        "small_image": "/cdn/img/item-images/0eb11ec1e956a5991eb4eba2bcdf3f4062362df2.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 2,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Fleet Slots",
-        "description": "+4 additional Fleet slots",
-        "duration": "1w",
-        "price": "10,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "f8fd610825fb4a442e27e4e9add74f050e040e27",
-        "large_image": "/cdn/img/item-images/d38f4e83f906ad747ec2601da836c0b11703e3b3.png",
-        "small_image": "/cdn/img/item-images/3e502c0a1f0462bd7e9589294934029f7f0af099.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 4,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Fleet Slots",
-        "description": "+6 additional Fleet slots",
-        "duration": "1w",
-        "price": "15,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "5a8000c372cd079292a92d35d4ddba3c0f348d3b",
-        "large_image": "/cdn/img/item-images/4db5665750dfb83bb958280ffd500c7105574068.png",
-        "small_image": "/cdn/img/item-images/94619b2c741bdc50c440147eefffd79ac5089b0e.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 6,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Fleet Slots",
-        "description": "+2 additional Fleet slots",
-        "duration": "4w 2d",
-        "price": "18,750 Dark Matter",
-        "inInventory": "0",
-        "ref": "94a28491b6fd85003f1cb151e88dde106f1d7596",
-        "large_image": "/cdn/img/item-images/8ab6d921069f01d8cb843f4bc37f51e5cf0c4318.png",
-        "small_image": "/cdn/img/item-images/bec85c7b4868bdd5d634d50de17d8c17d56d40b5.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 2,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Fleet Slots",
-        "description": "+4 additional Fleet slots",
-        "duration": "4w 2d",
-        "price": "37,500 Dark Matter",
-        "inInventory": "0",
-        "ref": "c4e598a85805a7eb3ca70f9265cbd366fc4d2b0e",
-        "large_image": "/cdn/img/item-images/8a133b938e57285a3de891dd4b82b594d4e808a3.png",
-        "small_image": "/cdn/img/item-images/bd55a2e08d6cc320646bbaf420d05cdf243db312.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 4,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Fleet Slots",
-        "description": "+6 additional Fleet slots",
-        "duration": "4w 2d",
-        "price": "56,250 Dark Matter",
-        "inInventory": "0",
-        "ref": "1808bf7639b81ac3ac87bcb7eb3bbba0a1874d0a",
-        "large_image": "/cdn/img/item-images/2fa215f7fe22370b9fd83796dc6baa17aed3f75a.png",
-        "small_image": "/cdn/img/item-images/b11fd1374eb6ceac0a9c7788bb3d3d03afb35a12.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 6,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Bronze Fleet Slots",
-        "description": "+2 additional Fleet slots",
-        "duration": "12w 6d",
-        "price": "52,500 Dark Matter",
-        "inInventory": "0",
-        "ref": "bb47add58876240199a18ddacc2db07789be1934",
-        "large_image": "/cdn/img/item-images/a61bbfc57d4b70abff2365005bbcaf918796d784.png",
-        "small_image": "/cdn/img/item-images/6e6c6061005786c1c2ccc16bf72488127adddda8.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 2,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Silver Fleet Slots",
-        "description": "+4 additional Fleet slots",
-        "duration": "12w 6d",
-        "price": "105,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "a693c5ce3f5676efaaf0781d94234bea4f599d2e",
-        "large_image": "/cdn/img/item-images/f7fc4e566869a8661ac5ef4a75ef9bd5fa5024e1.png",
-        "small_image": "/cdn/img/item-images/48e9a782b39199d3bb9f614ebd5d4a3804656079.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 4,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Gold Fleet Slots",
-        "description": "+6 additional Fleet slots",
-        "duration": "12w 6d",
-        "price": "157,500 Dark Matter",
-        "inInventory": "0",
-        "ref": "1f7024c4f6493f0c589e1b00c76e6ced258c00e5",
-        "large_image": "/cdn/img/item-images/fa17391a273844ee8e71d4625ce7381b458cf1ad.png",
-        "small_image": "/cdn/img/item-images/9e654ae49607c0ddcc87633bf7372b976fd7e183.png",
-        "effects": [
-            {
-                "type": "slots",
-                "target": "fleet",
-                "value": 6,
-                "unit": "flat"
-            }
-        ]
-    },
-    {
-        "name": "Researchers (Alliance)",
-        "description": "+10% speed to expedition destination +5% larger planets on colonisation Access to system phalanx: for 40,000 deuterium this can be used to scan fleet movements in whole systems, as long as these are within range.",
-        "duration": "Permanent",
-        "price": "500,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "1aa36213cb676fd5baad5edc2bee4fbe117a778b",
-        "large_image": "/cdn/img/item-images/55f7003a5cf07e52b38f11b81129ac5042dff4da.png",
-        "small_image": "/cdn/img/item-images/0fad76886bc161e860f8ffb04a1838ba21e377e6.png",
-        "effects": [
-            {
-                "type": "speed",
-                "target": "expedition",
-                "value": 10,
-                "unit": "percent"
-            },
-            {
-                "type": "planet_size_bonus",
-                "value": 5,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Traders (Alliance)",
-        "description": "+10% speed for transporters +5% production on resources and energy +10% storage capacity on moons and planets",
-        "duration": "Permanent",
-        "price": "500,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "6c9fe5e35bdad0d4e3382eb6a5aeac6bc8263752",
-        "large_image": "/cdn/img/item-images/5df93e894bb92e987219fc9d669c9a276ceb5499.png",
-        "small_image": "/cdn/img/item-images/b52a99657970f97a8881f2493be63e3a58c8d49f.png",
-        "effects": [
-            {
-                "type": "speed",
-                "target": "transporter",
-                "value": 10,
-                "unit": "percent"
-            },
-            {
-                "type": "production",
-                "resource": "all",
-                "value": 5,
-                "unit": "percent"
-            },
-            {
-                "type": "storage_capacity",
-                "target": "all",
-                "value": 10,
-                "unit": "percent"
-            }
-        ]
-    },
-    {
-        "name": "Warriors (Alliance)",
-        "description": "+10% speed for ships flying between alliance members +1 combat research levels +1 espionage research levels Access to espionage system: sends the selected number of espionage probes out to scan a whole system. You can set the type of celestial body to research, the time since the last espionage attack or desired player activity.",
-        "duration": "Permanent",
-        "price": "500,000 Dark Matter",
-        "inInventory": "0",
-        "ref": "9b48e257cbef6c5df0f03a47cead7f9abda3d437",
-        "large_image": "/cdn/img/item-images/48ca2adbb95b37db83777b659cfc4042c179fece.png",
-        "small_image": "/cdn/img/item-images/a2d0a5aa06f932c7ecbd76906d44d4b46e338600.png",
-        "effects": [
-            {
-                "type": "speed",
-                "target": "ships_alliance",
-                "value": 10,
-                "unit": "percent"
-            },
-            {
-                "type": "combat_levels",
-                "value": 1,
-                "unit": "flat"
-            },
-            {
-                "type": "espionage_levels",
-                "value": 1,
-                "unit": "flat"
-            }
-        ]
-    }
+  {
+    "name": "Complete Resource Package",
+    "ref": "c1d0232604872f899ea15a9772baf76880f55c5f",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/baf833b54bdb312d955cbf323d810bc6b24578d0.png",
+    "large_image": "/cdn/img/item-images/18145145a76b71f151ba97b7c17891a5389ceeb5.png",
+    "effect": "Upon activation you receive a daily production of all resources.",
+    "description": "Upon activation you receive a daily production of all resources.",
+    "costs": 360000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "resource_package",
+        "resource": "all",
+        "value": 1,
+        "unit": "daily_production"
+      }
+    ]
+  },
+  {
+    "name": "Metal Package",
+    "ref": "859d82d316b83848f7365d21949b3e1e63c7841f",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/4077be1c061371b031604a0212611965c363a0b2.png",
+    "large_image": "/cdn/img/item-images/0bd67f2ea31a389bfd33629b4e611e9261597c81.png",
+    "effect": "Upon activation you receive a daily production of metal.",
+    "description": "Upon activation you receive a daily production of metal.",
+    "costs": 60000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "resource_package",
+        "resource": "metal",
+        "value": 1,
+        "unit": "daily_production"
+      }
+    ]
+  },
+  {
+    "name": "Crystal Package",
+    "ref": "bb2f6843226ef598f0b567b92c51b283de90aa48",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/0b42850ea2014b8ace8db5b69bcee1475a881291.png",
+    "large_image": "/cdn/img/item-images/c48c8ca23fb22d8860962109799a1f2e0285a64e.png",
+    "effect": "Upon activation you receive a daily production of crystal.",
+    "description": "Upon activation you receive a daily production of crystal.",
+    "costs": 120000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "resource_package",
+        "resource": "crystal",
+        "value": 1,
+        "unit": "daily_production"
+      }
+    ]
+  },
+  {
+    "name": "Deuterium Package",
+    "ref": "cb72ed207dd871832a850ee29f1c1f83aa3f4f36",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/d4971620d3a2605afaac00736793fd942cd3ad35.png",
+    "large_image": "/cdn/img/item-images/c7e79db86d95d22b033627c706cb47d9342f5ec1.png",
+    "effect": "Upon activation you receive a daily production of deuterium.",
+    "description": "Upon activation you receive a daily production of deuterium.",
+    "costs": 180000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "resource_package",
+        "resource": "deuterium",
+        "value": 1,
+        "unit": "daily_production"
+      }
+    ]
+  },
+  {
+    "name": "General",
+    "ref": "77eff880829027daf23b755e14820a60c4c6fd93",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/3885fd784f5ccbda9f9a30040b1dffc98e204305.png",
+    "large_image": "/cdn/img/item-images/4b999ea0089c6358b5531635b37e280cfae62da2.png",
+    "effect": "<div class=\"item_characterclass_bonuslist\"><span class=\"blue_txt tooltip\" title=\"+100% speed for combat ships\">Faster Combat Ships</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+100% speed for Recyclers\">Rapid Recyclers</span><span>, </span><span class=\"blue_txt tooltip\" title=\"-50% deuterium consumption for all ships\">Economical Ships</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+20% cargo bay for Recyclers and Pathfinders\">Expanded Cargo Bays</span><span>, </span><span class=\"blue_txt tooltip\" title=\"A small chance to immediately destroy a Deathstar once in a battle using a light fighter.\">Hamill Manoeuvre</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Wreckage at attack (transport to starting planet)\">Wreckage at attack</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+2 combat research levels\">More Combat Research Levels</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+2 fleet slots\">Additional Fleet Slots</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+5 additional Moon Fields\">Additional Moon Fields</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Detailed fleet speed settings\">Five-percent increments for fleet speed</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% discount on acceleration (shipyard)\">Discount on Acceleration (shipyard)</span></div>",
+    "description": "<div class=\"item_characterclass_bonuslist\"><span class=\"blue_txt tooltip\" title=\"+100% speed for combat ships\">Faster Combat Ships</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+100% speed for Recyclers\">Rapid Recyclers</span><span>, </span><span class=\"blue_txt tooltip\" title=\"-50% deuterium consumption for all ships\">Economical Ships</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+20% cargo bay for Recyclers and Pathfinders\">Expanded Cargo Bays</span><span>, </span><span class=\"blue_txt tooltip\" title=\"A small chance to immediately destroy a Deathstar once in a battle using a light fighter.\">Hamill Manoeuvre</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Wreckage at attack (transport to starting planet)\">Wreckage at attack</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+2 combat research levels\">More Combat Research Levels</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+2 fleet slots\">Additional Fleet Slots</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+5 additional Moon Fields\">Additional Moon Fields</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Detailed fleet speed settings\">Five-percent increments for fleet speed</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% discount on acceleration (shipyard)\">Discount on Acceleration (shipyard)</span></div>",
+    "costs": 500000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Discoverer",
+    "ref": "2dd05cc4c0e185fce2e712112dc44932027aee98",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/e9278159a8c40e2e9337ba3495f0b5af1e2c9d05.png",
+    "large_image": "/cdn/img/item-images/fd416ac8494ed3de3ca701af477d93c30227256b.png",
+    "effect": "<div class=\"item_characterclass_bonuslist\"><span class=\"blue_txt tooltip\" title=\"-25% research time\">Research Bonus</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Increased gain on successful expeditions\">Expedition Bonus</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% larger planets on colonisation\">Planet Size</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Debris fields created on expeditions will be visible in the Galaxy view.\">Expedition Debris Fields</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+2 expeditions\">More Expeditions</span><span>, </span><span class=\"blue_txt tooltip\" title=\"-50% chance of expedition enemies\">Fewer Expedition Enemies</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+20% phalanx range\">Increased Phalanx Range</span><span>, </span><span class=\"blue_txt tooltip\" title=\"75% loot from inactive players\">Increased Inactive Plunder</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% discount on acceleration (research)\">Discount on Acceleration (research)</span></div>",
+    "description": "<div class=\"item_characterclass_bonuslist\"><span class=\"blue_txt tooltip\" title=\"-25% research time\">Research Bonus</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Increased gain on successful expeditions\">Expedition Bonus</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% larger planets on colonisation\">Planet Size</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Debris fields created on expeditions will be visible in the Galaxy view.\">Expedition Debris Fields</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+2 expeditions\">More Expeditions</span><span>, </span><span class=\"blue_txt tooltip\" title=\"-50% chance of expedition enemies\">Fewer Expedition Enemies</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+20% phalanx range\">Increased Phalanx Range</span><span>, </span><span class=\"blue_txt tooltip\" title=\"75% loot from inactive players\">Increased Inactive Plunder</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% discount on acceleration (research)\">Discount on Acceleration (research)</span></div>",
+    "costs": 500000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Collector",
+    "ref": "9374c79a24b84c4331f0d26526ef6c2d33319a6e",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/90b2366b4c96638a1a8b419a1c9ad762147ef38a.png",
+    "large_image": "/cdn/img/item-images/09726bf92556fc12b55ec5ee00516af0223b7713.png",
+    "effect": "<div class=\"item_characterclass_bonuslist\"><span class=\"blue_txt tooltip\" title=\"+25% mine production\">Increased Production</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% energy production\">Increased Energy Production</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+100% speed for Transporters\">Rapid Transporters</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+25% cargo bay for Transporters\">Expanded Cargo Bays</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+50% Crawler bonus\">Increased Crawler Bonus</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% more usable Crawlers with Geologist\">Increased Maximum Number of Crawlers</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Overload the Crawlers up to 150%\">Overload Crawler</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% discount on acceleration (building)\">Discount on Acceleration (buildings)</span></div>",
+    "description": "<div class=\"item_characterclass_bonuslist\"><span class=\"blue_txt tooltip\" title=\"+25% mine production\">Increased Production</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% energy production\">Increased Energy Production</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+100% speed for Transporters\">Rapid Transporters</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+25% cargo bay for Transporters\">Expanded Cargo Bays</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+50% Crawler bonus\">Increased Crawler Bonus</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% more usable Crawlers with Geologist\">Increased Maximum Number of Crawlers</span><span>, </span><span class=\"blue_txt tooltip\" title=\"Overload the Crawlers up to 150%\">Overload Crawler</span><span>, </span><span class=\"blue_txt tooltip\" title=\"+10% discount on acceleration (building)\">Discount on Acceleration (buildings)</span></div>",
+    "costs": 500000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Platinum Metal Booster",
+    "ref": "a83cfdc15b8dba27c82962d57e50d8101d263cfb",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/b29918a7d1f313fd91d788c9c444dfbe996640ee.png",
+    "large_image": "/cdn/img/item-images/34752e40512a574a74464006d326bd6aebecb1f1.png",
+    "effect": "+40% more Metal Mine extraction on one planet",
+    "description": "+40% more Metal Mine extraction on one planet",
+    "costs": 27000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Metal Booster",
+    "ref": "05294270032e5dc968672425ab5611998c409166",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/780aa9d6619ae572a318dacc29e7bb77ad980380.png",
+    "large_image": "/cdn/img/item-images/3d0e872a750a6dae2f2a5a7011ec79794bb0e676.png",
+    "effect": "+30% more Metal Mine extraction on one planet",
+    "description": "+30% more Metal Mine extraction on one planet",
+    "costs": 18000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Metal Booster",
+    "ref": "ba85cc2b8a5d986bbfba6954e2164ef71af95d4a",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/1ab70d0954b4ebbb91e020c60afbaacb28707e5d.png",
+    "large_image": "/cdn/img/item-images/db8f26a29991086cadd9db7deff044d89cd47dea.png",
+    "effect": "+20% more Metal Mine extraction on one planet",
+    "description": "+20% more Metal Mine extraction on one planet",
+    "costs": 6750,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Crystal Booster",
+    "ref": "35d96e441c21ef112a84c618934d9d0f026998fd",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/5650071c78c9fcf9681fc2c780694de96de29c1b.png",
+    "large_image": "/cdn/img/item-images/9952055cf47d116eedeec429a469b61abdf6ce72.png",
+    "effect": "+40% more Crystal Mine production on one planet",
+    "description": "+40% more Crystal Mine production on one planet",
+    "costs": 27000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Crystal Booster",
+    "ref": "118d34e685b5d1472267696d1010a393a59aed03",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/206bc65589c10c31b645c34991c12fc8556165b2.png",
+    "large_image": "/cdn/img/item-images/bdb4508609de1df58bf4a6108fff73078c89f777.png",
+    "effect": "+30% more Crystal Mine production on one planet",
+    "description": "+30% more Crystal Mine production on one planet",
+    "costs": 18000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Crystal Booster",
+    "ref": "422db99aac4ec594d483d8ef7faadc5d40d6f7d3",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/a703be5a40a8fe8128466721f5f925ae1e86d13a.png",
+    "large_image": "/cdn/img/item-images/6e1d20e739c143784d10e58ddb4c50c52122a40a.png",
+    "effect": "+20% more Crystal Mine production on one planet",
+    "description": "+20% more Crystal Mine production on one planet",
+    "costs": 6750,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Deuterium Booster",
+    "ref": "4b51d903560edd102467b110586000bd64fdb954",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/7a10926f00a92b563713ade10f89777a98efd96c.png",
+    "large_image": "/cdn/img/item-images/2d1d4247ba12a3185bfd423023b7b551cf841ac3.png",
+    "effect": "+40% more Deuterium Synthesizer harvest on one planet",
+    "description": "+40% more Deuterium Synthesizer harvest on one planet",
+    "costs": 27000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Deuterium Booster",
+    "ref": "5560a1580a0330e8aadf05cb5bfe6bc3200406e2",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/db408084e3b2b7b0e1fe13d9f234d2ebd76f11c5.png",
+    "large_image": "/cdn/img/item-images/d52a66ed7b32cf220746cc3618a885876fce520e.png",
+    "effect": "+30% more Deuterium Synthesizer harvest on one planet",
+    "description": "+30% more Deuterium Synthesizer harvest on one planet",
+    "costs": 18000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Deuterium Booster",
+    "ref": "e4b78acddfa6fd0234bcb814b676271898b0dbb3",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/d5c2ed6852d80e61359aef62171ec7c932fc3bd7.png",
+    "large_image": "/cdn/img/item-images/7d3064415ec1a60100db024471fb0c1fa8ab3726.png",
+    "effect": "+20% more Deuterium Synthesizer harvest on one planet",
+    "description": "+20% more Deuterium Synthesizer harvest on one planet",
+    "costs": 6750,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Planet Fields",
+    "ref": "f3d9b82e10f2e969209c1a5ad7d22181c703bb36",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/180da4a7942369943d5a7ef8ce155276ff66b64f.png",
+    "large_image": "/cdn/img/item-images/9771e15c04acfadc55cbd513efc8235ccfe5205d.png",
+    "effect": "+20 additional fields on a planet.",
+    "description": "+20 additional fields on a planet.",
+    "costs": 350000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 20,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Planet Fields",
+    "ref": "04e58444d6d0beb57b3e998edc34c60f8318825a",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/ea8aa572c703894eba463a0961065fabafcac334.png",
+    "large_image": "/cdn/img/item-images/ddc59021e1e5cec24be946c7f2dcc55721a540fa.png",
+    "effect": "+15 additional fields on a planet.",
+    "description": "+15 additional fields on a planet.",
+    "costs": 300000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 15,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Planet Fields",
+    "ref": "0e41524dc46225dca21c9119f2fb735fd7ea5cb3",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/6f2193f9f8714cdf9f15b6cdfed791fd8fc1de0a.png",
+    "large_image": "/cdn/img/item-images/67c8a380625953698ae109c3af85075419c8fe36.png",
+    "effect": "+9 additional fields on a planet.",
+    "description": "+9 additional fields on a planet.",
+    "costs": 150000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 9,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Planet Fields",
+    "ref": "16768164989dffd819a373613b5e1a52e226a5b0",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/ed1fc6b04d67c9e6058018c76f5ed3f325a0e1f1.png",
+    "large_image": "/cdn/img/item-images/34b21de1e58cdcfe271ac19798c6a877dfd7bc16.png",
+    "effect": "+4 additional fields on a planet.",
+    "description": "+4 additional fields on a planet.",
+    "costs": 75000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 4,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Moon Fields",
+    "ref": "8a426241572b2fea57844acd99bc326fe40e35cf",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/69e30e56b80972e492b9becda4ef429724e9913f.png",
+    "large_image": "/cdn/img/item-images/d25f5ba50e9b154aba44bd5616019450b9165b4a.png",
+    "effect": "+8 additional fields on a moon",
+    "description": "+8 additional fields on a moon",
+    "costs": 130000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 8,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Moon Fields",
+    "ref": "05ee9654bd11a261f1ff0e5d0e49121b5e7e4401",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/993278c3354e17af9e24a4b681770552518b27a6.png",
+    "large_image": "/cdn/img/item-images/5dbf1cc479110bc65469477c127b81870e4af9a2.png",
+    "effect": "+6 additional fields on a moon",
+    "description": "+6 additional fields on a moon",
+    "costs": 100000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 6,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Moon Fields",
+    "ref": "c21ff33ba8f0a7eadb6b7d1135763366f0c4b8bf",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/61534566b7942eb2669163cc26232bd449b3f8f0.png",
+    "large_image": "/cdn/img/item-images/f3c070b68fcc9a9fb5189056cfcbc657daafe34e.png",
+    "effect": "+4 additional fields on a moon",
+    "description": "+4 additional fields on a moon",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 4,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Moon Fields",
+    "ref": "be67e009a5894f19bbf3b0c9d9b072d49040a2cc",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/5676f99ae9818560720d97d0061fd480ca632837.png",
+    "large_image": "/cdn/img/item-images/fc59d4cb4bb28d6b9f43a8dd8bdd8ff9bb36674c.png",
+    "effect": "+2 additional fields on a moon",
+    "description": "+2 additional fields on a moon",
+    "costs": 30000,
+    "currency": "dm",
+    "duration": null,
+    "effects": [
+      {
+        "type": "fields",
+        "value": 2,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold M.O.O.N.S.",
+    "ref": "45d6660308689c65d97f3c27327b0b31f880ae75",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/35cba6d3db1f6e55e1d74f7ef7510e84c00d01b3.png",
+    "large_image": "/cdn/img/item-images/6a9a75066da0a9fb929def1f2c6cd3a9bcf84afa.png",
+    "effect": "Start an attack on your planet to create a moon.",
+    "description": "Start an attack on your planet to create a moon.",
+    "costs": 100000,
+    "currency": "dm",
+    "duration": 1800,
+    "effects": []
+  },
+  {
+    "name": "Silver M.O.O.N.S.",
+    "ref": "fd895a5c9fd978b9c5c7b65158099773ba0eccef",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/5fcb68729c6ec78b05d7c20e6d09a9fe41dba537.png",
+    "large_image": "/cdn/img/item-images/68522d45e2962071dd7ad69d36e5835e6c537170.png",
+    "effect": "Start an attack on your planet to create a moon.",
+    "description": "Start an attack on your planet to create a moon.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": 3600,
+    "effects": []
+  },
+  {
+    "name": "Bronze M.O.O.N.S.",
+    "ref": "485a6d5624d9de836d3eb52b181b13423f795770",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/a0dd8b12aa51f3f59b4897bd5f56ad3c999a69db.png",
+    "large_image": "/cdn/img/item-images/65f9589a497c3613d22e000e807329c34ad42077.png",
+    "effect": "Start an attack on your planet to create a moon.",
+    "description": "Start an attack on your planet to create a moon.",
+    "costs": 30000,
+    "currency": "dm",
+    "duration": 5400,
+    "effects": []
+  },
+  {
+    "name": "Platinum Crystal Booster",
+    "ref": "7c2edf40c5cd54ad11c6439398b83020c0a7a6be",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/5e33a2cfb73e9054540c5172f66b770b28765475.png",
+    "large_image": "/cdn/img/item-images/5a16b583800c72b8eef5585fd5aa0bbd8e5c2c0f.png",
+    "effect": "+40% more Crystal Mine production on one planet",
+    "description": "+40% more Crystal Mine production on one planet",
+    "costs": 240000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Crystal Booster",
+    "ref": "d45f00e8b909f5293a83df4f369737ea7d69c684",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/11d508fc74f136dde21fe9506cad6db3d43149d5.png",
+    "large_image": "/cdn/img/item-images/efdf5966695a147aaa26442f811346e8b749ec6d.png",
+    "effect": "+30% more Crystal Mine production on one planet",
+    "description": "+30% more Crystal Mine production on one planet",
+    "costs": 160000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Crystal Booster",
+    "ref": "04d8afd5936976e32ce894b765ea8bd168aa07ef",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/60a0fee6f82b2b4cec6928c1b052ac586f0b2a0d.png",
+    "large_image": "/cdn/img/item-images/23f7d50e917ed39c5b755b95786e8cf4c4141279.png",
+    "effect": "+20% more Crystal Mine production on one planet",
+    "description": "+20% more Crystal Mine production on one planet",
+    "costs": 64000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Crystal Booster",
+    "ref": "6bf45fcba8a6a68158273d04a924452eca75cf39",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/d3f3321fcd999f657e9dc4ccf9cb34731524123f.png",
+    "large_image": "/cdn/img/item-images/d4e203516d95ae28081a3d985818e2df5a2475d4.png",
+    "effect": "+40% more Crystal Mine production on one planet",
+    "description": "+40% more Crystal Mine production on one planet",
+    "costs": 93500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Crystal Booster",
+    "ref": "36fb611e71d42014f5ebd0aa5a52bc0c81a0c1cb",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/627957046e2d5315bf13104e258ca0ea37ca7489.png",
+    "large_image": "/cdn/img/item-images/5b84505319073e6b71900cfd059657750317ae23.png",
+    "effect": "+30% more Crystal Mine production on one planet",
+    "description": "+30% more Crystal Mine production on one planet",
+    "costs": 63750,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Crystal Booster",
+    "ref": "5b69663e3ba09a1fe77cf72c5094e246cfe954d6",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/2746f4d2372da032f4daa294606ee88e5ca7a46a.png",
+    "large_image": "/cdn/img/item-images/4cb9628975e286b2cf4949ef4d216bccc1813a77.png",
+    "effect": "+20% more Crystal Mine production on one planet",
+    "description": "+20% more Crystal Mine production on one planet",
+    "costs": 23800,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Deuterium Booster",
+    "ref": "831c3ea8d868eb3601536f4d5e768842988a1ba9",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/55966a0911221acfc9b7a88791a2846f659a1e29.png",
+    "large_image": "/cdn/img/item-images/55a877e91716da736ccec66817e611a61c9a1e4a.png",
+    "effect": "+40% more Deuterium Synthesizer harvest on one planet",
+    "description": "+40% more Deuterium Synthesizer harvest on one planet",
+    "costs": 240000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Deuterium Booster",
+    "ref": "dc5896bed3311434224d511fa7ced6fdbe41b4e8",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/4c7de7803df3ccb01d546ebce9e71379b1c49719.png",
+    "large_image": "/cdn/img/item-images/b4abecddc518baa61d2f2004687cfbd89d34e7c7.png",
+    "effect": "+30% more Deuterium Synthesizer harvest on one planet",
+    "description": "+30% more Deuterium Synthesizer harvest on one planet",
+    "costs": 160000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Deuterium Booster",
+    "ref": "6f0952a919fd2ab9c009e9ccd83c1745f98f758f",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/b4c6a0e05891b6bfd9509bd92b6653d61fdae8e5.png",
+    "large_image": "/cdn/img/item-images/c7850b988587f08689f6d2d8e579bfde146525dd.png",
+    "effect": "+20% more Deuterium Synthesizer harvest on one planet",
+    "description": "+20% more Deuterium Synthesizer harvest on one planet",
+    "costs": 64000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Deuterium Booster",
+    "ref": "620f779dbffa1011aded69b091239727910a3d03",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/d9b86d155a459c658cb7bfca594ce4b48e24546b.png",
+    "large_image": "/cdn/img/item-images/8245a9d21fb27088b25d48ae024e9382fcea1448.png",
+    "effect": "+40% more Deuterium Synthesizer harvest on one planet",
+    "description": "+40% more Deuterium Synthesizer harvest on one planet",
+    "costs": 93500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Deuterium Booster",
+    "ref": "300493ddc756869578cb2888a3a1bc0c3c66765f",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/9f8eab23fd888c7d3c5a07e0d250a66f017ecec7.png",
+    "large_image": "/cdn/img/item-images/b5d2db0f5428b76ce91a51daea5959426053e973.png",
+    "effect": "+30% more Deuterium Synthesizer harvest on one planet",
+    "description": "+30% more Deuterium Synthesizer harvest on one planet",
+    "costs": 63750,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Deuterium Booster",
+    "ref": "26416a3cdb94613844b1d3ca78b9057fd6ae9b15",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/14a51990fe394912463be7a591b8c3fd41a47aad.png",
+    "large_image": "/cdn/img/item-images/7c48195115d4b4c97ac5b651b0cd766463631b7a.png",
+    "effect": "+20% more Deuterium Synthesizer harvest on one planet",
+    "description": "+20% more Deuterium Synthesizer harvest on one planet",
+    "costs": 23800,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Metal Booster",
+    "ref": "ca7f903a65467b70411e513b0920d66c417aa3a2",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/e17ff7930eb79c7207502348180a2b4a437474d4.png",
+    "large_image": "/cdn/img/item-images/ff96652e498d26f8d2621b0599808860f11ee31c.png",
+    "effect": "+40% more Metal Mine extraction on one planet",
+    "description": "+40% more Metal Mine extraction on one planet",
+    "costs": 240000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Metal Booster",
+    "ref": "21c1a65ca6aecf54ffafb94c01d0c60d821b325d",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/a0cba1aa5de23e877b10b196f40855bafc91256c.png",
+    "large_image": "/cdn/img/item-images/b5ed0c10e3396c3cbab4dff2a778e2676f7b936a.png",
+    "effect": "+30% more Metal Mine extraction on one planet",
+    "description": "+30% more Metal Mine extraction on one planet",
+    "costs": 160000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Metal Booster",
+    "ref": "6f44dcd2bd84875527abba69158b4e976c308bbc",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/2e4d16cdaec1ea8ba2af28c914bb80f4d0939ce3.png",
+    "large_image": "/cdn/img/item-images/6b4ea2ced99211b1b9f0b84fb8a312f0f053a366.png",
+    "effect": "+20% more Metal Mine extraction on one planet",
+    "description": "+20% more Metal Mine extraction on one planet",
+    "costs": 64000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Platinum Metal Booster",
+    "ref": "c690f492cffe5f9f2952337e8eed307a8a62d6cf",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/ce3bb161706f1788c893b3196834d67102318866.png",
+    "large_image": "/cdn/img/item-images/ff1ad1a6d5879cb0ea720199c9eb6518584f0922.png",
+    "effect": "+40% more Metal Mine extraction on one planet",
+    "description": "+40% more Metal Mine extraction on one planet",
+    "costs": 93500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Gold Metal Booster",
+    "ref": "6fecb993169fe918d9c63cd37a2e541cc067664e",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/9132f52e224e6ba87677e5ccc5cd1391320cf7d2.png",
+    "large_image": "/cdn/img/item-images/eacc8d23eef74f5dd4b91b99a654e0d63450fa07.png",
+    "effect": "+30% more Metal Mine extraction on one planet",
+    "description": "+30% more Metal Mine extraction on one planet",
+    "costs": 63750,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Silver Metal Booster",
+    "ref": "742743b3b0ae1f0b8a1e01921042810b58f12f39",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/5e62926be58e94ebb28a231ecad87f8e852d0f6d.png",
+    "large_image": "/cdn/img/item-images/2bd0b5df51b77a3cb65d01568171cb991e047ac5.png",
+    "effect": "+20% more Metal Mine extraction on one planet",
+    "description": "+20% more Metal Mine extraction on one planet",
+    "costs": 23800,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Energy Booster Silver",
+    "ref": "c2bad58fcec374d709099d11d0549e59ea7e233e",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/162edd06c200f8eb655f31e5c6b98c89fabd7f82.png",
+    "large_image": "/cdn/img/item-images/78277dabf424cfe6d902fcb67c10d7a81686a51f.png",
+    "effect": "+40% more energy production on a planet",
+    "description": "+40% more energy production on a planet",
+    "costs": 6750,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Silver",
+    "ref": "bedd248aaf288c27e9351cfacfa6be03f1dbb898",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/24e7e9df03218996c2bc8fd7629bce7bb735e083.png",
+    "large_image": "/cdn/img/item-images/009ba047272acf73dfacca91dbef8e9c3b8d5a29.png",
+    "effect": "+40% more energy production on a planet",
+    "description": "+40% more energy production on a planet",
+    "costs": 23800,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Silver",
+    "ref": "e05aa5b9e3df5be3857b43da8403eafbf5ad3b96",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/3f1c1c7bec997542f706afab4e3e31e89473875a.png",
+    "large_image": "/cdn/img/item-images/0b9e7bcf137a106982345e37a33127400e201ffa.png",
+    "effect": "+40% more energy production on a planet",
+    "description": "+40% more energy production on a planet",
+    "costs": 64000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Gold",
+    "ref": "55b52cbfb148ec80cd4e5b0580f7bed01149d643",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/a1fd30dc5e5a3d0c68bb0116a45e1303ae8d3d70.png",
+    "large_image": "/cdn/img/item-images/8c59dc4096d4cbddfc83a3a29ed6a64fa4696388.png",
+    "effect": "+60% more energy production on a planet",
+    "description": "+60% more energy production on a planet",
+    "costs": 18000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Gold",
+    "ref": "4fa9a2273ee446284d5177fd9d60a22de01e932b",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/067d550b6153abc635b3c1dc5455ce2b75957758.png",
+    "large_image": "/cdn/img/item-images/76bc563f528108c6d65b8f3a75789d929e2eae2b.png",
+    "effect": "+60% more energy production on a planet",
+    "description": "+60% more energy production on a planet",
+    "costs": 63750,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Gold",
+    "ref": "5ad783dcfce3655ef97b36197425718a0dad6b66",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/ad67e4e7cc75c80a9d4e4424e2e44808312d1bbf.png",
+    "large_image": "/cdn/img/item-images/e7153f5de2c83321c908c2c3fcb76fb874547b5d.png",
+    "effect": "+60% more energy production on a planet",
+    "description": "+60% more energy production on a planet",
+    "costs": 160000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Platinum",
+    "ref": "77c36199102e074dca46f5f26ef57ce824d044dd",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/253e0610c53379ce1c99410b23be2d49ee869d45.png",
+    "large_image": "/cdn/img/item-images/a09b4c480b8b6971d73cc6d5102e4c2d217f51aa.png",
+    "effect": "+80% more energy production on a planet",
+    "description": "+80% more energy production on a planet",
+    "costs": 27000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Platinum",
+    "ref": "dfe86378f8c3d7f3ee0790ea64603bc44e83ca47",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/9acaa2896f0e6750d121d4b2263dc772dd36ad60.png",
+    "large_image": "/cdn/img/item-images/9d13f9cd483fe22e01f33ada7511677fa8556e4e.png",
+    "effect": "+80% more energy production on a planet",
+    "description": "+80% more energy production on a planet",
+    "costs": 93500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Energy Booster Platinum",
+    "ref": "c39aa972a971e94b1d9b4d7a8f734b3d8be12534",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/bcf756fab39cd83c5975c9aa7dfbc087ec0dbb3b.png",
+    "large_image": "/cdn/img/item-images/b1013d0e9eea34419d4b2acd05c4adcd15868417.png",
+    "effect": "+80% more energy production on a planet",
+    "description": "+80% more energy production on a planet",
+    "costs": 240000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Bronze Expedition Slots",
+    "ref": "e54ecc0416d6e96b4165f24238b03a1b32c1df47",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/0b8fc29be235051208ea31248a0861b2f89e3f4f.png",
+    "large_image": "/cdn/img/item-images/40224d1fb7b7d7a244b2f40d3cf281dcf484cfd3.png",
+    "effect": "+1 additional Expedition slots",
+    "description": "+1 additional Expedition slots",
+    "costs": 13500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 1,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Expedition Slots",
+    "ref": "8c1f6c6849d1a5e4d9de6ae9bb1b861f6f7b5d4d",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/a229f220ebffccbb9325817261b32fcbe5d38e80.png",
+    "large_image": "/cdn/img/item-images/a59682857b7a632c4bef319f0ef79f0c3bdba5c9.png",
+    "effect": "+1 additional Expedition slots",
+    "description": "+1 additional Expedition slots",
+    "costs": 47812,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 1,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Expedition Slots",
+    "ref": "a5784c685c0e1e6111d9c18aeaf80af2e0777ab4",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/8d70a785cd10a9ecc7ba2523e434ad7e2f421dd4.png",
+    "large_image": "/cdn/img/item-images/dcd22251b799c72a98bf4c425166335165f95a9f.png",
+    "effect": "+1 additional Expedition slots",
+    "description": "+1 additional Expedition slots",
+    "costs": 126000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 1,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Expedition Slots",
+    "ref": "b2bc9789df7c1ef5e058f72d61380b696dde54e8",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/7ce87a5a3875a7dd5e2a98cf5047cdbb9b1d6a41.png",
+    "large_image": "/cdn/img/item-images/dbaa137369a212345f0ab33e18f8bb2335f9bedf.png",
+    "effect": "+2 additional Expedition slots",
+    "description": "+2 additional Expedition slots",
+    "costs": 27000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 2,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Expedition Slots",
+    "ref": "31a504be1195149a3bef05b9cc6e3af185d24ef2",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/6d8d8b7a1b99bb14868646abfe8fab38d13451f5.png",
+    "large_image": "/cdn/img/item-images/2f3ee731849024bfef85eb8c7389bb65e8f6be61.png",
+    "effect": "+2 additional Expedition slots",
+    "description": "+2 additional Expedition slots",
+    "costs": 95625,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 2,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Expedition Slots",
+    "ref": "4f6f941bbf2a8527b0424b3ad11014502d8f4fb8",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/5adfefb8220ab03007a0ada97b493a89ba97faae.png",
+    "large_image": "/cdn/img/item-images/4d5123202c051020a7341d2ea3599b4869945319.png",
+    "effect": "+2 additional Expedition slots",
+    "description": "+2 additional Expedition slots",
+    "costs": 252000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 2,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Expedition Slots",
+    "ref": "9336b9f29d36e3f69b0619c9523d8bec5e09ab8e",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/641f4b83c91f51f7bb3b884d883e70776953fcef.png",
+    "large_image": "/cdn/img/item-images/ea4ec7669692e5b91dde58fc5fa606b7e1f22578.png",
+    "effect": "+3 additional Expedition slots",
+    "description": "+3 additional Expedition slots",
+    "costs": 40500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 3,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Expedition Slots",
+    "ref": "fd7d35e73d0e09e83e30812b738ef966ea9ef790",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/ce43c48b7ef200236ce251a8c89f9214262deebe.png",
+    "large_image": "/cdn/img/item-images/1ba0e8436af518f0014af352af7d20c8d174fb53.png",
+    "effect": "+3 additional Expedition slots",
+    "description": "+3 additional Expedition slots",
+    "costs": 143437,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 3,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Expedition Slots",
+    "ref": "540410439514ac09363c5c47cf47117a8b8ae79a",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/db28835101052547db777287667853d0a465b207.png",
+    "large_image": "/cdn/img/item-images/aede22854d3e8e46cb93dad726ad2b7edf9d235f.png",
+    "effect": "+3 additional Expedition slots",
+    "description": "+3 additional Expedition slots",
+    "costs": 378000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 3,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Fleet Slots",
+    "ref": "0684c6a5a42acbb3cd134913d421fc28dae6b90d",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/0eb11ec1e956a5991eb4eba2bcdf3f4062362df2.png",
+    "large_image": "/cdn/img/item-images/446d0d01503f8b845c3d3330c4dab673166570e1.png",
+    "effect": "+2 additional Fleet slots",
+    "description": "+2 additional Fleet slots",
+    "costs": 4500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 2,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Fleet Slots",
+    "ref": "94a28491b6fd85003f1cb151e88dde106f1d7596",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/bec85c7b4868bdd5d634d50de17d8c17d56d40b5.png",
+    "large_image": "/cdn/img/item-images/8ab6d921069f01d8cb843f4bc37f51e5cf0c4318.png",
+    "effect": "+2 additional Fleet slots",
+    "description": "+2 additional Fleet slots",
+    "costs": 15937,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 2,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Fleet Slots",
+    "ref": "bb47add58876240199a18ddacc2db07789be1934",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/6e6c6061005786c1c2ccc16bf72488127adddda8.png",
+    "large_image": "/cdn/img/item-images/a61bbfc57d4b70abff2365005bbcaf918796d784.png",
+    "effect": "+2 additional Fleet slots",
+    "description": "+2 additional Fleet slots",
+    "costs": 42000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 2,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Fleet Slots",
+    "ref": "f8fd610825fb4a442e27e4e9add74f050e040e27",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/3e502c0a1f0462bd7e9589294934029f7f0af099.png",
+    "large_image": "/cdn/img/item-images/d38f4e83f906ad747ec2601da836c0b11703e3b3.png",
+    "effect": "+4 additional Fleet slots",
+    "description": "+4 additional Fleet slots",
+    "costs": 9000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 4,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Fleet Slots",
+    "ref": "c4e598a85805a7eb3ca70f9265cbd366fc4d2b0e",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/bd55a2e08d6cc320646bbaf420d05cdf243db312.png",
+    "large_image": "/cdn/img/item-images/8a133b938e57285a3de891dd4b82b594d4e808a3.png",
+    "effect": "+4 additional Fleet slots",
+    "description": "+4 additional Fleet slots",
+    "costs": 31875,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 4,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Silver Fleet Slots",
+    "ref": "a693c5ce3f5676efaaf0781d94234bea4f599d2e",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/48e9a782b39199d3bb9f614ebd5d4a3804656079.png",
+    "large_image": "/cdn/img/item-images/f7fc4e566869a8661ac5ef4a75ef9bd5fa5024e1.png",
+    "effect": "+4 additional Fleet slots",
+    "description": "+4 additional Fleet slots",
+    "costs": 84000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 4,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Fleet Slots",
+    "ref": "5a8000c372cd079292a92d35d4ddba3c0f348d3b",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/94619b2c741bdc50c440147eefffd79ac5089b0e.png",
+    "large_image": "/cdn/img/item-images/4db5665750dfb83bb958280ffd500c7105574068.png",
+    "effect": "+6 additional Fleet slots",
+    "description": "+6 additional Fleet slots",
+    "costs": 13500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 6,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Fleet Slots",
+    "ref": "1808bf7639b81ac3ac87bcb7eb3bbba0a1874d0a",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/b11fd1374eb6ceac0a9c7788bb3d3d03afb35a12.png",
+    "large_image": "/cdn/img/item-images/2fa215f7fe22370b9fd83796dc6baa17aed3f75a.png",
+    "effect": "+6 additional Fleet slots",
+    "description": "+6 additional Fleet slots",
+    "costs": 47812,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 6,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Gold Fleet Slots",
+    "ref": "1f7024c4f6493f0c589e1b00c76e6ced258c00e5",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/9e654ae49607c0ddcc87633bf7372b976fd7e183.png",
+    "large_image": "/cdn/img/item-images/fa17391a273844ee8e71d4625ce7381b458cf1ad.png",
+    "effect": "+6 additional Fleet slots",
+    "description": "+6 additional Fleet slots",
+    "costs": 126000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "fleet_slots",
+        "value": 6,
+        "unit": "amount"
+      }
+    ]
+  },
+  {
+    "name": "Researchers (Alliance)",
+    "ref": "1aa36213cb676fd5baad5edc2bee4fbe117a778b",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/0fad76886bc161e860f8ffb04a1838ba21e377e6.png",
+    "large_image": "/cdn/img/item-images/55f7003a5cf07e52b38f11b81129ac5042dff4da.png",
+    "effect": "+10% speed to expedition destination<br />+5% larger planets on colonisation<br />Access to system phalanx: for 40,000 deuterium this can be used to scan fleet movements in whole systems, as long as these are within range.",
+    "description": "+10% speed to expedition destination<br />+5% larger planets on colonisation<br />Access to system phalanx: for 40,000 deuterium this can be used to scan fleet movements in whole systems, as long as these are within range.",
+    "costs": 500000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Traders (Alliance)",
+    "ref": "6c9fe5e35bdad0d4e3382eb6a5aeac6bc8263752",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/b52a99657970f97a8881f2493be63e3a58c8d49f.png",
+    "large_image": "/cdn/img/item-images/5df93e894bb92e987219fc9d669c9a276ceb5499.png",
+    "effect": "+10% speed for transporters<br />+5% production on resources and energy<br />+10% storage capacity on moons and planets",
+    "description": "+10% speed for transporters<br />+5% production on resources and energy<br />+10% storage capacity on moons and planets",
+    "costs": 500000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Warriors (Alliance)",
+    "ref": "9b48e257cbef6c5df0f03a47cead7f9abda3d437",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/a2d0a5aa06f932c7ecbd76906d44d4b46e338600.png",
+    "large_image": "/cdn/img/item-images/48ca2adbb95b37db83777b659cfc4042c179fece.png",
+    "effect": "+10% speed for ships flying between alliance members<br />+1 combat research levels<br />+1 espionage research levels<br />Access to espionage system: sends the selected number of espionage probes out to scan a whole system. You can set the type of celestial body to research, the time since the last espionage attack or desired player activity.",
+    "description": "+10% speed for ships flying between alliance members<br />+1 combat research levels<br />+1 espionage research levels<br />Access to espionage system: sends the selected number of espionage probes out to scan a whole system. You can set the type of celestial body to research, the time since the last espionage attack or desired player activity.",
+    "costs": 500000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Laser Cat",
+    "ref": "dc34fa00ba914ffab0031ac3f165e26f553d7809",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/e16df8340368cd8e8a8cc53ef5896cad3f4ca0af.png",
+    "large_image": "/cdn/img/item-images/e16df8340368cd8e8a8cc53ef5896cad3f4ca0af.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Little Alien",
+    "ref": "1c497ef926d674f2df9d96cfc58fe12f97cf4025",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/a060dc46b634a7d8c8469aed6ade12be409c7c23.png",
+    "large_image": "/cdn/img/item-images/a060dc46b634a7d8c8469aed6ade12be409c7c23.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Augmented",
+    "ref": "fd3b0789b5dca99e9d5b251f8bae0760ce52dea6",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/72bfdf4bd380226d53d346188bad3da4f0d059fc.png",
+    "large_image": "/cdn/img/item-images/72bfdf4bd380226d53d346188bad3da4f0d059fc.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Weightless",
+    "ref": "003db2a3d693c2d889864b76ad122b274bfd641b",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/b3ef6a99a90e36ebf3737444943af4d01ba137bf.png",
+    "large_image": "/cdn/img/item-images/b3ef6a99a90e36ebf3737444943af4d01ba137bf.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Ice Cold",
+    "ref": "8d514b69eb04a57495bab0c8f4b80f58294a7b17",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/7911a26d4450a5e10b7b1d3023388e9a9bc7cbb4.png",
+    "large_image": "/cdn/img/item-images/7911a26d4450a5e10b7b1d3023388e9a9bc7cbb4.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Cyberspace",
+    "ref": "83c4e79697a264462e3ca2e8567307e7f1d7954b",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/fc63fc3eba6ba634fad4eee02d9a9aae8400a422.png",
+    "large_image": "/cdn/img/item-images/fc63fc3eba6ba634fad4eee02d9a9aae8400a422.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Retro Kitties",
+    "ref": "2d7de180f3f3d191982294d2f8c1cd7507e90cb4",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/972d3e319bba56dc11b9e559e5cd0b7182f40cb6.png",
+    "large_image": "/cdn/img/item-images/972d3e319bba56dc11b9e559e5cd0b7182f40cb6.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Warbringer",
+    "ref": "c54d5a8f36f20373c5bb633a109241290b2e2a7a",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/a8de193695e537fdaf2c66b1f106d803035bc13f.png",
+    "large_image": "/cdn/img/item-images/a8de193695e537fdaf2c66b1f106d803035bc13f.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Commander Kitty",
+    "ref": "99f53568108115acac2d7f7425ee2ad76a6206b8",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/b6208351313f0d2b4b488a28b880d8f3e0ffb7d3.png",
+    "large_image": "/cdn/img/item-images/b6208351313f0d2b4b488a28b880d8f3e0ffb7d3.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Fate",
+    "ref": "c70f11e9543100622e3ef3bdcd57099a63f148bf",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/b4e5c8660f345d9ed1ecc1e21de8f0e0834f62bb.png",
+    "large_image": "/cdn/img/item-images/b4e5c8660f345d9ed1ecc1e21de8f0e0834f62bb.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 25000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Avatar: Burning Rage",
+    "ref": "ac5bd99552a23733f7b0decac45094d5bfbfedac",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/5bac563aab9f16b942b6692dd594117f2b9234d4.png",
+    "large_image": "/cdn/img/item-images/5bac563aab9f16b942b6692dd594117f2b9234d4.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 50000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Expedition Computer Bronze",
+    "ref": "221f38f81c21e36e67cd8ebbcc7562ef78da7a06",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/55d80c289d47a8d395dc0580aa47bb235d9846e4.png",
+    "large_image": "/cdn/img/item-images/55d80c289d47a8d395dc0580aa47bb235d9846e4.png",
+    "effect": "Increased chance of better expedition results",
+    "description": "Increased chance of better expedition results",
+    "costs": 250000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": []
+  },
+  {
+    "name": "Expedition Resource Booster (10%) Bronze",
+    "ref": "3fe4fb984a1b2bd29e8c14f9f25bea2389727b5e",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/b43ab2c66d274865dc17c1be973864c592f1a17a.png",
+    "large_image": "/cdn/img/item-images/b43ab2c66d274865dc17c1be973864c592f1a17a.png",
+    "effect": "+10% expedition resources",
+    "description": "+10% expedition resources",
+    "costs": 67500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 10,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (15%) Bronze",
+    "ref": "6c482898a61fa9ad20e9ce330975f07aa1f76520",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/bc5b6df98cc9da6f6bb81fb9f6c785615f1f3860.png",
+    "large_image": "/cdn/img/item-images/bc5b6df98cc9da6f6bb81fb9f6c785615f1f3860.png",
+    "effect": "+15% expedition resources",
+    "description": "+15% expedition resources",
+    "costs": 101250,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 15,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (20%) Bronze",
+    "ref": "335efdb763687e956dfe6a330ceddd32f174d753",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/8b8a96b4b001fbbf2d59127238571883902b356c.png",
+    "large_image": "/cdn/img/item-images/8b8a96b4b001fbbf2d59127238571883902b356c.png",
+    "effect": "+20% expedition resources",
+    "description": "+20% expedition resources",
+    "costs": 130500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (25%) Bronze",
+    "ref": "75154767d49fc6867c9d7465a095371993377c88",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/a172cec8959dae5173aa8011a6d1ba5687898379.png",
+    "large_image": "/cdn/img/item-images/a172cec8959dae5173aa8011a6d1ba5687898379.png",
+    "effect": "+25% expedition resources",
+    "description": "+25% expedition resources",
+    "costs": 162000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 25,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (30%) Bronze",
+    "ref": "b9d9a0d57544363a4ac5531fa01f4b0b17256e24",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/c37555bb5e612c25dd1d2aabf67d923ce6225c4c.png",
+    "large_image": "/cdn/img/item-images/c37555bb5e612c25dd1d2aabf67d923ce6225c4c.png",
+    "effect": "+30% expedition resources",
+    "description": "+30% expedition resources",
+    "costs": 180000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (35%) Bronze",
+    "ref": "edd5cb7bfed46a64d4351fa6f4ef2076dc305e10",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/889e0b529217ab9e607d7003977c162bfd8230be.png",
+    "large_image": "/cdn/img/item-images/889e0b529217ab9e607d7003977c162bfd8230be.png",
+    "effect": "+35% expedition resources",
+    "description": "+35% expedition resources",
+    "costs": 207000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 35,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (40%) Bronze",
+    "ref": "505fa6275e34b816d5059e26632dcaa8c18bde9a",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/133642df6c06fbdceed0ab1d7194fa9f114a5f6c.png",
+    "large_image": "/cdn/img/item-images/133642df6c06fbdceed0ab1d7194fa9f114a5f6c.png",
+    "effect": "+40% expedition resources",
+    "description": "+40% expedition resources",
+    "costs": 229500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Scrap Merchant Offer: 77%",
+    "ref": "3c3a8157d09e45bcb5c335ffe6630bb3ffd44aec",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/4a4ed52a4fef3180644f19cf2ced975c9d199fe5.png",
+    "large_image": "/cdn/img/item-images/7452343de863da1c26031edad418b8a04d703dd2.png",
+    "effect": "77% offer at the Scrap Merchant",
+    "description": "77% offer at the Scrap Merchant",
+    "costs": 150000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Scrap Merchant Offer: 79%",
+    "ref": "82b07917f4364fd9c10ec984cd1e08794d420731",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/38eafdd02dd2ecd1aed259ffb9f2194da1c970f0.png",
+    "large_image": "/cdn/img/item-images/f9187df013eea065aa33e17ae3a02c97ed53ad36.png",
+    "effect": "79% offer at the Scrap Merchant",
+    "description": "79% offer at the Scrap Merchant",
+    "costs": 300000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Scrap Merchant Offer: 81%",
+    "ref": "c33a18b50a1e80049a42569ffcfffe86e99b2c64",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/1b3c50e5e9660545ac91d94a5fd929544685ba78.png",
+    "large_image": "/cdn/img/item-images/5f18dd3aa5cffe0c2c75a0822021a1d8e78aa122.png",
+    "effect": "81% offer at the Scrap Merchant",
+    "description": "81% offer at the Scrap Merchant",
+    "costs": 450000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Scrap Merchant Offer: 83%",
+    "ref": "eeac889694efc5e4502a2a003402d34159981799",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/2fd71daec5ed31f677bb7cb6dc86df2b6580fc60.png",
+    "large_image": "/cdn/img/item-images/d908794451f47890e02afeac59a1b378ce6187b0.png",
+    "effect": "83% offer at the Scrap Merchant",
+    "description": "83% offer at the Scrap Merchant",
+    "costs": 600000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Scrap Merchant Offer: 85%",
+    "ref": "4586d8b85a73a5897fdb5545a78cb668eadabc06",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/4f59162141bcdb281231029479efa77b288c035a.png",
+    "large_image": "/cdn/img/item-images/8fc2e06e29f671ca365d70e99a2856d88322d153.png",
+    "effect": "85% offer at the Scrap Merchant",
+    "description": "85% offer at the Scrap Merchant",
+    "costs": 750000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Limited Avatar: Clash of the Titans",
+    "ref": "36850e5de29df3554193d67442ab28a72bd2b7af",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/87921c27609b8230f6fc26d37833cda8f29d647d.png",
+    "large_image": "/cdn/img/item-images/87921c27609b8230f6fc26d37833cda8f29d647d.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 65000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Limited Avatar: World in Flames",
+    "ref": "441c9bbbdc79efa3c9eee3d6439878e588fb6e7a",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/453363b28814bae1fdcdf1070942e19cef39c869.png",
+    "large_image": "/cdn/img/item-images/453363b28814bae1fdcdf1070942e19cef39c869.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 65000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Limited Avatar: Red Giant",
+    "ref": "930666b77481fe8ec62142f4109aec2f65e4c62b",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/8ff761b2fc29dcca6863b7842ffdbf13a1fa2ce8.png",
+    "large_image": "/cdn/img/item-images/8ff761b2fc29dcca6863b7842ffdbf13a1fa2ce8.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 65000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Limited Avatar: Starfighter",
+    "ref": "4009d2531be81ad5c4f7229bcf7500de1f200c18",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/6c30057be0e71ab7e8c0a3a6b8e3391263e25172.png",
+    "large_image": "/cdn/img/item-images/6c30057be0e71ab7e8c0a3a6b8e3391263e25172.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 65000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Limited Avatar: Eye of the Storm",
+    "ref": "0495bc197559ff95c45ce00f418e61061e08b335",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/ae50678791d36412694079b4473d95836f038ca8.png",
+    "large_image": "/cdn/img/item-images/ae50678791d36412694079b4473d95836f038ca8.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 65000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Limited Avatar: Flaming Colossus",
+    "ref": "3d0b4b64c05a0f99b591df1db59e22da7834488b",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/0e5fb52d350c7c5fea020cc804a06dd92de541cc.png",
+    "large_image": "/cdn/img/item-images/0e5fb52d350c7c5fea020cc804a06dd92de541cc.png",
+    "effect": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "description": "Select this avatar in your player profile to apply it and give your profile a personal touch. This item will be unlocked for all universes on your account. Please note that the synchronisation between universes may take some time.",
+    "costs": 65000,
+    "currency": "dm",
+    "duration": null,
+    "effects": []
+  },
+  {
+    "name": "Expedition Computer Bronze",
+    "ref": "39bc9d493f9742a31c60ead18f57db9b81717845",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/7c1e9207e0ad25741744ded87e14ff8821d9a613.png",
+    "large_image": "/cdn/img/item-images/b9430dca3aa2c0b374f1c26d31e3a729edd9fffb.png",
+    "effect": "Increased chance of better expedition results",
+    "description": "Increased chance of better expedition results",
+    "costs": 1000000,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Expedition Computer Bronze",
+    "ref": "28f9c6a547de94fcd2bb3fe82bd7bfd93ef88317",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/373ef95f2e5c9e944dcf041c075c95f161abf7a0.png",
+    "large_image": "/cdn/img/item-images/81758204ae854436d81c68cab1acfaacf4de74fa.png",
+    "effect": "Increased chance of better expedition results",
+    "description": "Increased chance of better expedition results",
+    "costs": 2500000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Expedition Resource Booster (10%) Bronze",
+    "ref": "586b20cfd60ef85c6670b62435ca2f44f1071bd8",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/ba4b9d7f3ab68863f09aea6a181119c51e2c5385.png",
+    "large_image": "/cdn/img/item-images/ba4b9d7f3ab68863f09aea6a181119c51e2c5385.png",
+    "effect": "+10% expedition resources",
+    "description": "+10% expedition resources",
+    "costs": 246500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 10,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (10%) Bronze",
+    "ref": "be998009fff22d7eea987cf974a25cacc06d330c",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/6f72d2dcb23508c560f0fa35ec440b3d1b90448a.png",
+    "large_image": "/cdn/img/item-images/6f72d2dcb23508c560f0fa35ec440b3d1b90448a.png",
+    "effect": "+10% expedition resources",
+    "description": "+10% expedition resources",
+    "costs": 560000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 10,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (15%) Bronze",
+    "ref": "e4b33192361f45f4c61691844d0e8ec95fa5a231",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/830dcc46684445ba94cc22f8d2733d497d4710a7.png",
+    "large_image": "/cdn/img/item-images/830dcc46684445ba94cc22f8d2733d497d4710a7.png",
+    "effect": "+15% expedition resources",
+    "description": "+15% expedition resources",
+    "costs": 340000,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 15,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (15%) Bronze",
+    "ref": "93eab867affae30157fc660899d9eac7d3b4f971",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/3bb48a097ac3de286416302f3cf899a21652f568.png",
+    "large_image": "/cdn/img/item-images/3bb48a097ac3de286416302f3cf899a21652f568.png",
+    "effect": "+15% expedition resources",
+    "description": "+15% expedition resources",
+    "costs": 800000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 15,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (20%) Bronze",
+    "ref": "03ece11ef535f5ef49b203ff50a0466fda5a76e2",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/04afd0281a5cf55e630a0dfa0b728676adf86a6a.png",
+    "large_image": "/cdn/img/item-images/04afd0281a5cf55e630a0dfa0b728676adf86a6a.png",
+    "effect": "+20% expedition resources",
+    "description": "+20% expedition resources",
+    "costs": 446250,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (20%) Bronze",
+    "ref": "01c49a959ed989bd1b86abf0526f91ac0b716bfe",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/cc88dd761ad05465b36969cacf352a8fa801ec52.png",
+    "large_image": "/cdn/img/item-images/cc88dd761ad05465b36969cacf352a8fa801ec52.png",
+    "effect": "+20% expedition resources",
+    "description": "+20% expedition resources",
+    "costs": 1008000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 20,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (25%) Bronze",
+    "ref": "0049d2538081bea1dc5264a2899a194fe79107f1",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/af805cbd0d3bd12afb18c90ca769a32a66871e54.png",
+    "large_image": "/cdn/img/item-images/af805cbd0d3bd12afb18c90ca769a32a66871e54.png",
+    "effect": "+25% expedition resources",
+    "description": "+25% expedition resources",
+    "costs": 552500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 25,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (25%) Bronze",
+    "ref": "4cfd5bef27f891a1608b0d1e595cf8bf8cb144c0",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/70e6803a60486fd49d60679a58a97b0089797474.png",
+    "large_image": "/cdn/img/item-images/70e6803a60486fd49d60679a58a97b0089797474.png",
+    "effect": "+25% expedition resources",
+    "description": "+25% expedition resources",
+    "costs": 1200000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 25,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (30%) Bronze",
+    "ref": "5e42748915b5cab0ca7fd8e58e842ae9abb12745",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/2dcd0ed54997dda504724b2267fc0a7397297088.png",
+    "large_image": "/cdn/img/item-images/2dcd0ed54997dda504724b2267fc0a7397297088.png",
+    "effect": "+30% expedition resources",
+    "description": "+30% expedition resources",
+    "costs": 595000,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (30%) Bronze",
+    "ref": "9c069cb845b9225f9bb191f15d4f6abb0e7e144e",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/e3e80c8c522e5066c8a12aeebb7e2c8b524ece11.png",
+    "large_image": "/cdn/img/item-images/e3e80c8c522e5066c8a12aeebb7e2c8b524ece11.png",
+    "effect": "+30% expedition resources",
+    "description": "+30% expedition resources",
+    "costs": 1360000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 30,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (35%) Bronze",
+    "ref": "2466f93d624ef96ffcc9e36f8c953699f525a5eb",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/03e6aa411be58b309eeac5db82623c990001f24d.png",
+    "large_image": "/cdn/img/item-images/03e6aa411be58b309eeac5db82623c990001f24d.png",
+    "effect": "+35% expedition resources",
+    "description": "+35% expedition resources",
+    "costs": 680000,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 35,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (35%) Bronze",
+    "ref": "1b709fc34003e171528ec345430cbb2e3aa090e5",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/66cdcb6c022a979633fcead6802fcadae243f76a.png",
+    "large_image": "/cdn/img/item-images/66cdcb6c022a979633fcead6802fcadae243f76a.png",
+    "effect": "+35% expedition resources",
+    "description": "+35% expedition resources",
+    "costs": 1520000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 35,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (40%) Bronze",
+    "ref": "3876b353a7f99b28520a82df01cd86c31b4cbfe0",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/c9047df6407fce9583ccc8e1a5547f630fa968df.png",
+    "large_image": "/cdn/img/item-images/c9047df6407fce9583ccc8e1a5547f630fa968df.png",
+    "effect": "+40% expedition resources",
+    "description": "+40% expedition resources",
+    "costs": 765000,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Resource Booster (40%) Bronze",
+    "ref": "b0f6477d68c9683170cb8d32be2df1177669c5a0",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/a0ec3a3d6cc4993e9cce8ea517d971a11e797aaf.png",
+    "large_image": "/cdn/img/item-images/a0ec3a3d6cc4993e9cce8ea517d971a11e797aaf.png",
+    "effect": "+40% expedition resources",
+    "description": "+40% expedition resources",
+    "costs": 1600000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": [
+      {
+        "type": "expedition_res",
+        "resource": "expedition",
+        "value": 40,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Resource Booster (15%) Bronze",
+    "ref": "302b246f44585109ca5b3ed94178707d7d4c32c0",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/a742456736e9246fbd4e8519b12476cf8b29913c.png",
+    "large_image": "/cdn/img/item-images/b85bd7435225f3ae9e0b10c8333cdbc57727f900.png",
+    "effect": "+15% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+15% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 93500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (15%) Bronze",
+    "ref": "828c11637d6177cf7369dddeffa63521d9f05c8c",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/2258aecdf4cbf77d2b668fbe7d1e46e83462be51.png",
+    "large_image": "/cdn/img/item-images/35378779d9a6bf1e4e90a133af76e6d10fe608f5.png",
+    "effect": "+15% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+15% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 200000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (20%) Bronze",
+    "ref": "bfc5896632e0d809947dac4d8ced39ad7974f686",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/79e4e2a9669662751164a75c7dceaf0ce2bbd4fa.png",
+    "large_image": "/cdn/img/item-images/79e4e2a9669662751164a75c7dceaf0ce2bbd4fa.png",
+    "effect": "+20% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+20% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 110500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (20%) Bronze",
+    "ref": "beff9da8ce9ed2a03f73fb412347ef02adf4e9f4",
+    "rarity": "uncommon",
+    "small_image": "/cdn/img/item-images/fb23cc9ddccda9a22ef411b7e24b23e228fa5fc8.png",
+    "large_image": "/cdn/img/item-images/fb23cc9ddccda9a22ef411b7e24b23e228fa5fc8.png",
+    "effect": "+20% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+20% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 240000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (25%) Bronze",
+    "ref": "f76a859138dab12d181590ff46bb11d0be5b79bd",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/dbd066e28c71e9c97365e8b29b60ba02e88e442c.png",
+    "large_image": "/cdn/img/item-images/dbd066e28c71e9c97365e8b29b60ba02e88e442c.png",
+    "effect": "+25% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+25% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 144500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (25%) Bronze",
+    "ref": "4fa71c28e076fd5a5f1fdba2d83b9537e7557295",
+    "rarity": "rare",
+    "small_image": "/cdn/img/item-images/ec039cbe52a12ed43ed8822b6d360fba1ede5f27.png",
+    "large_image": "/cdn/img/item-images/ec039cbe52a12ed43ed8822b6d360fba1ede5f27.png",
+    "effect": "+25% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+25% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 304000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (30%) Bronze",
+    "ref": "be06b5c24ec29aadfe9e348ec022e698a5367dd0",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/169057973ab2620bc30050249a835748db5c7a0b.png",
+    "large_image": "/cdn/img/item-images/169057973ab2620bc30050249a835748db5c7a0b.png",
+    "effect": "+30% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+30% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 178500,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (30%) Bronze",
+    "ref": "98fb2c053a8bd8608e9a307fe6f94e9b87754504",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/5450b8ae1561339826ef02efd60bb37488d12d58.png",
+    "large_image": "/cdn/img/item-images/5450b8ae1561339826ef02efd60bb37488d12d58.png",
+    "effect": "+30% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+30% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 384000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (40%) Bronze",
+    "ref": "370a7d4f976480fa054ef23068c442fc6e476301",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/d430856a13181a44190b10b7f7da21056d6c4550.png",
+    "large_image": "/cdn/img/item-images/d430856a13181a44190b10b7f7da21056d6c4550.png",
+    "effect": "+40% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+40% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 221000,
+    "currency": "dm",
+    "duration": 2592000,
+    "effects": []
+  },
+  {
+    "name": "Resource Booster (40%) Bronze",
+    "ref": "8cc0f382c3e6bb0751b42b8e9b9a0d3648313f25",
+    "rarity": "epic",
+    "small_image": "/cdn/img/item-images/19aa1099a6215804abef197ab894996d70cabbca.png",
+    "large_image": "/cdn/img/item-images/19aa1099a6215804abef197ab894996d70cabbca.png",
+    "effect": "+40% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "description": "+40% more resource production (Metal/Crystal/Deuterium) on a planet",
+    "costs": 480000,
+    "currency": "dm",
+    "duration": 7776000,
+    "effects": []
+  },
+  {
+    "name": "Bronze Metal Booster",
+    "ref": "bronze_metal_booster",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/7f833a0709db862070ca9cdca8e91c28e52432af.png",
+    "large_image": "/cdn/img/item-images/7f833a0709db862070ca9cdca8e91c28e52432af.png",
+    "effect": "+10% more Metal Mine extraction on one planet",
+    "description": "+10% more Metal Mine extraction on one planet",
+    "costs": 2500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "metal",
+        "value": 10,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Crystal Booster",
+    "ref": "bronze_crystal_booster",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/ddedd2f4128678c7c857af7e5550e397f50f38c2.png",
+    "large_image": "/cdn/img/item-images/ddedd2f4128678c7c857af7e5550e397f50f38c2.png",
+    "effect": "+10% more Crystal Mine production on one planet",
+    "description": "+10% more Crystal Mine production on one planet",
+    "costs": 2500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "crystal",
+        "value": 10,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Bronze Deuterium Booster",
+    "ref": "d9fa5f359e80ff4f4c97545d07c66dbadab1d1be",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/c7c2837a0b341d37383d6a9d8f8986f500db7bf9.png",
+    "large_image": "/cdn/img/item-images/c7c2837a0b341d37383d6a9d8f8986f500db7bf9.png",
+    "effect": "+10% more Deuterium Synthesizer harvest on one planet",
+    "description": "+10% more Deuterium Synthesizer harvest on one planet",
+    "costs": 2500,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "production",
+        "resource": "deuterium",
+        "value": 10,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "name": "Expedition Computer Bronze",
+    "ref": "615beac7f493e7724db5f6ef4f182e3be8d9545c",
+    "rarity": "common",
+    "small_image": "/cdn/img/item-images/19be23cc8eaca836f3e14b55d945017d8dfc3f8d.png",
+    "large_image": "/cdn/img/item-images/19be23cc8eaca836f3e14b55d945017d8dfc3f8d.png",
+    "effect": "+1 Expedition Slot",
+    "description": "+1 Expedition Slot",
+    "costs": 5000,
+    "currency": "dm",
+    "duration": 604800,
+    "effects": [
+      {
+        "type": "expedition_slots",
+        "value": 1,
+        "unit": "amount"
+      }
+    ]
+  }
 ]

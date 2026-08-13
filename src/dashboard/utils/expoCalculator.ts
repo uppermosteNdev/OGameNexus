@@ -34,7 +34,7 @@ export const SHIP_CARGO_VALUES: Record<number, number> = {
     219: 10000
 };
 
-export const FINDABLE_SHIPS = [202, 203, 204, 205, 206, 207, 210, 211, 215, 219];
+export const FINDABLE_SHIPS = [202, 203, 204, 205, 206, 207, 210, 211, 213, 215, 218, 219];
 
 export interface ShipEntry {
     id: number;

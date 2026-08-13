@@ -1,6 +1,22 @@
 
 const DEBUG_AMORTIZATION = false;
 import { getProductionBoosters } from './items';
+import { LIFEFORM_TECH_DATA, getLfTech } from '../db/lifeformTechData';
+
+export function getAmortizationEntry(t: any) {
+    if (!t) return null;
+    let rawId = typeof t === 'object' ? (t.selectedTechId || t.techId || t.id) : t;
+    if (!rawId) return null;
+
+    const techObj = getLfTech(rawId);
+    const internalId = techObj ? techObj.id : (rawId > 10000 ? ((rawId % 100 - 1) * 4 + Math.floor(rawId / 1000) % 10) : rawId);
+
+    // 1. Direct match by internalId or rawId in AMORTIZATION_TABLE
+    let entry = AMORTIZATION_TABLE.find(e => e.id === internalId || e.id === rawId);
+    if (entry) return entry;
+
+    return null;
+}
 
 export interface Cost {
     metal: number;
@@ -87,6 +103,7 @@ export const AMORTIZATION_TABLE = [
     { name: "Magma Forge", id: 12106, type: AmortizationType.LifeformProductionBuildings, baseCost: { metal: 10000, crystal: 8000, deuterium: 1000 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "metal", value: 0.02, target: "mine" } },
     { name: "Crystal Refinery", id: 12109, type: AmortizationType.LifeformProductionBuildings, baseCost: { metal: 85000, crystal: 44000, deuterium: 25000 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "crystal", value: 0.02, target: "mine" } },
     { name: "Deuterium Synthesiser", id: 12110, type: AmortizationType.LifeformProductionBuildings, baseCost: { metal: 120000, crystal: 50000, deuterium: 20000 }, multiplier: 1.4, lifeformId: 2, reduction: "megalith", effect: { type: "deuterium", value: 0.02, target: "mine" } },
+    { name: "Mineral Research Centre", id: 12111, type: AmortizationType.LifeformResearchBuildings, baseCost: { metal: 250000, crystal: 150000, deuterium: 100000 }, multiplier: 1.8, lifeformId: 2, reduction: "megalith", effect: { type: "mine_cost_reduction", value: 0.005 } },
 
     // LF Techs
     { name: "Catalyser Technology", id: 3, type: AmortizationType.LifeformProductionResearches, baseCost: { metal: 10000, crystal: 6000, deuterium: 1000 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "deuterium", value: 0.0008, target: "global" } },
@@ -156,16 +173,88 @@ export function formatROI(hours: number): string {
     return parts.join(' ');
 }
 
+export function safeArray<T = any>(val: any): T[] {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'object') {
+        return Object.entries(val).map(([k, v]: [string, any]) => {
+            if (typeof v === 'object' && v !== null) {
+                return { id: isNaN(Number(k)) ? k : Number(k), ...v };
+            }
+            return { id: Number(k), level: Number(v) };
+        }) as T[];
+    }
+    return [];
+}
+
+export function getResearchLevel(account: any, techId: number): number {
+    if (!account || !account.researches) return 0;
+    if (Array.isArray(account.researches)) {
+        const found = account.researches.find((r: any) => r && r.id === techId);
+        return found ? Number(found.level || 0) : 0;
+    }
+    if (typeof account.researches === 'object') {
+        const val = account.researches[techId] ?? account.researches[String(techId)];
+        if (val !== undefined) return Number(val);
+    }
+    return 0;
+}
+
+export function getLifeformExpLevel(account: any, speciesId?: number): number {
+    if (!account || !account.lifeformExperience) return 0;
+    if (Array.isArray(account.lifeformExperience)) {
+        const found = account.lifeformExperience.find((e: any) => e && (speciesId ? (e.id === speciesId || e.lifeformId === speciesId) : true));
+        return found ? Number(found.level || 0) : 0;
+    }
+    if (typeof account.lifeformExperience === 'object') {
+        if (!speciesId) {
+            const first = Object.values(account.lifeformExperience)[0] as any;
+            return first ? Number(first.level || first.xp || first || 0) : 0;
+        }
+        const key = speciesId > 700 ? speciesId : 700 + speciesId;
+        const val = account.lifeformExperience[key] || account.lifeformExperience[speciesId];
+        if (val !== undefined) return typeof val === 'object' ? Number(val.level || 0) : Number(val);
+    }
+    return 0;
+}
+
+export function getLifeformBuildingLevel(planet: any, buildingId: number): number {
+    if (!planet || !planet.lifeformBuildings) return 0;
+    if (Array.isArray(planet.lifeformBuildings)) {
+        const found = planet.lifeformBuildings.find((b: any) => b && (b.id === buildingId || (b as any).buildingId === buildingId));
+        return found ? Number(found.level || 0) : 0;
+    }
+    if (typeof planet.lifeformBuildings === 'object') {
+        const val = planet.lifeformBuildings[buildingId] ?? planet.lifeformBuildings[String(buildingId)];
+        if (val !== undefined) return Number(val);
+    }
+    return 0;
+}
+
+export function getLifeformTechLevel(planet: any, techId: number): number {
+    if (!planet || !planet.lifeformSetup) return 0;
+    if (Array.isArray(planet.lifeformSetup)) {
+        const found = planet.lifeformSetup.find((t: any) => t && (t.selectedTechId === techId || (t as any).techId === techId));
+        return found ? Number(found.level || 0) : 0;
+    }
+    if (typeof planet.lifeformSetup === 'object') {
+        const val = planet.lifeformSetup[techId] ?? planet.lifeformSetup[String(techId)];
+        if (val !== undefined) return Number(val);
+    }
+    return 0;
+}
+
 export function getPlanetTechMultiplier(planet: any, account: any): number {
-    const lfLevel = account?.lifeformExperience?.find((e: any) => e.id === planet.lifeformId || e.lifeformId === planet.lifeformId)?.level || 0;
+    const lfLevel = getLifeformExpLevel(account, planet?.lifeformId);
     const lfLevelBonus = lfLevel * 0.001; // 0.1% per level
 
     let buildingBonus = 0;
-    planet.lifeformBuildings?.forEach((b: any) => {
+    const safeBuildings = safeArray(planet?.lifeformBuildings);
+    safeBuildings.forEach((b: any) => {
         const entry = AMORTIZATION_TABLE.find(e => e.id === b.id);
         if (entry && entry.effect && (entry.effect as any).type === 'tech_bonus') {
             if (!planet.lifeformId || entry.lifeformId === planet.lifeformId) {
-                buildingBonus += b.level * (entry.effect as any).value;
+                buildingBonus += (b.level || 0) * (entry.effect as any).value;
             }
         }
     });
@@ -175,12 +264,13 @@ export function getPlanetTechMultiplier(planet: any, account: any): number {
 
 function calculateTotalExpeditionBonus(state: EmpireState, type: 'expo_res' | 'expo_si'): number {
     let totalBonus = 0;
-    const planets = state?.planets || [];
-    planets.forEach(p => {
+    const planets = safeArray(state?.planets);
+    planets.forEach((p: any) => {
         const techMult = getPlanetTechMultiplier(p, state?.account);
-        p.lifeformSetup?.forEach((t: any) => {
+        const safeSetup = safeArray(p.lifeformSetup);
+        safeSetup.forEach((t: any) => {
             const level = t.level || 0;
-            const entry = AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId);
+            const entry = getAmortizationEntry(t);
             if (entry && entry.effect && level > 0) {
                 const effect = entry.effect as any;
                 if (effect.type === type || effect.type === 'kaelesh_discovery_adv') {
@@ -211,7 +301,8 @@ export interface ProductionResults {
 }
 
 export function calculateEmpireProduction(state: EmpireState): ProductionResults {
-    const { account, planets } = state || {};
+    const { account } = state || {};
+    const planets = safeArray(state?.planets);
     const universeSpeed = account?.universeSpeed || 1;
     const playerClass = account?.playerClass || 0;
 
@@ -221,9 +312,10 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
 
     planets.forEach((p: any) => {
         const techMult = getPlanetTechMultiplier(p, account);
-        p.lifeformSetup?.forEach((t: any) => {
+        const safeSetup = safeArray(p.lifeformSetup);
+        safeSetup.forEach((t: any) => {
             const level = t.level || 0;
-            const entry = AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId);
+            const entry = getAmortizationEntry(t);
             if (entry && entry.effect && (entry.effect as any).target === 'global') {
                 const val = (entry.effect as any).value * level * techMult;
                 if ((entry.effect as any).type === 'metal') globalEuroMetal += val;
@@ -277,14 +369,16 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         results.empireBase.crystal += baseCrystal;
         results.empireBase.deuterium += baseDeut;
 
-        const plasmaLevel = account?.researches?.find((r: any) => r.id === 122)?.level || 0;
+        const plasmaLevel = getResearchLevel(account, 122);
         const plasmaMetal = plasmaLevel * 0.01;
         const plasmaCrystal = plasmaLevel * (0.66 / 100);
         const plasmaDeut = plasmaLevel * (0.33 / 100);
 
         let lfbMetal = 0, lfbCrystal = 0, lfbDeut = 0;
         const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
-        p.lifeformBuildings?.forEach((b: any) => {
+        const safeBuildings = safeArray(p.lifeformBuildings);
+        safeBuildings.forEach((b: any) => {
+            if (!b || !b.id) return;
             if (activePrefix && !b.id.toString().startsWith(activePrefix)) return;
             if (b.id === 12106) lfbMetal += b.level * 0.02;
             if (b.id === 12109) lfbCrystal += b.level * 0.02;
@@ -381,11 +475,15 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
         return 0;
     };
 
+    // Pre-calculate initial expedition bonuses to normalize historical baseline (expoAverages)
+    const initialResBonus = calculateTotalExpeditionBonus(state, 'expo_res');
+    const initialSiBonus = calculateTotalExpeditionBonus(state, 'expo_si');
+
     for (let i = 0; i < limit; i++) {
         const prodData = calculateEmpireProduction(state);
         const candidates: AmortizationItem[] = [];
 
-        // Pre-calculate current expedition bonuses for normalization
+        // Pre-calculate current expedition bonuses for simulated state
         const currentResBonus = calculateTotalExpeditionBonus(state, 'expo_res');
         const currentSiBonus = calculateTotalExpeditionBonus(state, 'expo_si');
 
@@ -408,13 +506,12 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                     if (entry.name === "Crystal Mine") currentLevel = p.crystalMine || 0;
                     if (entry.name === "Deuterium Mine") currentLevel = p.deuteriumMine || 0;
                 } else if (entry.type === AmortizationType.PlasmaTechnology) {
-                    currentLevel = state.account?.researches?.find((r: any) => r.id === 122)?.level || 0;
+                    currentLevel = getResearchLevel(state.account, 122);
                 } else if (entry.id && (entry.type === AmortizationType.LifeformProductionBuildings || entry.type === AmortizationType.LifeformResearchBuildings)) {
-                    currentLevel = p.lifeformBuildings?.find((b: any) => b.id === entry.id)?.level || 0;
+                    currentLevel = getLifeformBuildingLevel(p, entry.id);
                 } else if (entry.id && (entry.type === AmortizationType.LifeformProductionResearches || entry.type === AmortizationType.LifeformExpeditionResearches)) {
-                    const tech = p.lifeformSetup?.find((t: any) => t.selectedTechId === entry.id);
-                    if (!tech) return;
-                    currentLevel = tech.level;
+                    currentLevel = getLifeformTechLevel(p, entry.id);
+                    if (currentLevel === 0) return;
                 }
 
                 const nextLevel = currentLevel + 1;
@@ -455,13 +552,18 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                     else if (slot === 2) crystalPosFactor = 1.3;
                     else if (slot === 3) crystalPosFactor = 1.2;
 
+                    const prodSettings = p.productionSettings || {};
+                    const metalMineSettingsFactor = (prodSettings.metalMine !== undefined ? prodSettings.metalMine : 100) / 100;
+                    const crystalMineSettingsFactor = (prodSettings.crystalMine !== undefined ? prodSettings.crystalMine : 100) / 100;
+                    const deuteriumMineSettingsFactor = (prodSettings.deuteriumMine !== undefined ? prodSettings.deuteriumMine : 100) / 100;
+
                     const mNext = (entry.name === "Metal Mine" ? nextLevel : (p.metalMine || 0));
                     const cNext = (entry.name === "Crystal Mine" ? nextLevel : (p.crystalMine || 0));
                     const dNext = (entry.name === "Deuterium Mine" ? nextLevel : (p.deuteriumMine || 0));
 
-                    const bM_next = 30 * mNext * Math.pow(1.1, mNext) * universeSpeed * metalPosFactor;
-                    const bC_next = 20 * cNext * Math.pow(1.1, cNext) * universeSpeed * crystalPosFactor;
-                    const bD_next = 10 * dNext * Math.pow(1.1, dNext) * (1.44 - 0.004 * temp) * universeSpeed;
+                    const bM_next = 30 * mNext * Math.pow(1.1, mNext) * universeSpeed * metalPosFactor * metalMineSettingsFactor;
+                    const bC_next = 20 * cNext * Math.pow(1.1, cNext) * universeSpeed * crystalPosFactor * crystalMineSettingsFactor;
+                    const bD_next = 10 * dNext * Math.pow(1.1, dNext) * (1.44 - 0.004 * temp) * universeSpeed * deuteriumMineSettingsFactor;
 
                     const pData = prodData.planets[p.id];
                     prodDelta = {
@@ -486,7 +588,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
 
                         p.lifeformSetup?.forEach((t: any) => {
                             const level = t.level || 0;
-                            const tEntry = AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId);
+                            const tEntry = getAmortizationEntry(t);
                             if (tEntry && tEntry.effect) {
                                 const tEffect = tEntry.effect as any;
                                 const tVal = tEffect.value * level * factor;
@@ -503,9 +605,9 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                                         ? expoAverages.resources
                                         : { metal: 33333, crystal: 16666, deuterium: 8333 };
 
-                                    const trueM = baseline.metal / (1 + currentResBonus);
-                                    const trueC = baseline.crystal / (1 + currentResBonus);
-                                    const trueD = baseline.deuterium / (1 + currentResBonus);
+                                    const trueM = baseline.metal / (1 + initialResBonus);
+                                    const trueC = baseline.crystal / (1 + initialResBonus);
+                                    const trueD = baseline.deuterium / (1 + initialResBonus);
 
                                     deltaM += trueM * tVal;
                                     deltaC += trueC * tVal;
@@ -513,7 +615,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
 
                                     if (tEffect.type === 'kaelesh_discovery_adv') {
                                         // Discovery Adv mult boost also affects Slots and Enemies indirectly.
-                                        const computerLevel = state.account?.researches?.find((r: any) => r.id === 108)?.level || 10;
+                                        const computerLevel = getResearchLevel(state.account, 108) || 10;
                                         const slts = computerLevel + 3;
 
                                         // Bonus from Slot gain (0.004 per level) and Enemies (0.00045 per level)
@@ -522,9 +624,9 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                                         const indirectGainFactor = indirectBasePerLevel * level * factor;
 
                                         const baselineSi = (expoAverages?.ships?.metal || expoAverages?.ships?.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
-                                        const totalM = trueM * (1 + currentResBonus) + (baselineSi.metal / (1 + currentSiBonus)) * (1 + currentSiBonus);
-                                        const totalC = trueC * (1 + currentResBonus) + (baselineSi.crystal / (1 + currentSiBonus)) * (1 + currentSiBonus);
-                                        const totalD = trueD * (1 + currentResBonus) + (baselineSi.deuterium / (1 + currentSiBonus)) * (1 + currentSiBonus);
+                                        const totalM = trueM * (1 + currentResBonus) + (baselineSi.metal / (1 + initialSiBonus)) * (1 + currentSiBonus);
+                                        const totalC = trueC * (1 + currentResBonus) + (baselineSi.crystal / (1 + initialSiBonus)) * (1 + currentSiBonus);
+                                        const totalD = trueD * (1 + currentResBonus) + (baselineSi.deuterium / (1 + initialSiBonus)) * (1 + currentSiBonus);
 
                                         deltaM += totalM * indirectGainFactor;
                                         deltaC += totalC * indirectGainFactor;
@@ -535,9 +637,9 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                                         ? expoAverages.ships
                                         : { metal: 4166, crystal: 2083, deuterium: 416 };
 
-                                    const trueM = baseline.metal / (1 + currentSiBonus);
-                                    const trueC = baseline.crystal / (1 + currentSiBonus);
-                                    const trueD = baseline.deuterium / (1 + currentSiBonus);
+                                    const trueM = baseline.metal / (1 + initialSiBonus);
+                                    const trueC = baseline.crystal / (1 + initialSiBonus);
+                                    const trueD = baseline.deuterium / (1 + initialSiBonus);
 
                                     deltaM += trueM * tVal;
                                     deltaC += trueC * tVal;
@@ -555,16 +657,16 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                         const baselineRes = (expoAverages?.resources?.metal || expoAverages?.resources?.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 };
                         const baselineSi = (expoAverages?.ships?.metal || expoAverages?.ships?.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 };
 
-                        const trueM_res = baselineRes.metal / (1 + currentResBonus);
-                        const trueC_res = baselineRes.crystal / (1 + currentResBonus);
-                        const trueD_res = baselineRes.deuterium / (1 + currentResBonus);
+                        const trueM_res = baselineRes.metal / (1 + initialResBonus);
+                        const trueC_res = baselineRes.crystal / (1 + initialResBonus);
+                        const trueD_res = baselineRes.deuterium / (1 + initialResBonus);
 
-                        const trueM_si = baselineSi.metal / (1 + currentSiBonus);
-                        const trueC_si = baselineSi.crystal / (1 + currentSiBonus);
-                        const trueD_si = baselineSi.deuterium / (1 + currentSiBonus);
+                        const trueM_si = baselineSi.metal / (1 + initialSiBonus);
+                        const trueC_si = baselineSi.crystal / (1 + initialSiBonus);
+                        const trueD_si = baselineSi.deuterium / (1 + initialSiBonus);
 
                         if (isKaeleshAdv) {
-                            const computerLevel = state.account?.researches?.find((r: any) => r.id === 108)?.level || 10;
+                            const computerLevel = getResearchLevel(state.account, 108) || 10;
                             const estimatedSlots = computerLevel + 3; // Base 1 + Computer + 2 Discovery bonus
 
                             // 1. Direct Resource Bonus part (0.2% per level)
@@ -615,6 +717,49 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             };
                             prodIncrease = calculateMSU(prodDelta, rates);
                         }
+                    } else if (effect.type === 'mine_cost_reduction') {
+                        const temp = p.tempMax || 20;
+                        let slot = 0;
+                        try { slot = parseInt(p.coords.split(':')[2]); } catch (e) { }
+                        let metalPosFactor = 1;
+                        if (slot === 6 || slot === 10) metalPosFactor = 1.17;
+                        else if (slot === 7 || slot === 9) metalPosFactor = 1.23;
+                        else if (slot === 8) metalPosFactor = 1.35;
+
+                        let crystalPosFactor = 1;
+                        if (slot === 1) crystalPosFactor = 1.4;
+                        else if (slot === 2) crystalPosFactor = 1.3;
+                        else if (slot === 3) crystalPosFactor = 1.2;
+
+                        const prodSettings = p.productionSettings || {};
+                        const metalMineSettingsFactor = (prodSettings.metalMine !== undefined ? prodSettings.metalMine : 100) / 100;
+                        const crystalMineSettingsFactor = (prodSettings.crystalMine !== undefined ? prodSettings.crystalMine : 100) / 100;
+                        const deuteriumMineSettingsFactor = (prodSettings.deuteriumMine !== undefined ? prodSettings.deuteriumMine : 100) / 100;
+
+                        const mCurr = p.metalMine || 0;
+                        const cCurr = p.crystalMine || 0;
+                        const dCurr = p.deuteriumMine || 0;
+
+                        const mNext = mCurr + 1;
+                        const cNext = cCurr + 1;
+                        const dNext = dCurr + 1;
+
+                        const bM_next = 30 * mNext * Math.pow(1.1, mNext) * universeSpeed * metalPosFactor * metalMineSettingsFactor;
+                        const bC_next = 20 * cNext * Math.pow(1.1, cNext) * universeSpeed * crystalPosFactor * crystalMineSettingsFactor;
+                        const bD_next = 10 * dNext * Math.pow(1.1, dNext) * (1.44 - 0.004 * temp) * universeSpeed * deuteriumMineSettingsFactor;
+
+                        const pData = prodData.planets[p.id];
+                        const dM = (bM_next - pData.base.metal) * pData.mult.metal;
+                        const dC = (bC_next - pData.base.crystal) * pData.mult.crystal;
+                        const dD = (bD_next - pData.base.deuterium) * pData.mult.deuterium;
+
+                        const factor = effect.value;
+                        prodDelta = {
+                            metal: dM * factor,
+                            crystal: dC * factor,
+                            deuterium: dD * factor
+                        };
+                        prodIncrease = calculateMSU(prodDelta, rates);
                     } else {
                         const target = effect.target;
                         const techMult = (entry.type === AmortizationType.LifeformProductionResearches || entry.type === AmortizationType.LifeformExpeditionResearches)
@@ -649,12 +794,14 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             const m = pData.mult[resKey as keyof typeof pData.mult];
 
                             // Re-calculate components for logging
-                            const plasmaLevel = state.account.researches?.find((r: any) => r.id === 122)?.level || 0;
+                            const plasmaLevel = getResearchLevel(state.account, 122);
                             const plasmaB = resKey === "metal" ? plasmaLevel * 0.01 : (resKey === "crystal" ? plasmaLevel * (0.66 / 100) : plasmaLevel * (0.33 / 100));
 
                             let lfbB = 0;
                             const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
-                            p.lifeformBuildings?.forEach((b: any) => {
+                            const safeBuildings = safeArray(p.lifeformBuildings);
+                            safeBuildings.forEach((b: any) => {
+                                if (!b || !b.id) return;
                                 if (activePrefix && !b.id.toString().startsWith(activePrefix)) return;
                                 if (resKey === 'metal') {
                                     if (b.id === 12106) lfbB += b.level * 0.02;
@@ -694,24 +841,24 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                                 const isShips = effect.type === 'expo_si' || isKaeleshAdv;
 
                                 if (isKaeleshAdv) {
-                                    const computerLevel = state.account.researches?.find((r: any) => r.id === 108)?.level || 10;
+                                    const computerLevel = getResearchLevel(state.account, 108) || 10;
                                     const slts = computerLevel + 3;
                                     details.push(`Aggregated Discovery Boost (incl. Slots: +${(0.004 * techMult / slts * 100).toFixed(4)}% yield and Fewer Enemies: +${(0.00016 * techMult * 100).toFixed(4)}% yield)`);
                                     details.push(`Total Gain across both Res & Ships: +${prodIncrease.toFixed(2)} MSU/h`);
                                 } else {
-                                    const currentGlobalBonus = isRes ? currentResBonus : currentSiBonus;
+                                    const initialGlobalBonus = isRes ? initialResBonus : initialSiBonus;
                                     const baseline = isRes
                                         ? ((expoAverages?.resources?.metal || expoAverages?.resources?.crystal) ? expoAverages.resources : { metal: 33333, crystal: 16666, deuterium: 8333 })
                                         : ((expoAverages?.ships?.metal || expoAverages?.ships?.crystal) ? expoAverages.ships : { metal: 4166, crystal: 2083, deuterium: 416 });
 
-                                    const trueM = baseline.metal / (1 + currentGlobalBonus);
-                                    const trueC = baseline.crystal / (1 + currentGlobalBonus);
-                                    const trueD = baseline.deuterium / (1 + currentGlobalBonus);
+                                    const trueM = baseline.metal / (1 + initialGlobalBonus);
+                                    const trueC = baseline.crystal / (1 + initialGlobalBonus);
+                                    const trueD = baseline.deuterium / (1 + initialGlobalBonus);
 
                                     const dM = trueM * effectiveValue;
                                     const dC = trueC * effectiveValue;
                                     const dD = trueD * effectiveValue;
-                                    details.push(`Expedition ${isRes ? 'Res' : 'Ships'} Gain: +${calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates).toFixed(2)} MSU/h (normalized from ${(currentGlobalBonus * 100).toFixed(1)}% LF bonus)`);
+                                    details.push(`Expedition ${isRes ? 'Res' : 'Ships'} Gain: +${calculateMSU({ metal: dM, crystal: dC, deuterium: dD }, rates).toFixed(2)} MSU/h (normalized from ${(initialGlobalBonus * 100).toFixed(1)}% LF bonus)`);
                                 }
                             } else {
                                 const targetName = effect.target === 'global' ? 'Empire' : `Planet (${p.coords})`;
@@ -748,9 +895,10 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             const factor = (entry.effect as any).value;
                             let techDetails: string[] = [];
 
-                            p.lifeformSetup?.forEach((t: any) => {
+                            const safeSetup = safeArray(p.lifeformSetup);
+                            safeSetup.forEach((t: any) => {
                                 const level = t.level || 0;
-                                const tEntry = AMORTIZATION_TABLE.find(e => e.id === t.selectedTechId);
+                                const tEntry = getAmortizationEntry(t);
                                 if (tEntry && tEntry.effect && level > 0) {
                                     const tEffect = tEntry.effect as any;
                                     const tVal = tEffect.value * level * factor;
@@ -770,17 +918,17 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                                         const baseline = (expoAverages?.resources?.metal || expoAverages?.resources?.crystal)
                                             ? expoAverages.resources
                                             : { metal: 33333, crystal: 16666, deuterium: 8333 };
-                                        const trueM = baseline.metal / (1 + currentResBonus);
-                                        const trueC = baseline.crystal / (1 + currentResBonus);
-                                        const trueD = baseline.deuterium / (1 + currentResBonus);
+                                        const trueM = baseline.metal / (1 + initialResBonus);
+                                        const trueC = baseline.crystal / (1 + initialResBonus);
+                                        const trueD = baseline.deuterium / (1 + initialResBonus);
                                         deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
                                     } else if (tEffect.type === 'expo_si') {
                                         const baseline = (expoAverages?.ships?.metal || expoAverages?.ships?.crystal)
                                             ? expoAverages.ships
                                             : { metal: 4166, crystal: 2083, deuterium: 416 };
-                                        const trueM = baseline.metal / (1 + currentSiBonus);
-                                        const trueC = baseline.crystal / (1 + currentSiBonus);
-                                        const trueD = baseline.deuterium / (1 + currentSiBonus);
+                                        const trueM = baseline.metal / (1 + initialSiBonus);
+                                        const trueC = baseline.crystal / (1 + initialSiBonus);
+                                        const trueD = baseline.deuterium / (1 + initialSiBonus);
                                         deltaMSU = calculateMSU({ metal: trueM * tVal, crystal: trueC * tVal, deuterium: trueD * tVal }, rates);
                                     }
 
@@ -792,6 +940,10 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
 
                             breakdownStr = `\n                            - Tech Multiplier Bonus: +${(factor * 100).toFixed(2)}% per level
                             - Bonus Breakdown Across Selected Techs:${techDetails.length > 0 ? techDetails.map(d => '\n                                * ' + d).join('') : '\n                                (No production techs active)'}`;
+                        } else if (entry.effect && (entry.effect as any).type === 'mine_cost_reduction') {
+                            const factor = (entry.effect as any).value;
+                            breakdownStr = `\n                            - Mine Cost Reduction Bonus: -${(factor * 100).toFixed(2)}% cost discount on future mine upgrades
+                            - Effective Production Boost: +${prodIncrease.toFixed(2)} MSU/h`;
                         }
 
                         if (DEBUG_AMORTIZATION) {
@@ -865,18 +1017,23 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
         // Apply best to state
         if (best.type === AmortizationType.Mines) {
             const pIdx = state.planets.findIndex(pl => pl.id === best.planetId);
-            if (best.name === "Metal Mine") state.planets[pIdx].metalMine = (state.planets[pIdx].metalMine || 0) + 1;
-            else if (best.name === "Crystal Mine") state.planets[pIdx].crystalMine = (state.planets[pIdx].crystalMine || 0) + 1;
-            else if (best.name === "Deuterium Mine") state.planets[pIdx].deuteriumMine = (state.planets[pIdx].deuteriumMine || 0) + 1;
+            if (pIdx !== -1) {
+                if (best.name === "Metal Mine") state.planets[pIdx].metalMine = (state.planets[pIdx].metalMine || 0) + 1;
+                else if (best.name === "Crystal Mine") state.planets[pIdx].crystalMine = (state.planets[pIdx].crystalMine || 0) + 1;
+                else if (best.name === "Deuterium Mine") state.planets[pIdx].deuteriumMine = (state.planets[pIdx].deuteriumMine || 0) + 1;
+            }
         } else if (best.type === AmortizationType.PlasmaTechnology) {
-            const tech = state.account.researches?.find((r: any) => r.id === 122);
+            if (!Array.isArray(state.account.researches)) {
+                state.account.researches = safeArray(state.account.researches);
+            }
+            const tech = state.account.researches.find((r: any) => r.id === 122);
             if (tech) tech.level++;
             else state.account.researches.push({ id: 122, level: 1 });
         } else if (best.type === AmortizationType.LifeformProductionBuildings || best.type === AmortizationType.LifeformResearchBuildings) {
             const pIdx = state.planets.findIndex(pl => pl.id === best.planetId);
             if (pIdx !== -1) {
-                if (!state.planets[pIdx].lifeformBuildings) {
-                    state.planets[pIdx].lifeformBuildings = [];
+                if (!Array.isArray(state.planets[pIdx].lifeformBuildings)) {
+                    state.planets[pIdx].lifeformBuildings = safeArray(state.planets[pIdx].lifeformBuildings);
                 }
                 const bIdx = state.planets[pIdx].lifeformBuildings.findIndex((b: any) => b.id === best.id);
                 if (bIdx !== -1) {
@@ -893,10 +1050,10 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
         } else if (best.type === AmortizationType.LifeformProductionResearches || best.type === AmortizationType.LifeformExpeditionResearches) {
             const pIdx = state.planets.findIndex(pl => pl.id === best.planetId);
             if (pIdx !== -1) {
-                if (!state.planets[pIdx].lifeformSetup) {
-                    state.planets[pIdx].lifeformSetup = [];
+                if (!Array.isArray(state.planets[pIdx].lifeformSetup)) {
+                    state.planets[pIdx].lifeformSetup = safeArray(state.planets[pIdx].lifeformSetup);
                 }
-                const tech = state.planets[pIdx].lifeformSetup.find((t: any) => t.selectedTechId === best.id);
+                const tech = state.planets[pIdx].lifeformSetup.find((t: any) => t.selectedTechId === best.id || t.id === best.id);
                 if (tech) {
                     tech.level++;
                 } else {

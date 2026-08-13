@@ -151,7 +151,11 @@ export interface Planet {
 }
 
 export interface ActiveItem {
+    id?: string | number;
+    itemUuid?: string;
     ref?: string;
+    iconUrl?: string;
+    rarityClass?: string;
     name: string;
     title: string;
     rarity?: string;
@@ -574,6 +578,7 @@ export class OGNexusDB extends Dexie {
             this.seedKnowledge();
             this.seedSettings();
             this.migrateSpiedPlanets();
+            this.cleanPoisonedProductionSettings();
         });
     }
 
@@ -665,6 +670,50 @@ export class OGNexusDB extends Dexie {
             }
         } catch (error) {
             console.error('OGame Nexus: Failed to migrate spied planets capacities', error);
+        }
+    }
+
+    private async cleanPoisonedProductionSettings() {
+        try {
+            const planets = await this.planets.toArray();
+            const updates: any[] = [];
+            for (const p of planets) {
+                if (p.productionSettings) {
+                    let changed = false;
+                    const settings = { ...p.productionSettings };
+                    
+                    // If a mine is > 0 level, but settings say 0, it was likely poisoned by the old scraper. Reset to 100.
+                    if ((p.metalMine || 0) > 0 && settings.metalMine === 0) {
+                        settings.metalMine = 100;
+                        changed = true;
+                    }
+                    if ((p.crystalMine || 0) > 0 && settings.crystalMine === 0) {
+                        settings.crystalMine = 100;
+                        changed = true;
+                    }
+                    if ((p.deuteriumMine || 0) > 0 && settings.deuteriumMine === 0) {
+                        settings.deuteriumMine = 100;
+                        changed = true;
+                    }
+                    if ((p.crawlers || 0) > 0 && settings.crawlers === 0) {
+                        settings.crawlers = 100;
+                        changed = true;
+                    }
+                    
+                    if (changed) {
+                        updates.push({
+                            ...p,
+                            productionSettings: settings
+                        });
+                    }
+                }
+            }
+            if (updates.length > 0) {
+                console.log(`OGame Nexus: Cleaning up poisoned productionSettings for ${updates.length} planets.`);
+                await this.planets.bulkPut(updates);
+            }
+        } catch (error) {
+            console.error('OGame Nexus: Failed to clean poisoned production settings', error);
         }
     }
 }

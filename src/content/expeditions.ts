@@ -866,10 +866,12 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
 
         card.appendChild(statsRow);
         pillRow.appendChild(card);
+
         paginator.parentNode?.insertBefore(wrapper, paginator);
 
         updateBadgeState(wrapper);
         updateCardClickability(wrapper);
+        updateExpeditionViewDisplay();
 
         card.addEventListener('click', async () => {
             const isExpanded = wrapper.classList.contains('og-nexus-expanded');
@@ -892,6 +894,7 @@ export async function injectTodaySummaryCard(playerId: string, forceLoad: boolea
         window.dispatchEvent(new CustomEvent('ogame-nexus-trigger-tooltips'));
     });
 }
+
 
 function animateValue(obj: HTMLElement, start: number, end: number, duration: number) {
     if (start === end) return;
@@ -991,22 +994,33 @@ function formatExactNumber(num: number): string {
     return new Intl.NumberFormat().format(num);
 }
 
-function formatNumber(num: number): string {
+function formatNumber(num: number, decimals: number = 1): string {
     const n = num || 0;
-    const d = 2;
-    if (n >= 1000000000000) return (n / 1000000000000).toFixed(d) + 'T';
-    if (n >= 1000000000) return (n / 1000000000).toFixed(d) + 'B';
-    if (n >= 1000000) return (n / 1000000).toFixed(d) + 'M';
-    if (n >= 1000) return (n / 1000).toFixed(d) + 'K';
+    const d = decimals;
+    if (n >= 1000000000000) {
+        const val = (n / 1000000000000).toFixed(d);
+        return (val.endsWith('.0') ? val.slice(0, -2) : val) + 'T';
+    }
+    if (n >= 1000000000) {
+        const val = (n / 1000000000).toFixed(d);
+        return (val.endsWith('.0') ? val.slice(0, -2) : val) + 'B';
+    }
+    if (n >= 1000000) {
+        const val = (n / 1000000).toFixed(d);
+        return (val.endsWith('.0') ? val.slice(0, -2) : val) + 'M';
+    }
+    if (n >= 1000) {
+        const val = (n / 1000).toFixed(d);
+        return (val.endsWith('.0') ? val.slice(0, -2) : val) + 'K';
+    }
     if (n % 1 !== 0) {
-        // Keep up to 2 decimal places and strip trailing zeros
-        return Number(n.toFixed(2)).toString();
+        return Number(n.toFixed(d)).toString();
     }
     return Math.round(n).toString();
 }
 
-function formatCompactNumber(num: number): string {
-    return formatNumber(num);
+function formatCompactNumber(num: number, decimals: number = 1): string {
+    return formatNumber(num, decimals);
 }
 
 const SHIP_ID_TO_ICON: Record<string, string> = {};
@@ -2537,7 +2551,520 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
 }
 
 function triggerSiteTooltips() {
-    // Dispatch a custom event that our "MAIN" world script will pick up to call initOverlays()
-    // This avoids CSP violations from injecting inline scripts.
     window.dispatchEvent(new CustomEvent('ogame-nexus-trigger-tooltips'));
 }
+
+/* ------------------------------------------------------------- */
+/* OGAME NEXUS 10-COLUMN HORIZONTAL FIT EXPEDITIONS VIEW          */
+/* ------------------------------------------------------------- */
+let expeditionViewMode: 'horizontal' | 'vertical' = 'horizontal';
+
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['og_nexus_expedition_view_mode'], (res) => {
+        if (res?.og_nexus_expedition_view_mode) {
+            expeditionViewMode = res.og_nexus_expedition_view_mode;
+            updateExpeditionViewDisplay();
+        }
+    });
+}
+
+let enableExpeditionHorizontalView = false;
+
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['globalSettings'], (res) => {
+        if (res?.globalSettings?.enableExpeditionHorizontalView !== undefined) {
+            enableExpeditionHorizontalView = res.globalSettings.enableExpeditionHorizontalView;
+        }
+    });
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === 'local' && changes.globalSettings) {
+            const newSettings = changes.globalSettings.newValue;
+            if (newSettings && newSettings.enableExpeditionHorizontalView !== undefined) {
+                enableExpeditionHorizontalView = newSettings.enableExpeditionHorizontalView;
+                updateExpeditionViewDisplay();
+            }
+        }
+    });
+}
+
+export function setExpeditionViewMode(mode: 'horizontal' | 'vertical') {
+    expeditionViewMode = mode;
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ og_nexus_expedition_view_mode: mode });
+    }
+    updateExpeditionViewDisplay();
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target && target.closest('.innerTabItem, .singleTab, .tabItem, .ui-tabs-anchor, .tabs, .subtabs')) {
+            setTimeout(() => {
+                updateExpeditionViewDisplay();
+            }, 50);
+        }
+    });
+}
+
+export async function updateExpeditionViewDisplay() {
+    const messagesHolder = document.querySelector('.messagesHolder') as HTMLElement;
+    const isExpeditionsTabActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]');
+    const fitContainer = document.querySelector('.og-nexus-fit-container') as HTMLElement;
+    const subToolbar = document.querySelector('.og-nexus-sub-toolbar') as HTMLElement;
+
+    try {
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            const localData = await chrome.storage.local.get('globalSettings');
+            if (localData?.globalSettings?.enableExpeditionHorizontalView !== undefined) {
+                enableExpeditionHorizontalView = localData.globalSettings.enableExpeditionHorizontalView;
+            }
+        }
+    } catch (e) {}
+
+    if (!isExpeditionsTabActive || !enableExpeditionHorizontalView) {
+        if (messagesHolder) messagesHolder.classList.remove('og-nexus-hide-messages-holder');
+        if (fitContainer) fitContainer.style.display = 'none';
+        if (subToolbar) subToolbar.style.display = 'none';
+        return;
+    }
+
+    if (expeditionViewMode === 'horizontal') {
+        if (messagesHolder) messagesHolder.classList.add('og-nexus-hide-messages-holder');
+        renderHorizontalFitGrid();
+    } else {
+        if (messagesHolder) messagesHolder.classList.remove('og-nexus-hide-messages-holder');
+        if (fitContainer) fitContainer.style.display = 'none';
+        renderSubToolbarOnly();
+    }
+}
+
+function renderSubToolbarOnly() {
+    const paginator = document.querySelector('.messagePaginator');
+    const targetParent = paginator?.parentNode || document.querySelector('#messagewrapper');
+    if (!targetParent) return;
+
+    let subToolbar = document.querySelector('.og-nexus-sub-toolbar') as HTMLElement;
+    if (!subToolbar) {
+        subToolbar = document.createElement('div');
+        subToolbar.className = 'og-nexus-sub-toolbar';
+        if (paginator) {
+            paginator.parentNode?.insertBefore(subToolbar, paginator);
+        } else {
+            targetParent.appendChild(subToolbar);
+        }
+    }
+
+    subToolbar.style.display = 'flex';
+    subToolbar.innerHTML = `
+        <div class="og-nexus-view-switch">
+            <button class="og-nexus-toggle-btn btn-v ${expeditionViewMode === 'vertical' ? 'active' : ''}">Standard List</button>
+            <button class="og-nexus-toggle-btn btn-h ${expeditionViewMode === 'horizontal' ? 'active' : ''}">⚡ 10-Fit Bar</button>
+        </div>
+    `;
+
+    const btnV = subToolbar.querySelector('.btn-v') as HTMLButtonElement;
+    const btnH = subToolbar.querySelector('.btn-h') as HTMLButtonElement;
+
+    btnV?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setExpeditionViewMode('vertical');
+    });
+
+    btnH?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setExpeditionViewMode('horizontal');
+    });
+}
+
+function renderHorizontalFitGrid() {
+    renderSubToolbarOnly();
+
+    const paginator = document.querySelector('.messagePaginator');
+    const targetParent = paginator?.parentNode || document.querySelector('#messagewrapper');
+    if (!targetParent) return;
+
+    let fitContainer = document.querySelector('.og-nexus-fit-container') as HTMLElement;
+    if (!fitContainer) {
+        fitContainer = document.createElement('div');
+        fitContainer.className = 'og-nexus-fit-container';
+        if (paginator && paginator.nextSibling) {
+            paginator.parentNode?.insertBefore(fitContainer, paginator.nextSibling);
+        } else if (paginator) {
+            paginator.parentNode?.appendChild(fitContainer);
+        } else {
+            targetParent.appendChild(fitContainer);
+        }
+    }
+
+    fitContainer.style.display = 'block';
+
+    let grid = fitContainer.querySelector('.og-nexus-fit-grid') as HTMLElement;
+    if (!grid) {
+        grid = document.createElement('div');
+        grid.className = 'og-nexus-fit-grid';
+        fitContainer.appendChild(grid);
+    }
+
+    grid.innerHTML = '';
+
+    const msgNodes = document.querySelectorAll('.messagesHolder .msg');
+    if (msgNodes.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #94a3b8; padding: 12px; font-size: 12px;">No expedition messages on this page.</div>';
+        return;
+    }
+
+    msgNodes.forEach((msgNode) => {
+        const parsed = parseMsgElement(msgNode as HTMLElement);
+        if (parsed) {
+            const cardEl = createFitCardDOM(parsed);
+            grid.appendChild(cardEl);
+        }
+    });
+}
+
+function parseMsgElement(msgNode: HTMLElement) {
+    const rawMsg = msgNode.querySelector('.rawMessageData');
+    const msgId = msgNode.getAttribute('data-msg-id') || '';
+    
+    const msgType = rawMsg?.getAttribute('data-raw-messagetype') || '41';
+    const timestamp = parseInt(rawMsg?.getAttribute('data-raw-timestamp') || '0');
+    const coords = rawMsg?.getAttribute('data-raw-coords') || '';
+    const depletion = parseInt(rawMsg?.getAttribute('data-raw-depletion') || '1');
+    const size = parseInt(rawMsg?.getAttribute('data-raw-size') ?? '2');
+    const result = (rawMsg?.getAttribute('data-raw-expeditionresult') || rawMsg?.getAttribute('data-raw-discoverytype') || '').toLowerCase();
+
+    const timeEl = msgNode.querySelector('.msgDate');
+    let timeStr = '';
+    if (timeEl) {
+        const fullDateStr = timeEl.textContent?.trim() || '';
+        const parts = fullDateStr.split(' ');
+        if (parts.length > 1) {
+            timeStr = parts[1].substring(0, 5);
+        } else if (parts.length === 1 && parts[0].includes(':')) {
+            timeStr = parts[0].substring(0, 5);
+        }
+    }
+    if (!timeStr && timestamp > 0) {
+        const dateObj = new Date(timestamp * 1000);
+        timeStr = `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+    }
+
+    let coordsShort = coords;
+    if (coords) {
+        const cParts = coords.split(':');
+        if (cParts.length >= 2) {
+            coordsShort = `[${cParts[0]}:${cParts[1]}]`;
+        }
+    }
+
+    let resGained: any = null;
+    let shipsGained: any = null;
+    let itemGained: any = null;
+    const lifeform = parseInt(rawMsg?.getAttribute('data-raw-lifeform') || '0');
+    const lifeformXP = parseInt(rawMsg?.getAttribute('data-raw-lifeformgainedexperience') || '0');
+
+    try {
+        if (result === 'ressources' || result === 'resources' || result === 'darkmatter') {
+            const raw = rawMsg?.getAttribute('data-raw-resourcesgained');
+            if (raw) resGained = JSON.parse(raw);
+        } else if (result === 'shipwrecks') {
+            const raw = rawMsg?.getAttribute('data-raw-technologiesgained');
+            if (raw) shipsGained = JSON.parse(raw);
+        } else if (result === 'item' || result === 'items') {
+            const raw = rawMsg?.getAttribute('data-raw-itemsgained');
+            if (raw) itemGained = JSON.parse(raw);
+        }
+    } catch (e) {}
+
+    const storyText = msgNode.querySelector('.msgContent')?.textContent?.trim() || '';
+
+    const origFav = msgNode.querySelector('.msgFavouriteBtn') as HTMLElement;
+    const isFavorited = msgNode.classList.contains('favourite') ||
+                        msgNode.classList.contains('is-favourite') ||
+                        (origFav ? (origFav.classList.contains('active') || origFav.classList.contains('favourite') || origFav.classList.contains('is-favourite')) : false);
+
+    return {
+        msgId,
+        msgType,
+        timestamp,
+        coords,
+        coordsShort,
+        timeStr,
+        depletion,
+        size,
+        result,
+        resGained,
+        shipsGained,
+        itemGained,
+        lifeform,
+        lifeformXP,
+        storyText,
+        isFavorited,
+        msgNode
+    };
+}
+
+function createFitCardDOM(parsed: any): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'fit-card';
+    
+    // Rarity classification
+    let rarityClass = 'rarity-standard';
+    let isRare = false;
+    let isEpic = false;
+
+    const resRaw = (parsed.result || '').toLowerCase().trim();
+    const isNothing = resRaw === 'nothing' || resRaw === 'none' || resRaw === '0';
+
+    if (!isNothing) {
+        if (parsed.size === 1) {
+            rarityClass = 'rarity-rare';
+            isRare = true;
+        } else if (parsed.size === 0 || resRaw === 'fleetloss' || resRaw === 'fleetlost') {
+            rarityClass = 'rarity-epic';
+            isEpic = true;
+        }
+    }
+
+    card.classList.add(rarityClass);
+
+    const badge = document.createElement('span');
+    badge.className = 'rarity-badge';
+    if (isEpic) {
+        badge.classList.add('badge-epic');
+        badge.textContent = 'EPIC';
+    } else if (isRare) {
+        badge.classList.add('badge-rare');
+        badge.textContent = 'RARE';
+    } else {
+        badge.classList.add('badge-common');
+        badge.textContent = 'COMMON';
+    }
+    card.appendChild(badge);
+
+    const bodyDiv = document.createElement('div');
+    bodyDiv.className = 'fit-body';
+
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'fit-icon';
+
+    const iconImg = document.createElement('img');
+
+    const valDiv = document.createElement('div');
+    valDiv.className = 'fit-val';
+
+    const res = parsed.result;
+    let showIcon = true;
+
+    // Rarity background image
+    let rarityName = 'common';
+    if (isEpic) rarityName = 'epic';
+    else if (isRare) rarityName = 'rare';
+
+    const bgAssetUrl = chrome.runtime.getURL(`icons/misc/expedition-card-${rarityName}-medium.jpg`);
+    let topGradientRgb = 'rgba(17, 24, 39, 0.15)';
+
+    if (res === 'ressources' || res === 'resources') {
+        if (parsed.resGained?.metal) {
+            iconDiv.classList.add('icon-metal');
+            iconImg.src = chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg');
+            topGradientRgb = 'rgba(230, 149, 60, 0.18)';
+            valDiv.classList.add('val-metal');
+            valDiv.textContent = formatCompactNumber(parsed.resGained.metal);
+        } else if (parsed.resGained?.crystal) {
+            iconDiv.classList.add('icon-crystal');
+            iconImg.src = chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg');
+            topGradientRgb = 'rgba(76, 174, 230, 0.18)';
+            valDiv.classList.add('val-crystal');
+            valDiv.textContent = formatCompactNumber(parsed.resGained.crystal);
+        } else if (parsed.resGained?.deuterium) {
+            iconDiv.classList.add('icon-deuterium');
+            iconImg.src = chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg');
+            topGradientRgb = 'rgba(67, 209, 89, 0.18)';
+            valDiv.classList.add('val-deuterium');
+            valDiv.textContent = formatCompactNumber(parsed.resGained.deuterium);
+        } else {
+            iconDiv.classList.add('icon-metal');
+            iconImg.src = chrome.runtime.getURL('icons/misc/resources-icon-medium.png');
+            topGradientRgb = 'rgba(230, 149, 60, 0.15)';
+            valDiv.textContent = 'RESOURCES';
+        }
+    } else if (res === 'shipwrecks') {
+        let totalShips = 0;
+        if (parsed.shipsGained) {
+            Object.values(parsed.shipsGained).forEach((s: any) => {
+                totalShips += (s.amount || 0);
+            });
+        }
+        if (parsed.size === 1) {
+            iconDiv.classList.add('icon-rare');
+            iconImg.src = chrome.runtime.getURL('icons/misc/expedition-rare-icon-medium.png');
+        } else if (parsed.size === 0) {
+            iconDiv.classList.add('icon-rare');
+            iconImg.src = chrome.runtime.getURL('icons/misc/expedition-epic-icon-medium.png');
+        } else {
+            iconDiv.classList.add('icon-ships');
+            iconImg.src = chrome.runtime.getURL('icons/misc/expedition-shipfind-icon-medium.png');
+        }
+        topGradientRgb = 'rgba(225, 29, 72, 0.18)';
+        valDiv.classList.add('val-ships');
+        valDiv.textContent = totalShips > 0 ? formatCompactNumber(totalShips) : 'SHIPS';
+    } else if (res === 'darkmatter') {
+        const dmAmount = parsed.resGained?.darkmatter || parsed.resGained?.darkMatter || 0;
+        iconDiv.classList.add('icon-darkmatter');
+        iconImg.src = chrome.runtime.getURL('icons/resources/dark-matter-icon-medium.jpg');
+        topGradientRgb = 'rgba(147, 51, 234, 0.18)';
+        valDiv.classList.add('val-darkmatter');
+        valDiv.textContent = dmAmount > 0 ? formatCompactNumber(dmAmount) : 'DM';
+    } else if (res === 'navigation' || res === 'delay' || res === 'speedup') {
+        iconDiv.classList.add('icon-delay');
+        iconImg.src = chrome.runtime.getURL('icons/misc/delay-icon-medium.png');
+        topGradientRgb = 'rgba(245, 158, 11, 0.18)';
+        valDiv.classList.add('val-delay');
+        valDiv.textContent = 'DELAY';
+    } else if (res === 'fleetloss' || res === 'fleetlost') {
+        iconDiv.classList.add('icon-blackhole');
+        iconImg.src = chrome.runtime.getURL('icons/misc/black-hole.png');
+        topGradientRgb = 'rgba(168, 85, 247, 0.22)';
+        valDiv.classList.add('val-blackhole');
+        valDiv.textContent = 'BLACK HOLE';
+    } else if (res.includes('pirate')) {
+        iconDiv.classList.add('icon-combat');
+        iconImg.src = chrome.runtime.getURL('icons/misc/pirate-fight-icon-medium.png');
+        topGradientRgb = 'rgba(239, 68, 68, 0.2)';
+        valDiv.classList.add('val-combat');
+        valDiv.textContent = 'PIRATES';
+    } else if (res.includes('alien')) {
+        iconDiv.classList.add('icon-combat');
+        iconImg.src = chrome.runtime.getURL('icons/misc/alien-fight-icon-medium.png');
+        topGradientRgb = 'rgba(239, 68, 68, 0.2)';
+        valDiv.classList.add('val-combat');
+        valDiv.textContent = 'ALIENS';
+    } else if (res === 'trader') {
+        iconDiv.classList.add('icon-metal');
+        iconImg.src = chrome.runtime.getURL('icons/misc/trader-icon-medium.png');
+        topGradientRgb = 'rgba(234, 179, 8, 0.15)';
+        valDiv.textContent = 'TRADER';
+    } else if (res === 'artifacts') {
+        iconDiv.classList.add('icon-artifacts');
+        iconImg.src = chrome.runtime.getURL('icons/lifeforms/artifact-icon-large.png');
+        topGradientRgb = 'rgba(234, 179, 8, 0.2)';
+        valDiv.classList.add('val-artifacts');
+        valDiv.textContent = 'ARTIFACTS';
+    } else if (res === 'lifeform-xp' || res === 'lifeformgainedexperience' || res === 'lifeform_xp' || res === 'lifeform' || res.includes('lifeform') || parsed.lifeformXP > 0) {
+        const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
+        const lfName = lfNames[(parsed.lifeform || 1) - 1] || 'humans';
+        iconDiv.classList.add('icon-lifeform');
+        iconImg.src = chrome.runtime.getURL(`icons/lifeforms/${lfName}-icon-large.jpg`);
+        iconImg.style.borderRadius = '4px';
+        topGradientRgb = 'rgba(168, 85, 247, 0.2)';
+        valDiv.classList.add('val-darkmatter');
+        valDiv.textContent = parsed.lifeformXP > 0 ? `${formatCompactNumber(parsed.lifeformXP)} XP` : 'XP';
+    } else if (isNothing) {
+        showIcon = false;
+        valDiv.textContent = 'NOTHING';
+    } else {
+        iconDiv.classList.add('icon-metal');
+        iconImg.src = chrome.runtime.getURL('icons/misc/expedition-icon-medium.png');
+        valDiv.textContent = res.toUpperCase();
+    }
+
+    card.style.backgroundImage = `linear-gradient(180deg, ${topGradientRgb} 0%, rgba(17, 24, 39, 0.3) 40%, rgba(17, 24, 39, 0.85) 100%), url('${bgAssetUrl}')`;
+
+    if (showIcon) {
+        iconDiv.appendChild(iconImg);
+        bodyDiv.appendChild(iconDiv);
+    }
+    bodyDiv.appendChild(valDiv);
+
+    const ledsDiv = document.createElement('div');
+    ledsDiv.className = 'fit-leds';
+    const filledDots = Math.max(0, 6 - (parsed.depletion || 1));
+    for (let i = 0; i < 5; i++) {
+        const dot = document.createElement('span');
+        dot.className = `led-dot ${i < filledDots ? (parsed.depletion > 2 ? 'warn' : 'active') : ''}`;
+        ledsDiv.appendChild(dot);
+    }
+
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'fit-actions';
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'micro-btn del';
+    delBtn.title = 'Delete Message';
+    delBtn.innerHTML = '🗑️';
+    delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const origDel = parsed.msgNode.querySelector('.msgDeleteBtn') as HTMLElement;
+        if (origDel) origDel.click();
+        card.style.opacity = '0.3';
+    });
+
+    const favBtn = document.createElement('button');
+    favBtn.className = `micro-btn fav ${parsed.isFavorited ? 'active' : ''}`;
+    favBtn.title = parsed.isFavorited ? 'Unfavorite' : 'Favorite';
+    favBtn.innerHTML = parsed.isFavorited ? '⭐' : '☆';
+    if (parsed.isFavorited) {
+        favBtn.style.color = '#facc15';
+    }
+    favBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const origFav = parsed.msgNode.querySelector('.msgFavouriteBtn') as HTMLElement;
+        if (origFav) origFav.click();
+        parsed.isFavorited = !parsed.isFavorited;
+        favBtn.classList.toggle('active', parsed.isFavorited);
+        favBtn.title = parsed.isFavorited ? 'Unfavorite' : 'Favorite';
+        favBtn.innerHTML = parsed.isFavorited ? '⭐' : '☆';
+        favBtn.style.color = parsed.isFavorited ? '#facc15' : '';
+    });
+
+    actionsDiv.appendChild(delBtn);
+    actionsDiv.appendChild(favBtn);
+
+    card.appendChild(bodyDiv);
+    card.appendChild(ledsDiv);
+    card.appendChild(actionsDiv);
+
+    const popover = document.createElement('div');
+    popover.className = 'card-popover';
+
+    const popTitle = document.createElement('div');
+    popTitle.className = 'popover-title';
+    popTitle.innerHTML = `<span>${parsed.msgType === '61' ? 'Lifeform Discovery' : 'Expedition Result'}</span><span>${parsed.coords}${parsed.timeStr ? ' @ ' + parsed.timeStr : ''}</span>`;
+    popover.appendChild(popTitle);
+
+    if (parsed.shipsGained) {
+        const shipList = document.createElement('div');
+        shipList.className = 'popover-ship-list';
+        Object.values(parsed.shipsGained).forEach((s: any) => {
+            const row = document.createElement('div');
+            row.className = 'popover-ship-row';
+            row.innerHTML = `<span>${s.name || 'Ship'}</span><span style="font-weight: 700; color: #38bdf8;">${(s.amount || 0).toLocaleString()}</span>`;
+            shipList.appendChild(row);
+        });
+        popover.appendChild(shipList);
+    } else if (parsed.resGained) {
+        const detail = document.createElement('div');
+        detail.className = 'popover-detail';
+        const resText = Object.entries(parsed.resGained).map(([k, v]) => `${(v as number).toLocaleString()} ${k.toUpperCase()}`).join(', ');
+        detail.innerHTML = `<strong>Loot:</strong> ${resText}`;
+        popover.appendChild(detail);
+    } else if (parsed.storyText) {
+        const detail = document.createElement('div');
+        detail.className = 'popover-detail';
+        detail.textContent = parsed.storyText.length > 120 ? parsed.storyText.substring(0, 120) + '...' : parsed.storyText;
+        popover.appendChild(detail);
+    }
+
+    card.appendChild(popover);
+
+    card.addEventListener('click', () => {
+        const origLink = parsed.msgNode.querySelector('.msg_action_link') as HTMLElement;
+        if (origLink) origLink.click();
+    });
+
+    return card;
+}
+
+

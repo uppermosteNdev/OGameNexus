@@ -34,6 +34,7 @@ export interface ScrapedOverview {
     totalPlayers?: number;
     honorPoints?: number;
     lifeformId?: number;
+    activeItemsMap?: { [uuid: string]: { iconUrl: string, rarityClass: string, name: string } };
 }
 
 export function parseProduction(html: string): ScrapedProduction | null {
@@ -220,6 +221,29 @@ export function parseOverview(html: string): ScrapedOverview {
         data.lifeformId = parseInt(lfMatch[1]);
     }
 
+    // 7. Active Items Bar HTML (Pairs itemUuid directly with img src and rarity class)
+    const activeItemsMap: { [uuid: string]: { iconUrl: string, rarityClass: string, name: string } } = {};
+    const itemRegex = /data-uuid=["']([^"']+)["'][\s\S]*?class=["']([^"']*active_item[^"']*)["'][\s\S]*?<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["']/gi;
+    let itemMatch;
+    while ((itemMatch = itemRegex.exec(html)) !== null) {
+        const uuid = itemMatch[1];
+        const classStr = itemMatch[2];
+        const src = itemMatch[3];
+        const alt = itemMatch[4];
+
+        const rarityMatch = classStr.match(/r_\w+/);
+        const rarityClass = rarityMatch ? rarityMatch[0] : '';
+
+        activeItemsMap[uuid] = {
+            iconUrl: src,
+            rarityClass,
+            name: alt
+        };
+    }
+    if (Object.keys(activeItemsMap).length > 0) {
+        data.activeItemsMap = activeItemsMap;
+    }
+
     return data;
 }
 
@@ -372,10 +396,6 @@ export function parseLifeformResearch(html: string): { slotNumber: number, selec
 
             if (levelMatch) {
                 let level = parseInt(levelMatch[1], 10);
-                const liTag = match[0].split('>')[0];
-                if (liTag.includes('active') && level > 0) {
-                    level--;
-                }
                 techSetup.push({
                     slotNumber,
                     selectedTechId: internalTechId,

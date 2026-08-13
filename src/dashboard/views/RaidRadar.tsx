@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Planet, SpiedPlanet } from '../../db';
+import { getResearchLevel, getLifeformExpLevel, safeArray } from '../../utils/amortizationCalc';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Activity,
@@ -14,7 +15,7 @@ import {
     RotateCcw,
     Ship
 } from 'lucide-react';
-import { LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';
+import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 
 const THEME_CYAN = '#0062ff';
 const RESOURCE_COLORS = {
@@ -174,21 +175,20 @@ const RaidRadar: React.FC = () => {
         // Calculate dynamic cargo capacity based on research and lifeforms
         const lifeformCargoBonuses: Record<number, number> = {};
         if (ownPlanets && activeAccount) {
-            ownPlanets.filter(p => p.type === 'planet').forEach(p => {
-                const setup = p.lifeformSetup || [];
-                const expData = activeAccount.lifeformExperience?.find((e: any) => e.lifeformId === p.lifeformId);
+            safeArray(ownPlanets).filter((p: any) => p && p.type === 'planet').forEach((p: any) => {
+                const setup = safeArray(p.lifeformSetup);
+                const expLevel = getLifeformExpLevel(activeAccount, p.lifeformId);
                 let buildingBonus = 0;
-                if (p.lifeformBuildings) {
-                    p.lifeformBuildings.forEach((b: any) => {
-                        if (b.id === 11111) buildingBonus += b.level * 0.005;
-                        else if (b.id === 13107) buildingBonus += b.level * 0.003;
-                        else if (b.id === 13111) buildingBonus += b.level * 0.004;
-                    });
-                }
-                const totalMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
+                safeArray(p.lifeformBuildings).forEach((b: any) => {
+                    if (!b || !b.id) return;
+                    if (b.id === 11111) buildingBonus += b.level * 0.005;
+                    else if (b.id === 13107) buildingBonus += b.level * 0.003;
+                    else if (b.id === 13111) buildingBonus += b.level * 0.004;
+                });
+                const totalMultiplier = 1 + expLevel * 0.001 + buildingBonus;
 
                 setup.forEach((slot: any) => {
-                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                    const tech = getLfTech(slot.selectedTechId || slot.id);
                     if (!tech || !tech.target) return;
 
                     const uniqueBonusIds: number[] = [];
@@ -239,7 +239,7 @@ const RaidRadar: React.FC = () => {
             });
         }
 
-        const hypLevel = activeAccount?.researches?.find(r => r.id === 114)?.level || 0;
+        const hypLevel = getResearchLevel(activeAccount, 114);
         const cargoHyperspaceTechMultiplier = activeAccount?.cargoHyperspaceTechMultiplier || 5;
         const isCollector = activeAccount?.playerClass === 1;
 

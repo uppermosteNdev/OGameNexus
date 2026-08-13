@@ -7,8 +7,8 @@ import {
     AlertTriangle, CheckCircle, ChevronDown, ChevronUp,
     MapPin, Thermometer, Database, HelpCircle
 } from 'lucide-react';
-import { calculateEmpireProduction, DEFAULT_RATES, Cost } from '../../utils/amortizationCalc';
-import { getProductionBoosters } from '../../utils/items';
+import { calculateEmpireProduction, DEFAULT_RATES, Cost, getResearchLevel, safeArray } from '../../utils/amortizationCalc';
+import { getProductionBoosters, getItemDurationText } from '../../utils/items';
 
 const formatLargeNumber = (num: number) => {
     return Math.floor(num).toLocaleString('en-US');
@@ -95,13 +95,14 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
     const allMatch = matchM && matchC && matchD;
 
     // Individual Multiplier Breakdowns
-    const plasmaLevel = account?.researches?.find((r: any) => r.id === 122)?.level || 0;
+    const plasmaLevel = getResearchLevel(account, 122);
     const plasmaM = plasmaLevel * 0.01;
     const plasmaC = plasmaLevel * 0.0066;
     const plasmaD = plasmaLevel * 0.0033;
 
     let lfbM = 0, lfbC = 0, lfbD = 0;
-    planet.lifeformBuildings?.forEach((b: any) => {
+    safeArray(planet?.lifeformBuildings).forEach((b: any) => {
+        if (!b || !b.id) return;
         if (b.id === 12106) lfbM += b.level * 0.02;
         if (b.id === 12109) lfbC += b.level * 0.02;
         if (b.id === 12110) lfbD += b.level * 0.02;
@@ -524,7 +525,7 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                                                     <span>Type: {item.type}</span>
-                                                    <span>Remaining: {item.timeRemaining || (item.isPermanent ? 'Permanent' : 'Unknown')}</span>
+                                                    <span>Remaining: {getItemDurationText(item)}</span>
                                                 </div>
                                             </div>
                                         ))}

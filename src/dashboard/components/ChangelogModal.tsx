@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, ShieldCheck, Trash2, Database, Layout, Gauge, ArrowRight } from 'lucide-react';
+import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -12,24 +12,29 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <Trash2 size={22} color="#f43f5e" />,
-            title: "Dynamic Raid Radar Cleaning",
-            desc: "Relocated, deleted, or disappeared inactive planets are now automatically detected and soft-deleted/cleared from the database and Raid Radar list as you scroll through the galaxy."
+            icon: <ShieldCheck size={22} color="#00f2ff" />,
+            title: "OGame V13 Compatibility & Seamless Background Sync",
+            desc: "Full support for OGame Version 13 (v13). Powered by v13 engine integration, background synchronization now handles almost all telemetry and data updates seamlessly behind the scenes—keeping Nexus always updated."
         },
         {
-            icon: <Database size={22} color="#00f2ff" />,
-            title: "Galaxies & Storage Limits",
-            desc: "Resolved the 5-galaxy limit bug to support up to 9 galaxies based on server data. Added storage capacity limits and database tracking for flying resources."
+            icon: <Ship size={22} color="#f97316" />,
+            title: "Discoverer Optimizer & Expedition Calculators",
+            desc: "Fixed Discoverer Optimizer to show all future colonies past the 3-colony limit. Added Destroyers & Reapers to maximum findable ship calculations in Expedition Calculator and added live duration timers."
         },
         {
-            icon: <Layout size={22} color="#c084fc" />,
-            title: "UI Visualization Overhaul",
-            desc: "Redesigned visual containers for expedition, lifeform, and combat reports. Added At-A-Glance row dragging configurations and fixed trader expedition message glitches."
+            icon: <Dna size={22} color="#c084fc" />,
+            title: "Mineral Research Center & Amortization Fixes",
+            desc: "Integrated Mineral Research Center into ROI Amortization calculations. Planet Lifeforms are now fetched universally from any page, corrected Kaelesh Discoverer Enhancement tech labels, and fixed defense icons."
         },
         {
-            icon: <Gauge size={22} color="#10b981" />,
-            title: "Faster Background Sync & Item IDs",
-            desc: "Reduced background synchronization delays from 5 minutes to 1 minute for faster reactivity. Transitioned static items mapping to use robust item IDs instead of string names."
+            icon: <Activity size={22} color="#10b981" />,
+            title: "Terminal Mine Levels & DM Item Icons",
+            desc: "Mine levels are now displayed directly inside the Terminal Production tab. Fixed Dark Matter booster item icons in Production views and resolved planetary mine yield calculation bugs."
+        },
+        {
+            icon: <Database size={22} color="#3b82f6" />,
+            title: "Raid Radar Backup Export/Import & Telemetry",
+            desc: "Export and import Raid Radar target lists to JSON and cloud backup files. Added language-agnostic flying resource tracking and integrated full Lifeform telemetry into the Dashboard overview."
         }
     ];
 
@@ -128,7 +133,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.1.7
+                                v1.2.0
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

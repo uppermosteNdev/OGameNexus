@@ -37,10 +37,13 @@ import {
     Globe,
     Cloud,
     Loader2,
-    Check
+    Check,
+    Compass,
+    Dna
 } from 'lucide-react';
-import { LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';
+import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { getLinkedAccount, uploadToDrive } from '../../utils/googleAuth';
+import { getItemDurationText, sanitizeActiveItem } from '../../utils/items';
 
 // --- Constants ---
 
@@ -327,9 +330,6 @@ const SHIP_ITEMS = [
     { id: 213, label: 'Destroyer', color: '#f97316' },
     { id: 218, label: 'Reaper', color: '#14b8a6' },
     { id: 210, label: 'Espionage Probe', color: '#8b5cf6' },
-    { id: 208, label: 'Colony Ship', color: '#fca5a5' },
-    { id: 209, label: 'Recycler', color: '#dc2626' },
-    { id: 214, label: 'Deathstar', color: '#fffb00' },
 ];
 
 const TOP_SCORE_THRESHOLD_OPTIONS = [
@@ -362,6 +362,11 @@ const Expeditions: React.FC = () => {
         [activeAccount]
     ) || [];
 
+    const lifeformDiscoveries = useLiveQuery(
+        () => activeAccount ? db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).toArray() : [],
+        [activeAccount]
+    ) || [];
+
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
     const knowledge = useLiveQuery(() => db.gameKnowledge.where('category').equals('ships').toArray()) || [];
     const rates = settings || { metal: 3, crystal: 2, deuterium: 1 };
@@ -371,8 +376,52 @@ const Expeditions: React.FC = () => {
     const cMultiplier = rates.metal / rates.crystal;
     const dMultiplier = rates.metal / rates.deuterium;
 
+    const [expeditionMode, setExpeditionMode] = useState<'standard' | 'lifeform'>('standard');
     const [activeTab, setActiveTab] = useState('overview');
     const [subTab, setSubTab] = useState('none');
+
+    const activeTheme = useMemo(() => {
+        if (expeditionMode === 'lifeform') {
+            return {
+                background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
+                boxShadow: '0 0 14px rgba(168, 85, 247, 0.45)',
+                borderColor: 'rgba(236, 72, 153, 0.6)',
+                color: '#ffffff'
+            };
+        }
+        return {
+            background: 'linear-gradient(135deg, #0284c7 0%, #0062ff 50%, #38bdf8 100%)',
+            boxShadow: '0 0 14px rgba(0, 98, 255, 0.45)',
+            borderColor: 'rgba(56, 189, 248, 0.6)',
+            color: '#ffffff'
+        };
+    }, [expeditionMode]);
+
+    const [visibleLfResults, setVisibleLfResults] = useState<Set<string>>(new Set(['nothing', 'shipLost', 'lifeformXp', 'artifacts']));
+    const [visibleLfXp, setVisibleLfXp] = useState<Set<string>>(new Set(['humans', 'rocktal', 'mechas', 'kaelesh']));
+
+    const toggleLfResult = (id: string) => {
+        const next = new Set(visibleLfResults);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setVisibleLfResults(next);
+    };
+
+    const toggleLfXp = (id: string) => {
+        const next = new Set(visibleLfXp);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setVisibleLfXp(next);
+    };
+
+    const handleSwitchMode = (mode: 'standard' | 'lifeform') => {
+        setExpeditionMode(mode);
+        if (mode === 'standard') {
+            setActiveTab('overview');
+        } else {
+            setActiveTab('lf_results');
+        }
+    };
 
     // Support deep-linking from Hotbar
     useEffect(() => {
@@ -455,19 +504,24 @@ const Expeditions: React.FC = () => {
     // Active expedition boosters
     const activeExpeditionBoosters = useMemo(() => {
         const map = new Map<string, any>();
+        const now = Date.now();
         planets.forEach(p => {
             if (p.activeItems && p.activeItems.length > 0) {
-                p.activeItems.forEach(item => {
+                p.activeItems.forEach(rawItem => {
+                    if (rawItem.expiryTimestamp && rawItem.expiryTimestamp <= now) return;
+                    const item = sanitizeActiveItem(rawItem);
                     const title = (item.title || item.name || '').toLowerCase();
                     const isTarget = title.includes('expedition resource booster') || 
                                    title.includes('expedition computer') || 
                                    title.includes('expedition turbo');
                     
                     if (isTarget) {
-                        const existing = map.get(title);
-                        // Keep the one with the latest expiration (or first encountered if none have expiry)
-                        if (!existing || (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0)) {
-                            map.set(title, {
+                        const isResBooster = title.includes('expedition resource booster');
+                        const mapKey = isResBooster ? 'expedition_resource_booster' : title;
+                        const existing = map.get(mapKey);
+                        // Prefer higher bonus (e.g. 25% replaces 10%), then later expiry
+                        if (!existing || (item.bonus || 0) > (existing.bonus || 0) || ((item.bonus || 0) === (existing.bonus || 0) && (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0))) {
+                            map.set(mapKey, {
                                 ...item,
                                 planetName: p.name || 'Unknown',
                                 coords: p.coords || ''
@@ -509,7 +563,7 @@ const Expeditions: React.FC = () => {
                 }
                 const totalMultiplier = 1 + (expData?.level || 0) * 0.001 + buildingBonus;
                 setup.forEach((slot: any) => {
-                    const tech = LIFEFORM_TECH_DATA.find(t => t.id === slot.selectedTechId);
+                    const tech = getLfTech(slot.selectedTechId);
                     if (!tech || !tech.target) return;
                     const bonusContribution = tech.target
                         .filter(t => t.bonusBreakdownId === breakdownId)
@@ -599,7 +653,7 @@ const Expeditions: React.FC = () => {
     const [visibleShips, setVisibleShips] = useState<Set<number>>(new Set(SHIP_ITEMS.map(s => s.id)));
     const [visibleDepletion, setVisibleDepletion] = useState<Set<number>>(new Set([1, 2, 3, 4, 5]));
 
-    const TABS = [
+    const STANDARD_TABS = [
         { id: 'overview', label: 'Overview', icon: Activity, sub: [] },
         {
             id: 'resources', label: 'Resources', icon: Database,
@@ -623,15 +677,28 @@ const Expeditions: React.FC = () => {
         { id: 'info', label: 'Info', icon: Info, sub: [] },
     ];
 
-    const currentTab = TABS.find(t => t.id === activeTab) || TABS[0];
+    const LIFEFORM_TABS = [
+        { id: 'lf_results', label: 'Results', icon: Activity, sub: [] },
+        { id: 'lf_experience', label: 'Experience', icon: Zap, sub: [] },
+        { id: 'lf_artifacts', label: 'Artifacts', icon: Star, sub: [] },
+        { id: 'lf_info', label: 'Info', icon: Info, sub: [] },
+    ];
+
+    const currentTabs = useMemo(() => {
+        return expeditionMode === 'standard' ? STANDARD_TABS : LIFEFORM_TABS;
+    }, [expeditionMode]);
+
+    const currentTab = useMemo(() => {
+        return currentTabs.find(t => t.id === activeTab) || currentTabs[0];
+    }, [currentTabs, activeTab]);
 
     useEffect(() => {
-        if (currentTab.sub.length > 0) {
+        if (currentTab && currentTab.sub && currentTab.sub.length > 0) {
             setSubTab(currentTab.sub[0].id);
         } else {
             setSubTab('none');
         }
-    }, [activeTab]);
+    }, [activeTab, expeditionMode, currentTab]);
 
     const toggleCategory = (id: CategoryId) => {
         const next = new Set(visibleCategories);
@@ -984,6 +1051,170 @@ const Expeditions: React.FC = () => {
         })).sort((a, b) => b.count - a.count).slice(0, 7);
     }, [expeditions]);
 
+    // --- Lifeform Discoveries Data Processing ---
+    const RESULTS_CATEGORIES = [
+        { id: 'nothing', label: 'Empty Mission', color: '#6b7280' },
+        { id: 'shipLost', label: 'Lost Ships', color: '#dc2626' },
+        { id: 'lifeformXp', label: 'Lifeform Found', color: '#0d9488' },
+        { id: 'artifacts', label: 'Artifacts Found', color: '#eab308' },
+    ];
+
+    const XP_CATEGORIES = [
+        { id: 'humans', label: 'Humans', color: '#22c55e' },
+        { id: 'rocktal', label: 'Rock\'tal', color: '#ef4444' },
+        { id: 'mechas', label: 'Mechas', color: '#3b82f6' },
+        { id: 'kaelesh', label: 'Kaelesh', color: '#a855f7' },
+    ];
+
+    const lifeformResultsData = useMemo(() => {
+        const dataMap: Record<string, { nothing: number, shipLost: number, lifeformXp: number, artifacts: number }> = {};
+        lifeformDiscoveries.forEach(disc => {
+            const date = new Date(disc.timestamp * 1000);
+            const dateKey = toLocaleDateKey(date);
+            if (!dataMap[dateKey]) {
+                dataMap[dateKey] = { nothing: 0, shipLost: 0, lifeformXp: 0, artifacts: 0 };
+            }
+            const type = disc.discoveryType;
+            if (type === 'nothing') dataMap[dateKey].nothing++;
+            else if (type === 'ship-lost') dataMap[dateKey].shipLost++;
+            else if (type === 'lifeform-xp') dataMap[dateKey].lifeformXp++;
+            else if (type === 'artifacts') dataMap[dateKey].artifacts++;
+        });
+        const results = [];
+        const now = new Date();
+        const start = new Date();
+        start.setDate(now.getDate() - 29);
+        for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+            const key = toLocaleDateKey(d);
+            results.push({
+                date: key,
+                displayDate: d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' }),
+                ...(dataMap[key] || { nothing: 0, shipLost: 0, lifeformXp: 0, artifacts: 0 })
+            });
+        }
+        return results;
+    }, [lifeformDiscoveries]);
+
+    const lifeformExperienceData = useMemo(() => {
+        const dataMap: Record<string, { humans: number, rocktal: number, mechas: number, kaelesh: number }> = {};
+        lifeformDiscoveries.forEach(disc => {
+            const date = new Date(disc.timestamp * 1000);
+            const dateKey = toLocaleDateKey(date);
+            if (!dataMap[dateKey]) {
+                dataMap[dateKey] = { humans: 0, rocktal: 0, mechas: 0, kaelesh: 0 };
+            }
+            const lf = disc.lifeform;
+            const xp = disc.lifeformGainedExperience || 0;
+            if (lf === 1) dataMap[dateKey].humans += xp;
+            else if (lf === 2) dataMap[dateKey].rocktal += xp;
+            else if (lf === 3) dataMap[dateKey].mechas += xp;
+            else if (lf === 4) dataMap[dateKey].kaelesh += xp;
+        });
+        const results = [];
+        const now = new Date();
+        const start = new Date();
+        start.setDate(now.getDate() - 29);
+        for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+            const key = toLocaleDateKey(d);
+            results.push({
+                date: key,
+                displayDate: d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' }),
+                ...(dataMap[key] || { humans: 0, rocktal: 0, mechas: 0, kaelesh: 0 })
+            });
+        }
+        return results;
+    }, [lifeformDiscoveries]);
+
+    const lifeformArtifactsData = useMemo(() => {
+        const dataMap: Record<string, { artifacts: number }> = {};
+        lifeformDiscoveries.forEach(disc => {
+            const date = new Date(disc.timestamp * 1000);
+            const dateKey = toLocaleDateKey(date);
+            if (!dataMap[dateKey]) {
+                dataMap[dateKey] = { artifacts: 0 };
+            }
+            if (disc.discoveryType === 'artifacts') {
+                dataMap[dateKey].artifacts += disc.artifactsFound || 0;
+            }
+        });
+        const results = [];
+        const now = new Date();
+        const start = new Date();
+        start.setDate(now.getDate() - 29);
+        for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+            const key = toLocaleDateKey(d);
+            results.push({
+                date: key,
+                displayDate: d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' }),
+                artifacts: dataMap[key]?.artifacts || 0
+            });
+        }
+        return results;
+    }, [lifeformDiscoveries]);
+
+    const resultsRows = useMemo(() => [
+        { label: 'Empty Mission', color: '#6b7280', calc: (lf: any) => lf.discoveryType === 'nothing' ? 1 : 0 },
+        { label: 'Lost Ships', color: '#dc2626', calc: (lf: any) => lf.discoveryType === 'ship-lost' ? 1 : 0 },
+        { label: 'Lifeform Found', color: '#0d9488', calc: (lf: any) => lf.discoveryType === 'lifeform-xp' ? 1 : 0 },
+        { label: 'Artifacts Found', color: '#eab308', calc: (lf: any) => lf.discoveryType === 'artifacts' ? 1 : 0 },
+    ], []);
+
+    const experienceRows = useMemo(() => [
+        { label: 'Humans XP', color: '#22c55e', calc: (lf: any) => lf.lifeform === 1 ? (lf.lifeformGainedExperience || 0) : 0 },
+        { label: 'Rock\'tal XP', color: '#ef4444', calc: (lf: any) => lf.lifeform === 2 ? (lf.lifeformGainedExperience || 0) : 0 },
+        { label: 'Mechas XP', color: '#3b82f6', calc: (lf: any) => lf.lifeform === 3 ? (lf.lifeformGainedExperience || 0) : 0 },
+        { label: 'Kaelesh XP', color: '#a855f7', calc: (lf: any) => lf.lifeform === 4 ? (lf.lifeformGainedExperience || 0) : 0 },
+    ], []);
+
+    const artifactsRows = useMemo(() => [
+        { label: 'Total Artifacts', color: '#eab308', calc: (lf: any) => lf.discoveryType === 'artifacts' ? (lf.artifactsFound || 0) : 0 },
+        { label: 'Common Finds', color: '#6b7280', calc: (lf: any) => lf.discoveryType === 'artifacts' && (lf.artifactSize?.toLowerCase() === 'normal' || !lf.artifactSize) ? 1 : 0 },
+        { label: 'Big Finds', color: '#3b82f6', calc: (lf: any) => lf.discoveryType === 'artifacts' && lf.artifactSize?.toLowerCase() === 'big' ? 1 : 0 },
+        { label: 'Huge Finds', color: '#ec4899', calc: (lf: any) => lf.discoveryType === 'artifacts' && lf.artifactSize?.toLowerCase() === 'huge' ? 1 : 0 },
+    ], []);
+
+    const bestArtifacts = useMemo(() => {
+        return [...lifeformDiscoveries]
+            .filter(d => d.discoveryType === 'artifacts')
+            .sort((a, b) => (b.artifactsFound || 0) - (a.artifactsFound || 0))
+            .slice(0, 8);
+    }, [lifeformDiscoveries]);
+
+    const bestXp = useMemo(() => {
+        return [...lifeformDiscoveries]
+            .filter(d => d.discoveryType === 'lifeform-xp')
+            .sort((a, b) => (b.lifeformGainedExperience || 0) - (a.lifeformGainedExperience || 0))
+            .slice(0, 8);
+    }, [lifeformDiscoveries]);
+
+    const bestHumansXp = useMemo(() => {
+        return [...lifeformDiscoveries]
+            .filter(d => d.discoveryType === 'lifeform-xp' && d.lifeform === 1)
+            .sort((a, b) => (b.lifeformGainedExperience || 0) - (a.lifeformGainedExperience || 0))
+            .slice(0, 8);
+    }, [lifeformDiscoveries]);
+
+    const bestRocktalXp = useMemo(() => {
+        return [...lifeformDiscoveries]
+            .filter(d => d.discoveryType === 'lifeform-xp' && d.lifeform === 2)
+            .sort((a, b) => (b.lifeformGainedExperience || 0) - (a.lifeformGainedExperience || 0))
+            .slice(0, 8);
+    }, [lifeformDiscoveries]);
+
+    const bestMechasXp = useMemo(() => {
+        return [...lifeformDiscoveries]
+            .filter(d => d.discoveryType === 'lifeform-xp' && d.lifeform === 3)
+            .sort((a, b) => (b.lifeformGainedExperience || 0) - (a.lifeformGainedExperience || 0))
+            .slice(0, 8);
+    }, [lifeformDiscoveries]);
+
+    const bestKaeleshXp = useMemo(() => {
+        return [...lifeformDiscoveries]
+            .filter(d => d.discoveryType === 'lifeform-xp' && d.lifeform === 4)
+            .sort((a, b) => (b.lifeformGainedExperience || 0) - (a.lifeformGainedExperience || 0))
+            .slice(0, 8);
+    }, [lifeformDiscoveries]);
+
     const summaryStats = useMemo(() => {
         let totalMSU = 0;
         let positiveOutcomes = 0;
@@ -1007,27 +1238,397 @@ const Expeditions: React.FC = () => {
         };
     }, [expeditions, mMultiplier, cMultiplier, dMultiplier]);
 
+    const [infoPage, setInfoPage] = useState(1);
+    const LOG_ITEMS_PER_PAGE = 15;
+
+    const formatDate = (timestamp: number) => {
+        const d = new Date(timestamp * 1000);
+        return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+    };
+
+    const renderLifeformResultsChart = () => (
+        <div style={{ display: 'flex', width: '100%', height: '100%', gap: '24px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div className="card-title"><TrendingUp size={18} /><span>Lifeform Mission Results</span></div>
+                <div style={{ flex: 1, width: '100%', marginTop: '20px', minHeight: '350px', minWidth: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
+                        <AreaChart data={lifeformResultsData}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                            <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} dy={10} minTickGap={40} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }} allowDecimals={false} tickFormatter={formatYAxis} width={60} />
+                            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }} />
+                            {RESULTS_CATEGORIES.map((cat) => (
+                                <Area key={cat.id} name={cat.label} type="monotone" dataKey={cat.id} stackId="1" stroke={cat.color} fill={cat.color} fillOpacity={visibleLfResults.has(cat.id) ? 0.6 : 0} strokeOpacity={visibleLfResults.has(cat.id) ? 1 : 0} strokeWidth={2} hide={!visibleLfResults.has(cat.id)} />
+                            ))}
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+            <div style={{ width: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {RESULTS_CATEGORIES.map((cat) => (
+                    <div key={cat.id} onClick={() => toggleLfResult(cat.id)} className="glass" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', background: visibleLfResults.has(cat.id) ? 'rgba(255,255,255,0.05)' : 'transparent', border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.2s' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: cat.color, opacity: visibleLfResults.has(cat.id) ? 1 : 0.3 }} />
+                        <span style={{ fontSize: '0.75rem', color: visibleLfResults.has(cat.id) ? '#fff' : 'rgba(255,255,255,0.3)' }}>{cat.label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+
+    const renderLifeformExperienceChart = () => (
+        <div style={{ display: 'flex', width: '100%', height: '100%', gap: '24px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div className="card-title"><TrendingUp size={18} /><span>Lifeform Experience Gained</span></div>
+                <div style={{ flex: 1, width: '100%', marginTop: '20px', minHeight: '350px', minWidth: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
+                        <AreaChart data={lifeformExperienceData}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                            <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} dy={10} minTickGap={40} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }} allowDecimals={false} tickFormatter={formatYAxis} width={60} />
+                            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }} />
+                            {XP_CATEGORIES.map((cat) => (
+                                <Area key={cat.id} name={cat.label} type="monotone" dataKey={cat.id} stackId="1" stroke={cat.color} fill={cat.color} fillOpacity={visibleLfXp.has(cat.id) ? 0.6 : 0} strokeOpacity={visibleLfXp.has(cat.id) ? 1 : 0} strokeWidth={2} hide={!visibleLfXp.has(cat.id)} />
+                            ))}
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+            <div style={{ width: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {XP_CATEGORIES.map((cat) => (
+                    <div key={cat.id} onClick={() => toggleLfXp(cat.id)} className="glass" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', background: visibleLfXp.has(cat.id) ? 'rgba(255,255,255,0.05)' : 'transparent', border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.2s' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: cat.color, opacity: visibleLfXp.has(cat.id) ? 1 : 0.3 }} />
+                        <span style={{ fontSize: '0.75rem', color: visibleLfXp.has(cat.id) ? '#fff' : 'rgba(255,255,255,0.3)' }}>{cat.label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+
+    const renderLifeformArtifactsChart = () => (
+        <div style={{ display: 'flex', width: '100%', height: '100%', gap: '24px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div className="card-title"><TrendingUp size={18} /><span>Artifacts Found Activity</span></div>
+                <div style={{ flex: 1, width: '100%', marginTop: '20px', minHeight: '350px', minWidth: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
+                        <AreaChart data={lifeformArtifactsData}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                            <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} dy={10} minTickGap={40} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }} allowDecimals={false} tickFormatter={formatYAxis} width={60} />
+                            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }} />
+                            <Area name="Artifacts Found" type="monotone" dataKey="artifacts" stroke="#eab308" fill="#eab308" fillOpacity={0.6} strokeWidth={2} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderLifeformBestFinds = () => (
+        <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: '16px',
+            width: '100%',
+            height: '100%',
+            overflowY: 'auto',
+            padding: '4px'
+        }}>
+            <div className="glass" style={{ padding: '20px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(234, 179, 8, 0.25)', borderTop: '4px solid #eab308' }}>
+                <h4 style={{ margin: '0 0 16px', fontWeight: 900, color: '#eab308', fontSize: '0.85rem' }}>Best Finds (Artifacts)</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                        <tr style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <th style={{ padding: '8px 4px' }}>Size</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Amount</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {bestArtifacts.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                <td style={{ padding: '8px 4px', textTransform: 'capitalize', color: 'rgba(255,255,255,0.8)' }}>{row.artifactSize || 'normal'}</td>
+                                <td style={{ padding: '8px 4px', textAlign: 'right', fontWeight: 700, color: '#eab308' }}>{(row.artifactsFound || 0).toLocaleString()}</td>
+                                <td style={{ padding: '8px 4px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{formatDate(row.timestamp)}</td>
+                            </tr>
+                        ))}
+                        {bestArtifacts.length === 0 && (
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '16px', color: 'rgba(255,255,255,0.3)' }}>No artifact discoveries yet.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="glass" style={{ padding: '20px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(13, 148, 136, 0.25)', borderTop: '4px solid #0d9488' }}>
+                <h4 style={{ margin: '0 0 16px', fontWeight: 900, color: '#0d9488', fontSize: '0.85rem' }}>Best Finds (XP)</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                        <tr style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <th style={{ padding: '8px 4px' }}>Lifeform</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Amount</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {bestXp.map((row, idx) => {
+                            const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
+                            const lfName = lfNames[(row.lifeform || 1) - 1] || 'humans';
+                            return (
+                                <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                    <td style={{ padding: '6px 4px', display: 'flex', alignItems: 'center' }}>
+                                        <img src={`/icons/lifeforms/${lfName}-icon-large.jpg`} style={{ width: '18px', height: '18px', borderRadius: '4px' }} alt={lfName} />
+                                    </td>
+                                    <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: '#0d9488' }}>{(row.lifeformGainedExperience || 0).toLocaleString()}</td>
+                                    <td style={{ padding: '6px 4px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{formatDate(row.timestamp)}</td>
+                                </tr>
+                            );
+                        })}
+                        {bestXp.length === 0 && (
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '16px', color: 'rgba(255,255,255,0.3)' }}>No experience discoveries yet.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="glass" style={{ padding: '20px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(34, 197, 94, 0.25)', borderTop: '4px solid #22c55e' }}>
+                <h4 style={{ margin: '0 0 16px', fontWeight: 900, color: '#22c55e', fontSize: '0.85rem' }}>Best Finds (XP, Humans)</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                        <tr style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <th style={{ padding: '8px 4px' }}>Lifeform</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Amount</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {bestHumansXp.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                <td style={{ padding: '6px 4px', display: 'flex', alignItems: 'center' }}>
+                                    <img src="/icons/lifeforms/humans-icon-large.jpg" style={{ width: '18px', height: '18px', borderRadius: '4px' }} alt="Humans" />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: '#22c55e' }}>{(row.lifeformGainedExperience || 0).toLocaleString()}</td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{formatDate(row.timestamp)}</td>
+                            </tr>
+                        ))}
+                        {bestHumansXp.length === 0 && (
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '16px', color: 'rgba(255,255,255,0.3)' }}>No Humans finds yet.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="glass" style={{ padding: '20px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(239, 68, 68, 0.25)', borderTop: '4px solid #ef4444' }}>
+                <h4 style={{ margin: '0 0 16px', fontWeight: 900, color: '#ef4444', fontSize: '0.85rem' }}>Best Finds (XP, Rock'tal)</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                        <tr style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <th style={{ padding: '8px 4px' }}>Lifeform</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Amount</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {bestRocktalXp.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                <td style={{ padding: '6px 4px', display: 'flex', alignItems: 'center' }}>
+                                    <img src="/icons/lifeforms/rocktal-icon-large.jpg" style={{ width: '18px', height: '18px', borderRadius: '4px' }} alt="Rock'tal" />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: '#ef4444' }}>{(row.lifeformGainedExperience || 0).toLocaleString()}</td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{formatDate(row.timestamp)}</td>
+                            </tr>
+                        ))}
+                        {bestRocktalXp.length === 0 && (
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '16px', color: 'rgba(255,255,255,0.3)' }}>No Rock'tal finds yet.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="glass" style={{ padding: '20px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(59, 130, 246, 0.25)', borderTop: '4px solid #3b82f6' }}>
+                <h4 style={{ margin: '0 0 16px', fontWeight: 900, color: '#3b82f6', fontSize: '0.85rem' }}>Best Finds (XP, Mechas)</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                        <tr style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <th style={{ padding: '8px 4px' }}>Lifeform</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Amount</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {bestMechasXp.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                <td style={{ padding: '6px 4px', display: 'flex', alignItems: 'center' }}>
+                                    <img src="/icons/lifeforms/mechas-icon-large.jpg" style={{ width: '18px', height: '18px', borderRadius: '4px' }} alt="Mechas" />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: '#3b82f6' }}>{(row.lifeformGainedExperience || 0).toLocaleString()}</td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{formatDate(row.timestamp)}</td>
+                            </tr>
+                        ))}
+                        {bestMechasXp.length === 0 && (
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '16px', color: 'rgba(255,255,255,0.3)' }}>No Mechas finds yet.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="glass" style={{ padding: '20px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(168, 85, 247, 0.25)', borderTop: '4px solid #a855f7' }}>
+                <h4 style={{ margin: '0 0 16px', fontWeight: 900, color: '#a855f7', fontSize: '0.85rem' }}>Best Finds (XP, Kaelesh)</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                    <thead>
+                        <tr style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <th style={{ padding: '8px 4px' }}>Lifeform</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Amount</th>
+                            <th style={{ padding: '8px 4px', textAlign: 'right' }}>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {bestKaeleshXp.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                <td style={{ padding: '6px 4px', display: 'flex', alignItems: 'center' }}>
+                                    <img src="/icons/lifeforms/kaelesh-icon-large.jpg" style={{ width: '18px', height: '18px', borderRadius: '4px' }} alt="Kaelesh" />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: '#a855f7' }}>{(row.lifeformGainedExperience || 0).toLocaleString()}</td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{formatDate(row.timestamp)}</td>
+                            </tr>
+                        ))}
+                        {bestKaeleshXp.length === 0 && (
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '16px', color: 'rgba(255,255,255,0.3)' }}>No Kaelesh finds yet.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+
+    const renderLifeformDetailedLog = () => {
+        const sortedDiscoveries = [...lifeformDiscoveries].sort((a, b) => b.timestamp - a.timestamp);
+        const totalPages = Math.ceil(sortedDiscoveries.length / LOG_ITEMS_PER_PAGE);
+        const paginatedDiscoveries = sortedDiscoveries.slice((infoPage - 1) * LOG_ITEMS_PER_PAGE, infoPage * LOG_ITEMS_PER_PAGE);
+
+        return (
+            <div style={{ marginTop: '16px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', color: '#fff' }}>
+                    <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', textAlign: 'left' }}>
+                            <th style={{ padding: '12px' }}>Date</th>
+                            <th style={{ padding: '12px' }}>Coordinates</th>
+                            <th style={{ padding: '12px' }}>Type</th>
+                            <th style={{ padding: '12px' }}>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginatedDiscoveries.map((disc) => {
+                            let typeLabel = '';
+                            let typeColor = '';
+                            let details = '';
+                            if (disc.discoveryType === 'nothing') {
+                                typeLabel = 'Empty Mission';
+                                typeColor = '#6b7280';
+                                details = 'No significant findings.';
+                            } else if (disc.discoveryType === 'ship-lost') {
+                                typeLabel = 'Lost Ships';
+                                typeColor = '#dc2626';
+                                details = 'Ships were lost in the void.';
+                            } else if (disc.discoveryType === 'lifeform-xp') {
+                                const names = ['Humans', 'Rock\'tal', 'Mechas', 'Kaelesh'];
+                                const name = names[(disc.lifeform || 1) - 1] || 'Humans';
+                                typeLabel = 'Lifeform Found';
+                                typeColor = '#0d9488';
+                                details = `Found ${name} (Received +${(disc.lifeformGainedExperience || 0).toLocaleString()} XP)`;
+                            } else if (disc.discoveryType === 'artifacts') {
+                                typeLabel = 'Artifacts Found';
+                                typeColor = '#eab308';
+                                details = `Found ${(disc.artifactsFound || 0).toLocaleString()} artifacts (${disc.artifactSize || 'normal'} size).`;
+                            }
+                            return (
+                                <tr key={disc.messageId} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.01)' }}>
+                                    <td style={{ padding: '12px', color: 'rgba(255,255,255,0.7)' }}>{new Date(disc.timestamp * 1000).toLocaleString()}</td>
+                                    <td style={{ padding: '12px', fontFamily: 'monospace' }}>{disc.coords || 'N/A'}</td>
+                                    <td style={{ padding: '12px' }}><span style={{ color: typeColor, fontWeight: 700 }}>{typeLabel}</span></td>
+                                    <td style={{ padding: '12px', color: 'rgba(255,255,255,0.9)' }}>{details}</td>
+                                </tr>
+                            );
+                        })}
+                        {paginatedDiscoveries.length === 0 && (
+                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'rgba(255,255,255,0.3)' }}>No lifeform mission records available.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+                {totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '24px', alignItems: 'center' }}>
+                        <button
+                            onClick={() => setInfoPage(p => Math.max(1, p - 1))}
+                            disabled={infoPage === 1}
+                            className="glass"
+                            style={{
+                                padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                                color: infoPage === 1 ? 'rgba(255,255,255,0.2)' : '#fff', cursor: infoPage === 1 ? 'default' : 'pointer', background: 'rgba(255,255,255,0.02)'
+                            }}
+                        >
+                            Prev
+                        </button>
+                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Page {infoPage} of {totalPages}</span>
+                        <button
+                            onClick={() => setInfoPage(p => Math.min(totalPages, p + 1))}
+                            disabled={infoPage === totalPages}
+                            className="glass"
+                            style={{
+                                padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                                color: infoPage === totalPages ? 'rgba(255,255,255,0.2)' : '#fff', cursor: infoPage === totalPages ? 'default' : 'pointer', background: 'rgba(255,255,255,0.02)'
+                            }}
+                        >
+                            Next
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="expeditions-layout">
             {/* --- Sidebar 1: Primary --- */}
-            <div className="expeditions-sidebar-primary">
-                {TABS.map(tab => (
+            <div className="expeditions-sidebar-primary" style={{ gap: '12px' }}>
+                <div className="expedition-mode-switcher">
                     <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className="glass"
-                        style={{
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            padding: '12px 10px', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px',
-                            background: activeTab === tab.id ? THEME_CYAN : 'rgba(255,255,255,0.03)',
-                            color: activeTab === tab.id ? '#fff' : 'rgba(255,255,255,0.6)', cursor: 'pointer', transition: 'all 0.2s',
-                            fontSize: '0.75rem', textAlign: 'center', minHeight: '60px', gap: '4px'
-                        }}
+                        onClick={() => handleSwitchMode('standard')}
+                        className={`expedition-mode-btn ${expeditionMode === 'standard' ? 'active-standard' : 'inactive'}`}
+                        title="Expeditions View"
                     >
-                        <tab.icon size={18} />
-                        {tab.label}
+                        <Compass size={18} />
+                        <span>Expeditions</span>
                     </button>
-                ))}
+                    <button
+                        onClick={() => handleSwitchMode('lifeform')}
+                        className={`expedition-mode-btn ${expeditionMode === 'lifeform' ? 'active-lifeform' : 'inactive'}`}
+                        title="Lifeform View"
+                    >
+                        <Dna size={18} />
+                        <span>Lifeform</span>
+                    </button>
+                </div>
+                {currentTabs.map(tab => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className="glass"
+                            style={{
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                padding: '12px 10px',
+                                borderRadius: '8px',
+                                background: isActive ? activeTheme.background : 'rgba(255,255,255,0.03)',
+                                boxShadow: isActive ? activeTheme.boxShadow : 'none',
+                                border: isActive ? `1px solid ${activeTheme.borderColor}` : '1px solid rgba(255,255,255,0.05)',
+                                color: isActive ? '#fff' : 'rgba(255,255,255,0.6)', cursor: 'pointer', transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                fontSize: '0.75rem', fontWeight: isActive ? 800 : 500, textAlign: 'center', minHeight: '60px', gap: '4px'
+                            }}
+                        >
+                            <tab.icon size={18} />
+                            {tab.label}
+                        </button>
+                    );
+                })}
             </div>
 
             {/* --- Sidebar 2: Secondary --- */}
@@ -1040,22 +1641,27 @@ const Expeditions: React.FC = () => {
                         className="expeditions-sidebar-secondary"
                         style={{ display: 'flex', flexDirection: 'column', gap: '4px', overflow: 'hidden' }}
                     >
-                        {currentTab.sub.map(s => (
-                            <button
-                                key={s.id}
-                                onClick={() => setSubTab(s.id)}
-                                className="glass"
-                                style={{
-                                    display: 'flex', alignItems: 'center', padding: '10px 14px', borderRadius: '8px',
-                                    background: subTab === s.id ? THEME_CYAN : 'rgba(255,255,255,0.03)',
-                                    color: subTab === s.id ? '#fff' : 'rgba(255,255,255,0.6)', cursor: 'pointer',
-                                    border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600,
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                {s.label}
-                            </button>
-                        ))}
+                        {currentTab.sub.map(s => {
+                            const isActive = subTab === s.id;
+                            return (
+                                <button
+                                    key={s.id}
+                                    onClick={() => setSubTab(s.id)}
+                                    className="glass"
+                                    style={{
+                                        display: 'flex', alignItems: 'center', padding: '10px 14px', borderRadius: '8px',
+                                        background: isActive ? activeTheme.background : 'rgba(255,255,255,0.03)',
+                                        boxShadow: isActive ? activeTheme.boxShadow : 'none',
+                                        border: isActive ? `1px solid ${activeTheme.borderColor}` : '1px solid rgba(255,255,255,0.05)',
+                                        color: isActive ? '#fff' : 'rgba(255,255,255,0.6)', cursor: 'pointer',
+                                        fontSize: '0.75rem', fontWeight: isActive ? 800 : 600,
+                                        whiteSpace: 'nowrap', transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+                                    }}
+                                >
+                                    {s.label}
+                                </button>
+                            );
+                        })}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -1067,22 +1673,26 @@ const Expeditions: React.FC = () => {
                     <button
                         onClick={() => setViewMode('chart')}
                         style={{
-                            flex: 1, padding: '14px', background: viewMode === 'chart' ? THEME_CYAN : 'transparent',
+                            flex: 1, padding: '14px',
+                            background: viewMode === 'chart' ? activeTheme.background : 'transparent',
+                            boxShadow: viewMode === 'chart' ? activeTheme.boxShadow : 'none',
                             color: viewMode === 'chart' ? '#fff' : 'rgba(255,255,255,0.4)', border: 'none', cursor: 'pointer',
-                            fontSize: '0.8rem', fontWeight: 800, transition: 'all 0.2s', borderRight: '1px solid rgba(255,255,255,0.1)'
+                            fontSize: '0.8rem', fontWeight: 800, transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)', borderRight: '1px solid rgba(255,255,255,0.1)'
                         }}
                     >
-                        {activeTab === 'info' ? 'Expedition Details' : 'Chart'}
+                        {activeTab === 'info' ? 'Expedition Details' : (activeTab === 'lf_info' ? 'Best Finds Overview' : 'Chart')}
                     </button>
                     <button
                         onClick={() => setViewMode('table')}
                         style={{
-                            flex: 1, padding: '14px', background: viewMode === 'table' ? THEME_CYAN : 'transparent',
+                            flex: 1, padding: '14px',
+                            background: viewMode === 'table' ? activeTheme.background : 'transparent',
+                            boxShadow: viewMode === 'table' ? activeTheme.boxShadow : 'none',
                             color: viewMode === 'table' ? '#fff' : 'rgba(255,255,255,0.4)', border: 'none', cursor: 'pointer',
-                            fontSize: '0.8rem', fontWeight: 800, transition: 'all 0.2s', borderRight: '1px solid rgba(255,255,255,0.1)'
+                            fontSize: '0.8rem', fontWeight: 800, transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)', borderRight: '1px solid rgba(255,255,255,0.1)'
                         }}
                     >
-                        {activeTab === 'info' ? 'Expedition Hall of Fame' : 'Table'}
+                        {activeTab === 'info' ? 'Expedition Hall of Fame' : (activeTab === 'lf_info' ? 'Detailed Discoveries Log' : 'Table')}
                     </button>
                     <button
                         onClick={handleBackup}
@@ -1120,7 +1730,9 @@ const Expeditions: React.FC = () => {
                 <div style={{ flex: 1, overflowY: viewMode === 'table' ? 'auto' : 'hidden', padding: '24px', display: 'flex', flexDirection: 'column' }}>
                     {viewMode === 'table' ? (
                         <>
-                            {activeTab === 'overview' && (
+                            {expeditionMode === 'standard' && (
+                                <>
+                                    {activeTab === 'overview' && (
                                 <GenericExpeditionTable
                                     expeditions={expeditions}
                                     rows={CATEGORIES.map(cat => ({
@@ -1488,11 +2100,41 @@ const Expeditions: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+                                </>
+                            )}
+                            {expeditionMode === 'lifeform' && (
+                                <>
+                                    {activeTab === 'lf_results' && (
+                                        <GenericExpeditionTable
+                                            expeditions={lifeformDiscoveries}
+                                            rows={resultsRows}
+                                            footer={[{ label: 'Sum', calc: (vals) => vals.reduce((a, b) => a + b, 0) }]}
+                                        />
+                                    )}
+                                    {activeTab === 'lf_experience' && (
+                                        <GenericExpeditionTable
+                                            expeditions={lifeformDiscoveries}
+                                            rows={experienceRows}
+                                            footer={[{ label: 'Total XP Gained', calc: (vals) => vals.reduce((a, b) => a + b, 0) }]}
+                                        />
+                                    )}
+                                    {activeTab === 'lf_artifacts' && (
+                                        <GenericExpeditionTable
+                                            expeditions={lifeformDiscoveries}
+                                            rows={artifactsRows}
+                                            footer={[{ label: 'Sum', calc: (vals) => vals.reduce((a, b) => a + b, 0) }]}
+                                        />
+                                    )}
+                                    {activeTab === 'lf_info' && renderLifeformDetailedLog()}
+                                </>
+                            )}
                         </>
 
                     ) : (
                         <div style={{ width: '100%', height: '100%' }}>
-                            {activeTab === 'overview' && (
+                            {expeditionMode === 'standard' && (
+                                <>
+                                    {activeTab === 'overview' && (
                                 <div style={{ display: 'flex', width: '100%', height: '100%', gap: '24px' }}>
                                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                         <div className="card-title"><TrendingUp size={18} /><span>Mission Activity</span></div>
@@ -1887,6 +2529,7 @@ const Expeditions: React.FC = () => {
                                                                 const isRes = title.includes('expedition resource booster');
                                                                 const isComputer = title.includes('expedition computer');
                                                                 const accentColor = isRes ? '#10b981' : isComputer ? '#bd00ff' : '#00f2ff';
+                                                                const durationText = getItemDurationText(item);
                                                                 return (
                                                                     <div key={idx} className="glass" style={{
                                                                         display: 'flex',
@@ -1901,11 +2544,11 @@ const Expeditions: React.FC = () => {
                                                                         <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#fff' }}>{item.title}</div>
                                                                         {item.bonus > 0 && (
                                                                             <div style={{ fontSize: '0.75rem', fontWeight: 900, color: accentColor }}>
-                                                                                +{item.bonus * 100}%
+                                                                                +{Math.round(item.bonus * 100)}%
                                                                             </div>
                                                                         )}
                                                                         <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
-                                                                            ({item.timeRemaining || (item.isPermanent ? 'Permanent' : 'Active')})
+                                                                            ({durationText})
                                                                         </div>
                                                                     </div>
                                                                 );
@@ -2063,12 +2706,22 @@ const Expeditions: React.FC = () => {
                                 </div>
                             )}
 
-                            {(activeTab !== 'overview' && activeTab !== 'resources' && activeTab !== 'ships' && activeTab !== 'darkMatter' && activeTab !== 'depletion' && activeTab !== 'info' && activeTab !== 'calculator' && activeTab !== 'items') && (
+                            {expeditionMode === 'standard' && (activeTab !== 'overview' && activeTab !== 'resources' && activeTab !== 'ships' && activeTab !== 'darkMatter' && activeTab !== 'depletion' && activeTab !== 'info' && activeTab !== 'calculator' && activeTab !== 'items') && (
                                 <div style={{ padding: '40px', textAlign: 'center', opacity: 0.5, paddingTop: '100px' }}>
                                     <Activity size={48} style={{ marginBottom: '16px' }} />
                                     <h3>{currentTab.label} Visuals</h3>
                                     <p>Detailed analytics for this category are being computed.</p>
                                 </div>
+                            )}
+                                </>
+                            )}
+                            {expeditionMode === 'lifeform' && (
+                                <>
+                                    {activeTab === 'lf_results' && renderLifeformResultsChart()}
+                                    {activeTab === 'lf_experience' && renderLifeformExperienceChart()}
+                                    {activeTab === 'lf_artifacts' && renderLifeformArtifactsChart()}
+                                    {activeTab === 'lf_info' && renderLifeformBestFinds()}
+                                </>
                             )}
                         </div>
                     )}
