@@ -21,6 +21,7 @@ const Settings: React.FC = () => {
     const [removeOGLight, setRemoveOGLight] = useState(true);
     const [lowAnimationMode, setLowAnimationMode] = useState(false);
     const [enableExpeditionHorizontalView, setEnableExpeditionHorizontalView] = useState(false);
+    const [enableNexusOverseer, setEnableNexusOverseer] = useState(true);
 
     useEffect(() => {
         const fetchAccount = async () => {
@@ -33,7 +34,13 @@ const Settings: React.FC = () => {
         // Load Global Tools Preferences
         const loadSettings = async () => {
             try {
-                const localData = await chrome.storage.local.get('globalSettings');
+                const localData = await chrome.storage.local.get(['globalSettings', 'nexus_assistant_settings']);
+                if (localData?.nexus_assistant_settings?.enabled !== undefined) {
+                    setEnableNexusOverseer(localData.nexus_assistant_settings.enabled !== false);
+                } else if (localData?.globalSettings?.enableNexusOverseer !== undefined) {
+                    setEnableNexusOverseer(localData.globalSettings.enableNexusOverseer !== false);
+                }
+
                 if (localData?.globalSettings) {
                     const settings = localData.globalSettings;
                     if (settings.defaultScrapPercent !== undefined) setScrapPercent(settings.defaultScrapPercent);
@@ -50,6 +57,7 @@ const Settings: React.FC = () => {
                     const globalSettings = localStorage.getItem('og-nexus-global-settings');
                     if (globalSettings) {
                         const parsed = JSON.parse(globalSettings);
+                        if (parsed.enableNexusOverseer !== undefined) setEnableNexusOverseer(parsed.enableNexusOverseer !== false);
                         if (parsed.defaultScrapPercent !== undefined) setScrapPercent(parsed.defaultScrapPercent);
                         if (parsed.removeOGLightDuplicates !== undefined) {
                             setRemoveOGLight(parsed.removeOGLightDuplicates);
@@ -163,6 +171,24 @@ const Settings: React.FC = () => {
 
             // Sync to chrome.storage.local
             await chrome.storage.local.set({ globalSettings: current });
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const saveEnableNexusOverseer = async (val: boolean) => {
+        setEnableNexusOverseer(val);
+        try {
+            const current = JSON.parse(localStorage.getItem('og-nexus-global-settings') || '{}');
+            current.enableNexusOverseer = val;
+            localStorage.setItem('og-nexus-global-settings', JSON.stringify(current));
+
+            // Sync to globalSettings and nexus_assistant_settings
+            await chrome.storage.local.set({ globalSettings: current });
+            const data = await chrome.storage.local.get('nexus_assistant_settings');
+            const assistantSettings = data?.nexus_assistant_settings || {};
+            assistantSettings.enabled = val;
+            await chrome.storage.local.set({ nexus_assistant_settings: assistantSettings });
         } catch (e) {
             console.error(e);
         }
@@ -401,6 +427,34 @@ const Settings: React.FC = () => {
                                 }}>
                                     <span style={{
                                         position: 'absolute', content: '""', height: '18px', width: '18px', left: enableExpeditionHorizontalView ? '24px' : '4px', bottom: '3px',
+                                        backgroundColor: '#0f172a', transition: '.3s', borderRadius: '50%'
+                                    }} />
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+                        <div style={{ marginRight: '16px' }}>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Enable Nexus Overseer Bar</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Displays the real-time production, research, idle development, and logistics alert bar on the in-game Overview page. Default is ON.</span>
+                        </div>
+                        <div>
+                            <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={enableNexusOverseer} 
+                                    onChange={(e) => saveEnableNexusOverseer(e.target.checked)}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span className="slider" style={{
+                                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                                    backgroundColor: enableNexusOverseer ? 'var(--primary)' : '#334155',
+                                    transition: '.3s', borderRadius: '24px',
+                                    boxShadow: enableNexusOverseer ? '0 0 10px rgba(56, 189, 248, 0.4)' : 'none'
+                                }}>
+                                    <span style={{
+                                        position: 'absolute', content: '""', height: '18px', width: '18px', left: enableNexusOverseer ? '24px' : '4px', bottom: '3px',
                                         backgroundColor: '#0f172a', transition: '.3s', borderRadius: '50%'
                                     }} />
                                 </span>

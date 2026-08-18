@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity } from 'lucide-react';
+import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity, Eye, Zap, LayoutGrid, Orbit } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -12,29 +12,29 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <ShieldCheck size={22} color="#00f2ff" />,
-            title: "OGame V13 Compatibility & Seamless Background Sync",
-            desc: "Full support for OGame Version 13 (v13). Powered by v13 engine integration, background synchronization now handles almost all telemetry and data updates seamlessly behind the scenes—keeping Nexus always updated."
+            icon: <Eye size={22} color="#00f2ff" />,
+            title: "Nexus Overseer In-Game Assistant",
+            desc: "Introduced the native Overseer bar and command deck on the in-game Overview page. Monitors production queues, idle research labs, stationary fleets, booster gaps, artifact caps, galaxy debris opportunities, and ROI amortization recommendations."
         },
         {
-            icon: <Ship size={22} color="#f97316" />,
-            title: "Discoverer Optimizer & Expedition Calculators",
-            desc: "Fixed Discoverer Optimizer to show all future colonies past the 3-colony limit. Added Destroyers & Reapers to maximum findable ship calculations in Expedition Calculator and added live duration timers."
+            icon: <ShieldCheck size={22} color="#10b981" />,
+            title: "Overseer Master Control & Alert Customization (BETA)",
+            desc: "Added master enable/disable controls directly inside Settings and the in-game Overseer modal. Easily snooze or mute individual alert categories and inspect features via the header info badge."
         },
         {
-            icon: <Dna size={22} color="#c084fc" />,
-            title: "Mineral Research Center & Amortization Fixes",
-            desc: "Integrated Mineral Research Center into ROI Amortization calculations. Planet Lifeforms are now fetched universally from any page, corrected Kaelesh Discoverer Enhancement tech labels, and fixed defense icons."
+            icon: <LayoutGrid size={22} color="#f97316" />,
+            title: "10-Fit Horizontal Expedition Bar (BETA)",
+            desc: "Streamlined 10-column horizontal card grid for expeditions and lifeform discoveries with quick deletion, favoriting, depletion LEDs, and zero-clutter clean empty cards (Default OFF in Settings)."
         },
         {
-            icon: <Activity size={22} color="#10b981" />,
-            title: "Terminal Mine Levels & DM Item Icons",
-            desc: "Mine levels are now displayed directly inside the Terminal Production tab. Fixed Dark Matter booster item icons in Production views and resolved planetary mine yield calculation bugs."
+            icon: <Orbit size={22} color="#ef4444" />,
+            title: "Cosmic Black Hole Animation Fix + Restyle",
+            desc: "Replaced broken generic pink loot waves on total fleet wipe messages with a custom obsidian void & blood-red rotating accretion disk singularity animation."
         },
         {
-            icon: <Database size={22} color="#3b82f6" />,
-            title: "Raid Radar Backup Export/Import & Telemetry",
-            desc: "Export and import Raid Radar target lists to JSON and cloud backup files. Added language-agnostic flying resource tracking and integrated full Lifeform telemetry into the Dashboard overview."
+            icon: <Zap size={22} color="#c084fc" />,
+            title: "Bugfixes, Engine Stability & Visual Calibration",
+            desc: "Fixed occasional line clipping. Adjusted the Background Sync to now understand Import/Export items and Production Queue. Polished graphics."
         }
     ];
 
@@ -133,7 +133,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.2.0
+                                v1.2.1
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

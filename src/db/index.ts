@@ -20,6 +20,10 @@ export interface Account {
     hasEngineer?: boolean;
     hasGeologist?: boolean;
     hasTechnocrat?: boolean;
+    officersDetails?: Record<string, { active: boolean; hoursRemaining?: number; rawText?: string }>;
+    artifacts?: number;
+    artifactsLastUpdated?: number;
+    activeItems?: ActiveItem[];
     lastSeen: number;
     // Current / Total (Type 0)
     score?: number;
@@ -66,6 +70,7 @@ export interface Account {
 
     lastApiUpdate?: number;
     researches?: { id: number, level: number }[];
+    activeResearch?: ActiveResearchInfo | null;
     lifeformExperience?: {
         lifeformId: number,
         level: number,
@@ -79,6 +84,67 @@ export interface Account {
         food: number;
         lastUpdated: number;
     };
+    importExport?: ImportExportInfo;
+    inventory?: InventoryItem[];
+    inventoryLastUpdated?: number;
+    productionQueue?: EmpireProductionQueueData;
+}
+
+export type ProductionQueueType = 'building' | 'research' | 'shipyard' | 'lifeform_building' | 'lifeform_research' | 'mecha_shipyard';
+
+export interface ProductionQueueItem {
+    type: ProductionQueueType;
+    typeLabel: string;
+    planetId: string;
+    planetName?: string;
+    coords?: string;
+    itemName: string;
+    level?: number;
+    levelText?: string;
+    endTimestamp: number;
+    techId?: number;
+}
+
+export interface EmpireProductionQueueData {
+    items: ProductionQueueItem[];
+    lastUpdated: number;
+    hasActiveResearch: boolean;
+}
+
+export interface ActiveResearchInfo {
+    techId: number;
+    techName?: string;
+    targetLevel: number;
+    completeTimestamp?: number;
+    lastUpdated: number;
+}
+
+export interface InventoryItem {
+    ref: string;
+    name: string;
+    amount: number;
+    rarity: 'common' | 'uncommon' | 'rare' | 'epic' | string;
+    category: 'building_speedup' | 'research_speedup' | 'shipyard_speedup' | 'metal_booster' | 'crystal_booster' | 'deut_booster' | 'energy_booster' | 'fields' | 'class_token' | 'resource_pack' | 'other' | string;
+    duration?: string;
+    priceDm?: number;
+    description?: string;
+    iconUrl?: string;
+    imageLargeUrl?: string;
+    images?: string[];
+    lastUpdated: number;
+}
+
+export interface ImportExportInfo {
+    name?: string;
+    rarity?: string;
+    itemText?: string;
+    bargainText?: string;
+    hasBought?: boolean;
+    gotItem?: boolean;
+    offersLeft?: number;
+    price?: number;
+    newAjaxToken?: string;
+    lastUpdated?: number;
 }
 
 export interface Planet {
@@ -97,6 +163,17 @@ export interface Planet {
     metal?: number;
     crystal?: number;
     deuterium?: number;
+    energy?: number;
+    population?: number;
+    food?: number;
+    resources?: {
+        metal: number;
+        crystal: number;
+        deuterium: number;
+        energy: number;
+        population?: number;
+        food?: number;
+    };
     // Resource Buildings
     metalMine?: number;
     crystalMine?: number;

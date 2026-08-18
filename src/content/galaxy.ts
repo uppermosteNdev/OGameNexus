@@ -1,4 +1,6 @@
 import { SpiedPlanet } from '../db';
+import { DiscoveredDebrisField } from './assistant/types';
+import { debouncedRefreshAssistantBar } from './assistant/assistantBar';
 
 function isContextValid(): boolean {
   try {
@@ -985,19 +987,22 @@ export function applyGalaxyRings() {
   const system = parseInt(systemInput.value, 10);
   if (isNaN(galaxy) || isNaN(system)) return;
 
-  // Precaution: Ensure the galaxy page is fully loaded and coordinates match what OGame is displaying
+  // Precaution: Ensure the galaxy page is not actively loading
   const loadingEl = document.getElementById("galaxyLoading");
-  if (!loadingEl) return;
-  const isLoaded = window.getComputedStyle(loadingEl).display === "none" || loadingEl.style.display === "none";
-  if (!isLoaded) return;
+  if (loadingEl) {
+    const isLoaded = window.getComputedStyle(loadingEl).display === "none" || loadingEl.style.display === "none";
+    if (!isLoaded) return;
 
-  const currentPos = loadingEl.getAttribute("data-currentposition");
-  if (!currentPos) return;
-  const parts = currentPos.split(":");
-  if (parts.length !== 2) return;
-  const posGalaxy = parseInt(parts[0], 10);
-  const posSystem = parseInt(parts[1], 10);
-  if (posGalaxy !== galaxy || posSystem !== system) return;
+    const currentPos = loadingEl.getAttribute("data-currentposition");
+    if (currentPos) {
+      const parts = currentPos.split(":");
+      if (parts.length === 2) {
+        const posGalaxy = parseInt(parts[0], 10);
+        const posSystem = parseInt(parts[1], 10);
+        if (posGalaxy !== galaxy || posSystem !== system) return;
+      }
+    }
+  }
 
   // If system or galaxy changed, hide any active tooltip
   if (lastGalaxy !== null && lastSystem !== null && (lastGalaxy !== galaxy || lastSystem !== system)) {
@@ -1021,6 +1026,10 @@ export function applyGalaxyRings() {
 
   const rows = document.querySelectorAll('.galaxyRow.ctContentRow');
   if (rows.length < 15) return; // Precaution: Ensure system table is fully loaded with all 15 coordinate slots + deep space
+
+  // Scan and persist galaxy debris field opportunities (including Slot 16 Deep Space)
+  const allDebrisRows = document.querySelectorAll('.galaxyRow.ctContentRow, .expeditionDebrisSlotBoxRow, #galaxyRow16');
+  scanGalaxyDebrisFields(galaxy, system, allDebrisRows);
 
   rows.forEach(row => {
     const posCell = row.querySelector('.cellPosition');
@@ -1050,8 +1059,6 @@ export function applyGalaxyRings() {
       const targetCoords = `${galaxy}:${system}:${position}`;
       const cachedPlanet = spiedPlanetsCache.find(p => p.coords === targetCoords);
       if (cachedPlanet) {
-        console.log(`OGame Nexus: Detected empty slot at ${targetCoords} where database expected spied planet. Soft-deleting target.`, cachedPlanet);
-        
         chrome.runtime.sendMessage({
           type: "DELETE_SPIED_PLANET",
           data: { planetKey: cachedPlanet.planetKey }
@@ -1061,7 +1068,6 @@ export function applyGalaxyRings() {
             return;
           }
           if (response && response.success) {
-            console.log(`OGame Nexus: Successfully deleted spied planet at ${targetCoords} (Key: ${cachedPlanet.planetKey}) from DB.`);
             // Update local cache to prevent redundant deletion calls
             spiedPlanetsCache = spiedPlanetsCache.filter(p => p.planetKey !== cachedPlanet.planetKey);
             // Refresh sidebar if it is currently open
@@ -1309,6 +1315,161 @@ export function cleanupGalaxyView() {
 
   // Close sidebar state if navigating away
   sessionStorage.setItem('og-nexus-intel-sidebar-open', 'false');
+}
+
+// ==========================================================================
+// Galaxy Debris Field Opportunity Scanner (1-hour TTL + Live Invalidation)
+// ==========================================================================
+
+const DEBRIS_EXPIRY_MS = 60 * 60 * 1000; // 1 hour TTL
+
+function parseDebrisAmount(text: string): number {
+  if (!text) return 0;
+  // Match digits with optional commas/dots: e.g. "Metal: 6,921,000" or "6.921.000"
+  const cleaned = text.replace(/[^0-9]/g, '');
+  return parseInt(cleaned, 10) || 0;
+}
+
+export async function scanGalaxyDebrisFields(galaxy: number, system: number, rows: NodeListOf<Element>) {
+  if (!galaxy || !system || !rows || rows.length === 0) return;
+  if (!isContextValid()) return;
+
+  try {
+    const storageKey = 'nexus_discovered_debris_fields';
+    const store = await chrome.storage.local.get(storageKey);
+    const existingMap: Record<string, DiscoveredDebrisField> = store[storageKey] || {};
+    const now = Date.now();
+
+    // 1. Prune expired entries across all galaxies (> 1 hour)
+    let hasChanges = false;
+    for (const [coords, item] of Object.entries(existingMap)) {
+      if (!item || now >= item.expiresAt || now - item.timestamp > DEBRIS_EXPIRY_MS) {
+        delete existingMap[coords];
+        hasChanges = true;
+      }
+    }
+
+    // Read configured threshold (default 1,000,000 MSU)
+    const settingsKey = 'nexus_assistant_settings';
+    const settingsStore = await chrome.storage.local.get(settingsKey);
+    const minDebrisMsu = settingsStore[settingsKey]?.thresholds?.minDebrisMsu ?? 1000000;
+
+    // Track all positions seen in this scan
+    const inspectedPositions = new Set<number>();
+
+    // 2. Scan every position in the current system (including slot 16)
+    rows.forEach(row => {
+      const posCell = row.querySelector('.cellPosition, .expeditionDebrisSlotBoxCell');
+      let position = posCell ? parseInt(posCell.textContent || '', 10) : 0;
+      if (isNaN(position) || position <= 0) {
+        if (row.id === 'galaxyRow16' || row.classList.contains('expeditionDebrisSlotBoxRow')) {
+          position = 16;
+        }
+      }
+      if (isNaN(position) || position <= 0) return;
+
+      inspectedPositions.add(position);
+
+      const coords = `${galaxy}:${system}:${position}`;
+      const debrisCell = row.querySelector('.cellDebris, #expeditionDebrisSlotDebrisContainer, #expeditionDebris') || row;
+
+      let metal = 0;
+      let crystal = 0;
+      let deuterium = 0;
+      let recyclersNeeded = 0;
+      let hasDebris = false;
+
+      if (debrisCell) {
+        const microdebris = debrisCell.querySelector('.microdebris, #expeditionDebris, img[src*="debris"], img[src*="fa3e396b8af2ae31e28ef3b44eca91"]');
+        const tooltipEl = debrisCell.querySelector('.galaxyTooltip, [id^="debris"]');
+
+        if (microdebris || tooltipEl) {
+          const links = (tooltipEl || debrisCell).querySelectorAll('.ListLinks li, .debris-content, .debris-recyclers');
+          links.forEach(li => {
+            const t = (li.textContent || '').toLowerCase();
+            if (t.includes('metal')) {
+              metal = parseDebrisAmount(t);
+            } else if (t.includes('crystal') || t.includes('kristall') || t.includes('cristal')) {
+              crystal = parseDebrisAmount(t);
+            } else if (t.includes('deut')) {
+              deuterium = parseDebrisAmount(t);
+            } else if (t.includes('recycler') || t.includes('recy') || t.includes('pathfinder') || t.includes('pionier') || t.includes('éclaireur')) {
+              recyclersNeeded = parseDebrisAmount(t);
+            }
+          });
+
+          // Check onclick sendShips(8, g, s, p, 2, recyclers) fallback
+          if (!recyclersNeeded) {
+            const mineBtn = (tooltipEl || debrisCell).querySelector('a[onclick*="sendShips"]');
+            if (mineBtn) {
+              const onclickText = mineBtn.getAttribute('onclick') || '';
+              const match = onclickText.match(/sendShips\s*\(\s*8\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*2\s*,\s*(\d+)\s*\)/i);
+              if (match) {
+                recyclersNeeded = parseInt(match[1], 10) || 0;
+              }
+            }
+          }
+
+          if (metal > 0 || crystal > 0 || deuterium > 0) {
+            hasDebris = true;
+          }
+        }
+      }
+
+      const msu = metal + crystal * 1.5 + deuterium * 3.0;
+
+      if (hasDebris && msu >= minDebrisMsu) {
+        if (!recyclersNeeded) {
+          recyclersNeeded = Math.ceil((metal + crystal + deuterium) / 25000);
+        }
+
+        const existing = existingMap[coords];
+        const isDifferent = !existing || existing.metal !== metal || existing.crystal !== crystal || existing.deuterium !== deuterium;
+
+        if (isDifferent) {
+          existingMap[coords] = {
+            coords,
+            galaxy,
+            system,
+            position,
+            metal,
+            crystal,
+            deuterium,
+            msu,
+            recyclersNeeded,
+            timestamp: now,
+            expiresAt: now + DEBRIS_EXPIRY_MS
+          };
+          hasChanges = true;
+        }
+      } else {
+        // If debris is collected/missing or below threshold and was previously saved for this coords, remove it immediately
+        if (existingMap[coords]) {
+          delete existingMap[coords];
+          hasChanges = true;
+        }
+      }
+    });
+
+    // 3. For any stored debris field in THIS system that was not found with qualifying debris in this scan, delete it!
+    for (const [coords, item] of Object.entries(existingMap)) {
+      if (item && item.galaxy === galaxy && item.system === system) {
+        if (!inspectedPositions.has(item.position)) {
+          delete existingMap[coords];
+          hasChanges = true;
+        }
+      }
+    }
+
+    if (hasChanges) {
+      await chrome.storage.local.set({ [storageKey]: existingMap });
+      const playerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+      window.dispatchEvent(new CustomEvent('ogame-nexus-debris-fields-updated'));
+      debouncedRefreshAssistantBar(playerId);
+    }
+  } catch (err) {
+    console.error('OGame Nexus: Error scanning galaxy debris fields', err);
+  }
 }
 
 

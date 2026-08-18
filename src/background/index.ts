@@ -244,6 +244,63 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (message.type === "UPDATE_PLAYER_INVENTORY") {
+        const { playerId, inventory, timestamp } = message;
+        (async () => {
+            try {
+                const existing = await db.accounts.get(playerId);
+                if (existing) {
+                    await db.accounts.update(playerId, {
+                        inventory,
+                        inventoryLastUpdated: timestamp || Date.now()
+                    });
+                    sendResponse({ success: true });
+                } else {
+                    sendResponse({ success: false, error: "Account not found" });
+                }
+            } catch (err) {
+                console.error("OGame Nexus: Error in UPDATE_PLAYER_INVENTORY", err);
+                sendResponse({ success: false });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "UPDATE_PRODUCTION_QUEUE") {
+        const { playerId, productionQueue } = message;
+        (async () => {
+            try {
+                const existing = await db.accounts.get(playerId);
+                if (existing) {
+                    await db.accounts.update(playerId, {
+                        productionQueue
+                    });
+                    sendResponse({ success: true });
+                } else {
+                    sendResponse({ success: false, error: "Account not found" });
+                }
+            } catch (err) {
+                console.error("OGame Nexus: Error in UPDATE_PRODUCTION_QUEUE", err);
+                sendResponse({ success: false });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "GET_PLAYER_INVENTORY") {
+        const { playerId } = message;
+        (async () => {
+            try {
+                const account = await db.accounts.get(playerId);
+                sendResponse({ success: true, inventory: account?.inventory || [] });
+            } catch (err) {
+                console.error("OGame Nexus: Error in GET_PLAYER_INVENTORY", err);
+                sendResponse({ success: false, inventory: [] });
+            }
+        })();
+        return true;
+    }
+
     if (message.type === "SYNC_SESSION") {
         const { account, planets, overview, supplies, facilities, production, activePlanetId, lifeformId, researches, lifeformSetup, lifeformExperience, lifeformBuildings, empire } = message.data;
         const syncData = async () => {
@@ -253,20 +310,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     const existing = await db.accounts.get(account.playerId);
 
                     // Security: Standard Research levels can only go up. Compare and keep max.
-                    let mergedResearches = Array.isArray(existing?.researches) ? existing.researches : [];
-                    if (!Array.isArray(mergedResearches) && existing?.researches && typeof existing.researches === 'object') {
-                        mergedResearches = Object.entries(existing.researches).map(([id, level]) => ({ id: parseInt(id), level: Number(level) }));
-                    }
-                    const incomingResearches = researches || (empire?.research ? Object.entries(empire.research).map(([id, level]) => ({ id: parseInt(id), level })) : null);
-
-                    if (incomingResearches) {
+                    let mergedResearches = existing?.researches || [];
+                    if (researches && researches.length > 0) {
                         const newResearches = [...mergedResearches];
-                        incomingResearches.forEach((nr: any) => {
-                            const idx = newResearches.findIndex((er: any) => er.id === nr.id);
-                            if (idx !== -1) {
-                                // Trust incoming if > 0 to resolve concatenation bugs
-                                const finalLevel = nr.level > 0 ? nr.level : newResearches[idx].level;
-                                newResearches[idx] = { ...newResearches[idx], level: finalLevel };
+                        researches.forEach((nr: { id: number, level: number }) => {
+                            const idx = newResearches.findIndex(r => r.id === nr.id);
+                            if (idx >= 0) {
+                                newResearches[idx].level = Math.max(newResearches[idx].level, nr.level);
                             } else if (nr.level > 0) {
                                 newResearches.push(nr);
                             }
@@ -300,7 +350,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         ...serverData,
                         ...(overview?.accountData || {}),
                         researches: mergedResearches,
+                        activeResearch: message.data.activeResearch !== undefined ? message.data.activeResearch : (account as any)?.activeResearch ?? existing?.activeResearch,
                         lifeformExperience: mergedLifeformExp,
+                        artifacts: (account as any).artifacts ?? existing?.artifacts,
+                        artifactsLastUpdated: (account as any).artifactsLastUpdated ?? existing?.artifactsLastUpdated,
+                        inventory: (account as any).inventory ?? existing?.inventory,
+                        inventoryLastUpdated: (account as any).inventoryLastUpdated ?? existing?.inventoryLastUpdated,
                         lastSeen: Date.now()
                     }));
                 }
@@ -405,6 +460,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                 playerId: account.playerId,
                                 name: resolvedName,
                                 activeItems: resolvedActiveItems,
+                                resources: empirePlanet?.resources || existing?.resources,
                                 productionSettings: production?.productionSettings || empirePlanet?.productionSettings || existing?.productionSettings,
                                 ...(isMainPlanet ? {
                                     ...(overview?.planetData || {}),
@@ -497,7 +553,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     lifeformSetup: updateData.lifeformSetup,
                                     lifeformBuildings: updateData.lifeformBuildings,
                                     activeItems: resolvedActiveItems,
-                                    production: updateData.production
+                                    production: updateData.production,
+                                    resources: updateData.resources
                                 }
                             );
                         }
@@ -907,6 +964,105 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ success: true, planets, account });
             } catch (err) {
                 console.error("OGame Nexus: Error fetching empire production data", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "GET_ASSISTANT_DATA") {
+        (async () => {
+            try {
+                let playerId = String(message.playerId || '').trim();
+                let account = playerId ? await db.accounts.get(playerId) : undefined;
+                if (!account && playerId && !isNaN(Number(playerId))) {
+                    account = await db.accounts.get(Number(playerId) as any);
+                }
+                if (!account) {
+                    account = await db.accounts.orderBy('lastSeen').reverse().first() || await db.accounts.toCollection().last();
+                }
+                const targetPlayerId = account?.playerId || playerId;
+
+                let planets = targetPlayerId
+                    ? await db.planets.where('playerId').equals(targetPlayerId).toArray()
+                    : [];
+
+                if (planets.length === 0 && targetPlayerId && !isNaN(Number(targetPlayerId))) {
+                    planets = await db.planets.where('playerId').equals(Number(targetPlayerId) as any).toArray();
+                }
+                if (planets.length === 0) {
+                    const allPlanets = await db.planets.toArray();
+                    if (targetPlayerId) {
+                        const filtered = allPlanets.filter(p => String(p.playerId) === String(targetPlayerId));
+                        if (filtered.length > 0) planets = filtered;
+                    }
+                    if (planets.length === 0) {
+                        planets = allPlanets;
+                    }
+                }
+                // Fetch Today's and Recent 4h Expeditions for Intel Analytics & Depletion rules
+                const now = new Date();
+                const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
+                const fourHoursAgo = (Date.now() - 4 * 3600 * 1000) / 1000;
+                const minTimestamp = Math.min(startOfDay, fourHoursAgo);
+
+                let todayExpeditions: any[] = [];
+                if (targetPlayerId) {
+                    todayExpeditions = await db.expeditions
+                        .where('timestamp')
+                        .aboveOrEqual(minTimestamp)
+                        .filter(exp => String(exp.playerId).trim() === String(targetPlayerId).trim())
+                        .toArray();
+                }
+
+                sendResponse({ success: true, planets, account, todayExpeditions });
+            } catch (err) {
+                console.error("OGame Nexus: Error fetching assistant data", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "UPDATE_IMPORT_EXPORT_INFO") {
+        (async () => {
+            try {
+                const { playerId, info } = message;
+                if (playerId && info) {
+                    const acc = await db.accounts.get(playerId);
+                    if (acc) {
+                        await db.accounts.update(playerId, { importExport: info });
+                    }
+                }
+                sendResponse({ success: true });
+            } catch (err) {
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "UPDATE_ARTIFACTS") {
+        (async () => {
+            try {
+                const playerId = String(message.playerId || '').trim();
+                const artifacts = Number(message.artifacts);
+                if (playerId && !isNaN(artifacts)) {
+                    let account = await db.accounts.get(playerId);
+                    if (!account && !isNaN(Number(playerId))) {
+                        account = await db.accounts.get(Number(playerId) as any);
+                    }
+                    if (account) {
+                        await db.accounts.update(account.playerId, {
+                            artifacts,
+                            artifactsLastUpdated: Date.now()
+                        });
+                        console.log(`[OGame Nexus] Updated Artifacts for ${account.playerName || playerId}: ${artifacts}/3600`);
+                    }
+                }
+                sendResponse({ success: true });
+            } catch (err) {
+                console.error("OGame Nexus: Error updating artifacts", err);
                 sendResponse({ success: false, error: String(err) });
             }
         })();

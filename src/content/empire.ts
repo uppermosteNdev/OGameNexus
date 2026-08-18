@@ -25,8 +25,6 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
     const isMoonView = url.includes('planetType=1');
     const planetType = isMoonView ? 'moon' : 'planet';
 
-    console.log(`OGame Nexus: Scraping Empire page (${planetType}s)...`);
-
     const planetDivs = Array.from(empire.querySelectorAll('.planet:not(.summary)'));
     const planets: Partial<Planet>[] = [];
     const research: Record<number, number> = {};
@@ -287,7 +285,6 @@ export function scrapeEmpireData(): { planets: Partial<Planet>[], research: Reco
         planets.push(planet);
     });
 
-    console.log(`OGame Nexus: Successfully scraped ${planets.length} planets from Empire page. Sections: [Buildings, Facilities, Ships, Defense, Research, Lifeform Buildings, Lifeform Research, Active Boosters]`);
     return { planets, research };
 }
 
@@ -399,11 +396,22 @@ export function parseExternalDataExportJson(data: any): {
                 lastUpdated: Date.now()
             };
 
-            // Resources
+            // Resources (from externaldataexport)
             if (rawP.resources) {
                 planet.metal = Number(rawP.resources.metal || 0);
                 planet.crystal = Number(rawP.resources.crystal || 0);
                 planet.deuterium = Number(rawP.resources.deuterium || 0);
+                planet.energy = Number(rawP.resources.energy || 0);
+                planet.population = Number(rawP.resources.population || 0);
+                planet.food = Number(rawP.resources.food || 0);
+                planet.resources = {
+                    metal: Number(rawP.resources.metal || 0),
+                    crystal: Number(rawP.resources.crystal || 0),
+                    deuterium: Number(rawP.resources.deuterium || 0),
+                    energy: Number(rawP.resources.energy || 0),
+                    population: Number(rawP.resources.population || 0),
+                    food: Number(rawP.resources.food || 0)
+                };
             }
 
             // Production rates
@@ -425,6 +433,17 @@ export function parseExternalDataExportJson(data: any): {
                         mapTechToPlanet(planet, techId, level);
                     }
                 });
+
+                // Calculate storage capacities from storage building levels
+                const isTraderAlliance = Number(data.allianceClassId) === 2 || Number(data.allianceClassId) === 1;
+                const calcStorageCap = (level: number) => {
+                    const lvl = Math.max(0, level || 0);
+                    const base = 5000 * Math.floor(2.5 * Math.exp((20 / 33) * lvl));
+                    return isTraderAlliance && lvl > 0 ? Math.floor(base * 1.10) : base;
+                };
+                if (planet.metalStorage !== undefined) planet.metalCapacity = calcStorageCap(planet.metalStorage);
+                if (planet.crystalStorage !== undefined) planet.crystalCapacity = calcStorageCap(planet.crystalStorage);
+                if (planet.deuteriumStorage !== undefined) planet.deuteriumCapacity = calcStorageCap(planet.deuteriumStorage);
             }
 
             // Ships

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, TodoProject } from '../../db';
-import { AmortizationItem, AmortizationType, rankAmortizationItems, DEFAULT_RATES, formatROI, Cost, calculateMSU, AMORTIZATION_TABLE as STATIC_TABLE } from '../../utils/amortizationCalc';
+import { AmortizationItem, AmortizationType, rankAmortizationItems, DEFAULT_RATES, formatROI, Cost, calculateMSU, getItemIcon, AMORTIZATION_TABLE as STATIC_TABLE } from '../../utils/amortizationCalc';
 import { SHIP_DATA } from '../../db/staticData';
 
 interface AmortizationViewProps {
@@ -224,33 +224,6 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
         setTimeout(() => setNotification(null), 1200);
         setAnimatedRow(key);
         setTimeout(() => setAnimatedRow(null), 800);
-    };
-
-    const getItemIcon = (item: AmortizationItem) => {
-        if (item.type === AmortizationType.Mines) {
-            const lowName = item.name.toLowerCase();
-            if (lowName.includes('metal')) return 'icons/resources/metal_mine_large.jpg';
-            if (lowName.includes('crystal')) return 'icons/resources/crystal_mine_large.jpg';
-            if (lowName.includes('deuterium')) return 'icons/resources/deuterium_mine_large.jpg';
-        }
-        if (item.type === AmortizationType.PlasmaTechnology) {
-            return 'icons/research/plasma-tech-research-large.jpg';
-        }
-
-        const staticEntry = STATIC_TABLE.find(e => e.name === item.name);
-        if (staticEntry && staticEntry.lifeformId) {
-            const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
-            const lfName = lfNames[staticEntry.lifeformId - 1];
-
-            if (item.type === AmortizationType.LifeformProductionResearches || item.type === AmortizationType.LifeformExpeditionResearches) {
-                const slotNum = Math.floor((staticEntry.id! - 1) / 4) + 1;
-                return `icons/lifeforms/${lfName}-tech-t${slotNum}-large.jpg`;
-            } else {
-                const slotNum = staticEntry.id! % 100;
-                return `icons/lifeforms/${lfName}-building-${slotNum}-large.jpg`;
-            }
-        }
-        return '';
     };
 
     const formatAbbreviated = (num: number) => {

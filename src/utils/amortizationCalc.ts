@@ -144,6 +144,34 @@ export const AMORTIZATION_TABLE = [
     }
 ];
 
+export function getItemIcon(item: AmortizationItem): string {
+    if (!item) return '';
+    if (item.type === AmortizationType.Mines) {
+        const lowName = (item.name || '').toLowerCase();
+        if (lowName.includes('metal')) return 'icons/resources/metal_mine_large.jpg';
+        if (lowName.includes('crystal')) return 'icons/resources/crystal_mine_large.jpg';
+        if (lowName.includes('deuterium')) return 'icons/resources/deuterium_mine_large.jpg';
+    }
+    if (item.type === AmortizationType.PlasmaTechnology) {
+        return 'icons/research/plasma-tech-research-large.jpg';
+    }
+
+    const staticEntry = AMORTIZATION_TABLE.find(e => e.name === item.name);
+    if (staticEntry && staticEntry.lifeformId) {
+        const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
+        const lfName = lfNames[staticEntry.lifeformId - 1];
+
+        if (item.type === AmortizationType.LifeformProductionResearches || item.type === AmortizationType.LifeformExpeditionResearches) {
+            const slotNum = Math.floor((staticEntry.id! - 1) / 4) + 1;
+            return `icons/lifeforms/${lfName}-tech-t${slotNum}-large.jpg`;
+        } else {
+            const slotNum = staticEntry.id! % 100;
+            return `icons/lifeforms/${lfName}-building-${slotNum}-large.jpg`;
+        }
+    }
+    return '';
+}
+
 export function calculateMSU(cost: Cost, rates: any = DEFAULT_RATES): number {
     const mMultiplier = 1;
     const cMultiplier = rates.metal / rates.crystal;
@@ -395,7 +423,7 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
 
         const geologistBonus = account?.hasGeologist ? 0.1 : 0;
         const staffBonus = (account?.hasCommander && account?.hasAdmiral && account?.hasEngineer && account?.hasGeologist && account?.hasTechnocrat) ? 0.02 : 0;
-        const allyTraderBonus = account?.allianceClass === 1 ? 0.05 : 0;
+        const allyTraderBonus = (account?.allianceClass === 2 || account?.allianceClass === 1) ? 0.05 : 0;
 
         const maxCrawlers = (m + c + d) * universeSpeed;
         const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);

@@ -88,6 +88,33 @@ function hookJQueryAjax() {
                         window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-messages-loaded'));
                     }
                 }
+
+                // Intercept Fleet Event List & Fleet Dispatches
+                if (url.includes('component=eventlist') || url.includes('component=eventList') || data.includes('component=eventlist') || data.includes('component=eventList')) {
+                    try {
+                        const rawText = xhr?.responseText || '';
+                        window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-eventlist-loaded', {
+                            detail: { html: rawText }
+                        }));
+                    } catch (e) {
+                        window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-eventlist-loaded', { detail: { html: null } }));
+                    }
+                } else if (url.includes('action=miniFleet') || url.includes('action=recallFleet') || url.includes('action=sendFleet')) {
+                    // Fleet dispatched or recalled - trigger event refresh
+                    setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-eventlist-loaded', { detail: { html: null } }));
+                    }, 500);
+                }
+
+                // Intercept Trader Import/Export operations
+                if (url.includes('traderImportExport') || url.includes('importExport') || data.includes('traderImportExport') || data.includes('importExport') || url.includes('action=takeItem') || url.includes('action=buyItem')) {
+                    try {
+                        const rawText = xhr?.responseText || '';
+                        window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-importexport-loaded', {
+                            detail: { response: rawText }
+                        }));
+                    } catch (e) {}
+                }
             }
         });
     } else {

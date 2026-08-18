@@ -124,9 +124,10 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
     const staffC = hasStaff ? 0.02 : 0;
     const staffD = hasStaff ? 0.02 : 0;
 
-    const allyTraderM = account?.allianceClass === 1 ? 0.05 : 0;
-    const allyTraderC = account?.allianceClass === 1 ? 0.05 : 0;
-    const allyTraderD = account?.allianceClass === 1 ? 0.05 : 0;
+    const isTrader = account?.allianceClass === 2 || account?.allianceClass === 1;
+    const allyTraderM = isTrader ? 0.05 : 0;
+    const allyTraderC = isTrader ? 0.05 : 0;
+    const allyTraderD = isTrader ? 0.05 : 0;
 
     const dynamicBoosters = getProductionBoosters(planet.activeItems);
     const boostM = dynamicBoosters.metal;
@@ -709,19 +710,23 @@ const TestingProduction: React.FC = () => {
                             Commanding Staff: Active (+2%)
                         </span>
                     )}
-                    {activeAccount.allianceClass !== undefined && activeAccount.allianceClass > 0 && (
-                        <span style={{
-                            background: activeAccount.allianceClass === 1 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(255, 255, 255, 0.03)',
-                            border: activeAccount.allianceClass === 1 ? '1px solid rgba(234, 179, 8, 0.25)' : '1px solid rgba(255, 255, 255, 0.05)',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            color: activeAccount.allianceClass === 1 ? '#eab308' : 'rgba(255, 255, 255, 0.5)',
-                            padding: '6px 12px',
-                            borderRadius: '8px'
-                        }}>
-                            Ally Class: {activeAccount.allianceClass === 1 ? 'Trader (+5%)' : activeAccount.allianceClass === 2 ? 'Researcher' : 'Warrior'}
-                        </span>
-                    )}
+                    {activeAccount.allianceClass !== undefined && activeAccount.allianceClass > 0 && (() => {
+                        const isTrader = activeAccount.allianceClass === 2 || activeAccount.allianceClass === 1;
+                        const label = isTrader ? 'Trader (+5%)' : activeAccount.allianceClass === 3 ? 'Researcher' : 'Warrior';
+                        return (
+                            <span style={{
+                                background: isTrader ? 'rgba(234, 179, 8, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                                border: isTrader ? '1px solid rgba(234, 179, 8, 0.25)' : '1px solid rgba(255, 255, 255, 0.05)',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                color: isTrader ? '#eab308' : 'rgba(255, 255, 255, 0.5)',
+                                padding: '6px 12px',
+                                borderRadius: '8px'
+                            }}>
+                                Ally Class: {label}
+                            </span>
+                        );
+                    })()}
                     <span style={{
                         background: 'rgba(255, 255, 255, 0.03)',
                         border: '1px solid rgba(255, 255, 255, 0.05)',

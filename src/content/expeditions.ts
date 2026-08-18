@@ -2306,21 +2306,15 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
             `;
 
         const pill = document.createElement('div');
-        pill.className = 'nexus-tooltip og-nexus-black-hole-pill';
-        if (rarityTier === 0) pill.classList.add('rarity-pill-common');
-        if (rarityTier === 1) pill.classList.add('rarity-pill-rare-animate');
-        if (rarityTier === 2) pill.classList.add('rarity-pill-epic-animate');
+        pill.className = 'nexus-tooltip og-nexus-black-hole-pill rarity-pill-blackhole-animate';
         pill.setAttribute('data-nexus-tooltip', 'TOTAL EXPEDITION FLEET LOSS');
         pill.style.cssText = `
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 6px;
-            background-color: rgba(10, 5, 5, 0.95);
-            border: 1px solid #ff4444;
-            border-radius: 4px;
-            padding: 6px 20px;
-            box-shadow: 0 0 25px rgba(255, 68, 68, 0.4);
+            border-radius: 6px;
+            padding: 8px 22px;
             justify-content: center;
             cursor: default;
             width: fit-content;
@@ -2815,7 +2809,7 @@ function createFitCardDOM(parsed: any): HTMLElement {
     let isEpic = false;
 
     const resRaw = (parsed.result || '').toLowerCase().trim();
-    const isNothing = resRaw === 'nothing' || resRaw === 'none' || resRaw === '0';
+    const isNothing = resRaw === 'nothing' || resRaw === 'none' || resRaw === '0' || resRaw === 'ship-lost' || resRaw === 'shiplost' || resRaw === 'empty' || resRaw === '';
 
     if (!isNothing) {
         if (parsed.size === 1) {
@@ -2963,7 +2957,7 @@ function createFitCardDOM(parsed: any): HTMLElement {
         valDiv.textContent = parsed.lifeformXP > 0 ? `${formatCompactNumber(parsed.lifeformXP)} XP` : 'XP';
     } else if (isNothing) {
         showIcon = false;
-        valDiv.textContent = 'NOTHING';
+        valDiv.textContent = '';
     } else {
         iconDiv.classList.add('icon-metal');
         iconImg.src = chrome.runtime.getURL('icons/misc/expedition-icon-medium.png');

@@ -1,5 +1,5 @@
 
-import { Planet } from '../db';
+import { Planet, ActiveResearchInfo } from '../db';
 import { trackExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
 import { trackLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson, parseExternalDataExportJson } from './empire';
@@ -11,6 +11,11 @@ import { trackCombatReports, injectTodayCombatSummaryCard } from './combats';
 import { trackEspionageReports, trackRawEspionageReports } from './espionage';
 import { renderAnalyticsTab } from './analytics';
 import { initGalaxyView, cleanupGalaxyView } from './galaxy';
+import { initAssistantBar, refreshAssistantBar, debouncedRefreshAssistantBar, isOverseerDisabled } from './assistant/assistantBar';
+import { scrapeImportExportDom, initImportExportListener, saveImportExportInfo } from './assistant/importExport';
+import { fetchPlayerInventory, parseInventoryHtml, savePlayerInventory } from './inventory';
+import { fetchEmpireProductionQueue } from './productionQueue';
+import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom } from './fleetMovement';
 import {
   SHIP_DATA,
   RESEARCH_DATA,
@@ -114,56 +119,111 @@ function scrapePlayerClass() {
   return undefined;
 }
 
-function scrapeOfficers() {
-  const officers = {
-    hasCommander: false,
-    hasAdmiral: false,
-    hasEngineer: false,
-    hasGeologist: false,
-    hasTechnocrat: false
-  };
-
+function parseOfficerDetail(selector: string): { active: boolean; hoursRemaining?: number; rawText?: string } {
   const officersEl = document.querySelector("#officers");
-  if (officersEl) {
-    const checkActive = (selector: string) => {
-      const el = officersEl.querySelector(selector);
-      if (!el) return false;
+  if (!officersEl) return { active: false };
 
-      if (el.classList.contains("on")) return true;
+  const el = officersEl.querySelector(selector);
+  if (!el) return { active: false };
 
-      const title = el.getAttribute("data-tooltip-title") || "";
-      const lowerTitle = title.toLowerCase();
-      if (lowerTitle.includes("active") || lowerTitle.includes("still active")) {
-        return true;
-      }
-      return false;
-    };
+  const isActive = el.classList.contains("on");
+  const tooltipHtml = el.getAttribute("data-tooltip-title") || el.getAttribute("title") || "";
+  const lowerTooltip = tooltipHtml.toLowerCase();
 
-    officers.hasCommander = checkActive("a.commander");
-    officers.hasAdmiral = checkActive("a.admiral");
-    officers.hasEngineer = checkActive("a.engineer");
-    officers.hasGeologist = checkActive("a.geologist");
-    officers.hasTechnocrat = checkActive("a.technocrat");
+  if (!isActive && !lowerTooltip.includes("active") && !lowerTooltip.includes("still active")) {
+    return { active: false, rawText: tooltipHtml };
   }
 
-  return officers;
+  const text = tooltipHtml
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#10;/g, ' ')
+    .replace(/&#43;/g, '+')
+    .replace(/<[^>]*>/g, ' ');
+
+  let hoursRemaining: number | undefined = undefined;
+
+  // 1. Days
+  const daysMatch = text.match(/(?:active|remaining|for)\s*(?:more than\s*)?(\d+)\s*(?:days?|d|tage?|jours?|giorni|dias|dni)\b/i) ||
+                    text.match(/(\d+)\s*(?:days?|d|tage?|jours?|giorni|dias|dni)\b/i);
+  if (daysMatch) {
+    hoursRemaining = parseInt(daysMatch[1], 10) * 24;
+  } else {
+    // 2. Combined (e.g. 2h 45m)
+    const combinedMatch = text.match(/(\d+)\s*(?:h|hours?|hrs?|std|stunden|heures?|ore|horas)\s*(?:and\s*)?(\d+)\s*(?:m|mins?|minutes?|minuten)\b/i);
+    if (combinedMatch) {
+      hoursRemaining = parseInt(combinedMatch[1], 10) + parseInt(combinedMatch[2], 10) / 60;
+    } else {
+      // 3. Hours only or minutes only
+      const hoursMatch = text.match(/(?:active|remaining|for|about|less than\s*)?(\d+)\s*(?:hours?|hrs?|h|std|stunden|heures?|ore|horas|godz)\b/i);
+      const minsMatch = text.match(/(?:active|remaining|for|about|less than\s*)?(\d+)\s*(?:minutes?|mins?|m|minuten|min)\b/i);
+      if (hoursMatch) {
+        hoursRemaining = parseInt(hoursMatch[1], 10) + (minsMatch ? parseInt(minsMatch[1], 10) / 60 : 0);
+      } else if (minsMatch) {
+        hoursRemaining = parseInt(minsMatch[1], 10) / 60;
+      } else if (/less than (?:1|an) hour|weniger als 1 stunde/i.test(text)) {
+        hoursRemaining = 0.5;
+      }
+    }
+  }
+
+  return {
+    active: true,
+    hoursRemaining,
+    rawText: text.trim()
+  };
 }
 
-function scrapeAllianceClass() {
-  const url = window.location.href.toLowerCase();
-  if (!url.includes("resourcesettings")) return undefined;
+function scrapeOfficers() {
+  const commander = parseOfficerDetail("a.commander");
+  const admiral = parseOfficerDetail("a.admiral");
+  const engineer = parseOfficerDetail("a.engineer");
+  const geologist = parseOfficerDetail("a.geologist");
+  const technocrat = parseOfficerDetail("a.technocrat");
 
+  return {
+    hasCommander: commander.active,
+    hasAdmiral: admiral.active,
+    hasEngineer: engineer.active,
+    hasGeologist: geologist.active,
+    hasTechnocrat: technocrat.active,
+    officersDetails: {
+      commander,
+      admiral,
+      engineer,
+      geologist,
+      technocrat
+    }
+  };
+}
+
+function scrapeAllianceClass(): number | undefined {
+  // 1. Check Resource Settings page (tr[data-techid="1005"])
   const allyRow = document.querySelector('tr[data-techid="1005"]');
-  if (!allyRow) return undefined;
+  if (allyRow) {
+    const classEl = allyRow.querySelector('.allianceclass');
+    if (!classEl) return 0; // No class active
+    if (classEl.classList.contains('warrior')) return 1; // Warrior (OGame ID 1)
+    if (classEl.classList.contains('trader')) return 2; // Trader (OGame ID 2)
+    if (classEl.classList.contains('researcher')) return 3; // Researcher (OGame ID 3)
+    return 0;
+  }
 
-  const classEl = allyRow.querySelector('.allianceclass');
-  if (!classEl) return 0; // No class active
+  // 2. Check Alliance Overview page (component=alliance)
+  const allyOverviewEl = document.querySelector('#allianceOverview, #alliance, .alliance_class, .allianceclass');
+  if (allyOverviewEl) {
+    const classEl = document.querySelector('.allianceclass, .alliance_class, [class*="alliance_class_"]');
+    if (classEl) {
+      const cls = classEl.className.toLowerCase();
+      if (cls.includes('warrior')) return 1;
+      if (cls.includes('trader')) return 2;
+      if (cls.includes('researcher')) return 3;
+    }
+  }
 
-  if (classEl.classList.contains('trader')) return 1; // Trader
-  if (classEl.classList.contains('researcher')) return 2; // Researcher
-  if (classEl.classList.contains('warrior')) return 3; // Warrior
-
-  return 0;
+  return undefined;
 }
 
 function scrapePlanetList() {
@@ -776,6 +836,60 @@ function scrapeResearchLevels() {
   return researches.length > 0 ? researches : null;
 }
 
+function scrapeActiveResearch(): ActiveResearchInfo | null {
+  const url = window.location.href;
+  if (url.includes("component=research")) {
+    const activeNode = document.querySelector("#technologies li.technology.active");
+    if (!activeNode) return null;
+
+    const techId = parseInt(activeNode.getAttribute("data-technology") || "0", 10);
+    const levelNode = activeNode.querySelector(".level");
+    const targetLevel = parseInt(levelNode?.getAttribute("data-value") || "0", 10);
+    const techName = activeNode.querySelector(".technology-name")?.textContent?.trim() || undefined;
+
+    let completeTimestamp: number | undefined = undefined;
+    const timerNode = document.querySelector("#researchCountdown") ||
+                      activeNode.querySelector(".countdown") ||
+                      document.querySelector("#boxResearchCountdown") ||
+                      document.querySelector(".technology.active .timer") ||
+                      document.querySelector(".researchCountdown");
+    if (timerNode) {
+      const endAttr = timerNode.getAttribute("data-end") || timerNode.getAttribute("data-timestamp");
+      if (endAttr && Number(endAttr) > 0) {
+        completeTimestamp = Number(endAttr) > 1e11 ? Number(endAttr) : Number(endAttr) * 1000;
+      }
+    }
+
+    return {
+      techId,
+      techName,
+      targetLevel,
+      completeTimestamp,
+      lastUpdated: Date.now()
+    };
+  }
+
+  // On any page, if global countdown element exists
+  const countdownEl = document.querySelector("#researchCountdown") ||
+                      document.querySelector("#boxResearchCountdown") ||
+                      document.querySelector(".researchCountdown") ||
+                      document.querySelector("#productionboxresearchcomponent .countdown");
+  if (countdownEl) {
+    const endAttr = countdownEl.getAttribute("data-end") || countdownEl.getAttribute("data-timestamp");
+    if (endAttr && Number(endAttr) > 0) {
+      const completeTimestamp = Number(endAttr) > 1e11 ? Number(endAttr) : Number(endAttr) * 1000;
+      return {
+        techId: 0,
+        targetLevel: 0,
+        completeTimestamp,
+        lastUpdated: Date.now()
+      };
+    }
+  }
+
+  return null;
+}
+
 function scrapeLifeformSetup() {
   const url = window.location.href;
   if (!url.includes("component=lfresearch")) return null;
@@ -1019,6 +1133,11 @@ function scrapeAndSync() {
 
   if (!playerId || !playerName) return;
 
+  // Background fetch of Empire production queues (1-minute automated throttle)
+  fetchEmpireProductionQueue(playerId, false).then(() => {
+    debouncedRefreshAssistantBar(playerId);
+  }).catch(() => {});
+
   // Scrape Avatar URL
   let avatarUrl = "";
   const avatarEl = document.querySelector("#playerName profile-picture");
@@ -1082,7 +1201,8 @@ function scrapeAndSync() {
     planets,
     activePlanetId: getActivePlanetId(),
     lifeformId: scrapeLifeformId(),
-    researches: undefined,
+    activeResearch: scrapeActiveResearch(),
+    researches: scrapeResearchLevels() || undefined,
     lifeformSetup: undefined,
     lifeformExperience: undefined,
     lifeformBuildings: undefined,
@@ -1092,6 +1212,11 @@ function scrapeAndSync() {
     production: scrapeProductionData(),
     empire: empire
   };
+
+  if (window.location.href.includes("component=research")) {
+    const activeRes = scrapeActiveResearch();
+    chrome.storage.local.set({ [`nexus_active_research_${playerId}`]: activeRes });
+  }
 
   const dataStr = JSON.stringify(data);
   if ((window as any)._lastScrapedDataHash === dataStr) {
@@ -1103,7 +1228,6 @@ function scrapeAndSync() {
     type: "SYNC_SESSION",
     data
   });
-
 }
 
 function injectButton() {
@@ -1327,7 +1451,7 @@ async function toggleNexusModal() {
       syncBadge.textContent = 'Game Synced: Syncing...';
 
       try {
-        await performBackgroundEmpireSync();
+        await performBackgroundEmpireSync(true);
         const now = Date.now();
         await chrome.storage.local.set({ 'last_empire_sync_time': now });
 
@@ -1731,7 +1855,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
       const playerClass = account?.playerClass || 0;
       const geologistBonus = account?.hasGeologist ? 0.1 : 0;
       const staffBonus = (account?.hasCommander && account?.hasAdmiral && account?.hasEngineer && account?.hasGeologist && account?.hasTechnocrat) ? 0.02 : 0;
-      const allyTraderBonus = account?.allianceClass === 1 ? 0.05 : 0;
+      const allyTraderBonus = (account?.allianceClass === 2 || account?.allianceClass === 1) ? 0.05 : 0;
       const plasmaLevel = account?.researches?.find((r: any) => r.id === 122)?.level || 0;
 
       const plasmaMetal = plasmaLevel * 0.01;
@@ -2263,6 +2387,9 @@ function updateFleetProgressOverlay() {
 
   const eventContent = document.getElementById('eventContent');
   if (eventContent) {
+    const movementsData = parseEventListDom(eventContent);
+    saveFleetMovements(movementsData);
+
     const rows = eventContent.querySelectorAll('tr.eventFleet');
     let ownFlyingShips = 0;
     let totalMissions = 0;
@@ -2396,6 +2523,39 @@ function updateFleetProgressOverlay() {
   }
 }
 
+let lastScrapedArtifactsCount: number | null = null;
+
+function scrapeAndSyncArtifacts() {
+  const slotEl = document.querySelector("#slot01") || document.querySelector(".slot") || document.querySelector("[id*='slot']");
+  if (!slotEl) return;
+
+  const text = slotEl.textContent || "";
+  const match = text.match(/([\d,\.]+)\s*\/\s*([\d,\.]+)/);
+  if (!match) return;
+
+  const count = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
+  if (isNaN(count) || count < 0) return;
+
+  if (lastScrapedArtifactsCount === count) return;
+  lastScrapedArtifactsCount = count;
+
+  const playerId = getMetaContent("ogame-player-id") || "";
+  if (!playerId) return;
+
+  chrome.storage.local.set({
+    [`nexus_artifacts_${playerId}`]: count,
+    [`nexus_artifacts_updated_${playerId}`]: Date.now()
+  });
+
+  safeSendMessage({
+    type: "UPDATE_ARTIFACTS",
+    playerId,
+    artifacts: count
+  });
+
+  debouncedRefreshAssistantBar(playerId);
+}
+
 function throttle(func: (...args: any[]) => void, limit: number) {
   let inThrottle = false;
   return function (this: any, ...args: any[]) {
@@ -2476,6 +2636,37 @@ const throttledObserverLogic = throttle(() => {
   } else {
     cleanupGalaxyView();
   }
+
+  // Passive Import/Export scraper when user is viewing Trader
+  if (document.querySelector("#trader_importexport, .import_export, #importexport")) {
+    const playerId = getMetaContent("ogame-player-id") || undefined;
+    scrapeImportExportDom(document, playerId);
+  }
+
+  // Live Fleet Dispatch Slots parser (#slots) on fleetdispatch page
+  if (document.querySelector("#slots")) {
+    updateDispatchSlotsFromDom(document);
+  }
+
+  // Passive Lifeform Artefacts scraper (#slot01) on lfresearch page
+  if (document.querySelector("#slot01") || window.location.href.includes("component=lfresearch")) {
+    scrapeAndSyncArtifacts();
+  }
+
+  // OGame Nexus Assistant Info Bar (Restricted strictly to Overview page)
+  const isOverview = window.location.href.includes("component=overview") ||
+                     window.location.href.includes("page=overview") ||
+                     (window.location.href.includes("page=ingame") && !window.location.href.includes("component="));
+  const existingBar = document.querySelector("#og-nexus-assistant-bar");
+
+  if (!isOverview || isOverseerDisabled()) {
+    if (existingBar) existingBar.remove();
+  } else if (document.querySelector("#planet") && !existingBar) {
+    const playerId = getMetaContent("ogame-player-id");
+    if (playerId) {
+      initAssistantBar(playerId);
+    }
+  }
 }, 50);
 
 const observer = new MutationObserver((mutations) => {
@@ -2487,6 +2678,12 @@ const observer = new MutationObserver((mutations) => {
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+
+// Initialize Flying Fleet Movements Tracker
+initFleetMovementListener();
+
+// Initialize Import/Export Passive Tracker
+initImportExportListener();
 
 function processActiveMessages() {
   if (!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id)) return;
@@ -2588,7 +2785,7 @@ injectButton();
 processActiveMessages();
 
 
-async function performBackgroundEmpireSync() {
+async function performBackgroundEmpireSync(ignoreDelay = false) {
   const playerId = getMetaContent("ogame-player-id");
   const playerName = getMetaContent("ogame-player-name");
 
@@ -2599,6 +2796,8 @@ async function performBackgroundEmpireSync() {
   let planetsData: { planets: Partial<Planet>[], research: Record<number, number> } = { planets: [], research: {} };
   let moonsData: { planets: Partial<Planet>[], research: Record<number, number> } = { planets: [], research: {} };
   let lifeformExperienceData: any = {};
+  let allianceClassFromApi: number | undefined = undefined;
+  let playerClassFromApi: number | undefined = undefined;
   let syncedViaAccountInfo = false;
 
   // 1. Primary: Try OGame v13+ externaldataexport accountInfo GET endpoint
@@ -2617,6 +2816,12 @@ async function performBackgroundEmpireSync() {
         moonsData = { planets: parsedExt.moons, research: parsedExt.research };
         if (parsedExt.speciesExperience) {
           lifeformExperienceData = parsedExt.speciesExperience;
+        }
+        if (parsedExt.allianceClass !== undefined) {
+          allianceClassFromApi = Number(parsedExt.allianceClass);
+        }
+        if (parsedExt.playerClass !== undefined) {
+          playerClassFromApi = Number(parsedExt.playerClass);
         }
         syncedViaAccountInfo = true;
       }
@@ -2713,6 +2918,49 @@ async function performBackgroundEmpireSync() {
     } catch (e) {}
   }
 
+  // 3. Fetch Import/Export Info (tracks daily & 6x/day event mystery container status)
+  try {
+    const ieRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=importExportInfo&asJson=1', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      redirect: 'manual'
+    });
+    if (ieRes.ok && ieRes.type !== 'opaqueredirect') {
+      const ieText = await ieRes.text();
+      const trimmed = ieText ? ieText.trim() : '';
+      if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        const data = JSON.parse(trimmed);
+        const info = {
+          name: data.name || undefined,
+          rarity: data.rarity || undefined,
+          itemText: data.itemText || undefined,
+          bargainText: data.bargainText || undefined,
+          hasBought: data.hasBought === 'true' || data.hasBought === true,
+          gotItem: data.gotItem === 'true' || data.gotItem === true,
+          offersLeft: data.offersLeft !== undefined ? Number(data.offersLeft) : undefined,
+          price: data.price !== undefined ? Number(data.price) : undefined,
+          newAjaxToken: data.newAjaxToken || undefined,
+          lastUpdated: Date.now()
+        };
+        await saveImportExportInfo(info, playerId);
+        refreshAssistantBar(playerId);
+      }
+    }
+  } catch (e) {}
+
+  // 4. Fetch Player Inventory (stored boosters, speed-ups, tokens, etc.)
+  try {
+    await fetchPlayerInventory(playerId);
+  } catch (e) {
+    console.warn('OGame Nexus: Failed to fetch inventory during empire sync', e);
+  }
+
+  // 5. Fetch Empire Production Queue (in-progress mines, facilities, LF tech/buildings, shipyards)
+  try {
+    await fetchEmpireProductionQueue(playerId, ignoreDelay);
+  } catch (e) {
+    console.warn('OGame Nexus: Failed to fetch production queue during empire sync', e);
+  }
+
   // Count standard buildings, ships, defenses, and lifeform tech for logging
   let totalPlanets = [...planetsData.planets, ...moonsData.planets];
   let supplyCount = 0;
@@ -2787,8 +3035,8 @@ async function performBackgroundEmpireSync() {
         allianceName: getMetaContent("ogame-alliance-name") || undefined,
         allianceTag: getMetaContent("ogame-alliance-tag") || undefined,
         serverUrl: window.location.origin,
-        playerClass: scrapePlayerClass(),
-        allianceClass: scrapeAllianceClass(),
+        playerClass: playerClassFromApi !== undefined ? playerClassFromApi : scrapePlayerClass(),
+        allianceClass: allianceClassFromApi !== undefined ? allianceClassFromApi : scrapeAllianceClass(),
         ...scrapeOfficers()
       },
       planets: planetsList.length > 0 ? planetsList : [...planetsData.planets, ...moonsData.planets].map(p => ({
@@ -2809,14 +3057,17 @@ async function performBackgroundEmpireSync() {
     }
   });
 
+  // Refresh Nexus Overseer with latest synced data
+  refreshAssistantBar(playerId);
+
   console.log(
     `%c[OGame Nexus Sync] Background Sync Complete:`,
     'color: #00f2ff; font-weight: bold; font-size: 12px;',
     {
       playerId,
       playerName,
-      playerClass: scrapePlayerClass(),
-      allianceClass: scrapeAllianceClass(),
+      playerClass: playerClassFromApi !== undefined ? playerClassFromApi : scrapePlayerClass(),
+      allianceClass: allianceClassFromApi !== undefined ? allianceClassFromApi : scrapeAllianceClass(),
       officers: scrapeOfficers(),
       syncedVia: syncedViaAccountInfo ? 'externaldataexport' : 'empire AJAX',
       planetsCount: totalPlanets.length,
@@ -2830,7 +3081,8 @@ async function performBackgroundEmpireSync() {
         lifeformId: p.lifeformId,
         activeItems: p.activeItems || [],
         lifeformSetup: p.lifeformSetup,
-        lifeformBuildings: p.lifeformBuildings
+        lifeformBuildings: p.lifeformBuildings,
+        resources: p.resources
       }))
     }
   );
@@ -2899,8 +3151,6 @@ async function checkAutoSync() {
 
     // 1 minute = 1 * 60 * 1000 milliseconds
     if (now - lastSync >= 1 * 60 * 1000) {
-      console.log("OGame Nexus: Auto-sync triggered (1 minute elapsed since last sync).");
-
       // Update sync time immediately to prevent concurrent triggers in other tabs
       await chrome.storage.local.set({ 'last_empire_sync_time': now });
 
@@ -2913,18 +3163,13 @@ async function checkAutoSync() {
           badge.textContent = 'Game Synced: Just now';
         }
       } catch (syncErr) {
-        console.log("OGame Nexus: Empire background sync failed, scheduling retry on next navigation after 15 seconds", syncErr);
         // Set timestamp back to 45 seconds ago, so if the player navigates to another page after 15 seconds,
         // it will retry the sync instead of waiting another 1 minute
         await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 45 * 1000 });
       }
     }
   } catch (err: any) {
-    if (err?.message?.includes("context invalidated")) {
-      console.log("OGame Nexus: Auto-sync check skipped due to extension context invalidation.");
-    } else {
-      console.log("OGame Nexus: Error during auto-sync check", err);
-    }
+    // Quietly ignore context invalidation on extension reload
   }
 }
 
