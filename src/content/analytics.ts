@@ -65,7 +65,7 @@ function getExpeditionShipsResources(shipsMap: Record<number, number>) {
     let metal = 0;
     let crystal = 0;
     let deuterium = 0;
-    
+
     Object.keys(shipsMap).forEach(k => {
         const id = parseInt(k);
         const amount = shipsMap[id] || 0;
@@ -76,9 +76,9 @@ function getExpeditionShipsResources(shipsMap: Record<number, number>) {
             deuterium += cost.deuterium * amount;
         }
     });
-    
+
     const msu = metal + crystal * 1.5 + deuterium * 3;
-    
+
     return { metal, crystal, deuterium, msu };
 }
 
@@ -768,7 +768,7 @@ function renderShipsCard(aggregate: AnalyticsDataAggregate) {
         item.className = 'nexus-tooltip';
         item.setAttribute('data-nexus-tooltip', `${sName}: ${count.toLocaleString()}`);
         item.setAttribute('title', `${sName}: ${count.toLocaleString()}`);
-        
+
         item.style.cssText = `
             display: flex;
             flex-direction: row;
@@ -895,7 +895,7 @@ function renderTotalsTable(
 
     hdrs.forEach((h, idx) => {
         const th = document.createElement('th');
-        th.style.cssText = `padding: 12px; border-right: 1px solid rgba(255,255,255,0.03); ${h ? 'text-align: center;' : 'width: 240px; position: relative;'}`;
+        th.style.cssText = `padding: 12px; border-right: 1px solid rgba(255,255,255,0.03); ${h ? 'text-align: center;' : 'width: 312px; min-width: 312px; position: relative;'}`;
         if (idx === 0) {
             th.innerHTML = `
                 <div class="og-nexus-totals-settings-cog" style="cursor: pointer; display: flex; align-items: center; justify-content: center; color: #64748b; transition: color 0.2s; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 10;" title="Configure Rows">
@@ -954,7 +954,7 @@ function renderTotalsTable(
         rowTr.style.background = rowData.bg;
         rowTr.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
         rowTr.innerHTML = `
-            <td style="padding: 14px 20px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05);">${rowData.title}</td>
+            <td style="padding: 14px 16px; text-align: center; font-weight: bold; color: #f8fafc; border-right: 1px solid rgba(255,255,255,0.05); width: 312px; min-width: 312px; white-space: nowrap;">${rowData.title}</td>
             <td style="padding: 14px 12px; text-align: center; color: #cbd5e1; font-weight: bold;">${formatNumber(rowData.events, 0) || '-'}</td>
             <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #E6953C;">${formatNumber(Math.round(rowData.metal), 0) || '-'}</td>
             <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #4CAEE6;">${formatNumber(Math.round(rowData.crystal), 0) || '-'}</td>
@@ -974,7 +974,7 @@ function getRowName(id: string): string {
     switch (id) {
         case 'expoResources': return 'Expedition Resources';
         case 'expoShips': return 'Expedition Ships';
-        case 'expoTotal': return 'Expeditions Total';
+        case 'expoTotal': return 'Expeditions Total (Res + Ships)';
         case 'combats': return 'Combats';
         case 'debrisFields': return 'Debris Fields';
         case 'totalToday': return '∑ Today';
@@ -1064,7 +1064,7 @@ function getRowMetadata(
         case 'expoTotal': {
             const shipRes = getExpeditionShipsResources(ag.shipsMap);
             return {
-                title: 'Expeditions Total',
+                title: 'Expeditions Total (Res + Ships)',
                 bg: 'rgba(56, 189, 248, 0.08)',
                 color: '#38bdf8',
                 events: (ag.categories['Resources'] || 0) + (ag.categories['Ships'] || 0),
@@ -1261,7 +1261,7 @@ function renderDragList(listContainer: HTMLElement, config: OptionalRowConfig[],
             opacity: ${item.enabled ? '1' : '0.45'};
             transition: opacity 0.2s, background-color 0.2s, border-color 0.2s;
         `;
-        
+
         rowItem.addEventListener('dragstart', (e) => {
             dragSourceIndex = idx;
             rowItem.style.opacity = '0.4';
@@ -1384,11 +1384,11 @@ function toggleSettingsModal(
 
     const header = document.createElement('div');
     header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;';
-    
+
     const title = document.createElement('span');
     title.textContent = 'Configure Table Rows';
     title.style.cssText = 'color: #fff; font-weight: 700; font-size: 14px;';
-    
+
     const saveBtn = document.createElement('button');
     saveBtn.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -1416,7 +1416,7 @@ function toggleSettingsModal(
         saveBtn.style.background = 'rgba(34, 197, 94, 0.2)';
         saveBtn.style.boxShadow = 'none';
     };
-    
+
     saveBtn.onclick = () => {
         try {
             chrome.storage.local.set({ nexusTerminalRowsConfig: cachedRowsConfig }, () => {

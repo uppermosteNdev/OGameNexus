@@ -73,60 +73,60 @@ const RESEARCH_BASE_COSTS: Record<string, { base: ResourceCost; factor: number }
 
 const LIFEFORM_BUILDINGS_COSTS: Record<number, { base: ResourceCost; factor: number }> = {
     // Humans
-    11101: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.20 },
-    11102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.23 },
-    11103: { base: { metal: 20000, crystal: 25000, deuterium: 10000 }, factor: 1.3 },
-    11104: { base: { metal: 40000, crystal: 35000, deuterium: 15000 }, factor: 1.3 },
-    11105: { base: { metal: 50000, crystal: 40000, deuterium: 20000 }, factor: 1.3 },
-    11106: { base: { metal: 9000, crystal: 6000, deuterium: 3000 }, factor: 1.5 },
-    11107: { base: { metal: 25000, crystal: 20000, deuterium: 10000 }, factor: 1.15 },
-    11108: { base: { metal: 50000, crystal: 25000, deuterium: 15000 }, factor: 1.5 },
-    11109: { base: { metal: 100000, crystal: 80000, deuterium: 30000 }, factor: 1.15 },
-    11110: { base: { metal: 150000, crystal: 120000, deuterium: 50000 }, factor: 1.3 },
-    11111: { base: { metal: 80000, crystal: 35000, deuterium: 60000 }, factor: 1.5 },
-    11112: { base: { metal: 500000, crystal: 400000, deuterium: 200000 }, factor: 1.3 },
+    11101: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.20 }, // Residential Sector
+    11102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.23 }, // Biosphere Farm
+    11103: { base: { metal: 20000, crystal: 25000, deuterium: 10000 }, factor: 1.30 }, // Research Centre
+    11104: { base: { metal: 5000, crystal: 3200, deuterium: 1500 }, factor: 1.70 }, // Academy of Sciences
+    11105: { base: { metal: 50000, crystal: 40000, deuterium: 50000 }, factor: 1.70 }, // Neuro-Calibration Centre
+    11106: { base: { metal: 9000, crystal: 6000, deuterium: 3000 }, factor: 1.50 }, // High Energy Smelting
+    11107: { base: { metal: 25000, crystal: 13000, deuterium: 7000 }, factor: 1.09 }, // Food Silo
+    11108: { base: { metal: 50000, crystal: 25000, deuterium: 15000 }, factor: 1.50 }, // Fusion-Powered Production
+    11109: { base: { metal: 75000, crystal: 20000, deuterium: 25000 }, factor: 1.09 }, // Skyscraper
+    11110: { base: { metal: 150000, crystal: 30000, deuterium: 15000 }, factor: 1.12 }, // Biotech Lab
+    11111: { base: { metal: 80000, crystal: 35000, deuterium: 60000 }, factor: 1.50 }, // Metropolis
+    11112: { base: { metal: 250000, crystal: 125000, deuterium: 125000 }, factor: 1.20 }, // Planetary Shield
 
     // Rock'tal
-    12101: { base: { metal: 9, crystal: 3, deuterium: 0 }, factor: 1.20 },
-    12102: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.20 },
-    12103: { base: { metal: 40000, crystal: 10000, deuterium: 15000 }, factor: 1.3 },
-    12104: { base: { metal: 50000, crystal: 15000, deuterium: 20000 }, factor: 1.3 },
-    12105: { base: { metal: 60000, crystal: 20000, deuterium: 25000 }, factor: 1.3 },
-    12106: { base: { metal: 10000, crystal: 8000, deuterium: 1000 }, factor: 1.4 },
-    12107: { base: { metal: 35000, crystal: 25000, deuterium: 15000 }, factor: 1.15 },
-    12108: { base: { metal: 75000, crystal: 35000, deuterium: 20000 }, factor: 1.4 },
-    12109: { base: { metal: 85000, crystal: 44000, deuterium: 25000 }, factor: 1.4 },
-    12110: { base: { metal: 120000, crystal: 50000, deuterium: 20000 }, factor: 1.4 },
-    12111: { base: { metal: 250000, crystal: 150000, deuterium: 100000 }, factor: 1.8 },
-    12112: { base: { metal: 600000, crystal: 450000, deuterium: 250000 }, factor: 1.3 },
+    12101: { base: { metal: 9, crystal: 3, deuterium: 0 }, factor: 1.20 }, // Meditation Enclave
+    12102: { base: { metal: 7, crystal: 2, deuterium: 0 }, factor: 1.20 }, // Crystal Farm
+    12103: { base: { metal: 40000, crystal: 10000, deuterium: 15000 }, factor: 1.30 }, // Rune Technologium
+    12104: { base: { metal: 5000, crystal: 3800, deuterium: 1000 }, factor: 1.70 }, // Rune Forge
+    12105: { base: { metal: 50000, crystal: 40000, deuterium: 50000 }, factor: 1.65 }, // Oriktorium
+    12106: { base: { metal: 10000, crystal: 8000, deuterium: 1000 }, factor: 1.40 }, // Magma Forge
+    12107: { base: { metal: 20000, crystal: 15000, deuterium: 10000 }, factor: 1.20 }, // Disruption Chamber
+    12108: { base: { metal: 50000, crystal: 35000, deuterium: 15000 }, factor: 1.50 }, // Megalith
+    12109: { base: { metal: 85000, crystal: 44000, deuterium: 25000 }, factor: 1.40 }, // Crystal Refinery
+    12110: { base: { metal: 120000, crystal: 50000, deuterium: 20000 }, factor: 1.40 }, // Deuterium Synthesiser
+    12111: { base: { metal: 250000, crystal: 150000, deuterium: 100000 }, factor: 1.80 }, // Mineral Research Centre
+    12112: { base: { metal: 250000, crystal: 125000, deuterium: 125000 }, factor: 1.50 }, // Advanced Recycling Plant
 
     // Mechas
-    13101: { base: { metal: 6, crystal: 2, deuterium: 0 }, factor: 1.21 },
-    13102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.18 },
-    13103: { base: { metal: 30000, crystal: 20000, deuterium: 10000 }, factor: 1.3 },
-    13104: { base: { metal: 50000, crystal: 30000, deuterium: 15000 }, factor: 1.3 },
-    13105: { base: { metal: 80000, crystal: 50000, deuterium: 25000 }, factor: 1.3 },
-    13106: { base: { metal: 15000, crystal: 10000, deuterium: 5000 }, factor: 1.5 },
-    13107: { base: { metal: 35000, crystal: 15000, deuterium: 10000 }, factor: 1.5 },
-    13108: { base: { metal: 60000, crystal: 45000, deuterium: 20000 }, factor: 1.15 },
-    13109: { base: { metal: 120000, crystal: 90000, deuterium: 40000 }, factor: 1.15 },
-    13110: { base: { metal: 100000, crystal: 40000, deuterium: 20000 }, factor: 1.5 },
-    13111: { base: { metal: 55000, crystal: 50000, deuterium: 30000 }, factor: 1.5 },
-    13112: { base: { metal: 750000, crystal: 500000, deuterium: 300000 }, factor: 1.3 },
+    13101: { base: { metal: 6, crystal: 2, deuterium: 0 }, factor: 1.21 }, // Assembly Line
+    13102: { base: { metal: 5, crystal: 2, deuterium: 0 }, factor: 1.18 }, // Fusion Cell Factory
+    13103: { base: { metal: 30000, crystal: 20000, deuterium: 10000 }, factor: 1.30 }, // Robotics Research Centre
+    13104: { base: { metal: 5000, crystal: 3800, deuterium: 1000 }, factor: 1.80 }, // Update Network
+    13105: { base: { metal: 50000, crystal: 40000, deuterium: 50000 }, factor: 1.80 }, // Quantum Computer Centre
+    13106: { base: { metal: 7500, crystal: 7000, deuterium: 1000 }, factor: 1.30 }, // Automatised Assembly Centre
+    13107: { base: { metal: 35000, crystal: 15000, deuterium: 10000 }, factor: 1.50 }, // High-Performance Transformer
+    13108: { base: { metal: 50000, crystal: 20000, deuterium: 30000 }, factor: 1.07 }, // Microchip Assembly Line
+    13109: { base: { metal: 100000, crystal: 10000, deuterium: 3000 }, factor: 1.14 }, // Production Assembly Hall
+    13110: { base: { metal: 100000, crystal: 40000, deuterium: 20000 }, factor: 1.50 }, // High-Performance Synthesiser
+    13111: { base: { metal: 55000, crystal: 50000, deuterium: 30000 }, factor: 1.50 }, // Chip Mass Production
+    13112: { base: { metal: 250000, crystal: 125000, deuterium: 125000 }, factor: 1.40 }, // Nano Repair Bots
 
     // Kaelesh
-    14101: { base: { metal: 4, crystal: 3, deuterium: 0 }, factor: 1.21 },
-    14102: { base: { metal: 6, crystal: 3, deuterium: 0 }, factor: 1.21 },
-    14103: { base: { metal: 20000, crystal: 20000, deuterium: 30000 }, factor: 1.3 },
-    14104: { base: { metal: 45000, crystal: 30000, deuterium: 20000 }, factor: 1.3 },
-    14105: { base: { metal: 70000, crystal: 50000, deuterium: 35000 }, factor: 1.3 },
-    14106: { base: { metal: 12000, crystal: 9000, deuterium: 3000 }, factor: 1.5 },
-    14107: { base: { metal: 30000, crystal: 20000, deuterium: 15000 }, factor: 1.15 },
-    14108: { base: { metal: 60000, crystal: 50000, deuterium: 25000 }, factor: 1.15 },
-    14109: { base: { metal: 110000, crystal: 80000, deuterium: 50000 }, factor: 1.15 },
-    14110: { base: { metal: 130000, crystal: 90000, deuterium: 60000 }, factor: 1.5 },
-    14111: { base: { metal: 70000, crystal: 60000, deuterium: 40000 }, factor: 1.5 },
-    14112: { base: { metal: 1000000, crystal: 750000, deuterium: 500000 }, factor: 1.3 }
+    14101: { base: { metal: 4, crystal: 3, deuterium: 0 }, factor: 1.21 }, // Sanctuary
+    14102: { base: { metal: 6, crystal: 3, deuterium: 0 }, factor: 1.21 }, // Antimatter Condenser
+    14103: { base: { metal: 20000, crystal: 20000, deuterium: 30000 }, factor: 1.30 }, // Vortex Chamber
+    14104: { base: { metal: 7500, crystal: 5000, deuterium: 800 }, factor: 1.80 }, // Halls of Realisation
+    14105: { base: { metal: 60000, crystal: 30000, deuterium: 50000 }, factor: 1.80 }, // Forum of Transcendence
+    14106: { base: { metal: 8500, crystal: 5000, deuterium: 3000 }, factor: 1.25 }, // Antimatter Convector
+    14107: { base: { metal: 15000, crystal: 15000, deuterium: 20000 }, factor: 1.20 }, // Cloning Laboratory
+    14108: { base: { metal: 75000, crystal: 25000, deuterium: 30000 }, factor: 1.05 }, // Chrysalis Accelerator
+    14109: { base: { metal: 87500, crystal: 25000, deuterium: 30000 }, factor: 1.20 }, // Bio Modifier
+    14110: { base: { metal: 150000, crystal: 30000, deuterium: 30000 }, factor: 1.50 }, // Psionic Modulator
+    14111: { base: { metal: 75000, crystal: 50000, deuterium: 55000 }, factor: 1.20 }, // Ship Manufacturing Hall
+    14112: { base: { metal: 500000, crystal: 250000, deuterium: 250000 }, factor: 1.40 } // Supra Refractor
 };
 
 const DEFENCES_BASE_COSTS: Record<number, ResourceCost> = {
@@ -165,21 +165,14 @@ const calculateStandardCost = (base: ResourceCost, multiplier: number, start: nu
     return { metal, crystal, deuterium };
 };
 
-const calculateLifeformBuildingCost = (itemId: number, base: ResourceCost, multiplier: number, start: number, end: number): ResourceCost => {
-    const isTechScaled = [11101, 11102, 12101, 12102, 13101, 13102, 14101, 14102].includes(itemId);
+const calculateLifeformBuildingCost = (_itemId: number, base: ResourceCost, multiplier: number, start: number, end: number): ResourceCost => {
     let metal = 0;
     let crystal = 0;
     let deuterium = 0;
     for (let level = start + 1; level <= end; level++) {
-        if (isTechScaled) {
-            metal += Math.floor(base.metal * Math.pow(multiplier, level - 1) * level);
-            crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1) * level);
-            deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1) * level);
-        } else {
-            metal += Math.floor(base.metal * Math.pow(multiplier, level - 1));
-            crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1));
-            deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1));
-        }
+        metal += Math.floor(base.metal * Math.pow(multiplier, level - 1) * level);
+        crystal += Math.floor(base.crystal * Math.pow(multiplier, level - 1) * level);
+        deuterium += Math.floor(base.deuterium * Math.pow(multiplier, level - 1) * level);
     }
     return { metal, crystal, deuterium };
 };
@@ -1486,6 +1479,17 @@ const CostsPlanner: React.FC = () => {
         return formatGatherTime(remainingDaysToGather);
     }, [remainingDaysToGather]);
 
+    const remainingGatherDateText = useMemo(() => {
+        if (!remainingDaysToGather || remainingDaysToGather <= 0 || !isFinite(remainingDaysToGather)) {
+            return 'Resources ready now (all available in storage & flight)';
+        }
+        const target = new Date(Date.now() + remainingDaysToGather * 24 * 60 * 60 * 1000);
+        const dayName = target.toLocaleDateString(undefined, { weekday: 'long' });
+        const dateFormatted = target.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        const timeFormatted = target.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+        return `Est. Ready: ${dayName}, ${dateFormatted} at ${timeFormatted}`;
+    }, [remainingDaysToGather]);
+
     const groupedCart = useMemo(() => {
         const groups: Record<string, { name: string; coords: string; isEmpire: boolean; planetImg?: string; items: CartItem[] }> = {};
 
@@ -2695,10 +2699,13 @@ const CostsPlanner: React.FC = () => {
                                     </div>
                                     <div className="msu-val-text">{formatNumber(cartSummary.msu)}</div>
                                 </div>
-                                <div className="summary-msu-pod" title={`Calculated by subtracting total planet, moon, and flying resources (${formatFullNumber(totalCurrentResourcesMSU)} MSU) from total cost`}>
+                                <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#38bdf8" />
                                         <span>EST. GATHER TIME</span>
+                                        <span className="gather-info-icon" title={remainingGatherDateText}>
+                                            <Info size={12} />
+                                        </span>
                                     </div>
                                     <div className="msu-val-text" style={{ color: '#38bdf8', textShadow: '0 0 10px rgba(56, 189, 248, 0.25)' }}>{remainingGatherTimeText}</div>
                                 </div>

@@ -204,6 +204,7 @@ export function renderAssistantBar(playerId: string): void {
           <div class="header-slice-fill"></div>
           <div class="header-cap-right"></div>
           <h3>Nexus Overseer</h3>
+          <div class="nexus-header-cat-indicators"></div>
           <span class="nexus-overseer-info-btn nexus-tooltip" data-nexus-tooltip="Nexus Overseer acts as your personal assistant, delivering real-time intelligent telemetry, empire notifications, and smart recommendations across all your planets.&#10;&#10;You can snooze or mute alerts anytime or disable Overseer completely from inside Nexus settings.">i</span>
         </div>
         <div class="content">
@@ -237,27 +238,30 @@ export function renderAssistantBar(playerId: string): void {
   const logisticsCount = notifications.filter(n => n.category === 'logistics').length;
   const intelCount = notifications.filter(n => n.category === 'intel' || n.category === 'growth').length;
 
-  const pulseDot = barEl.querySelector('.nexus-pulse-dot');
-  const targetPulseClass = criticalCount > 0
-    ? 'pulse-danger'
-    : (reminderCount > 0 ? 'pulse-warning' : (logisticsCount > 0 ? 'pulse-warning' : 'pulse-normal'));
-
-  if (pulseDot && lastRenderedPulseState !== targetPulseClass) {
-    lastRenderedPulseState = targetPulseClass;
-    pulseDot.className = `nexus-pulse-dot ${targetPulseClass}`;
-  }
-
-  const pillsContainer = barEl.querySelector('.nexus-counter-pills');
-  const pillsHtml = `
-    ${criticalCount > 0 ? `<span class="nexus-pill-badge pill-danger" title="${criticalCount} Active Warning(s)"><span class="nexus-pill-dot dot-danger"></span><span class="nexus-pill-count">${criticalCount}</span></span>` : ''}
-    ${reminderCount > 0 ? `<span class="nexus-pill-badge pill-reminder" title="${reminderCount} Active Reminder(s)"><span class="nexus-pill-dot dot-reminder"></span><span class="nexus-pill-count">${reminderCount}</span></span>` : ''}
-    ${logisticsCount > 0 ? `<span class="nexus-pill-badge pill-warning" title="${logisticsCount} Active Logistics Alert(s)"><span class="nexus-pill-dot dot-warning"></span><span class="nexus-pill-count">${logisticsCount}</span></span>` : ''}
-    ${intelCount > 0 ? `<span class="nexus-pill-badge pill-info" title="${intelCount} Active Intel Update(s)"><span class="nexus-pill-dot dot-info"></span><span class="nexus-pill-count">${intelCount}</span></span>` : ''}
-  `.trim();
-
-  if (pillsContainer && pillsHtml !== lastRenderedPillsHtml) {
-    lastRenderedPillsHtml = pillsHtml;
-    pillsContainer.innerHTML = pillsHtml;
+  const indicatorsEl = barEl.querySelector('.nexus-header-cat-indicators');
+  if (indicatorsEl) {
+    const catKey = `${criticalCount}_${reminderCount}_${logisticsCount}_${intelCount}`;
+    if (indicatorsEl.getAttribute('data-last-key') !== catKey) {
+      indicatorsEl.setAttribute('data-last-key', catKey);
+      indicatorsEl.innerHTML = `
+        <div class="nexus-header-cat-pill cat-critical ${criticalCount > 0 ? 'has-alerts' : 'is-empty'}" data-target-tab="critical" title="${criticalCount} Warning(s) & Critical Alert(s)">
+          <span class="cat-dot dot-critical"></span>
+          <span class="cat-count-num text-critical">${criticalCount}</span>
+        </div>
+        <div class="nexus-header-cat-pill cat-reminder ${reminderCount > 0 ? 'has-alerts' : 'is-empty'}" data-target-tab="reminder" title="${reminderCount} Reminder(s)">
+          <span class="cat-dot dot-reminder"></span>
+          <span class="cat-count-num text-reminder">${reminderCount}</span>
+        </div>
+        <div class="nexus-header-cat-pill cat-logistics ${logisticsCount > 0 ? 'has-alerts' : 'is-empty'}" data-target-tab="logistics" title="${logisticsCount} Logistics Alert(s)">
+          <span class="cat-dot dot-logistics"></span>
+          <span class="cat-count-num text-logistics">${logisticsCount}</span>
+        </div>
+        <div class="nexus-header-cat-pill cat-intel ${intelCount > 0 ? 'has-alerts' : 'is-empty'}" data-target-tab="intel" title="${intelCount} Intel Notification(s)">
+          <span class="cat-dot dot-intel"></span>
+          <span class="cat-count-num text-intel">${intelCount}</span>
+        </div>
+      `;
+    }
   }
 
   if (shuffledOrder.length !== notifications.length) {
@@ -277,19 +281,38 @@ export function renderAssistantBar(playerId: string): void {
 
     let tickerHtml = '';
     if (!currentItem) {
+      const allClearTooltip = [
+        'Nexus Overseer: All Clear',
+        'All empire sectors nominal. Fleet secure, queues active & resources balanced.',
+        '💡 Click anywhere on the bar to open Nexus Overseer Terminal.'
+      ].join('\n\n');
+
       tickerHtml = `
-        <div class="nexus-ticker-item all-clear">
+        <div class="nexus-ticker-item all-clear nexus-tooltip" data-nexus-tooltip="${allClearTooltip.replace(/"/g, '&quot;')}">
           <span class="nexus-ticker-icon">✨</span>
           <span class="nexus-ticker-text">All sectors nominal. Fleet secure & resources balanced.</span>
         </div>
       `;
     } else {
       const catBadgeText = currentItem.badgeText || (currentItem.category === 'critical' ? 'WARNING' : currentItem.category.toUpperCase());
+      
+      const tooltipLines: string[] = [];
+      if (currentItem.title && currentItem.title.toLowerCase() !== currentItem.shortMessage.toLowerCase()) {
+        tooltipLines.push(currentItem.title);
+      }
+      if (currentItem.message && currentItem.message.toLowerCase() !== currentItem.shortMessage.toLowerCase()) {
+        tooltipLines.push(currentItem.message);
+      } else {
+        tooltipLines.push(currentItem.shortMessage);
+      }
+      tooltipLines.push('💡 Click anywhere on the bar to open Nexus Overseer Terminal.');
+      const itemTooltip = tooltipLines.join('\n\n');
+
       tickerHtml = `
-        <div class="nexus-ticker-item severity-${currentItem.severity}">
-          <span class="nexus-ticker-icon${currentItem.iconTooltip ? ' nexus-tooltip' : ''}" ${currentItem.iconTooltip ? `data-nexus-tooltip="${currentItem.iconTooltip.replace(/"/g, '&quot;')}"` : ''}>${renderAssistantIcon(currentItem.icon)}</span>
+        <div class="nexus-ticker-item severity-${currentItem.severity} nexus-tooltip" data-nexus-tooltip="${itemTooltip.replace(/"/g, '&quot;')}">
+          <span class="nexus-ticker-icon">${renderAssistantIcon(currentItem.icon)}</span>
           <span class="nexus-ticker-badge badge-${currentItem.category}">${catBadgeText}</span>
-          <span class="nexus-ticker-text" title="${currentItem.message}">${currentItem.shortMessage}</span>
+          <span class="nexus-ticker-text">${currentItem.shortMessage}</span>
         </div>
       `;
     }
@@ -314,12 +337,20 @@ function attachBarEvents(barEl: HTMLElement, playerId: string): void {
     };
   }
 
-  barEl.onclick = async () => {
+  barEl.onclick = async (e: MouseEvent) => {
+    const catPill = (e.target as HTMLElement)?.closest('.nexus-header-cat-pill') as HTMLElement | null;
     let targetTab: 'critical' | 'reminder' | 'logistics' | 'intel' | 'settings' | undefined = undefined;
-    if (notifications.length > 0 && shuffledOrder.length > 0) {
-      const currentItem = notifications[shuffledOrder[cycleIndex % shuffledOrder.length]];
-      if (currentItem) {
-        targetTab = currentItem.category === 'growth' ? 'intel' : (currentItem.category as any);
+
+    if (catPill) {
+      e.stopPropagation();
+      const tabAttr = catPill.getAttribute('data-target-tab') as any;
+      if (tabAttr) targetTab = tabAttr;
+    } else {
+      if (notifications.length > 0 && shuffledOrder.length > 0) {
+        const currentItem = notifications[shuffledOrder[cycleIndex % shuffledOrder.length]];
+        if (currentItem) {
+          targetTab = currentItem.category === 'growth' ? 'intel' : (currentItem.category as any);
+        }
       }
     }
 

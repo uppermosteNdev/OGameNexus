@@ -1410,71 +1410,59 @@ async function toggleNexusModal() {
   `;
   syncBadge.textContent = 'Game Synced: ...';
 
-  const officers = scrapeOfficers();
+  syncBadge.addEventListener('mouseenter', () => {
+    if (!syncBadge.classList.contains('syncing')) {
+      syncBadge.style.background = 'rgba(56, 189, 248, 0.15)';
+      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.2)';
+    }
+  });
 
-  if (!officers.hasCommander) {
-    syncBadge.textContent = 'Manual Sync Only';
+  syncBadge.addEventListener('mouseleave', () => {
+    if (!syncBadge.classList.contains('syncing')) {
+      syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
+      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
+    }
+  });
+
+  syncBadge.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (syncBadge.classList.contains('syncing')) return;
+
+    syncBadge.classList.add('syncing');
     syncBadge.style.color = '#94a3b8';
-    syncBadge.style.background = 'rgba(148, 163, 184, 0.05)';
-    syncBadge.style.borderColor = 'rgba(148, 163, 184, 0.1)';
+    syncBadge.style.background = 'rgba(148, 163, 184, 0.08)';
+    syncBadge.style.borderColor = 'rgba(148, 163, 184, 0.2)';
     syncBadge.style.textShadow = 'none';
     syncBadge.style.boxShadow = 'none';
     syncBadge.style.cursor = 'default';
-  } else {
-    syncBadge.addEventListener('mouseenter', () => {
-      if (!syncBadge.classList.contains('syncing')) {
-        syncBadge.style.background = 'rgba(56, 189, 248, 0.15)';
-        syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-        syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.2)';
-      }
-    });
+    syncBadge.textContent = 'Game Synced: Syncing...';
 
-    syncBadge.addEventListener('mouseleave', () => {
-      if (!syncBadge.classList.contains('syncing')) {
-        syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
-        syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
-        syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
-      }
-    });
+    try {
+      await performBackgroundEmpireSync(true);
+      const now = Date.now();
+      await chrome.storage.local.set({ 'last_empire_sync_time': now });
 
-    syncBadge.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (syncBadge.classList.contains('syncing')) return;
-
-      syncBadge.classList.add('syncing');
-      syncBadge.style.color = '#94a3b8';
-      syncBadge.style.background = 'rgba(148, 163, 184, 0.08)';
-      syncBadge.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-      syncBadge.style.textShadow = 'none';
-      syncBadge.style.boxShadow = 'none';
-      syncBadge.style.cursor = 'default';
-      syncBadge.textContent = 'Game Synced: Syncing...';
-
-      try {
-        await performBackgroundEmpireSync(true);
-        const now = Date.now();
-        await chrome.storage.local.set({ 'last_empire_sync_time': now });
-
-        syncBadge.style.color = '#38bdf8';
-        syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
-        syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
-        syncBadge.style.textShadow = '0 0 8px rgba(56, 189, 248, 0.4)';
-        syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
-        syncBadge.style.cursor = 'pointer';
-        syncBadge.textContent = 'Game Synced: Just now';
-      } catch (err) {
-        console.warn('OGame Nexus: Background sync failed', err);
-        syncBadge.style.color = '#ef4444';
-        syncBadge.style.background = 'rgba(239, 68, 68, 0.08)';
-        syncBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-        syncBadge.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.4)';
-        syncBadge.style.cursor = 'pointer';
-        syncBadge.textContent = 'Game Synced: Failed (Retry)';
-      } finally {
-        syncBadge.classList.remove('syncing');
-      }
-    });
-  }
+      syncBadge.style.color = '#38bdf8';
+      syncBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+      syncBadge.style.borderColor = 'rgba(56, 189, 248, 0.2)';
+      syncBadge.style.textShadow = '0 0 8px rgba(56, 189, 248, 0.4)';
+      syncBadge.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.05)';
+      syncBadge.style.cursor = 'pointer';
+      syncBadge.textContent = 'Game Synced: Just now';
+    } catch (err) {
+      console.warn('OGame Nexus: Background sync failed', err);
+      syncBadge.style.color = '#ef4444';
+      syncBadge.style.background = 'rgba(239, 68, 68, 0.08)';
+      syncBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+      syncBadge.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.4)';
+      syncBadge.style.cursor = 'pointer';
+      syncBadge.textContent = 'Game Synced: Failed (Retry)';
+    } finally {
+      syncBadge.classList.remove('syncing');
+    }
+  });
 
   const closeBtn = document.createElement('div');
   closeBtn.innerHTML = '&#x2715;';
@@ -1486,10 +1474,6 @@ async function toggleNexusModal() {
   rightGroup.appendChild(closeBtn);
 
   const updateHeaderBadge = async () => {
-    if (!officers.hasCommander) {
-      syncBadge.textContent = 'Manual Sync Only';
-      return;
-    }
     try {
       const res = await chrome.storage.local.get('last_empire_sync_time');
       const timestamp = res.last_empire_sync_time;
@@ -2890,8 +2874,20 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
       const trimmed = sbText ? sbText.trim() : '';
       if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
         const sbJson = JSON.parse(trimmed);
-        if (sbJson?.species) {
-          lifeformExperienceData = sbJson.species;
+        const rawSpecies = sbJson?.speciesInformation || sbJson?.species || sbJson?.data?.species;
+        if (Array.isArray(rawSpecies) && rawSpecies.length > 0) {
+          lifeformExperienceData = rawSpecies.map((s: any) => ({
+            id: Number(s.id),
+            lifeformId: Number(s.id > 700 ? s.id - 700 : s.id),
+            level: Number(s.level || 0),
+            bonus: Number(s.bonus || 0),
+            currentExp: Number(s.xp !== undefined ? s.xp : (s.currentExp || 0)),
+            nextLevelExp: Number(s.xpToNextLevel !== undefined ? s.xpToNextLevel : (s.nextLevelExp || 100)),
+            xp: Number(s.xp !== undefined ? s.xp : (s.currentExp || 0)),
+            xpToNextLevel: Number(s.xpToNextLevel !== undefined ? s.xpToNextLevel : (s.nextLevelExp || 100))
+          }));
+        } else if (rawSpecies && typeof rawSpecies === 'object') {
+          lifeformExperienceData = rawSpecies;
         }
       }
     }
@@ -3139,18 +3135,12 @@ async function checkAutoSync() {
     // Only attempt sync if player has an active session/context loaded
     if (!playerId || !playerName) return;
 
-    // Only auto-sync if player has Commander active
-    const officers = scrapeOfficers();
-    if (!officers.hasCommander) {
-      return;
-    }
-
     const res = await chrome.storage.local.get('last_empire_sync_time');
     const lastSync = res.last_empire_sync_time || 0;
     const now = Date.now();
 
-    // 1 minute = 1 * 60 * 1000 milliseconds
-    if (now - lastSync >= 1 * 60 * 1000) {
+    // 20 seconds delay between navigation auto-syncs
+    if (now - lastSync >= 20 * 1000) {
       // Update sync time immediately to prevent concurrent triggers in other tabs
       await chrome.storage.local.set({ 'last_empire_sync_time': now });
 
@@ -3163,9 +3153,8 @@ async function checkAutoSync() {
           badge.textContent = 'Game Synced: Just now';
         }
       } catch (syncErr) {
-        // Set timestamp back to 45 seconds ago, so if the player navigates to another page after 15 seconds,
-        // it will retry the sync instead of waiting another 1 minute
-        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 45 * 1000 });
+        // Set timestamp back to 10 seconds ago on failure so next navigation retries promptly
+        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 10 * 1000 });
       }
     }
   } catch (err: any) {

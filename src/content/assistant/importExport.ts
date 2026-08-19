@@ -16,14 +16,20 @@ export async function getStoredImportExportInfo(): Promise<ImportExportInfo | nu
 
 export async function saveImportExportInfo(info: ImportExportInfo, playerId?: string): Promise<void> {
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.storage?.local) {
       await chrome.storage.local.set({ 'nexus_import_export_info': info });
     }
-    if (playerId && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ type: "UPDATE_IMPORT_EXPORT_INFO", playerId, info }, () => {});
+    if (playerId && typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: "UPDATE_IMPORT_EXPORT_INFO", playerId, info }, () => {
+        if (chrome.runtime?.lastError) {
+          // Silent catch
+        }
+      });
     }
-  } catch (e) {
-    console.warn('OGame Nexus: Error saving Import/Export info', e);
+  } catch (e: any) {
+    if (!e?.message?.includes('Extension context invalidated')) {
+      console.warn('OGame Nexus: Error saving Import/Export info', e);
+    }
   }
 }
 

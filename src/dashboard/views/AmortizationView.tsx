@@ -22,15 +22,16 @@ const THEME_CYAN = '#00f2ff';
 const THEME_PURPLE = '#a855f7';
 
 const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account }) => {
+    const onlyPlanets = useMemo(() => (planets || []).filter(p => p && p.type !== 'moon'), [planets]);
     const [selectedPlanets, setSelectedPlanets] = useState<string[]>([]);
     const [lastInitializedPlayerId, setLastInitializedPlayerId] = useState<string | null>(null);
 
     useEffect(() => {
-        if (planets.length > 0 && account?.playerId !== lastInitializedPlayerId) {
-            setSelectedPlanets(planets.map(p => p.id));
+        if (onlyPlanets.length > 0 && account?.playerId !== lastInitializedPlayerId) {
+            setSelectedPlanets(onlyPlanets.map(p => p.id));
             setLastInitializedPlayerId(account?.playerId || null);
         }
-    }, [planets, account?.playerId, lastInitializedPlayerId]);
+    }, [onlyPlanets, account?.playerId, lastInitializedPlayerId]);
 
     const [filters, setFilters] = useState<{ [key in AmortizationType]: boolean }>({
         [AmortizationType.Mines]: true,
@@ -142,12 +143,12 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     useEffect(() => {
         const calculate = async () => {
             setLoading(true);
-            const items = await rankAmortizationItems(planets, account, filters, settings || DEFAULT_RATES, limit, expoAverages, selectedPlanets);
+            const items = await rankAmortizationItems(onlyPlanets, account, filters, settings || DEFAULT_RATES, limit, expoAverages, selectedPlanets);
             setResults(items);
             setLoading(false);
         };
         calculate();
-    }, [selectedPlanets, filters, limit, planets, account, settings, expoAverages]);
+    }, [selectedPlanets, filters, limit, onlyPlanets, account, settings, expoAverages]);
 
     // Update existing todos with new calculated values
     useEffect(() => {
@@ -310,7 +311,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                 <motion.button
                                     whileHover={{ background: 'rgba(255,255,255,0.08)', color: '#fff' }}
                                     whileTap={{ scale: 0.95 }}
-                                    onClick={() => setSelectedPlanets(planets.map(p => p.id))}
+                                    onClick={() => setSelectedPlanets(onlyPlanets.map(p => p.id))}
                                     style={{ padding: '6px 14px', borderRadius: '8px', border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: 1000, cursor: 'pointer', transition: 'all 0.2s' }}
                                 >ALL</motion.button>
                                 <motion.button
@@ -321,7 +322,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                 >NONE</motion.button>
                             </div>
                             <div style={{ fontSize: '11px', fontWeight: 900, color: THEME_CYAN, background: 'rgba(0,242,255,0.05)', padding: '4px 10px', borderRadius: '20px', border: '1px solid rgba(0,242,255,0.1)' }}>
-                                {selectedPlanets.length} / {planets.length} ACTIVE
+                                {selectedPlanets.length} / {onlyPlanets.length} ACTIVE
                             </div>
                         </div>
                     </div>
@@ -335,7 +336,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                         paddingRight: '10px',
                         paddingBottom: '8px'
                     }} className="intelligence-track">
-                        {planets.map(p => {
+                        {onlyPlanets.map(p => {
                             const isSelected = selectedPlanets.includes(p.id);
                             return (
                                 <motion.button

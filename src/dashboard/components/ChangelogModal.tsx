@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity, Eye, Zap, LayoutGrid, Orbit } from 'lucide-react';
+import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity, Eye, Zap, LayoutGrid, Orbit, Calculator, Clock } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -13,28 +13,23 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
     const changes = [
         {
             icon: <Eye size={22} color="#00f2ff" />,
-            title: "Nexus Overseer In-Game Assistant",
-            desc: "Introduced the native Overseer bar and command deck on the in-game Overview page. Monitors production queues, idle research labs, stationary fleets, booster gaps, artifact caps, galaxy debris opportunities, and ROI amortization recommendations."
+            title: "Overseer Enhancements & Planet To-Dos",
+            desc: "Added top-bar category status pills for instant navigation, local Planet To-Dos scanner for top amortization projects on the active planet, and chromatic threat-level scaling for Exposed Goods."
         },
         {
-            icon: <ShieldCheck size={22} color="#10b981" />,
-            title: "Overseer Master Control & Alert Customization (BETA)",
-            desc: "Added master enable/disable controls directly inside Settings and the in-game Overseer modal. Easily snooze or mute individual alert categories and inspect features via the header info badge."
+            icon: <Clock size={22} color="#10b981" />,
+            title: "Costs Planner Gather Projections & Cost Fixes",
+            desc: "Added hover completion tooltips (showing exact target day, hour, and minute) on Estimated Gather Time, centered investment cells, and corrected Lifeform building calculation costs."
         },
         {
-            icon: <LayoutGrid size={22} color="#f97316" />,
-            title: "10-Fit Horizontal Expedition Bar (BETA)",
-            desc: "Streamlined 10-column horizontal card grid for expeditions and lifeform discoveries with quick deletion, favoriting, depletion LEDs, and zero-clutter clean empty cards (Default OFF in Settings)."
+            icon: <Zap size={22} color="#f97316" />,
+            title: "Autonomous Background Sync (Commander Independent)",
+            desc: "Nexus now automatically background-syncs data whenever the player is active, regardless of whether Commander is active or not (removing 'Manual Sync Only' limitations)."
         },
         {
-            icon: <Orbit size={22} color="#ef4444" />,
-            title: "Cosmic Black Hole Animation Fix + Restyle",
-            desc: "Replaced broken generic pink loot waves on total fleet wipe messages with a custom obsidian void & blood-red rotating accretion disk singularity animation."
-        },
-        {
-            icon: <Zap size={22} color="#c084fc" />,
-            title: "Bugfixes, Engine Stability & Visual Calibration",
-            desc: "Fixed occasional line clipping. Adjusted the Background Sync to now understand Import/Export items and Production Queue. Polished graphics."
+            icon: <ShieldCheck size={22} color="#c084fc" />,
+            title: "Fleet Telemetry & Engine Bugfixes",
+            desc: "Fixed flying fleet percentages, empire-wide fleet detection, broken Import/Export Overseer deep-links, invalid mine notifications on moons, and fortified runtime lifecycle guards."
         }
     ];
 
@@ -133,7 +128,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.2.1
+                                v1.2.2
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

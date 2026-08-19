@@ -325,18 +325,16 @@ export interface ProductionResults {
             total: { metal: number; crystal: number; deuterium: number };
         }
     };
-    globalBonuses: { metal: number; crystal: number; deuterium: number };
+        globalBonuses: { metal: number; crystal: number; deuterium: number };
 }
 
 export function calculateEmpireProduction(state: EmpireState): ProductionResults {
     const { account } = state || {};
-    const planets = safeArray(state?.planets);
+    const planets = safeArray(state.planets).filter((p: any) => p && p.type !== 'moon');
     const universeSpeed = account?.universeSpeed || 1;
-    const playerClass = account?.playerClass || 0;
+    const playerClass = account?.playerClass || 0; // 1 = Collector
 
-    let globalEuroMetal = 0;
-    let globalEuroCrystal = 0;
-    let globalEuroDeut = 0;
+    let globalEuroMetal = 0, globalEuroCrystal = 0, globalEuroDeut = 0;
 
     planets.forEach((p: any) => {
         const techMult = getPlanetTechMultiplier(p, account);
@@ -456,8 +454,9 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
 }
 
 export function rankAmortizationItems(planets: any[], account: any, filters: { [key in AmortizationType]: boolean }, rates: any = DEFAULT_RATES, limit: number = 25, expoAverages?: { resources: Cost, ships: Cost, totals: { resources: Cost, ships: Cost } }, selectedPlanetIds?: string[]): AmortizationItem[] {
-    // Deep clone to create full empire state
-    const state: EmpireState = JSON.parse(JSON.stringify({ planets, account }));
+    // Deep clone only valid planets (moons have no mines or amortization production)
+    const cleanPlanets = (planets || []).filter((p: any) => p && p.type !== 'moon');
+    const state: EmpireState = JSON.parse(JSON.stringify({ planets: cleanPlanets, account }));
     const resultItems: AmortizationItem[] = [];
 
     const REDUCTION_IDS = {
@@ -473,27 +472,27 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
     const getReduction = (type: string, planet: any, state: EmpireState): number => {
         if (!type) return 0;
         if (type === "mineralResearchCenter") {
-            const level = (!planet.lifeformId || planet.lifeformId === 2) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.mineralResearchCenter)?.level || 0) : 0;
-            return level * 0.005;
+            const level = (!planet.lifeformId || planet.lifeformId === 2) ? getLifeformBuildingLevel(planet, REDUCTION_IDS.mineralResearchCenter) : 0;
+            return Math.min(0.5, level * 0.005);
         }
         if (type === "megalith") {
-            const level = (!planet.lifeformId || planet.lifeformId === 2) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.megalith)?.level || 0) : 0;
-            return level * 0.01;
+            const level = (!planet.lifeformId || planet.lifeformId === 2) ? getLifeformBuildingLevel(planet, REDUCTION_IDS.megalith) : 0;
+            return Math.min(0.5, level * 0.01);
         }
         if (type === "research_centers") {
-            const l1 = (!planet.lifeformId || planet.lifeformId === 1) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.researchCentre)?.level || 0) : 0;
-            const l2 = (!planet.lifeformId || planet.lifeformId === 2) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.runeTechnologium)?.level || 0) : 0;
-            const l3 = (!planet.lifeformId || planet.lifeformId === 3) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.roboticsResearchCentre)?.level || 0) : 0;
-            const l4 = (!planet.lifeformId || planet.lifeformId === 4) ? (planet.lifeformBuildings?.find((b: any) => b.id === REDUCTION_IDS.vortexChamber)?.level || 0) : 0;
-            return (l1 + l2 + l3 + l4) * 0.0025;
+            const l1 = (!planet.lifeformId || planet.lifeformId === 1) ? getLifeformBuildingLevel(planet, REDUCTION_IDS.researchCentre) : 0;
+            const l2 = (!planet.lifeformId || planet.lifeformId === 2) ? getLifeformBuildingLevel(planet, REDUCTION_IDS.runeTechnologium) : 0;
+            const l3 = (!planet.lifeformId || planet.lifeformId === 3) ? getLifeformBuildingLevel(planet, REDUCTION_IDS.roboticsResearchCentre) : 0;
+            const l4 = (!planet.lifeformId || planet.lifeformId === 4) ? getLifeformBuildingLevel(planet, REDUCTION_IDS.vortexChamber) : 0;
+            return Math.min(0.5, (l1 + l2 + l3 + l4) * 0.0025);
         }
         if (type === "improvedStellarator") {
             let totalBoostedLevel = 0;
             state.planets.forEach((pl: any) => {
-                const tech = pl.lifeformSetup?.find((t: any) => t.selectedTechId === REDUCTION_IDS.improvedStellarator);
-                if (tech && tech.level > 0) {
+                const techLevel = getLifeformTechLevel(pl, REDUCTION_IDS.improvedStellarator);
+                if (techLevel > 0) {
                     const techMult = getPlanetTechMultiplier(pl, state.account);
-                    totalBoostedLevel += tech.level * techMult;
+                    totalBoostedLevel += techLevel * techMult;
                 }
             });
             // Improved Stellarator reduction is 0.15% per level (boosted)

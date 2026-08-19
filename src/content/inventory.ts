@@ -262,11 +262,11 @@ export async function fetchPlayerInventory(playerId?: string): Promise<Inventory
       headers: {
         'Accept': 'application/json, text/plain, */*',
         'X-Requested-With': 'XMLHttpRequest'
-      }
+      },
+      redirect: 'manual'
     });
 
-    if (!response.ok) {
-      console.warn(`[OGame Nexus] Inventory fetch failed with HTTP ${response.status}`);
+    if (!response.ok || response.type === 'opaqueredirect') {
       return [];
     }
 
@@ -286,8 +286,8 @@ export async function fetchPlayerInventory(playerId?: string): Promise<Inventory
     }
 
     return items;
-  } catch (err) {
-    console.warn('[OGame Nexus] Error during fetchPlayerInventory', err);
+  } catch (err: any) {
+    // Normal browser behavior when player navigates away while fetch is in-flight
     return [];
   }
 }

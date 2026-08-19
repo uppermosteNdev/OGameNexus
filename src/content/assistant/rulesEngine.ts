@@ -1,12 +1,40 @@
 import { Planet, Account, ImportExportInfo, Expedition, ActiveResearchInfo } from '../../db';
-import { AssistantNotification, AssistantSettings, SnoozeRecord, DiscoveredDebrisField } from './types';
+import {
+  AssistantNotification,
+  AssistantSettings,
+  SnoozeRecord,
+  DiscoveredDebrisField,
+  AssistantDomainId,
+  AssistantSubCategoryId,
+  OVERSEER_TAXONOMY
+} from './types';
 import { getStoredImportExportInfo } from './importExport';
-import { getPlanetTechMultiplier, rankAmortizationItems, AmortizationType, DEFAULT_RATES, formatROI, getItemIcon } from '../../utils/amortizationCalc';
+import { getPlanetTechMultiplier, rankAmortizationItems, AmortizationType, DEFAULT_RATES, formatROI, getItemIcon, AMORTIZATION_TABLE } from '../../utils/amortizationCalc';
 import { getStoredFleetMovements, countActiveMissions, FleetMovementsData } from '../fleetMovement';
 import { SHIP_DATA } from '../../db/staticData';
 import { getProductionBoosters } from '../../utils/items';
 import { getStoredPlayerInventory } from '../inventory';
 import { getStoredProductionQueue } from '../productionQueue';
+
+export { formatROI };
+
+export function getCurrentActivePlanetId(): string | null {
+  if (typeof window === 'undefined') return null;
+  const url = window.location.href;
+  const cpMatch = url.match(/[?&]cp=(\d+)/);
+  if (cpMatch) return cpMatch[1];
+
+  const activePlanetNode = document.querySelector("#planetList .smallplanet.active, #planetList .smallplanet.active_home");
+  if (activePlanetNode) return activePlanetNode.id.replace("planet-", "");
+
+  const activeLink = document.querySelector("#planetList a.active");
+  if (activeLink) {
+    const href = activeLink.getAttribute("href") || "";
+    const m = href.match(/cp=(\d+)/);
+    if (m) return m[1];
+  }
+  return null;
+}
 
 const DEFAULT_SETTINGS: AssistantSettings = {
   enabled: true,
@@ -73,7 +101,8 @@ export async function saveAssistantSettings(settings: AssistantSettings): Promis
 export async function snoozeNotification(
   target: AssistantNotification | string,
   type: 'forever' | 'until',
-  hours = 24
+  hours = 24,
+  meta?: { level?: 'domain' | 'subCategory' | 'rule' | 'instance'; title?: string; icon?: string }
 ): Promise<void> {
   const settings = await getAssistantSettings();
   const id = typeof target === 'string' ? target : target.id;
@@ -81,8 +110,9 @@ export async function snoozeNotification(
     type,
     untilTimestamp: type === 'until' ? Date.now() + hours * 3600 * 1000 : undefined,
     snoozedAt: Date.now(),
-    title: typeof target === 'object' ? target.title : undefined,
-    icon: typeof target === 'object' ? target.icon : undefined,
+    level: meta?.level || (typeof target === 'object' ? 'instance' : 'rule'),
+    title: meta?.title || (typeof target === 'object' ? target.title : undefined),
+    icon: meta?.icon || (typeof target === 'object' ? target.icon : undefined),
     planetName: typeof target === 'object' ? target.planetName : undefined,
     planetImgUrl: typeof target === 'object' ? target.planetImgUrl : undefined,
     coords: typeof target === 'object' ? target.coords : undefined,
@@ -92,20 +122,63 @@ export async function snoozeNotification(
   await saveAssistantSettings(settings);
 }
 
-export function formatFriendlyRuleName(id: string, record?: SnoozeRecord): { title: string; icon: string; coords?: string; planetName?: string; planetImgUrl?: string } {
+export async function snoozeHierarchyNode(
+  key: string,
+  type: 'forever' | 'until',
+  hours = 24,
+  meta?: { title?: string; icon?: string; level?: 'domain' | 'subCategory' | 'rule' | 'instance' }
+): Promise<void> {
+  const settings = await getAssistantSettings();
+  const record: SnoozeRecord = {
+    type,
+    untilTimestamp: type === 'until' ? Date.now() + hours * 3600 * 1000 : undefined,
+    snoozedAt: Date.now(),
+    level: meta?.level || 'rule',
+    title: meta?.title,
+    icon: meta?.icon
+  };
+  settings.snoozedRules[key] = record;
+  await saveAssistantSettings(settings);
+}
+
+export async function unsnoozeHierarchyNode(key: string): Promise<void> {
+  const settings = await getAssistantSettings();
+  delete settings.snoozedRules[key];
+  await saveAssistantSettings(settings);
+}
+
+export function formatFriendlyRuleName(id: string, record?: SnoozeRecord): { title: string; icon: string; coords?: string; planetName?: string; planetImgUrl?: string; level?: string } {
   if (record && record.title) {
     return {
       title: record.title,
       icon: record.icon || '🛡️',
       coords: record.coords,
       planetName: record.planetName,
-      planetImgUrl: record.planetImgUrl
+      planetImgUrl: record.planetImgUrl,
+      level: record.level
     };
+  }
+
+  // Lookup in taxonomy tree
+  for (const domain of OVERSEER_TAXONOMY) {
+    if (domain.id === id) {
+      return { title: domain.name, icon: domain.icon, level: 'domain' };
+    }
+    for (const sub of domain.subCategories) {
+      if (sub.id === id) {
+        return { title: sub.name, icon: sub.icon, level: 'subCategory' };
+      }
+      for (const rule of sub.rules) {
+        if (rule.id === id) {
+          return { title: rule.name, icon: rule.icon, level: 'rule' };
+        }
+      }
+    }
   }
 
   // Fallback parsing for legacy snoozed IDs
   if (id.startsWith('energy_deficit_')) {
-    return { title: 'Energy Deficit Alert', icon: '⚡' };
+    return { title: 'Energy Deficit Alert', icon: 'icons/resources/solar-plant-large.jpg', level: 'instance' };
   }
   if (id.startsWith('storage_overflow_')) {
     const parts = id.split('_');
@@ -113,29 +186,29 @@ export function formatFriendlyRuleName(id: string, record?: SnoozeRecord): { tit
     let icon = 'icons/resources/metal_storage_large.jpg';
     if (resKey === 'crystal') icon = 'icons/resources/crystal_storage_large.jpg';
     if (resKey === 'deuterium') icon = 'icons/resources/deuterium_storage_large.jpg';
-    const res = resKey ? `${resKey.charAt(0).toUpperCase() + resKey.slice(1)} Storage Alert` : 'Storage Alert';
-    return { title: res, icon };
+    const res = resKey ? `${resKey.charAt(0).toUpperCase() + resKey.slice(1)} Storage Overflow` : 'Storage Alert';
+    return { title: res, icon, level: 'instance' };
   }
   if (id === 'fleet_save_reminder') {
-    return { title: 'Fleet Save Reminder', icon: '🔔' };
+    return { title: 'Fleet Save Reminder', icon: '🔔', level: 'rule' };
   }
   if (id === 'officer_geologist_inactive') {
-    return { title: 'Geologist Officer Alert', icon: '⚠️' };
+    return { title: 'Geologist Officer Alert', icon: '⚠️', level: 'rule' };
   }
   if (id === 'idle_expedition_slots') {
-    return { title: 'Idle Expedition Slots', icon: '🧭' };
+    return { title: 'Idle Expedition Slots', icon: '🧭', level: 'rule' };
   }
   if (id === 'today_expedition_yield_summary') {
-    return { title: "Expedition Yield Summary", icon: '📊' };
+    return { title: "Expedition Yield Summary", icon: '📊', level: 'rule' };
   }
   if (id === 'top_expedition_find_today') {
-    return { title: 'Top Expedition Find Today', icon: '✨' };
+    return { title: 'Top Expedition Find Today', icon: '✨', level: 'rule' };
   }
   if (id === 'expedition_depletion_warning' || id === 'expedition_depletion') {
-    return { title: 'Expedition System Depletion Warning', icon: '🧭' };
+    return { title: 'Expedition System Depletion Warning', icon: '🧭', level: 'rule' };
   }
   if (id.startsWith('crawler_deficit_') || id === 'crawler_deficit') {
-    return { title: 'Crawler Saturation Shortage', icon: 'icons/ships/crawler-large.jpg' };
+    return { title: 'Crawler Saturation Shortage', icon: 'icons/ships/crawler-large.jpg', level: 'instance' };
   }
 
   return { title: id.replace(/_/g, ' ').toUpperCase(), icon: '🛡️' };
@@ -147,21 +220,38 @@ export async function unsnoozeNotification(id: string): Promise<void> {
   await saveAssistantSettings(settings);
 }
 
-export function isNotificationSnoozed(id: string, settings: AssistantSettings): boolean {
-  const record = settings.snoozedRules[id];
+export function isKeySnoozed(key: string, settings: AssistantSettings): boolean {
+  if (!settings.snoozedRules) return false;
+  const record = settings.snoozedRules[key];
   if (!record) return false;
   if (record.type === 'forever') return true;
   if (record.type === 'until' && record.untilTimestamp) {
-    if (Date.now() < record.untilTimestamp) {
-      return true;
-    }
+    return Date.now() < record.untilTimestamp;
   }
+  return false;
+}
+
+export function isNotificationSnoozed(notification: AssistantNotification | string, settings: AssistantSettings): boolean {
+  if (typeof notification === 'string') {
+    return isKeySnoozed(notification, settings);
+  }
+  if (!settings.snoozedRules) return false;
+
+  // Level 3a: Instance ID
+  if (isKeySnoozed(notification.id, settings)) return true;
+  // Level 3b: Rule ID (Sub-Category 2)
+  if (notification.ruleId && isKeySnoozed(notification.ruleId, settings)) return true;
+  // Level 2: Sub-Category ID (Sub-Category 1)
+  if (notification.subCategory && isKeySnoozed(notification.subCategory, settings)) return true;
+  // Level 1: Domain ID (Category)
+  if (notification.domain && isKeySnoozed(notification.domain, settings)) return true;
+
   return false;
 }
 
 // --- Helpers ---
 
-function formatNumber(num: number): string {
+export function formatNumber(num: number): string {
   if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
   if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
   if (num >= 1e3) return (num / 1e3).toFixed(1) + 'k';
@@ -189,7 +279,7 @@ function formatDurationLabel(hours: number): string {
 
 // --- Background Data Fetcher Bridge ---
 
-function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; account: Account | undefined; todayExpeditions: any[] }> {
+function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; account: Account | undefined; todayExpeditions: any[]; todoProjects: any[] }> {
   return new Promise((resolve) => {
     if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.sendMessage) {
       try {
@@ -200,23 +290,28 @@ function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; acco
             if (!msg.includes('Extension context invalidated') && !msg.includes('Receiving end does not exist')) {
               console.warn('OGame Nexus Overseer: Message error fetching data', err);
             }
-            resolve({ planets: [], account: undefined, todayExpeditions: [] });
+            resolve({ planets: [], account: undefined, todayExpeditions: [], todoProjects: [] });
             return;
           }
           if (res && res.success) {
-            resolve({ planets: res.planets || [], account: res.account, todayExpeditions: res.todayExpeditions || [] });
+            resolve({
+              planets: res.planets || [],
+              account: res.account,
+              todayExpeditions: res.todayExpeditions || [],
+              todoProjects: res.todoProjects || []
+            });
           } else {
-            resolve({ planets: [], account: undefined, todayExpeditions: [] });
+            resolve({ planets: [], account: undefined, todayExpeditions: [], todoProjects: [] });
           }
         });
       } catch (e: any) {
         if (!e?.message?.includes('Extension context invalidated')) {
           console.warn('OGame Nexus Overseer: Extension context error', e);
         }
-        resolve({ planets: [], account: undefined, todayExpeditions: [] });
+        resolve({ planets: [], account: undefined, todayExpeditions: [], todoProjects: [] });
       }
     } else {
-      resolve({ planets: [], account: undefined, todayExpeditions: [] });
+      resolve({ planets: [], account: undefined, todayExpeditions: [], todoProjects: [] });
     }
   });
 }
@@ -225,7 +320,7 @@ function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; acco
 
 export async function evaluateAllNotifications(playerId: string): Promise<AssistantNotification[]> {
   const settings = await getAssistantSettings();
-  const { planets, account, todayExpeditions } = await fetchAssistantData(playerId);
+  const { planets, account, todayExpeditions, todoProjects } = await fetchAssistantData(playerId);
 
   const effectiveAccount: Account = account || {
     playerId: playerId || 'unknown',
@@ -299,6 +394,10 @@ export async function evaluateAllNotifications(playerId: string): Promise<Assist
   const amortizationNotes = evaluateAmortization(planets, effectiveAccount, settings);
   notifications.push(...amortizationNotes);
 
+  // Planet Amortization To-Dos (Top 3 scheduled projects on the current active planet)
+  const planetTodoNotes = evaluatePlanetAmortizationTodos(planets, effectiveAccount, todoProjects, settings);
+  notifications.push(...planetTodoNotes);
+
   // Galaxy Debris Field Opportunities (scanned via Galaxy view)
   const debrisNotes = await evaluateDebrisOpportunities(settings);
   notifications.push(...debrisNotes);
@@ -315,8 +414,8 @@ export async function evaluateAllNotifications(playerId: string): Promise<Assist
   const boosterGapNotes = await evaluateProductionBoosterGaps(planets, effectiveAccount, settings);
   notifications.push(...boosterGapNotes);
 
-  // Filter out any snoozed / muted notifications
-  const activeNotifications = notifications.filter(n => !isNotificationSnoozed(n.id, settings));
+  // Filter out any snoozed / muted notifications (checks instance ID, ruleId, subCategory, and domain)
+  const activeNotifications = notifications.filter(n => !isNotificationSnoozed(n, settings));
 
   // Sort: Danger (Critical) first, then Warning, then Info, then Success
   const severityOrder: Record<string, number> = { danger: 0, warning: 1, info: 2, success: 3 };
@@ -332,84 +431,117 @@ export async function evaluateAllNotifications(playerId: string): Promise<Assist
 // ==========================================================================
 // RULE 1: Fleet Save Reminder (Single Global Empire-wide Alert)
 // ==========================================================================
-interface TopFleetLocation {
+export interface ExposedFleetLocation {
   id: string;
   name: string;
-  coords?: string;
-  msu: number;
-  ships: number;
+  coords: string;
+  type: 'planet' | 'moon';
   imgUrl?: string;
+  resMsu: number;
+  shipsMsu: number;
+  totalMsu: number;
+  shipsCount: number;
+  metal: number;
+  crystal: number;
+  deuterium: number;
+  topShips: { name: string; count: number; icon: string }[];
 }
 
 function evaluateFleetSave(planets: Planet[], settings: AssistantSettings): AssistantNotification[] {
-  const minMsu = settings.thresholds.minFleetSaveMsu || 1000000;
-  const minShips = settings.thresholds.minFleetSaveShips || 20;
+  const minMsu = settings.thresholds.minFleetSaveMsu ?? 10000000;
 
-  let totalExposedShips = 0;
-  let totalExposedMsu = 0;
-  let exposedLocationsCount = 0;
-  let topLocation: TopFleetLocation | null = null;
+  const exposedLocations: ExposedFleetLocation[] = [];
 
   for (const p of planets) {
     let shipsOnPlanet = 0;
+    let shipsMsu = 0;
+    const topShips: { name: string; count: number; icon: string }[] = [];
+
     if (p.ships && typeof p.ships === 'object') {
-      Object.entries(p.ships).forEach(([shipId, count]) => {
-        const id = parseInt(shipId, 10);
+      Object.entries(p.ships).forEach(([shipIdStr, count]) => {
+        const id = parseInt(shipIdStr, 10);
+        const c = Number(count || 0);
         // Exclude solar satellites (212) and crawlers (217)
-        if (id !== 212 && id !== 217 && count > 0) {
-          shipsOnPlanet += Number(count);
+        if (id !== 212 && id !== 217 && c > 0) {
+          shipsOnPlanet += c;
+          const shipInfo = SHIP_DATA.find(s => s.id === id);
+          const cost = shipInfo?.metadata?.cost || { metal: 0, crystal: 0, deuterium: 0 };
+          const unitMsu = (cost.metal || 0) + (cost.crystal || 0) * 1.5 + (cost.deuterium || 0) * 3;
+          shipsMsu += c * unitMsu;
+          if (shipInfo) {
+            topShips.push({ name: shipInfo.name, count: c, icon: shipInfo.icon });
+          }
         }
       });
     }
+
+    topShips.sort((a, b) => b.count - a.count);
 
     const metal = Number(p.metal || 0);
     const crystal = Number(p.crystal || 0);
     const deut = Number(p.deuterium || 0);
     const resMsu = metal + crystal * 1.5 + deut * 3;
+    const totalLocationMsu = resMsu + shipsMsu;
 
-    if (shipsOnPlanet >= minShips || resMsu >= minMsu) {
-      totalExposedShips += shipsOnPlanet;
-      totalExposedMsu += resMsu;
-      exposedLocationsCount++;
-
-      const loc: TopFleetLocation = {
-        id: p.id,
+    // Per-planet / per-moon threshold check
+    if (totalLocationMsu >= minMsu) {
+      exposedLocations.push({
+        id: String(p.id),
         name: p.name || (p.type === 'moon' ? 'Moon' : 'Planet'),
-        coords: p.coords,
-        msu: resMsu,
-        ships: shipsOnPlanet,
-        imgUrl: p.imgUrl
-      };
-
-      if (!topLocation || resMsu > topLocation.msu || (resMsu === topLocation.msu && shipsOnPlanet > topLocation.ships)) {
-        topLocation = loc;
-      }
+        coords: p.coords || '1:1:1',
+        type: p.type === 'moon' ? 'moon' : 'planet',
+        imgUrl: p.imgUrl,
+        totalMsu: totalLocationMsu,
+        resMsu,
+        shipsMsu,
+        shipsCount: shipsOnPlanet,
+        metal,
+        crystal,
+        deuterium: deut,
+        topShips: topShips.slice(0, 3)
+      });
     }
   }
 
-  if (exposedLocationsCount === 0) return [];
+  if (exposedLocations.length === 0) return [];
 
-  const topLocText = topLocation ? `${topLocation.name} [${topLocation.coords}]` : 'your colonies';
+  // Sort strictly in descending order of total exposed magnitude (MSU)
+  exposedLocations.sort((a, b) => b.totalMsu - a.totalMsu);
+
+  const topLocation = exposedLocations[0];
+  const totalExposedMsu = exposedLocations.reduce((sum, l) => sum + l.totalMsu, 0);
+  const totalExposedShips = exposedLocations.reduce((sum, l) => sum + l.shipsCount, 0);
+
+  const topLocText = `${topLocation.name} [${topLocation.coords}] (${formatNumber(topLocation.totalMsu)} MSU)`;
 
   return [{
     id: 'fleet_save_reminder',
     ruleId: 'fleet_save',
+    domain: 'fleet_tactical',
+    subCategory: 'fleet_safety',
     category: 'reminder',
     severity: 'warning',
     icon: '🔔',
     iconTooltip: 'Fleet Movement & Safety Reminder',
     badgeText: 'REMINDER',
     title: 'Fleet Save Reminder',
-    message: `Don't forget to fleet save! You have ${formatNumber(totalExposedShips)} stationary ships and ${formatNumber(totalExposedMsu)} MSU sitting exposed across ${exposedLocationsCount} location(s) (highest at ${topLocText}). Dispatch your assets safely before logging off!`,
-    shortMessage: 'Fleet Save!',
+    message: `You have ${exposedLocations.length} location${exposedLocations.length > 1 ? 's' : ''} exceeding your ${formatNumber(minMsu)} MSU Fleet Save threshold (total ${formatNumber(totalExposedMsu)} MSU & ${formatNumber(totalExposedShips)} stationary ships). Highest exposure at ${topLocText}. Dispatch your assets safely before logging off!`,
+    shortMessage: `Fleet Save! (${exposedLocations.length} ${exposedLocations.length === 1 ? 'location' : 'locations'} > ${formatNumber(minMsu)} MSU)`,
     timestamp: Date.now(),
-    planetId: topLocation?.id,
-    planetName: topLocation?.name,
-    planetImgUrl: topLocation?.imgUrl,
-    coords: topLocation?.coords,
+    planetId: topLocation.id,
+    planetName: topLocation.name,
+    planetImgUrl: topLocation.imgUrl,
+    coords: topLocation.coords,
     actionLabel: 'Fleet Dispatch',
-    actionUrl: `/game/index.php?page=ingame&component=fleetdispatch${topLocation ? `&cp=${topLocation.id}` : ''}`,
-    meta: { totalExposedShips, totalExposedMsu, exposedLocationsCount, topLocation }
+    actionUrl: `/game/index.php?page=ingame&component=fleetdispatch&cp=${topLocation.id}`,
+    meta: {
+      minMsu,
+      totalExposedMsu,
+      totalExposedShips,
+      exposedLocationsCount: exposedLocations.length,
+      topLocation,
+      exposedLocations
+    }
   }];
 }
 
@@ -439,9 +571,11 @@ function evaluateEnergyDeficit(planets: Planet[], settings: AssistantSettings): 
       results.push({
         id,
         ruleId: 'energy_deficit',
+        domain: 'resources',
+        subCategory: 'energy_grid',
         category: 'critical',
-        severity: deficit >= 1000 ? 'danger' : 'warning',
-        icon: '⚡',
+        severity: 'warning',
+        icon: 'icons/resources/solar-plant-large.jpg',
         iconTooltip: 'Energy Deficit & Solar Grid',
         badgeText: 'WARNING',
         title: `Energy Deficit on ${pName} [${p.coords}]`,
@@ -526,6 +660,7 @@ function evaluateStorageOverflow(planets: Planet[], account: Account, settings: 
 
       if (hoursToOverflow <= overflowThresholdHours) {
         const id = `storage_overflow_${p.id}_${res.key}`;
+        const ruleId = `storage_overflow_${res.key}`;
         const isFull = hoursToOverflow <= 0;
         const timeStr = formatHoursToTime(hoursToOverflow);
         const severity = isFull || hoursToOverflow <= 1 ? 'danger' : 'warning';
@@ -542,7 +677,9 @@ function evaluateStorageOverflow(planets: Planet[], account: Account, settings: 
 
         results.push({
           id,
-          ruleId: 'storage_overflow',
+          ruleId,
+          domain: 'resources',
+          subCategory: 'storage_tanks',
           category: 'logistics',
           severity,
           icon: storageIcon,
@@ -610,6 +747,8 @@ function evaluateOfficers(account: Account, planets: Planet[], settings: Assista
     results.push({
       id: 'officers_expiring_soon',
       ruleId: 'officer_expiring',
+      domain: 'empire',
+      subCategory: 'officers',
       category: 'critical',
       severity: 'warning',
       icon: '⏱️',
@@ -644,6 +783,8 @@ function evaluateOfficers(account: Account, planets: Planet[], settings: Assista
     results.push({
       id,
       ruleId: 'officer_alert',
+      domain: 'empire',
+      subCategory: 'officers',
       category: 'critical',
       severity: 'warning',
       icon: '⚠️',
@@ -784,6 +925,8 @@ function evaluateExpeditionSlots(
     results.push({
       id,
       ruleId: 'idle_expedition_slots',
+      domain: 'expeditions',
+      subCategory: 'expedition_ops',
       category: 'critical',
       severity: idleSlots >= 3 ? 'danger' : 'warning',
       icon: '🧭',
@@ -835,6 +978,8 @@ async function evaluateImportExport(account: Account, settings: AssistantSetting
     results.push({
       id,
       ruleId: 'import_export',
+      domain: 'fleet_tactical',
+      subCategory: 'import_export',
       category: 'intel',
       severity: 'info',
       icon: '📦',
@@ -845,7 +990,7 @@ async function evaluateImportExport(account: Account, settings: AssistantSetting
       shortMessage: priceFormatted ? `Mystery Container (${priceFormatted})!` : 'Mystery Container ready!',
       timestamp: Date.now(),
       actionLabel: 'Open Import/Export',
-      actionUrl: `/game/index.php?page=ingame&component=traderOverview#animation=false&page=traderImportExport`,
+      actionUrl: `/game/index.php?page=ingame&component=trader&action=importexport`,
       meta: info
     });
   }
@@ -858,7 +1003,8 @@ async function evaluateImportExport(account: Account, settings: AssistantSetting
 // ==========================================================================
 function evaluateAmortization(planets: Planet[], account: Account, settings: AssistantSettings): AssistantNotification[] {
   const results: AssistantNotification[] = [];
-  if (!planets || planets.length === 0) return results;
+  const validPlanets = (planets || []).filter(p => p && p.type !== 'moon');
+  if (!validPlanets || validPlanets.length === 0) return results;
 
   try {
     const filters = {
@@ -870,11 +1016,11 @@ function evaluateAmortization(planets: Planet[], account: Account, settings: Ass
       [AmortizationType.PlasmaTechnology]: true
     };
 
-    const items = rankAmortizationItems(planets, account, filters, DEFAULT_RATES, 1);
+    const items = rankAmortizationItems(validPlanets, account, filters, DEFAULT_RATES, 1);
     if (!items || items.length === 0) return results;
 
     const topItem = items[0];
-    const targetPlanet = planets.find(p => p.id === topItem.planetId);
+    const targetPlanet = validPlanets.find(p => p.id === topItem.planetId);
     const planetName = targetPlanet ? (targetPlanet.name || 'Planet') : undefined;
     const coords = targetPlanet ? targetPlanet.coords : undefined;
     const planetImgUrl = targetPlanet ? targetPlanet.imgUrl : undefined;
@@ -921,6 +1067,8 @@ function evaluateAmortization(planets: Planet[], account: Account, settings: Ass
     results.push({
       id: `amortization_top_${topItem.name}_${topItem.planetId || 'empire'}_lvl${nextLvl}`,
       ruleId: 'amortization_recommendation',
+      domain: 'resources',
+      subCategory: 'amortization_roi',
       category: 'intel',
       severity: 'info',
       icon: itemIcon,
@@ -945,6 +1093,113 @@ function evaluateAmortization(planets: Planet[], account: Account, settings: Ass
   }
 
   return results;
+}
+
+// ==========================================================================
+// RULE: Planet To-Dos (Amortization Projects on Current Active Planet)
+// ==========================================================================
+function evaluatePlanetAmortizationTodos(
+  planets: Planet[],
+  account: Account,
+  todoProjects: any[],
+  settings: AssistantSettings
+): AssistantNotification[] {
+  if (!todoProjects || todoProjects.length === 0 || !planets || planets.length === 0) {
+    return [];
+  }
+
+  // 1. Identify current active planet ID from page
+  const activePlanetId = getCurrentActivePlanetId();
+  if (!activePlanetId) return [];
+
+  const currentPlanet = planets.find(p => String(p.id) === String(activePlanetId));
+  if (!currentPlanet || currentPlanet.type === 'moon') return [];
+
+  // 2. Filter todos for this specific planet and discard completed ones
+  const planetTodos = todoProjects.filter((todo: any) => {
+    if (String(todo.planetId) !== String(currentPlanet.id)) return false;
+
+    // Check if already completed
+    let currentLevel = 0;
+    const typeStr = String(todo.type || '');
+    const name = String(todo.name || '');
+
+    if (typeStr === 'Mines' || typeStr === '1' || name.toLowerCase().includes('mine')) {
+      if (name.includes('Metal Mine')) currentLevel = currentPlanet.metalMine || 0;
+      else if (name.includes('Crystal Mine')) currentLevel = currentPlanet.crystalMine || 0;
+      else if (name.includes('Deuterium')) currentLevel = currentPlanet.deuteriumMine || 0;
+    } else if (typeStr === 'LifeformProductionBuildings' || typeStr === 'LifeformResearchBuildings' || typeStr === '2' || typeStr === '3') {
+      const entry = AMORTIZATION_TABLE.find(e => e.name === todo.name);
+      if (entry?.id && currentPlanet.lifeformBuildings) {
+        const b = currentPlanet.lifeformBuildings.find((lb: any) => Number(lb.id) === Number(entry.id));
+        currentLevel = b?.level || 0;
+      }
+    } else if (typeStr === 'LifeformProductionResearches' || typeStr === 'LifeformExpeditionResearches' || typeStr === '4' || typeStr === '5') {
+      const entry = AMORTIZATION_TABLE.find(e => e.name === todo.name);
+      if (entry?.id && currentPlanet.lifeformSetup) {
+        const t = currentPlanet.lifeformSetup.find((lt: any) => Number(lt.selectedTechId) === Number(entry.id));
+        currentLevel = t?.level || 0;
+      }
+    } else if (typeStr === 'PlasmaTechnology' || typeStr === '6') {
+      const res = account?.researches?.find(r => r.id === 122);
+      currentLevel = res?.level || 0;
+    }
+
+    return currentLevel < (todo.targetLevel || 1);
+  });
+
+  if (planetTodos.length === 0) return [];
+
+  // 3. Sort by lowest ROI hours first (best return on investment)
+  planetTodos.sort((a, b) => (Number(a.roiHours) || 0) - (Number(b.roiHours) || 0));
+
+  // 4. Take maximum 3 projects
+  const top3 = planetTodos.slice(0, 3);
+  const first = top3[0];
+
+  let actionLabel = 'Supplies';
+  let actionUrl = `/game/index.php?page=ingame&component=supplies&cp=${currentPlanet.id}`;
+
+  const firstType = String(first.type || '');
+  if (firstType === 'LifeformProductionBuildings' || firstType === 'LifeformResearchBuildings' || firstType === '2' || firstType === '3') {
+    actionLabel = 'LF Buildings';
+    actionUrl = `/game/index.php?page=ingame&component=lfbuildings&cp=${currentPlanet.id}`;
+  } else if (firstType === 'LifeformProductionResearches' || firstType === 'LifeformExpeditionResearches' || firstType === '4' || firstType === '5') {
+    actionLabel = 'LF Research';
+    actionUrl = `/game/index.php?page=ingame&component=lfresearch&cp=${currentPlanet.id}`;
+  } else if (firstType === 'PlasmaTechnology' || firstType === '6') {
+    actionLabel = 'Research';
+    actionUrl = `/game/index.php?page=ingame&component=research&cp=${currentPlanet.id}`;
+  }
+
+  return [{
+    id: `planet_todos_${currentPlanet.id}`,
+    ruleId: 'planet_amortization_todos',
+    domain: 'resources',
+    subCategory: 'amortization_roi',
+    category: 'intel',
+    severity: 'info',
+    icon: first.icon || 'icons/resources/metal_mine_large.jpg',
+    iconTooltip: 'Planet Amortization Schedule',
+    badgeText: 'TO-DO',
+    title: `${currentPlanet.name} [${currentPlanet.coords}] To-Do List (${planetTodos.length} Project${planetTodos.length > 1 ? 's' : ''})`,
+    message: `Scheduled amortization projects for ${currentPlanet.name} [${currentPlanet.coords}]. Prioritize your highest ROI upgrades when resources are ready:`,
+    shortMessage: `${planetTodos.length} To-Do${planetTodos.length > 1 ? 's' : ''} on ${currentPlanet.name}!`,
+    timestamp: Date.now(),
+    planetId: String(currentPlanet.id),
+    planetName: currentPlanet.name,
+    planetImgUrl: currentPlanet.imgUrl,
+    coords: currentPlanet.coords,
+    actionLabel,
+    actionUrl,
+    meta: {
+      planetId: currentPlanet.id,
+      planetName: currentPlanet.name,
+      coords: currentPlanet.coords,
+      todos: top3,
+      totalPlanetTodos: planetTodos.length
+    }
+  }];
 }
 
 // ==========================================================================
@@ -973,6 +1228,8 @@ async function evaluateArtifacts(account: Account, settings: AssistantSettings):
     results.push({
       id: 'artifacts_storage_full',
       ruleId: 'artifacts_limit',
+      domain: 'empire',
+      subCategory: 'lifeforms',
       category: 'critical',
       severity: 'danger',
       icon: '🔮',
@@ -990,6 +1247,8 @@ async function evaluateArtifacts(account: Account, settings: AssistantSettings):
     results.push({
       id: 'artifacts_storage_almost_full',
       ruleId: 'artifacts_limit',
+      domain: 'empire',
+      subCategory: 'lifeforms',
       category: 'critical',
       severity: 'warning',
       icon: '🔮',
@@ -1056,6 +1315,8 @@ async function evaluateDebrisOpportunities(settings: AssistantSettings): Promise
       results.push({
         id: `debris_field_${d.galaxy}_${d.system}_${d.position}`,
         ruleId: 'debris_opportunity',
+        domain: 'fleet_tactical',
+        subCategory: 'galaxy_intel',
         category: 'intel',
         severity: isHuge ? 'warning' : 'info',
         icon: '☄️',
@@ -1168,6 +1429,8 @@ function evaluateTodayExpeditionYield(todayExpeditions: any[], settings: Assista
     results.push({
       id: 'today_expedition_yield_summary',
       ruleId: 'today_expedition_yield',
+      domain: 'expeditions',
+      subCategory: 'expedition_intel',
       category: 'intel',
       severity: 'info',
       icon: '📊',
@@ -1233,6 +1496,8 @@ function evaluateTopExpeditionFinds(todayExpeditions: any[], settings: Assistant
   results.push({
     id: `top_expedition_find_today`,
     ruleId: 'top_expedition_find',
+    domain: 'expeditions',
+    subCategory: 'expedition_intel',
     category: 'intel',
     severity: 'info',
     icon: '✨',
@@ -1289,6 +1554,8 @@ function evaluateExpeditionDepletion(expeditions: any[], settings: AssistantSett
     results.push({
       id: 'expedition_depletion_warning',
       ruleId: 'expedition_depletion',
+      domain: 'expeditions',
+      subCategory: 'expedition_ops',
       category: 'critical',
       severity: 'warning',
       icon: '🧭',
@@ -1346,6 +1613,8 @@ function evaluateCrawlerDeficit(planets: Planet[], account: Account, settings: A
       results.push({
         id: `crawler_deficit_${p.id}`,
         ruleId: 'crawler_deficit',
+        domain: 'resources',
+        subCategory: 'boosters_crawlers',
         category: 'logistics',
         severity: isZero ? 'warning' : 'info',
         icon: 'icons/ships/crawler-large.jpg',
@@ -1424,13 +1693,15 @@ async function evaluateProductionBoosterGaps(
 
         results.push({
           id: 'booster_gap_deuterium',
-          ruleId: 'production_booster_gap',
+          ruleId: 'booster_gap_deuterium',
+          domain: 'resources',
+          subCategory: 'boosters_crawlers',
           category: 'intel',
           severity: 'info',
           icon: deutBoosters[0]?.iconUrl || 'icons/resources/deuterium-icon-medium.jpg',
           iconTooltip: deutTooltip,
           badgeText: 'BOOSTER',
-          title: `Deuterium Booster Available (${totalDeutStock} in Stock)`,
+          title: `Deuterium Boosters Available (${totalDeutStock} total in Stock)`,
           message: `You have ${totalDeutStock}x Deuterium Booster${totalDeutStock > 1 ? 's' : ''} in inventory, but ${unboostedDeutPlanets.length} planet${unboostedDeutPlanets.length > 1 ? 's have' : ' has'} no active booster! Best candidate: ${top.name || 'Planet'} ${topCoords} (Deut Synth Lvl ${topLevel})${runnerUpStr}.`,
           shortMessage: `${totalDeutStock}x Deut Booster${totalDeutStock > 1 ? 's' : ''}! Best: ${top.name || 'Planet'} ${topCoords} (Lvl ${topLevel})`,
           timestamp: now,
@@ -1475,13 +1746,15 @@ async function evaluateProductionBoosterGaps(
 
         results.push({
           id: 'booster_gap_crystal',
-          ruleId: 'production_booster_gap',
+          ruleId: 'booster_gap_crystal',
+          domain: 'resources',
+          subCategory: 'boosters_crawlers',
           category: 'intel',
           severity: 'info',
           icon: crystalBoosters[0]?.iconUrl || 'icons/resources/crystal-icon-medium.jpg',
           iconTooltip: crystalTooltip,
           badgeText: 'BOOSTER',
-          title: `Crystal Booster Available (${totalCrystalStock} in Stock)`,
+          title: `Crystal Boosters Available (${totalCrystalStock} total in Stock)`,
           message: `You have ${totalCrystalStock}x Crystal Booster${totalCrystalStock > 1 ? 's' : ''} in inventory, but ${unboostedCrystalPlanets.length} planet${unboostedCrystalPlanets.length > 1 ? 's have' : ' has'} no active booster! Best candidate: ${top.name || 'Planet'} ${topCoords} (Crystal Mine Lvl ${topLevel})${runnerUpStr}.`,
           shortMessage: `${totalCrystalStock}x Crystal Booster${totalCrystalStock > 1 ? 's' : ''}! Best: ${top.name || 'Planet'} ${topCoords} (Lvl ${topLevel})`,
           timestamp: now,
@@ -1526,13 +1799,15 @@ async function evaluateProductionBoosterGaps(
 
         results.push({
           id: 'booster_gap_metal',
-          ruleId: 'production_booster_gap',
+          ruleId: 'booster_gap_metal',
+          domain: 'resources',
+          subCategory: 'boosters_crawlers',
           category: 'intel',
           severity: 'info',
           icon: metalBoosters[0]?.iconUrl || 'icons/resources/metal-icon-medium.jpg',
           iconTooltip: metalTooltip,
           badgeText: 'BOOSTER',
-          title: `Metal Booster Available (${totalMetalStock} in Stock)`,
+          title: `Metal Boosters Available (${totalMetalStock} total in Stock)`,
           message: `You have ${totalMetalStock}x Metal Booster${totalMetalStock > 1 ? 's' : ''} in inventory, but ${unboostedMetalPlanets.length} planet${unboostedMetalPlanets.length > 1 ? 's have' : ' has'} no active booster! Best candidate: ${top.name || 'Planet'} ${topCoords} (Metal Mine Lvl ${topLevel})${runnerUpStr}.`,
           shortMessage: `${totalMetalStock}x Metal Booster${totalMetalStock > 1 ? 's' : ''}! Best: ${top.name || 'Planet'} ${topCoords} (Lvl ${topLevel})`,
           timestamp: now,
@@ -1638,6 +1913,8 @@ async function evaluateIdleResearch(
     return [{
       id: 'idle_research_lab',
       ruleId: 'idle_research',
+      domain: 'empire',
+      subCategory: 'research_lab',
       category: 'reminder',
       severity: 'warning',
       icon: 'icons/facilities/research_lab_large.jpg',

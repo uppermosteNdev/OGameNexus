@@ -331,9 +331,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         if (scraped) serverData = scraped;
                     }
 
-                    let rawLfExp = lifeformExperience || existing?.lifeformExperience;
-                    let mergedLifeformExp = Array.isArray(rawLfExp) ? rawLfExp : [];
-                    if (!Array.isArray(rawLfExp) && rawLfExp && typeof rawLfExp === 'object') {
+                    let rawLfExp = (lifeformExperience && (Array.isArray(lifeformExperience) ? lifeformExperience.length > 0 : Object.keys(lifeformExperience).length > 0)) 
+                        ? lifeformExperience 
+                        : existing?.lifeformExperience;
+                    let mergedLifeformExp: any[] = [];
+                    if (Array.isArray(rawLfExp)) {
+                        mergedLifeformExp = rawLfExp.map((s: any) => ({
+                            id: Number(s.id),
+                            lifeformId: Number(s.lifeformId || (s.id > 700 ? s.id - 700 : s.id)),
+                            level: Number(s.level || 0),
+                            bonus: Number(s.bonus || 0),
+                            currentExp: Number(s.currentExp !== undefined ? s.currentExp : (s.xp || 0)),
+                            nextLevelExp: Number(s.nextLevelExp !== undefined ? s.nextLevelExp : (s.xpToNextLevel || 100)),
+                            xp: Number(s.xp !== undefined ? s.xp : (s.currentExp || 0)),
+                            xpToNextLevel: Number(s.xpToNextLevel !== undefined ? s.xpToNextLevel : (s.nextLevelExp || 100))
+                        }));
+                    } else if (rawLfExp && typeof rawLfExp === 'object') {
                         mergedLifeformExp = Object.entries(rawLfExp).map(([id, val]: [string, any]) => {
                             const specId = parseInt(id);
                             const lifeformId = specId > 700 ? specId - 700 : specId;
@@ -1015,7 +1028,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         .toArray();
                 }
 
-                sendResponse({ success: true, planets, account, todayExpeditions });
+                let todoProjects: any[] = [];
+                if (targetPlayerId) {
+                    todoProjects = await db.todoProjects
+                        .filter(t => t.playerId === targetPlayerId || !!(t.planetId && planets.some(p => p.id === t.planetId)))
+                        .toArray();
+                } else {
+                    todoProjects = await db.todoProjects.toArray();
+                }
+
+                sendResponse({ success: true, planets, account, todayExpeditions, todoProjects });
             } catch (err) {
                 console.error("OGame Nexus: Error fetching assistant data", err);
                 sendResponse({ success: false, error: String(err) });
