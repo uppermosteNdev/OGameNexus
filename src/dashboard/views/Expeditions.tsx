@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { getLinkedAccount, uploadToDrive } from '../../utils/googleAuth';
-import { getItemDurationText, sanitizeActiveItem } from '../../utils/items';
+import { getItemDurationText, getItemIconUrl, sanitizeActiveItem } from '../../utils/items';
 
 // --- Constants ---
 
@@ -505,40 +505,97 @@ const Expeditions: React.FC = () => {
     const activeExpeditionBoosters = useMemo(() => {
         const map = new Map<string, any>();
         const now = Date.now();
+
+        // 1. Gather all active items from account level and all planets
+        const rawItems: any[] = [];
+        if (activeAccount?.activeItems && Array.isArray(activeAccount.activeItems)) {
+            activeAccount.activeItems.forEach(item => {
+                rawItems.push({
+                    ...item,
+                    locationName: 'Account'
+                });
+            });
+        }
         planets.forEach(p => {
             if (p.activeItems && p.activeItems.length > 0) {
                 p.activeItems.forEach(rawItem => {
-                    if (rawItem.expiryTimestamp && rawItem.expiryTimestamp <= now) return;
-                    const item = sanitizeActiveItem(rawItem);
-                    const title = (item.title || item.name || '').toLowerCase();
-                    const isTarget = title.includes('expedition resource booster') || 
-                                   title.includes('expedition computer') || 
-                                   title.includes('expedition turbo');
-                    
-                    if (isTarget) {
-                        const isResBooster = title.includes('expedition resource booster');
-                        const mapKey = isResBooster ? 'expedition_resource_booster' : title;
-                        const existing = map.get(mapKey);
-                        // Prefer higher bonus (e.g. 25% replaces 10%), then later expiry
-                        if (!existing || (item.bonus || 0) > (existing.bonus || 0) || ((item.bonus || 0) === (existing.bonus || 0) && (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0))) {
-                            map.set(mapKey, {
-                                ...item,
-                                planetName: p.name || 'Unknown',
-                                coords: p.coords || ''
-                            });
-                        }
-                    }
+                    rawItems.push({
+                        ...rawItem,
+                        locationName: `${p.name || 'Planet'} [${p.coords || ''}]`
+                    });
                 });
             }
         });
+
+        rawItems.forEach(rawItem => {
+            if (rawItem.expiryTimestamp && rawItem.expiryTimestamp <= now) return;
+            const item = sanitizeActiveItem(rawItem);
+            const title = (item.title || item.name || '').toLowerCase();
+            const type = (item.type || '').toLowerCase();
+
+            // Check if item impacts expeditions:
+            // 1. type === 'expedition_res' or 'expedition_slots'
+            // 2. title includes 'expedition', 'turbo', or 'computer' (even if type is 'other')
+            const isExpoRes = type === 'expedition_res' || title.includes('expedition resource booster');
+            const isExpoSlots = type === 'expedition_slots' || title.includes('expedition slots');
+            const isExpoComputer = title.includes('expedition computer') || title.includes('computer');
+            const isExpoTurbo = title.includes('expedition turbo') || title.includes('turbo');
+            const isOtherExpo = title.includes('expedition') || title.includes('expo');
+
+            if (isExpoRes || isExpoSlots || isExpoComputer || isExpoTurbo || isOtherExpo) {
+                let key = title;
+                if (isExpoRes) key = 'expedition_resource_booster';
+                else if (isExpoTurbo) key = 'expedition_turbo';
+                else if (isExpoComputer) key = 'expedition_computer';
+                else if (isExpoSlots) key = 'expedition_slots';
+
+                const existing = map.get(key);
+                if (!existing || (item.bonus || 0) > (existing.bonus || 0) || ((item.bonus || 0) === (existing.bonus || 0) && (item.expiryTimestamp || 0) > (existing.expiryTimestamp || 0))) {
+                    // Determine rarity
+                    let rarity = item.rarity || item.rarityClass || '';
+                    if (!rarity) {
+                        if (title.includes('bronze')) rarity = 'bronze';
+                        else if (title.includes('silver')) rarity = 'silver';
+                        else if (title.includes('gold')) rarity = 'gold';
+                        else if (title.includes('platinum')) rarity = 'platinum';
+                        else rarity = 'common';
+                    }
+
+                    // Format effect badge text
+                    let effectBadge = '';
+                    if (item.bonus && item.bonus > 0) {
+                        effectBadge = `+${Math.round(item.bonus * 100)}%`;
+                    } else if (isExpoSlots || isExpoComputer) {
+                        const slotsMatch = title.match(/\+(\d+)/);
+                        effectBadge = slotsMatch ? `+${slotsMatch[1]}` : '+Slots';
+                    } else if (isExpoTurbo) {
+                        const pctMatch = title.match(/(\d+)%/);
+                        effectBadge = pctMatch ? `-${pctMatch[1]}%` : 'Turbo';
+                    }
+
+                    map.set(key, {
+                        ...item,
+                        rarity: rarity.toLowerCase(),
+                        effectBadge,
+                        isExpoRes,
+                        isExpoTurbo,
+                        isExpoComputer,
+                        isExpoSlots,
+                        locationName: rawItem.locationName || 'Account'
+                    });
+                }
+            }
+        });
+
         return Array.from(map.values());
-    }, [planets]);
+    }, [activeAccount, planets]);
 
     const expeditionResBoosterPercent = useMemo(() => {
         let total = 0;
         activeExpeditionBoosters.forEach(item => {
             const title = (item.title || item.name || '').toLowerCase();
-            if (title.includes('expedition resource booster')) {
+            const type = (item.type || '').toLowerCase();
+            if (type === 'expedition_res' || title.includes('expedition resource booster')) {
                 total += item.bonus || 0;
             }
         });
@@ -2515,7 +2572,7 @@ const Expeditions: React.FC = () => {
                                                 <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.05)' }} />
 
                                                 {/* Active boosters list */}
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                         <Package size={14} color={THEME_CYAN} />
                                                         <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -2523,32 +2580,116 @@ const Expeditions: React.FC = () => {
                                                         </span>
                                                     </div>
                                                     {activeExpeditionBoosters.length > 0 ? (
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                                                             {activeExpeditionBoosters.map((item, idx) => {
-                                                                const title = (item.title || item.name || '').toLowerCase();
-                                                                const isRes = title.includes('expedition resource booster');
-                                                                const isComputer = title.includes('expedition computer');
-                                                                const accentColor = isRes ? '#10b981' : isComputer ? '#bd00ff' : '#00f2ff';
+                                                                const iconUrl = getItemIconUrl(item) || item.iconUrl || 'https://gf3.geo.gfsrv.net/cdn5e/dce3a2441481ff2a732ec6312da9aa.jpg';
                                                                 const durationText = getItemDurationText(item);
+                                                                
+                                                                const rarityColors: Record<string, { border: string; glow: string; text: string }> = {
+                                                                    bronze: { border: '#cd7f32', glow: 'rgba(205, 127, 50, 0.35)', text: '#cd7f32' },
+                                                                    silver: { border: '#c0c0c0', glow: 'rgba(192, 192, 192, 0.35)', text: '#e2e8f0' },
+                                                                    gold: { border: '#ffd700', glow: 'rgba(255, 215, 0, 0.4)', text: '#ffd700' },
+                                                                    platinum: { border: '#00f2ff', glow: 'rgba(0, 242, 255, 0.4)', text: '#00f2ff' },
+                                                                    common: { border: '#3b82f6', glow: 'rgba(59, 130, 246, 0.25)', text: '#60a5fa' }
+                                                                };
+                                                                const rarityStyle = rarityColors[item.rarity?.toLowerCase()] || rarityColors.common;
+
+                                                                const isRes = item.isExpoRes;
+                                                                const isTurbo = item.isExpoTurbo;
+                                                                const isComputer = item.isExpoComputer || item.isExpoSlots;
+                                                                const badgeBg = isRes 
+                                                                    ? 'linear-gradient(135deg, #059669, #047857)' 
+                                                                    : isTurbo 
+                                                                    ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
+                                                                    : isComputer 
+                                                                    ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' 
+                                                                    : 'linear-gradient(135deg, #0284c7, #0369a1)';
+
+                                                                const tooltipContent = `${item.title || item.name}\n• Effect: ${item.effectBadge || 'Active Booster'}\n• Remaining: ${durationText}\n• Location: ${item.locationName || 'Account'}`;
+
                                                                 return (
-                                                                    <div key={idx} className="glass" style={{
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '10px',
-                                                                        padding: '8px 14px',
-                                                                        borderRadius: '12px',
-                                                                        background: 'rgba(255, 255, 255, 0.02)',
-                                                                        border: `1px solid ${accentColor}33`
-                                                                    }}>
-                                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: accentColor, boxShadow: `0 0 8px ${accentColor}` }} />
-                                                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#fff' }}>{item.title}</div>
-                                                                        {item.bonus > 0 && (
-                                                                            <div style={{ fontSize: '0.75rem', fontWeight: 900, color: accentColor }}>
-                                                                                +{Math.round(item.bonus * 100)}%
+                                                                    <div 
+                                                                        key={idx}
+                                                                        title={tooltipContent}
+                                                                        style={{
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '10px',
+                                                                            background: 'rgba(15, 23, 42, 0.65)',
+                                                                            padding: '5px 10px 5px 6px',
+                                                                            borderRadius: '12px',
+                                                                            border: `1px solid ${rarityStyle.border}44`,
+                                                                            boxShadow: `0 3px 10px rgba(0, 0, 0, 0.4), 0 0 8px ${rarityStyle.glow}`,
+                                                                            transition: 'all 0.2s ease',
+                                                                            cursor: 'default'
+                                                                        }}
+                                                                    >
+                                                                        {/* Icon Box */}
+                                                                        <div style={{
+                                                                            position: 'relative',
+                                                                            width: '40px',
+                                                                            height: '40px',
+                                                                            borderRadius: '8px',
+                                                                            background: 'rgba(10, 15, 29, 0.95)',
+                                                                            border: `1.5px solid ${rarityStyle.border}`,
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            overflow: 'visible',
+                                                                            flexShrink: 0
+                                                                        }}>
+                                                                            <img 
+                                                                                src={iconUrl} 
+                                                                                alt={item.title || item.name} 
+                                                                                style={{
+                                                                                    width: '34px',
+                                                                                    height: '34px',
+                                                                                    objectFit: 'cover',
+                                                                                    borderRadius: '5px'
+                                                                                }}
+                                                                                onError={(e) => {
+                                                                                    (e.target as HTMLElement).style.opacity = '0.4';
+                                                                                }}
+                                                                            />
+                                                                            {item.effectBadge && (
+                                                                                <div style={{
+                                                                                    position: 'absolute',
+                                                                                    top: '-6px',
+                                                                                    right: '-6px',
+                                                                                    background: badgeBg,
+                                                                                    color: '#ffffff',
+                                                                                    fontSize: '0.62rem',
+                                                                                    fontWeight: 900,
+                                                                                    padding: '1px 4.5px',
+                                                                                    borderRadius: '8px',
+                                                                                    border: '1px solid rgba(255, 255, 255, 0.4)',
+                                                                                    boxShadow: '0 2px 5px rgba(0, 0, 0, 0.8)',
+                                                                                    lineHeight: '1.1',
+                                                                                    letterSpacing: '-0.02em',
+                                                                                    whiteSpace: 'nowrap'
+                                                                                }}>
+                                                                                    {item.effectBadge}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Text Summary */}
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                            <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap' }}>
+                                                                                {item.title || item.name}
                                                                             </div>
-                                                                        )}
-                                                                        <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
-                                                                            ({durationText})
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                <div style={{
+                                                                                    fontSize: '0.65rem',
+                                                                                    fontWeight: 800,
+                                                                                    color: rarityStyle.text
+                                                                                }}>
+                                                                                    {item.effectBadge}
+                                                                                </div>
+                                                                                <div style={{ fontSize: '0.65rem', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 600 }}>
+                                                                                    ({durationText})
+                                                                                </div>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 );

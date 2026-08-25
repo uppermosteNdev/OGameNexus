@@ -1,8 +1,8 @@
 import { db } from "../db";
 import { parseProduction, parseOverview, parsePlayerDataXml, parseSupplies, parseResearches, parseLifeformResearch, parseLifeformBuildings, parseLifeformBonuses, parseServerDataXml } from "./scrapers";
-import { LIFEFORM_BUILDING_DATA } from "../db/staticData";
+import { LIFEFORM_BUILDING_DATA, SHIP_DATA } from "../db/staticData";
 import { LIFEFORM_TECH_DATA, getLfTech, isLifeformBuilding } from "../db/lifeformTechData";
-import { AMORTIZATION_TABLE, calculateEmpireProduction } from "../utils/amortizationCalc";
+import { AMORTIZATION_TABLE, calculateEmpireProduction, calculateMSU, DEFAULT_RATES, Cost } from "../utils/amortizationCalc";
 import { sanitizeActiveItem } from "../utils/items";
 
 function cleanObject(obj: any) {
@@ -10,6 +10,9 @@ function cleanObject(obj: any) {
     Object.keys(cleaned).forEach(key => cleaned[key] === undefined && delete cleaned[key]);
     return cleaned;
 }
+
+const expoAveragesCache = new Map<string, { data: any; calculatedAt: number }>();
+const EXPO_AVERAGES_CACHE_TTL = 30 * 60 * 1000; // 30 minutes TTL
 
 function mergeLifeformBuildings(existing: any[], incoming: any[], activeLifeformId?: number) {
     if (activeLifeformId === 0) {
@@ -186,6 +189,12 @@ async function fetchServerData(universe: string) {
 }
 
 let lastBackgroundScan = 0;
+// Tracking serializing mutexes to prevent concurrent duplicate inserts
+let expeditionTrackingLock: Promise<any> = Promise.resolve();
+let lifeformTrackingLock: Promise<any> = Promise.resolve();
+let combatTrackingLock: Promise<any> = Promise.resolve();
+let debrisTrackingLock: Promise<any> = Promise.resolve();
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "OPEN_DASHBOARD") {
         chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
@@ -474,7 +483,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                 name: resolvedName,
                                 activeItems: resolvedActiveItems,
                                 resources: empirePlanet?.resources || existing?.resources,
-                                productionSettings: production?.productionSettings || empirePlanet?.productionSettings || existing?.productionSettings,
+                                productionSettings: (isMainPlanet && production?.productionSettings) ? production.productionSettings : (empirePlanet?.productionSettings || existing?.productionSettings),
                                 ...(isMainPlanet ? {
                                     ...(overview?.planetData || {}),
                                     ...supplies,
@@ -647,45 +656,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         syncData();
     }
 
-    if (message.type === "TRACK_EXPEDITIONS") {
+        if (message.type === "TRACK_EXPEDITIONS") {
         const { expeditions, playerId } = message.data;
         (async () => {
-            try {
-                const messageIds = expeditions.map((e: any) => e.messageId);
-                const existingExpeditions = await db.expeditions.bulkGet(messageIds);
-                const newExpeditions: any[] = [];
-                const finalResults: any[] = [];
+            expeditionTrackingLock = expeditionTrackingLock.then(async () => {
+                try {
+                    const messageIds = expeditions.map((e: any) => e.messageId);
+                    const existingExpeditions = await db.expeditions.bulkGet(messageIds);
+                    const newExpeditions: any[] = [];
+                    const finalResults: any[] = [];
+                    const toUpdate: any[] = [];
 
-                const toUpdate: any[] = [];
-
-                expeditions.forEach((exp: any, index: number) => {
-                    const existing = existingExpeditions[index];
-                    if (!existing) {
-                        const newEntry = { ...exp, tracked: true, playerId };
-                        newExpeditions.push(newEntry);
-                        finalResults.push({ ...newEntry, isNew: true });
-                    } else {
-                        // Check if the old record was scraped without details
-                        if (!existing.resultDetails && exp.resultDetails) {
-                            existing.resultDetails = exp.resultDetails;
-                            toUpdate.push(existing);
+                    expeditions.forEach((exp: any, index: number) => {
+                        const existing = existingExpeditions[index];
+                        if (!existing) {
+                            const newEntry = { ...exp, tracked: true, playerId };
+                            newExpeditions.push(newEntry);
+                            finalResults.push({ ...newEntry, isNew: true });
+                        } else {
+                            if (!existing.resultDetails && exp.resultDetails) {
+                                existing.resultDetails = exp.resultDetails;
+                                toUpdate.push(existing);
+                            }
+                            finalResults.push({ ...existing, isNew: false });
                         }
-                        finalResults.push(existing);
+                    });
+
+                    if (newExpeditions.length > 0) {
+                        await db.expeditions.bulkPut(newExpeditions);
                     }
-                });
+                    if (toUpdate.length > 0) {
+                        await db.expeditions.bulkPut(toUpdate);
+                    }
 
-                if (newExpeditions.length > 0) {
-                    await db.expeditions.bulkPut(newExpeditions);
+                    sendResponse({ success: true, data: finalResults, newCount: newExpeditions.length });
+                } catch (err) {
+                    console.error("OGame Nexus: Expedition tracking error", err);
+                    sendResponse({ success: false, error: String(err) });
                 }
-                if (toUpdate.length > 0) {
-                    await db.expeditions.bulkPut(toUpdate);
-                }
-
-                sendResponse({ success: true, data: finalResults, newCount: newExpeditions.length });
-            } catch (err) {
-                console.error("OGame Nexus: Expedition tracking error", err);
+            }).catch(err => {
+                console.error("OGame Nexus: Expedition lock error", err);
                 sendResponse({ success: false, error: String(err) });
-            }
+            });
+            await expeditionTrackingLock;
         })();
         return true;
     }
@@ -710,7 +723,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         .toArray()
                 ]);
 
-                const totals = { metal: 0, crystal: 0, deuterium: 0, darkMatter: 0, artifacts: 0, items: 0 };
+                const totals = { 
+                    metal: 0, 
+                    crystal: 0, 
+                    deuterium: 0, 
+                    darkMatter: 0, 
+                    artifacts: 0, 
+                    items: 0,
+                    traders: 0,
+                    delays: 0,
+                    speedups: 0,
+                    navigations: 0,
+                    pirates: 0,
+                    aliens: 0,
+                    blackHoles: 0
+                };
                 todayExpeditions.forEach(exp => {
                     const type = (exp.result || '').toLowerCase();
                     if (type === 'resources' || type === 'ressources') {
@@ -725,6 +752,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         } else {
                             totals.items += 1;
                         }
+                    } else if (type === 'trader' || type === 'merchant') {
+                        totals.traders += 1;
+                    } else if (type === 'delay') {
+                        totals.delays += 1;
+                    } else if (type === 'speedup') {
+                        totals.speedups += 1;
+                    } else if (type === 'navigation' || type === 'early') {
+                        const details = exp.resultDetails || {};
+                        const isDelay = (details.returnTimeAbsoluteIncreaseHours || 0) > 0 || (details.returnTimeMultiplier !== undefined && details.returnTimeMultiplier >= 1) || details.type === 'delay';
+                        const isSpeedup = (details.returnTimeAbsoluteDecreaseHours || 0) > 0 || (details.returnTimeMultiplier !== undefined && details.returnTimeMultiplier < 1) || details.type === 'speedup';
+                        if (isDelay) totals.delays += 1;
+                        else if (isSpeedup) totals.speedups += 1;
+                        else totals.navigations += 1;
+                    } else if (type === 'combatpirates' || type === 'pirates') {
+                        totals.pirates += 1;
+                    } else if (type === 'combataliens' || type === 'aliens') {
+                        totals.aliens += 1;
+                    } else if (type === 'fleetloss' || type === 'fleetlost') {
+                        totals.blackHoles += 1;
                     }
                 });
 
@@ -815,35 +861,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
-    if (message.type === "TRACK_LIFEFORMS") {
+        if (message.type === "TRACK_LIFEFORMS") {
         const { discoveries, playerId } = message.data;
         (async () => {
-            try {
-                const messageIds = discoveries.map((d: any) => d.messageId);
-                const existingDiscoveries = await db.lifeformDiscoveries.bulkGet(messageIds);
-                const newDiscoveries: any[] = [];
-                const finalResults: any[] = [];
+            lifeformTrackingLock = lifeformTrackingLock.then(async () => {
+                try {
+                    const messageIds = discoveries.map((d: any) => d.messageId);
+                    const existingDiscoveries = await db.lifeformDiscoveries.bulkGet(messageIds);
+                    const newDiscoveries: any[] = [];
+                    const finalResults: any[] = [];
 
-                discoveries.forEach((disc: any, index: number) => {
-                    const existing = existingDiscoveries[index];
-                    if (!existing) {
-                        const newEntry = { ...disc, tracked: true, playerId };
-                        newDiscoveries.push(newEntry);
-                        finalResults.push({ ...newEntry, isNew: true });
-                    } else {
-                        finalResults.push(existing);
+                    discoveries.forEach((disc: any, index: number) => {
+                        const existing = existingDiscoveries[index];
+                        if (!existing) {
+                            const newEntry = { ...disc, tracked: true, playerId };
+                            newDiscoveries.push(newEntry);
+                            finalResults.push({ ...newEntry, isNew: true });
+                        } else {
+                            finalResults.push({ ...existing, isNew: false });
+                        }
+                    });
+
+                    if (newDiscoveries.length > 0) {
+                        await db.lifeformDiscoveries.bulkPut(newDiscoveries);
                     }
-                });
 
-                if (newDiscoveries.length > 0) {
-                    await db.lifeformDiscoveries.bulkPut(newDiscoveries);
+                    sendResponse({ success: true, data: finalResults, newCount: newDiscoveries.length });
+                } catch (err) {
+                    console.error("OGame Nexus: Lifeform tracking error", err);
+                    sendResponse({ success: false, error: String(err) });
                 }
-
-                sendResponse({ success: true, data: finalResults, newCount: newDiscoveries.length });
-            } catch (err) {
-                console.error("OGame Nexus: Lifeform tracking error", err);
+            }).catch(err => {
+                console.error("OGame Nexus: Lifeform lock error", err);
                 sendResponse({ success: false, error: String(err) });
-            }
+            });
+            await lifeformTrackingLock;
         })();
         return true;
     }
@@ -1037,7 +1089,104 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     todoProjects = await db.todoProjects.toArray();
                 }
 
-                sendResponse({ success: true, planets, account, todayExpeditions, todoProjects });
+                // Fetch conversion rates
+                const conversionRates = (await db.settings.get('conversion_rates')) || DEFAULT_RATES;
+
+                // Calculate 60-day expedition averages for ROI calculations (cached in memory)
+                let expoAverages: any = undefined;
+                if (targetPlayerId) {
+                    const cached = expoAveragesCache.get(targetPlayerId);
+                    if (cached && (Date.now() - cached.calculatedAt < EXPO_AVERAGES_CACHE_TTL)) {
+                        expoAverages = cached.data;
+                    } else {
+                        const nowTs = Date.now();
+                        const start60d = Math.floor((nowTs - (60 * 24 * 60 * 60 * 1000)) / 1000);
+                        const end60d = Math.floor(nowTs / 1000);
+
+                        const expoItems = await db.expeditions
+                            .where('timestamp')
+                            .between(start60d, end60d)
+                            .filter(exp => String(exp.playerId).trim() === String(targetPlayerId).trim())
+                            .toArray();
+
+                        if (expoItems.length > 0) {
+                            const shipCosts: Record<number, any> = {};
+                            SHIP_DATA.forEach(s => shipCosts[s.id] = s.metadata?.cost);
+
+                            const dailyYields: Record<number, { res: Cost, ships: Cost }> = {};
+                            expoItems.forEach(item => {
+                                const dayKey = Math.floor(item.timestamp / (24 * 3600));
+                                if (!dailyYields[dayKey]) {
+                                    dailyYields[dayKey] = {
+                                        res: { metal: 0, crystal: 0, deuterium: 0 },
+                                        ships: { metal: 0, crystal: 0, deuterium: 0 }
+                                    };
+                                }
+
+                                const resType = (item.result || '').toLowerCase().trim();
+                                const details = item.resultDetails || {};
+
+                                if (resType === 'resources' || resType === 'ressources') {
+                                    dailyYields[dayKey].res.metal += Number(details.metal) || 0;
+                                    dailyYields[dayKey].res.crystal += Number(details.crystal) || 0;
+                                    dailyYields[dayKey].res.deuterium += Number(details.deuterium) || 0;
+                                } else if (resType === 'shipwrecks' || resType === 'technologiesgained' || resType === 'ships') {
+                                    Object.entries(details).forEach(([id, data]: [string, any]) => {
+                                        const sid = parseInt(id);
+                                        const cost = shipCosts[sid];
+                                        if (cost) {
+                                            const amount = typeof data === 'object' ? (data.amount || 0) : (Number(data) || 0);
+                                            if (amount > 0) {
+                                                dailyYields[dayKey].ships.metal += (Number(cost.metal) || 0) * amount;
+                                                dailyYields[dayKey].ships.crystal += (Number(cost.crystal) || 0) * amount;
+                                                dailyYields[dayKey].ships.deuterium += (Number(cost.deuterium) || 0) * amount;
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+
+                            const allDays = Object.values(dailyYields);
+                            const sortedResDays = [...allDays].sort((a, b) =>
+                                calculateMSU(b.res, conversionRates) - calculateMSU(a.res, conversionRates)
+                            ).slice(0, 7);
+
+                            const sortedShipDays = [...allDays].sort((a, b) =>
+                                calculateMSU(b.ships, conversionRates) - calculateMSU(a.ships, conversionRates)
+                            ).slice(0, 7);
+
+                            let resM = 0, resC = 0, resD = 0;
+                            sortedResDays.forEach(day => {
+                                resM += day.res.metal;
+                                resC += day.res.crystal;
+                                resD += day.res.deuterium;
+                            });
+
+                            let shipM = 0, shipC = 0, shipD = 0;
+                            sortedShipDays.forEach(day => {
+                                shipM += day.ships.metal;
+                                shipC += day.ships.crystal;
+                                shipD += day.ships.deuterium;
+                            });
+
+                            const resHours = (sortedResDays.length || 1) * 24;
+                            const shipHours = (sortedShipDays.length || 1) * 24;
+
+                            expoAverages = {
+                                resources: { metal: resM / resHours, crystal: resC / resHours, deuterium: resD / resHours },
+                                ships: { metal: shipM / shipHours, crystal: shipC / shipHours, deuterium: shipD / shipHours },
+                                totals: {
+                                    resources: { metal: resM, crystal: resC, deuterium: resD },
+                                    ships: { metal: shipM, crystal: shipC, deuterium: shipD }
+                                }
+                            };
+
+                            expoAveragesCache.set(targetPlayerId, { data: expoAverages, calculatedAt: Date.now() });
+                        }
+                    }
+                }
+
+                sendResponse({ success: true, planets, account, todayExpeditions, todoProjects, expoAverages, rates: conversionRates });
             } catch (err) {
                 console.error("OGame Nexus: Error fetching assistant data", err);
                 sendResponse({ success: false, error: String(err) });
@@ -1192,79 +1341,82 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
-    if (message.type === "TRACK_COMBATS") {
+        if (message.type === "TRACK_COMBATS") {
         const { combats, playerId } = message.data;
         (async () => {
-            try {
-                const messageIds = combats.map((c: any) => c.messageId);
-                const existingCombats = await db.combatReports.bulkGet(messageIds);
-                const newCombats: any[] = [];
-                const finalResults: any[] = [];
+            combatTrackingLock = combatTrackingLock.then(async () => {
+                try {
+                    const messageIds = combats.map((c: any) => c.messageId);
+                    const existingCombats = await db.combatReports.bulkGet(messageIds);
+                    const newCombats: any[] = [];
+                    const finalResults: any[] = [];
 
-                combats.forEach((combat: any, index: number) => {
-                    const existing = existingCombats[index];
-                    if (!existing) {
-                        const newEntry = { ...combat, playerId, isNew: true };
-                        newCombats.push(newEntry);
-                        finalResults.push(newEntry);
-                    } else {
-                        finalResults.push({ ...existing, isNew: false });
-                    }
-                });
+                    combats.forEach((combat: any, index: number) => {
+                        const existing = existingCombats[index];
+                        if (!existing) {
+                            const newEntry = { ...combat, playerId, isNew: true };
+                            newCombats.push(newEntry);
+                            finalResults.push(newEntry);
+                        } else {
+                            finalResults.push({ ...existing, isNew: false });
+                        }
+                    });
 
-                if (newCombats.length > 0) {
-                    await db.combatReports.bulkAdd(newCombats);
+                    if (newCombats.length > 0) {
+                        await db.combatReports.bulkAdd(newCombats);
 
-                    // Apply real-time plundering reductions to tracked Raid Radar planets
-                    const account = await db.accounts.get(playerId);
-                    if (account) {
-                        for (const combat of newCombats) {
-                            if (combat.attackerName && combat.attackerName.toLowerCase() === account.playerName.toLowerCase()) {
-                                const matchingPlanets = await db.spiedPlanets
-                                    .where('coords')
-                                    .equals(combat.coords)
-                                    .filter(p => p.universe === account.universe)
-                                    .toArray();
-                                if (matchingPlanets.length > 0) {
-                                    const spiedPlanet = matchingPlanets[0];
-                                    // Only reduce if the combat report is newer than our last spied/reduced state
-                                    if (combat.timestamp > spiedPlanet.lastSpiedTimestamp) {
-                                        const dT = (combat.timestamp - spiedPlanet.lastSpiedTimestamp) / 3600; // in hours
-                                        const metalAccumulated = spiedPlanet.metalPerHour * dT;
-                                        const crystalAccumulated = spiedPlanet.crystalPerHour * dT;
-                                        const deuteriumAccumulated = spiedPlanet.deuteriumPerHour * dT;
+                        // Apply real-time plundering reductions to tracked Raid Radar planets
+                        const account = await db.accounts.get(playerId);
+                        if (account) {
+                            for (const combat of newCombats) {
+                                if (combat.attackerName && combat.attackerName.toLowerCase() === account.playerName.toLowerCase()) {
+                                    const matchingPlanets = await db.spiedPlanets
+                                        .where('coords')
+                                        .equals(combat.coords)
+                                        .filter(p => p.universe === account.universe)
+                                        .toArray();
+                                    if (matchingPlanets.length > 0) {
+                                        const spiedPlanet = matchingPlanets[0];
+                                        if (combat.timestamp > spiedPlanet.lastSpiedTimestamp) {
+                                            const dT = (combat.timestamp - spiedPlanet.lastSpiedTimestamp) / 3600;
+                                            const metalAccumulated = spiedPlanet.metalPerHour * dT;
+                                            const crystalAccumulated = spiedPlanet.crystalPerHour * dT;
+                                            const deuteriumAccumulated = spiedPlanet.deuteriumPerHour * dT;
 
-                                        const metalCap = spiedPlanet.metalCapacity !== undefined ? spiedPlanet.metalCapacity : Infinity;
-                                        const crystalCap = spiedPlanet.crystalCapacity !== undefined ? spiedPlanet.crystalCapacity : Infinity;
-                                        const deuteriumCap = spiedPlanet.deuteriumCapacity !== undefined ? spiedPlanet.deuteriumCapacity : Infinity;
+                                            const metalCap = spiedPlanet.metalCapacity !== undefined ? spiedPlanet.metalCapacity : Infinity;
+                                            const crystalCap = spiedPlanet.crystalCapacity !== undefined ? spiedPlanet.crystalCapacity : Infinity;
+                                            const deuteriumCap = spiedPlanet.deuteriumCapacity !== undefined ? spiedPlanet.deuteriumCapacity : Infinity;
 
-                                        // Total resources accumulated on the planet right before plundering
-                                        const metalTotalAtCombat = Math.max(spiedPlanet.lastSpiedMetal, Math.min(metalCap, spiedPlanet.lastSpiedMetal + metalAccumulated));
-                                        const crystalTotalAtCombat = Math.max(spiedPlanet.lastSpiedCrystal, Math.min(crystalCap, spiedPlanet.lastSpiedCrystal + crystalAccumulated));
-                                        const deuteriumTotalAtCombat = Math.max(spiedPlanet.lastSpiedDeuterium, Math.min(deuteriumCap, spiedPlanet.lastSpiedDeuterium + deuteriumAccumulated));
+                                            const metalTotalAtCombat = Math.max(spiedPlanet.lastSpiedMetal, Math.min(metalCap, spiedPlanet.lastSpiedMetal + metalAccumulated));
+                                            const crystalTotalAtCombat = Math.max(spiedPlanet.lastSpiedCrystal, Math.min(crystalCap, spiedPlanet.lastSpiedCrystal + crystalAccumulated));
+                                            const deuteriumTotalAtCombat = Math.max(spiedPlanet.lastSpiedDeuterium, Math.min(deuteriumCap, spiedPlanet.lastSpiedDeuterium + deuteriumAccumulated));
 
-                                        // Discoverer (class 3) plunders 75% leaving 25%. Others plunder 50% leaving 50%.
-                                        const isDiscoverer = account.playerClass === 3;
-                                        const reductionFactor = isDiscoverer ? 0.25 : 0.50;
+                                            const isDiscoverer = account.playerClass === 3;
+                                            const reductionFactor = isDiscoverer ? 0.25 : 0.50;
 
-                                        await db.spiedPlanets.put({
-                                            ...spiedPlanet,
-                                            lastSpiedMetal: Math.floor(metalTotalAtCombat * reductionFactor),
-                                            lastSpiedCrystal: Math.floor(crystalTotalAtCombat * reductionFactor),
-                                            lastSpiedDeuterium: Math.floor(deuteriumTotalAtCombat * reductionFactor),
-                                            lastSpiedTimestamp: combat.timestamp
-                                        });
+                                            await db.spiedPlanets.put({
+                                                ...spiedPlanet,
+                                                lastSpiedMetal: Math.floor(metalTotalAtCombat * reductionFactor),
+                                                lastSpiedCrystal: Math.floor(crystalTotalAtCombat * reductionFactor),
+                                                lastSpiedDeuterium: Math.floor(deuteriumTotalAtCombat * reductionFactor),
+                                                lastSpiedTimestamp: combat.timestamp
+                                            });
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    sendResponse({ success: true, data: finalResults, newCount: newCombats.length });
+                } catch (err) {
+                    console.error("OGame Nexus: Error tracking combats", err);
+                    sendResponse({ success: false, error: String(err) });
                 }
-                sendResponse({ success: true, data: finalResults, newCount: newCombats.length });
-            } catch (err) {
-                console.error("OGame Nexus: Error tracking combats", err);
+            }).catch(err => {
+                console.error("OGame Nexus: Combat lock error", err);
                 sendResponse({ success: false, error: String(err) });
-            }
+            });
+            await combatTrackingLock;
         })();
         return true;
     }

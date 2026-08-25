@@ -9,7 +9,7 @@ import {
     Clock, DollarSign, ListOrdered, ArrowRight
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, TodoProject } from '../../db';
+import { db, TodoProject, ProductionQueueItem, EmpireProductionQueueData } from '../../db';
 import { AmortizationItem, AmortizationType, rankAmortizationItems, DEFAULT_RATES, formatROI, Cost, calculateMSU, getItemIcon, AMORTIZATION_TABLE as STATIC_TABLE } from '../../utils/amortizationCalc';
 import { SHIP_DATA } from '../../db/staticData';
 
@@ -20,6 +20,19 @@ interface AmortizationViewProps {
 
 const THEME_CYAN = '#00f2ff';
 const THEME_PURPLE = '#a855f7';
+
+const formatRemainingTime = (ms: number) => {
+    if (ms <= 0) return '0s';
+    const totalSec = Math.floor(ms / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+};
 
 const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account }) => {
     const onlyPlanets = useMemo(() => (planets || []).filter(p => p && p.type !== 'moon'), [planets]);
@@ -47,6 +60,111 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     const [animatedRow, setAnimatedRow] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ key: string, text: string, type: 'add' | 'remove' } | null>(null);
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
+    const liveAccount = useLiveQuery(
+        () => account?.playerId ? db.accounts.get(account.playerId) : undefined,
+        [account?.playerId]
+    );
+
+    const [cachedQueue, setCachedQueue] = useState<EmpireProductionQueueData | null>(null);
+    const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
+    const [currentTime, setCurrentTime] = useState(Date.now());
+
+    // 1-second interval to keep live queue countdowns updating
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Sync queue and server time offset from chrome.storage.local
+    useEffect(() => {
+        const loadQueueFromStorage = async () => {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                const key = account?.playerId ? `nexus_production_queue_${account.playerId}` : 'nexus_production_queue';
+                const res = await chrome.storage.local.get([key, 'nexus_production_queue', 'nexus_server_time_offset']);
+                if (res?.nexus_server_time_offset !== undefined) {
+                    setServerTimeOffset(res.nexus_server_time_offset);
+                }
+                if (res?.[key]) {
+                    setCachedQueue(res[key]);
+                    if (res[key].serverTimeOffset !== undefined) {
+                        setServerTimeOffset(res[key].serverTimeOffset);
+                    }
+                } else if (res?.nexus_production_queue) {
+                    setCachedQueue(res.nexus_production_queue);
+                    if (res.nexus_production_queue.serverTimeOffset !== undefined) {
+                        setServerTimeOffset(res.nexus_production_queue.serverTimeOffset);
+                    }
+                }
+            }
+        };
+        loadQueueFromStorage();
+
+        const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+            if (areaName === 'local') {
+                const key = account?.playerId ? `nexus_production_queue_${account.playerId}` : 'nexus_production_queue';
+                if (changes['nexus_server_time_offset']?.newValue !== undefined) {
+                    setServerTimeOffset(changes['nexus_server_time_offset'].newValue);
+                }
+                if (changes[key]?.newValue) {
+                    setCachedQueue(changes[key].newValue);
+                    if (changes[key].newValue.serverTimeOffset !== undefined) {
+                        setServerTimeOffset(changes[key].newValue.serverTimeOffset);
+                    }
+                } else if (changes.nexus_production_queue?.newValue) {
+                    setCachedQueue(changes.nexus_production_queue.newValue);
+                    if (changes.nexus_production_queue.newValue.serverTimeOffset !== undefined) {
+                        setServerTimeOffset(changes.nexus_production_queue.newValue.serverTimeOffset);
+                    }
+                }
+            }
+        };
+
+        if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+            chrome.storage.onChanged.addListener(handleStorageChange);
+            return () => {
+                chrome.storage.onChanged.removeListener(handleStorageChange);
+            };
+        }
+    }, [account?.playerId]);
+
+    const queueItems: ProductionQueueItem[] = useMemo(() => {
+        return liveAccount?.productionQueue?.items || cachedQueue?.items || account?.productionQueue?.items || [];
+    }, [liveAccount?.productionQueue, cachedQueue, account?.productionQueue]);
+
+    const findOngoingQueueItem = (item: AmortizationItem, planetCoords?: string): ProductionQueueItem | undefined => {
+        if (!queueItems || queueItems.length === 0) return undefined;
+        const cleanItemName = (item.name || '').toLowerCase().trim();
+
+        return queueItems.find(q => {
+            const cleanQueueName = (q.itemName || '').toLowerCase().trim();
+            const nameMatch = cleanQueueName === cleanItemName ||
+                              cleanQueueName.includes(cleanItemName) ||
+                              cleanItemName.includes(cleanQueueName);
+            if (!nameMatch) return false;
+
+            // For global empire research (e.g. Plasma Technology)
+            if (item.type === AmortizationType.PlasmaTechnology || !item.planetId) {
+                return q.type === 'research' || q.planetId === 'global';
+            }
+
+            // For planet-specific items
+            if (item.planetId) {
+                const pId1 = String(q.planetId || '').replace(/\D/g, '');
+                const pId2 = String(item.planetId || '').replace(/\D/g, '');
+                if (pId1 && pId2 && pId1 === pId2) return true;
+            }
+
+            // Fallback match by coordinates
+            if (planetCoords && q.coords) {
+                const c1 = planetCoords.replace(/[\[\]]/g, '').trim();
+                const c2 = q.coords.replace(/[\[\]]/g, '').trim();
+                if (c1 && c1 === c2) return true;
+            }
+
+            return false;
+        });
+    };
+
     const todoList = useLiveQuery(
         () => account ? db.todoProjects.where('playerId').equals(account.playerId).toArray() : [],
         [account]
@@ -605,45 +723,93 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                             <img src={icon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                                         </div>
                                         <div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <span style={{ color: '#fff', fontSize: '17px', fontWeight: 1000, letterSpacing: '-0.02em' }}>{item.name}</span>
-                                                <div style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    background: isFirst ? THEME_CYAN : 'rgba(255,255,255,0.08)',
-                                                    padding: '3px 8px',
-                                                    borderRadius: '8px',
-                                                    color: isFirst ? '#000' : '#fff',
-                                                    fontSize: '11px',
-                                                    fontWeight: 1000,
-                                                    border: isFirst ? 'none' : '1px solid rgba(255,255,255,0.1)'
-                                                }}>
-                                                    <span style={{ opacity: 0.6 }}>{item.currentLevel}</span>
-                                                    <ArrowRight size={10} color={isFirst ? '#000' : THEME_CYAN} strokeWidth={3} />
-                                                    <span style={{ color: isFirst ? '#000' : THEME_CYAN }}>{item.currentLevel + 1}</span>
-                                                </div>
-                                            </div>
-                                            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', fontWeight: 800, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div style={{
-                                                    width: '16px',
-                                                    height: '16px',
-                                                    borderRadius: '50%',
-                                                    overflow: 'hidden',
-                                                    border: '1px solid rgba(255,255,255,0.1)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    background: 'rgba(255,255,255,0.05)'
-                                                }}>
-                                                    {planet ? (
-                                                        <img src={planet.imgUrl || 'icons/resources/metal_mine_large.jpg'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                                                    ) : (
-                                                        <Globe size={10} color={THEME_CYAN} />
-                                                    )}
-                                                </div>
-                                                <span style={{ color: isFirst ? '#fff' : 'inherit' }}>{planet ? `${planet.coords === '0:0:0' ? 'Unknown' : planet.coords} • ${planet.name}` : 'EMPIRE-WIDE RESEARCH'}</span>
-                                            </div>
+                                            {(() => {
+                                                const ongoingQueue = findOngoingQueueItem(item, planet?.coords);
+                                                const offset = liveAccount?.productionQueue?.serverTimeOffset ?? cachedQueue?.serverTimeOffset ?? serverTimeOffset ?? 0;
+                                                const currentServerTime = currentTime + offset;
+                                                const remainingMs = ongoingQueue && ongoingQueue.endTimestamp > 0 ? Math.max(0, ongoingQueue.endTimestamp - currentServerTime) : 0;
+
+                                                return (
+                                                    <>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                                            <span style={{ color: '#fff', fontSize: '17px', fontWeight: 1000, letterSpacing: '-0.02em' }}>{item.name}</span>
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '6px',
+                                                                background: isFirst ? THEME_CYAN : 'rgba(255,255,255,0.08)',
+                                                                padding: '3px 8px',
+                                                                borderRadius: '8px',
+                                                                color: isFirst ? '#000' : '#fff',
+                                                                fontSize: '11px',
+                                                                fontWeight: 1000,
+                                                                border: isFirst ? 'none' : '1px solid rgba(255,255,255,0.1)'
+                                                            }}>
+                                                                <span style={{ opacity: 0.6 }}>{item.currentLevel}</span>
+                                                                <ArrowRight size={10} color={isFirst ? '#000' : THEME_CYAN} strokeWidth={3} />
+                                                                <span style={{ color: isFirst ? '#000' : THEME_CYAN }}>{item.currentLevel + 1}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', fontWeight: 800, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                            <div style={{
+                                                                width: '16px',
+                                                                height: '16px',
+                                                                borderRadius: '50%',
+                                                                overflow: 'hidden',
+                                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                background: 'rgba(255,255,255,0.05)'
+                                                            }}>
+                                                                {planet ? (
+                                                                    <img src={planet.imgUrl || 'icons/resources/metal_mine_large.jpg'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                                                                ) : (
+                                                                    <Globe size={10} color={THEME_CYAN} />
+                                                                )}
+                                                            </div>
+                                                            <span style={{ color: isFirst ? '#fff' : 'inherit' }}>{planet ? `${planet.coords === '0:0:0' ? 'Unknown' : planet.coords} • ${planet.name}` : 'EMPIRE-WIDE RESEARCH'}</span>
+                                                        </div>
+
+                                                        {ongoingQueue && (
+                                                            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center' }}>
+                                                                <div style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '5px',
+                                                                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.12) 100%)',
+                                                                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                                                                    boxShadow: '0 0 10px rgba(245, 158, 11, 0.15)',
+                                                                    padding: '2px 8px',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: 900,
+                                                                    color: '#fbbf24',
+                                                                    letterSpacing: '0.02em'
+                                                                }}>
+                                                                    <span style={{
+                                                                        width: '6px',
+                                                                        height: '6px',
+                                                                        borderRadius: '50%',
+                                                                        background: '#f59e0b',
+                                                                        boxShadow: '0 0 6px #f59e0b',
+                                                                        display: 'inline-block',
+                                                                        animation: 'pulse 1.5s infinite'
+                                                                    }} />
+                                                                    <Clock size={11} color="#fbbf24" />
+                                                                    <span>IN QUEUE</span>
+                                                                    {ongoingQueue.endTimestamp > 0 && remainingMs > 0 && (
+                                                                        <span style={{ opacity: 0.85, fontSize: '10px', marginLeft: '2px', fontFamily: 'monospace' }}>
+                                                                            ({formatRemainingTime(remainingMs)})
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
 
@@ -708,6 +874,11 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                     0% { transform: translateX(-100%) skewX(-25deg); opacity: 0; }
                     50% { opacity: 0.6; }
                     100% { transform: translateX(200%) skewX(-25deg); opacity: 0; }
+                }
+
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.35; transform: scale(0.85); }
                 }
 
                 .flash-overlay {

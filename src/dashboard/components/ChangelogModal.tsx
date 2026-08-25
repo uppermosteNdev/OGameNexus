@@ -12,24 +12,29 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <Eye size={22} color="#00f2ff" />,
-            title: "Overseer Enhancements & Planet To-Dos",
-            desc: "Added top-bar category status pills for instant navigation, local Planet To-Dos scanner for top amortization projects on the active planet, and chromatic threat-level scaling for Exposed Goods."
+            icon: <Zap size={22} color="#00f2ff" />,
+            title: "Instant Multi-Page Message Scanning",
+            desc: "Opening Expeditions or Combat Reports tabs automatically imports and saves all pending reports across all pages in 1 background shot without needing to click through pagination."
         },
         {
-            icon: <Clock size={22} color="#10b981" />,
-            title: "Costs Planner Gather Projections & Cost Fixes",
-            desc: "Added hover completion tooltips (showing exact target day, hour, and minute) on Estimated Gather Time, centered investment cells, and corrected Lifeform building calculation costs."
+            icon: <Orbit size={22} color="#a855f7" />,
+            title: "Full Moon Background Synchronization",
+            desc: "Background and manual sync now correctly synchronizes all moons (resources, fleets, defenses, lunar base, phalanx, jump gate, and active items) directly alongside planets."
         },
         {
-            icon: <Zap size={22} color="#f97316" />,
-            title: "Autonomous Background Sync (Commander Independent)",
-            desc: "Nexus now automatically background-syncs data whenever the player is active, regardless of whether Commander is active or not (removing 'Manual Sync Only' limitations)."
+            icon: <Activity size={22} color="#10b981" />,
+            title: "Overseer Mouse Wheel Navigation & Clock Sync",
+            desc: "Scroll directly over the Overseer bar or click the scroll indicator to cycle alerts, accompanied by server-time synchronized queue countdowns across Amortization and rules."
         },
         {
-            icon: <ShieldCheck size={22} color="#c084fc" />,
-            title: "Fleet Telemetry & Engine Bugfixes",
-            desc: "Fixed flying fleet percentages, empire-wide fleet detection, broken Import/Export Overseer deep-links, invalid mine notifications on moons, and fortified runtime lifecycle guards."
+            icon: <Calculator size={22} color="#f59e0b" />,
+            title: "Production % & Crawler Overload Calculations",
+            desc: "Scrapes and applies exact mine, reactor, solar, and crawler overload percentages (up to 150%) to the Nexus Terminal Production tab and Amortization Engine."
+        },
+        {
+            icon: <ShieldCheck size={22} color="#38bdf8" />,
+            title: "Expedition Tracking Bugfixes & Expanded Bounty",
+            desc: "Resolved background race conditions for newly arrived expeditions and expanded Direct Bounty to track Trader encounters, navigation shifts, discovered items, and combat events."
         }
     ];
 
@@ -128,7 +133,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.2.2
+                                v1.2.3
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

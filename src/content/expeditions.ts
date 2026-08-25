@@ -3,9 +3,14 @@ import { flyToNexusButton } from './effects';
 
 let sessionRecentExpeditions: any[] = [];
 let newBadgeActive = false;
+const processedExpeditionIds = new Set<string>();
 
 export function addSessionTrackedItems(items: any[]) {
-    sessionRecentExpeditions = [...sessionRecentExpeditions, ...items];
+    const existingIds = new Set(sessionRecentExpeditions.map(e => e.messageId));
+    const uniqueNew = items.filter(e => e.messageId && !existingIds.has(e.messageId));
+    if (uniqueNew.length > 0) {
+        sessionRecentExpeditions = [...sessionRecentExpeditions, ...uniqueNew];
+    }
 }
 
 export function setNewBadgeActive(active: boolean) {
@@ -24,89 +29,120 @@ function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
 }
 
+function parseExpeditionElement(msg: Element): any | null {
+    const parentMsg = msg.closest('.msg');
+    const messageId = parentMsg?.getAttribute('data-msg-id');
+    if (!messageId) return null;
+
+    const timestamp = msg.getAttribute('data-raw-timestamp');
+    const coords = msg.getAttribute('data-raw-coords') || msg.getAttribute('data-raw-coordinates');
+    const depletion = msg.getAttribute('data-raw-depletion');
+    const size = msg.getAttribute('data-raw-size');
+    const result = msg.getAttribute('data-raw-expeditionresult');
+
+    if (timestamp && coords && depletion !== null && size !== null && result) {
+        let resultDetails: any = null;
+        const resType = result.toLowerCase();
+
+        try {
+            if (resType === 'navigation' || resType === 'delay' || resType === 'speedup') {
+                const raw = msg.getAttribute('data-raw-navigation');
+                if (raw) resultDetails = JSON.parse(raw);
+            } else if (resType === 'ressources' || resType === 'resources') {
+                const raw = msg.getAttribute('data-raw-resourcesgained');
+                if (raw) resultDetails = JSON.parse(raw);
+            } else if (resType === 'shipwrecks') {
+                const raw = msg.getAttribute('data-raw-technologiesgained');
+                if (raw) resultDetails = JSON.parse(raw);
+            } else if (resType === 'darkmatter') {
+                const raw = msg.getAttribute('data-raw-resourcesgained');
+                if (raw) resultDetails = JSON.parse(raw);
+            } else if (resType === 'item' || resType === 'items') {
+                const raw = msg.getAttribute('data-raw-itemsgained') || msg.getAttribute('data-raw-items') || msg.getAttribute('data-raw-technologiesgained');
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        let imgUrl = null;
+                        if (parentMsg) {
+                            const shopIcon = parentMsg.querySelector('shopitem-icon') as HTMLElement;
+                            if (shopIcon && shopIcon.style.backgroundImage) {
+                                imgUrl = shopIcon.style.backgroundImage.replace(/^url\(['"]?/, '').replace(/['"]?\)$/, '');
+                            }
+                        }
+
+                        if (Array.isArray(parsed)) {
+                            resultDetails = parsed.map(item => ({ ...item, imgUrl }));
+                        } else {
+                            resultDetails = parsed;
+                            if (resultDetails && typeof resultDetails === 'object' && imgUrl) {
+                                resultDetails.imgUrl = imgUrl;
+                            }
+                        }
+                    } catch (e) { }
+                }
+            } else if (resType === 'trader') {
+                const raw = msg.getAttribute('data-raw-resources');
+                if (raw) resultDetails = JSON.parse(raw);
+            } else if (resType === 'fleetloss' || resType === 'fleetlost') {
+                const rawShips = msg.getAttribute('data-raw-shipslost') || msg.getAttribute('data-raw-fleet');
+                if (rawShips) {
+                    try {
+                        resultDetails = { shipsLost: JSON.parse(rawShips) };
+                    } catch (e) { }
+                }
+            }
+        } catch (e) {
+            console.warn('OGame Nexus: Failed to parse expedition JSON details', e);
+        }
+
+        return {
+            messageId,
+            timestamp: parseInt(timestamp),
+            coords,
+            depletion: parseInt(depletion),
+            size: parseInt(size),
+            result,
+            resultDetails
+        };
+    }
+    return null;
+}
+
 export function scrapeExpeditionMessages() {
     // Only scrape messages that haven't been marked as processed yet
     const expeditionMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]:not([data-og-nexus-processed="true"])');
     const results = [];
 
     for (const msg of expeditionMessages) {
-        const messageId = msg.closest('.msg')?.getAttribute('data-msg-id');
-        if (!messageId) continue;
-
-        const timestamp = msg.getAttribute('data-raw-timestamp');
-        const coords = msg.getAttribute('data-raw-coords');
-        const depletion = msg.getAttribute('data-raw-depletion');
-        const size = msg.getAttribute('data-raw-size');
-        const result = msg.getAttribute('data-raw-expeditionresult');
-
-        if (timestamp && coords && depletion !== null && size !== null && result) {
-            let resultDetails: any = null;
-            const resType = result.toLowerCase();
-
-            try {
-                if (resType === 'navigation' || resType === 'delay' || resType === 'speedup') {
-                    const raw = msg.getAttribute('data-raw-navigation');
-                    if (raw) resultDetails = JSON.parse(raw);
-                } else if (resType === 'ressources' || resType === 'resources') {
-                    const raw = msg.getAttribute('data-raw-resourcesgained');
-                    if (raw) resultDetails = JSON.parse(raw);
-                } else if (resType === 'shipwrecks') {
-                    const raw = msg.getAttribute('data-raw-technologiesgained');
-                    if (raw) resultDetails = JSON.parse(raw);
-                } else if (resType === 'darkmatter') {
-                    const raw = msg.getAttribute('data-raw-resourcesgained');
-                    if (raw) resultDetails = JSON.parse(raw);
-                } else if (resType === 'item' || resType === 'items') {
-                    const raw = msg.getAttribute('data-raw-itemsgained') || msg.getAttribute('data-raw-items') || msg.getAttribute('data-raw-technologiesgained');
-                    if (raw) {
-                        try {
-                            const parsed = JSON.parse(raw);
-                            const parentMsg = msg.closest('.msg');
-                            let imgUrl = null;
-                            if (parentMsg) {
-                                const shopIcon = parentMsg.querySelector('shopitem-icon') as HTMLElement;
-                                if (shopIcon && shopIcon.style.backgroundImage) {
-                                    imgUrl = shopIcon.style.backgroundImage.replace(/^url\(['"]?/, '').replace(/['"]?\)$/, '');
-                                }
-                            }
-
-                            if (Array.isArray(parsed)) {
-                                resultDetails = parsed.map(item => ({ ...item, imgUrl }));
-                            } else {
-                                resultDetails = parsed;
-                                if (resultDetails && typeof resultDetails === 'object' && imgUrl) {
-                                    resultDetails.imgUrl = imgUrl;
-                                }
-                            }
-                        } catch (e) { }
-                    }
-                } else if (resType === 'trader') {
-                    const raw = msg.getAttribute('data-raw-resources');
-                    if (raw) resultDetails = JSON.parse(raw);
-                } else if (resType === 'fleetloss' || resType === 'fleetlost') {
-                    const rawShips = msg.getAttribute('data-raw-shipslost') || msg.getAttribute('data-raw-fleet');
-                    if (rawShips) {
-                        try {
-                            resultDetails = { shipsLost: JSON.parse(rawShips) };
-                        } catch (e) { }
-                    }
-                }
-            } catch (e) {
-                console.warn('OGame Nexus: Failed to parse expedition JSON details', e);
-            }
-
-            results.push({
-                messageId,
-                timestamp: parseInt(timestamp),
-                coords,
-                depletion: parseInt(depletion),
-                size: parseInt(size),
-                result,
-                resultDetails
-            });
-
-            // Mark as processed immediately to avoid rescanning in the same cycle if multiple mutations occur
+        const item = parseExpeditionElement(msg);
+        if (item) {
             msg.setAttribute('data-og-nexus-processed', 'true');
+            if (!processedExpeditionIds.has(item.messageId)) {
+                processedExpeditionIds.add(item.messageId);
+                results.push(item);
+            }
+        }
+    }
+
+    return results;
+}
+
+export function scrapeRawExpeditionHTML(htmls: string[]) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmls.join(''), 'text/html');
+    const expeditionMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]');
+    const results = [];
+
+    for (const msg of expeditionMessages) {
+        const item = parseExpeditionElement(msg);
+        if (item) {
+            const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="41"]`);
+            if (domMsg) domMsg.setAttribute('data-og-nexus-processed', 'true');
+
+            if (!processedExpeditionIds.has(item.messageId)) {
+                processedExpeditionIds.add(item.messageId);
+                results.push(item);
+            }
         }
     }
 
@@ -172,24 +208,7 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
         card.appendChild(detailsPane);
     }
 
-    detailsPane.innerHTML = `
-        <div class="og-nexus-details-grid">
-            <div class="og-nexus-details-col">
-                <h4 class="og-nexus-details-title" style="color: #facc15;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;"><polygon points="12,2 22,8.5 12,15 2,8.5"></polygon><polyline points="2,8.5 12,22 22,8.5"></polyline><line x1="12" y1="15" x2="12" y2="22"></line></svg>
-                    Direct Bounty
-                </h4>
-                <div class="og-nexus-no-data">Loading recent bounty...</div>
-            </div>
-            <div class="og-nexus-details-col">
-                <h4 class="og-nexus-details-title" style="color: #38bdf8;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                    Fleet Value
-                </h4>
-                <div class="og-nexus-no-data">Loading fleet...</div>
-            </div>
-        </div>
-    `;
+    detailsPane.innerHTML = `<div class="og-nexus-details-grid"><div class="og-nexus-details-col"><h4 class="og-nexus-details-title" style="color: #facc15;">Direct Bounty</h4><div class="og-nexus-no-data">Loading recent bounty...</div></div><div class="og-nexus-details-col"><h4 class="og-nexus-details-title" style="color: #38bdf8;">Fleet Value</h4><div class="og-nexus-no-data">Loading fleet...</div></div></div>`;
 
     let expeditions: any[] = [];
     if (sessionRecentExpeditions && sessionRecentExpeditions.length > 0) {
@@ -198,7 +217,7 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
         expeditions = await new Promise<any[]>((resolve) => {
             chrome.runtime.sendMessage({
                 type: "GET_RECENT_EXPEDITIONS",
-                data: { playerId, limit: 20 }
+                data: { playerId, limit: 50 }
             }, (response) => {
                 if (response?.success && response.expeditions) {
                     resolve(response.expeditions);
@@ -208,6 +227,18 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
             });
         });
     }
+
+    // Deduplicate expeditions by messageId / identity
+    const seenMsgIds = new Set<string>();
+    const dedupedExpeditions: any[] = [];
+    expeditions.forEach(exp => {
+        const key = exp.messageId || `${exp.timestamp}_${exp.coords}_${exp.result}`;
+        if (!seenMsgIds.has(key)) {
+            seenMsgIds.add(key);
+            dedupedExpeditions.push(exp);
+        }
+    });
+    expeditions = dedupedExpeditions;
 
     if (expeditions.length === 0) {
         detailsPane.innerHTML = `
@@ -227,6 +258,13 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
     let totalArtifacts = 0;
     let totalXp = 0;
     let totalBlackHoles = 0;
+    let totalTraders = 0;
+    let totalItems = 0;
+    let totalDelays = 0;
+    let totalSpeedups = 0;
+    let totalNavigations = 0;
+    let totalPirates = 0;
+    let totalAliens = 0;
 
     const lifeformXp: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
     const shipsFound: Record<string, { amount: number; name: string; icon: string }> = {};
@@ -237,7 +275,7 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
         if (isLifeform) {
             if (exp.discoveryType === 'artifacts') {
                 totalArtifacts += exp.artifactsFound || 0;
-            } else if (exp.discoveryType === 'lifeform-xp') {
+            } else if (exp.discoveryType === 'lifeform-xp' || exp.discoveryType === 'xp') {
                 totalXp += exp.lifeformGainedExperience || 0;
                 const lfId = Number(exp.lifeform) || 0;
                 if (lfId >= 1 && lfId <= 4) {
@@ -255,6 +293,25 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
                 totalDarkMatter += exp.resultDetails?.darkMatter || exp.resultDetails?.darkmatter || 0;
             } else if (type === 'fleetloss' || type === 'fleetlost') {
                 totalBlackHoles++;
+            } else if (type === 'trader' || type === 'merchant') {
+                totalTraders++;
+            } else if (type === 'item' || type === 'items') {
+                totalItems++;
+            } else if (type === 'delay') {
+                totalDelays++;
+            } else if (type === 'speedup') {
+                totalSpeedups++;
+            } else if (type === 'navigation' || type === 'early') {
+                const details = exp.resultDetails || {};
+                const isDelay = (details.returnTimeAbsoluteIncreaseHours || 0) > 0 || (details.returnTimeMultiplier !== undefined && details.returnTimeMultiplier >= 1) || details.type === 'delay';
+                const isSpeedup = (details.returnTimeAbsoluteDecreaseHours || 0) > 0 || (details.returnTimeMultiplier !== undefined && details.returnTimeMultiplier < 1) || details.type === 'speedup';
+                if (isDelay) totalDelays++;
+                else if (isSpeedup) totalSpeedups++;
+                else totalNavigations++;
+            } else if (type === 'combatpirates' || type === 'pirates') {
+                totalPirates++;
+            } else if (type === 'combataliens' || type === 'aliens') {
+                totalAliens++;
             }
 
             if (type === 'shipwrecks' && exp.resultDetails) {
@@ -355,6 +412,62 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
             </div>
         `);
     }
+    if (totalItems > 0) {
+        groupB.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/lifeforms/artifact-icon-large.png')}">
+                    Items Found
+                </div>
+                <div class="og-nexus-details-value" style="color: #EAB308;">+${totalItems} Item${totalItems > 1 ? 's' : ''}</div>
+            </div>
+        `);
+    }
+    if (totalTraders > 0) {
+        groupB.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/misc/trader-icon-medium.png')}">
+                    Trader Encounter
+                </div>
+                <div class="og-nexus-details-value" style="color: #fb923c;">${totalTraders} Trader${totalTraders > 1 ? 's' : ''}</div>
+            </div>
+        `);
+    }
+    if (totalDelays > 0 || totalSpeedups > 0 || totalNavigations > 0) {
+        const navParts: string[] = [];
+        if (totalDelays > 0) navParts.push(`${totalDelays} Delay${totalDelays > 1 ? 's' : ''}`);
+        if (totalSpeedups > 0) navParts.push(`${totalSpeedups} Speedup${totalSpeedups > 1 ? 's' : ''}`);
+        if (totalNavigations > 0 && totalDelays === 0 && totalSpeedups === 0) navParts.push(`${totalNavigations} Shift`);
+        const navText = navParts.join(' / ');
+        const navIcon = totalDelays > totalSpeedups 
+            ? 'icons/misc/delay-icon-medium.png' 
+            : (totalSpeedups > totalDelays ? 'icons/misc/speedup-icon-medium.png' : 'icons/misc/navigation-delay-speedup-medium.png');
+
+        groupB.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL(navIcon)}">
+                    Navigation Shifts
+                </div>
+                <div class="og-nexus-details-value" style="color: ${totalDelays > totalSpeedups ? '#f97316' : '#22c55e'};">${navText}</div>
+            </div>
+        `);
+    }
+    if (totalPirates > 0 || totalAliens > 0) {
+        const combatParts: string[] = [];
+        if (totalPirates > 0) combatParts.push(`${totalPirates} Pirate${totalPirates > 1 ? 's' : ''}`);
+        if (totalAliens > 0) combatParts.push(`${totalAliens} Alien${totalAliens > 1 ? 's' : ''}`);
+        groupB.push(`
+            <div class="og-nexus-details-item">
+                <div class="og-nexus-details-label-group">
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/misc/pirate-fight-icon-medium.png')}">
+                    Hostile Combats
+                </div>
+                <div class="og-nexus-details-value" style="color: #ef4444;">${combatParts.join(' / ')}</div>
+            </div>
+        `);
+    }
 
     const lifeformConfigs: Record<number, { name: string; icon: string; color: string }> = {
         1: { name: 'Humans', icon: 'icons/lifeforms/humans-icon-large.jpg', color: '#22c55e' },
@@ -383,10 +496,10 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
         groupB.push(`
             <div class="og-nexus-details-item">
                 <div class="og-nexus-details-label-group">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="og-nexus-details-icon" style="padding: 1px; box-sizing: border-box; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);"><circle cx="12" cy="12" r="10" stroke-dasharray="4 2"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2" fill="#ef4444"></circle></svg>
+                    <img class="og-nexus-details-icon" src="${chrome.runtime.getURL('icons/misc/black-hole.png')}" style="width: 18px; height: 18px; object-fit: contain;">
                     Black Holes
                 </div>
-                <div class="og-nexus-details-value" style="color: #ef4444;">${totalBlackHoles}</div>
+                <div class="og-nexus-details-value" style="color: #ef4444;">${totalBlackHoles} Lost</div>
             </div>
         `);
     }
@@ -655,6 +768,14 @@ async function updateDetailsPane(wrapper: HTMLElement, playerId: string) {
                 ${fleetContent}
             </div>
         </div>
+        ${hasAnyDepletion ? `
+            <div class="og-nexus-details-footer" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <span style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Depletion Overview</span>
+                    ${depletionContent}
+                </div>
+            </div>
+        ` : ''}
     `;
 
     window.dispatchEvent(new CustomEvent('ogame-nexus-trigger-tooltips'));
@@ -974,14 +1095,83 @@ export async function trackExpeditions(playerId: string) {
                 }
             });
 
-            // Re-init tooltips once after batch update
             triggerSiteTooltips();
 
-            // Only re-fetch if actually new data was logged to IndexedDB
             if (response.newCount && response.newCount > 0) {
                 const newItems = response.data.filter((exp: any) => exp.isNew).map((exp: any) => ({ ...exp, type: 'expedition' }));
                 if (newItems.length > 0) {
-                    sessionRecentExpeditions = [...sessionRecentExpeditions, ...newItems];
+                    addSessionTrackedItems(newItems);
+                    newBadgeActive = true;
+                }
+                injectTodaySummaryCard(playerId, true, maxRarity);
+            }
+        }
+    });
+}
+
+const processedRawExpeditionIds = new Set<string>();
+
+export async function trackRawExpeditions(playerId: string, htmls: string[]) {
+    if (!isExtensionStillValid()) return;
+
+    const expeditionData = scrapeRawExpeditionHTML(htmls);
+    if (expeditionData.length === 0) return;
+
+    let removeOGLight = true;
+    try {
+        const localData = await chrome.storage.local.get('globalSettings');
+        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
+            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
+        }
+    } catch (e) {
+        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
+    }
+
+    injectTodaySummaryCard(playerId, false);
+
+    chrome.runtime.sendMessage({
+        type: "TRACK_EXPEDITIONS",
+        data: { expeditions: expeditionData, playerId }
+    }, (response) => {
+        if (response?.success) {
+            let maxRarity = 0;
+            response.data.forEach((exp: any) => {
+                const msgElement = document.querySelector(`.msg[data-msg-id="${exp.messageId}"]`) as HTMLElement;
+                if (msgElement) {
+                    updateExpeditionVisuals(msgElement, exp, removeOGLight);
+
+                    if (exp.isNew) {
+                        setTimeout(() => {
+                            const wrapper = msgElement.querySelector('.og-nexus-resource-result') || msgElement.querySelector('.og-nexus-darkmatter-result') || msgElement.querySelector('.og-nexus-shipwreck-result') || msgElement.querySelector('.og-nexus-trader-result') || msgElement.querySelector('.og-nexus-item-result');
+                            if (wrapper) {
+                                const icons = Array.from(wrapper.querySelectorAll('div[style*="background-image"], img'))
+                                    .map(el => (el as HTMLImageElement).src || getComputedStyle(el).backgroundImage.replace(/url\(['"]?(.*?)['"]?\)/i, '$1'))
+                                    .filter(src => src && src !== 'none' && !src.includes('rarity'));
+                                if (icons.length > 0) {
+                                    flyToNexusButton(msgElement, [icons[0]]);
+                                }
+                            }
+                        }, 100);
+                    }
+                }
+
+                const resType = (exp.result || '').toLowerCase();
+                if (resType !== 'nothing') {
+                    const size = exp.size ?? 2;
+                    let rarity = 0;
+                    if (size === 0) rarity = 2; // Epic
+                    else if (size === 1) rarity = 1; // Rare
+
+                    if (rarity > maxRarity) maxRarity = rarity;
+                }
+            });
+
+            triggerSiteTooltips();
+
+            if (response.newCount && response.newCount > 0) {
+                const newItems = response.data.filter((exp: any) => exp.isNew).map((exp: any) => ({ ...exp, type: 'expedition' }));
+                if (newItems.length > 0) {
+                    addSessionTrackedItems(newItems);
                     newBadgeActive = true;
                 }
                 injectTodaySummaryCard(playerId, true, maxRarity);

@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { getLinkedAccount, linkGoogleAccount, unlinkGoogleAccount, GoogleAccount } from '../../utils/googleAuth';
 import { LogIn, LogOut, CheckCircle, Smartphone, ShieldCheck, Database, TrendingUp, Cpu, Trash2, ArrowRight, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
+import { ThemeIcon } from '../components/ThemeIcon';
 
 const Settings: React.FC = () => {
     const [account, setAccount] = useState<GoogleAccount | null>(null);
@@ -271,15 +271,20 @@ const Settings: React.FC = () => {
 
     return (
         <div className="view">
-            <h1>Settings Hub</h1>
-            <p>Configure extension behavior, economy baselines, and data management.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+                <ThemeIcon name="settings" size={44} glow />
+                <div>
+                    <h1 style={{ margin: 0 }}>Settings Hub</h1>
+                    <p style={{ margin: '4px 0 0', color: 'var(--text-muted)' }}>Configure extension behavior, economy baselines, and data management.</p>
+                </div>
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: '32px' }}>
                 
                 {/* Economy Settings */}
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                        <TrendingUp size={20} color="var(--primary)" />
+                        <ThemeIcon name="sliders" size={22} />
                         <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Market & Economy Rates</h2>
                     </div>
                     <p style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '20px' }}>
@@ -317,8 +322,9 @@ const Settings: React.FC = () => {
                     </div>
                     <button 
                         onClick={saveRates}
-                        style={{ marginTop: '20px', width: '100%', padding: '10px', background: 'var(--primary)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 800, cursor: 'pointer' }}
+                        style={{ marginTop: '20px', width: '100%', padding: '10px', background: 'var(--primary)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                     >
+                        <ThemeIcon name="save" size={16} />
                         {isSavingRates ? 'Saved!' : 'Save Economy Rates'}
                     </button>
                 </div>
@@ -326,7 +332,7 @@ const Settings: React.FC = () => {
                 {/* Tool Preferences */}
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                        <Cpu size={20} color="var(--primary)" />
+                        <ThemeIcon name="tools" size={22} />
                         <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Tool Preferences</h2>
                     </div>
                     <p style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '20px' }}>
@@ -466,7 +472,7 @@ const Settings: React.FC = () => {
                 {/* Data Management */}
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                        <Database size={20} color="var(--primary)" />
+                        <ThemeIcon name="database" size={22} />
                         <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Data Management</h2>
                     </div>
                     
@@ -516,7 +522,7 @@ const Settings: React.FC = () => {
                 {/* Cloud Backup */}
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                        <ShieldCheck size={20} color="var(--primary)" />
+                        <ThemeIcon name="protect" size={22} />
                         <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Cloud Backup</h2>
                     </div>
 

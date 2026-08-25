@@ -1,25 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-    LayoutDashboard,
-    Compass,
-    Dna,
-    Swords,
-    Orbit,
-    Settings as SettingsIcon,
-    Rocket,
-    PlusCircle,
-    Wrench,
-    Database,
-    Activity,
-    Globe,
-    Sparkles,
-    BookOpen,
-    ChevronLeft,
-    ChevronRight,
-    ShoppingCart,
-    Radar
-} from 'lucide-react';
 import { motion } from 'framer-motion';
+import { ThemeIcon } from './ThemeIcon';
 
 interface SidebarProps {
     activeView: string;
@@ -47,19 +28,19 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     };
 
     const menuItems = [
-        { id: 'overview', label: 'Empire 360', icon: <LayoutDashboard size={22} /> },
-        { id: 'expeditions', label: 'Expeditions', icon: <Compass size={22} /> },
-        { id: 'lifeforms', label: 'Lifeforms', icon: <Dna size={22} /> },
-        { id: 'combat', label: 'Combats', icon: <Swords size={22} /> },
-        { id: 'raidRadar', label: 'Raid Radar', icon: <Radar size={22} /> },
-        { id: 'debris', label: 'Debris Fields', icon: <Orbit size={22} /> },
-        { id: 'empire', label: 'Empire', icon: <Rocket size={22} /> },
-        { id: 'costsPlanner', label: 'Costs Planner', icon: <ShoppingCart size={22} /> },
-        { id: 'tools', label: 'Tools', icon: <Wrench size={22} /> },
-        { id: 'signature', label: 'Signature Forge', icon: <Sparkles size={22} /> },
-        { id: 'dataManagement', label: 'Data Management', icon: <Database size={22} /> },
-        { id: 'settings', label: 'Settings', icon: <SettingsIcon size={22} /> },
-        { id: 'tutorials', label: 'Tutorials', icon: <BookOpen size={22} /> },
+        { id: 'overview', label: 'Empire 360', iconName: 'control-panel' },
+        { id: 'expeditions', label: 'Expeditions', iconName: 'navigation' },
+        { id: 'lifeforms', label: 'Lifeforms', iconName: 'leaf' },
+        { id: 'combat', label: 'Combats', iconName: 'sword' },
+        { id: 'raidRadar', label: 'Raid Radar', iconName: 'radar' },
+        { id: 'debris', label: 'Debris Fields', iconName: 'debris-field' },
+        { id: 'empire', label: 'Empire', iconName: 'skyscrapers' },
+        { id: 'costsPlanner', label: 'Costs Planner', iconName: 'shopping-cart' },
+        { id: 'tools', label: 'Tools', iconName: 'tools' },
+        { id: 'signature', label: 'Signature Forge', iconName: 'sparkling' },
+        { id: 'dataManagement', label: 'Data Management', iconName: 'circuit' },
+        { id: 'settings', label: 'Settings', iconName: 'settings' },
+        { id: 'tutorials', label: 'Tutorials', iconName: 'open-book' },
     ];
 
     return (
@@ -178,7 +159,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                                 justifyContent: 'center',
                                 width: '100%'
                             }}>
-                                {item.icon}
+                                <ThemeIcon name={item.iconName} size={22} glow={isActive} />
                             </span>
                         </motion.button>
                     );

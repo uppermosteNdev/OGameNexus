@@ -111,7 +111,7 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
     id: 'resources',
     name: 'Resources & Infrastructure',
     desc: 'Planetary mines, storage capacities, power grid, and economic expansion',
-    icon: '🪐',
+    icon: 'icons/themes/sci-fi/city-buildings-96.png',
     subCategories: [
       {
         id: 'storage_tanks',
@@ -197,20 +197,20 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
         id: 'amortization_roi',
         name: 'Amortization & ROI',
         desc: 'Mathematical return-on-investment building recommendations',
-        icon: '💡',
+        icon: 'icons/themes/sci-fi/idea-96.png',
         rules: [
           {
             id: 'amortization_recommendation',
             name: 'Optimal ROI Upgrade Recommendation',
             desc: 'Recommends the best economic mine or lifeform building upgrade based on payback time',
-            icon: '💡',
+            icon: 'icons/themes/sci-fi/idea-96.png',
             defaultSeverity: 'info'
           },
           {
             id: 'planet_amortization_todos',
             name: 'Planet To-Dos',
             desc: 'Notifies top prioritized amortization projects scheduled on the current active planet',
-            icon: '📋',
+            icon: 'icons/themes/sci-fi/goal-96.png',
             defaultSeverity: 'info'
           }
         ]
@@ -221,26 +221,26 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
     id: 'expeditions',
     name: 'Expeditions & Deep Space',
     desc: 'Deep space missions, fleet discovery outcomes, and sector telemetry',
-    icon: '🧭',
+    icon: 'icons/themes/sci-fi/navigation-96.png',
     subCategories: [
       {
         id: 'expedition_ops',
         name: 'Expedition Operations',
         desc: 'Fleet dispatch slots, mission availability, and sector depletion tracking',
-        icon: '🧭',
+        icon: 'icons/themes/sci-fi/navigation-96.png',
         rules: [
           {
             id: 'idle_expedition_slots',
             name: 'Idle Expedition Slots',
             desc: 'Alerts when available expedition fleet slots are sitting unlaunched',
-            icon: '🧭',
+            icon: 'icons/themes/sci-fi/navigation-96.png',
             defaultSeverity: 'warning'
           },
           {
             id: 'expedition_depletion',
             name: 'Sector Depletion Rate Warning',
             desc: 'Alerts when recent expeditions encounter high sector depletion rates (>10%)',
-            icon: '🧭',
+            icon: 'icons/themes/sci-fi/radar-96.png',
             defaultSeverity: 'warning'
           }
         ]
@@ -249,20 +249,20 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
         id: 'expedition_intel',
         name: 'Expedition Intel & Highlights',
         desc: 'Daily expedition yield summaries and top recovery spotlights',
-        icon: '📊',
+        icon: 'icons/themes/sci-fi/bar-chart-96.png',
         rules: [
           {
             id: 'today_expedition_yield',
             name: 'Daily Expedition Yield Summary',
             desc: 'Summarizes total daily resources and MSU hauled from deep space missions',
-            icon: '📊',
+            icon: 'icons/themes/sci-fi/bar-chart-96.png',
             defaultSeverity: 'info'
           },
           {
             id: 'top_expedition_find',
             name: 'Top Daily Expedition Finds',
             desc: 'Highlights top largest resource and ship recoveries made today',
-            icon: '✨',
+            icon: 'icons/themes/sci-fi/sparkling-96.png',
             defaultSeverity: 'info'
           }
         ]
@@ -273,7 +273,7 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
     id: 'empire',
     name: 'Empire & Laboratory',
     desc: 'Empire-wide research labs, Lifeform relics, and Officer Mess management',
-    icon: '🔬',
+    icon: 'icons/themes/sci-fi/skyscrapers-96.png',
     subCategories: [
       {
         id: 'research_lab',
@@ -294,13 +294,13 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
         id: 'lifeforms',
         name: 'Lifeform Civilization',
         desc: 'Lifeform relic collection and artifact storage management',
-        icon: '🔮',
+        icon: 'icons/themes/sci-fi/leaf-96.png',
         rules: [
           {
             id: 'artifacts_limit',
             name: 'Artifact Storage Limits',
             desc: 'Warns when collected Lifeform Artifacts approach 3,000 or cap out at 3,600',
-            icon: '🔮',
+            icon: 'icons/themes/sci-fi/leaf-96.png',
             defaultSeverity: 'warning'
           }
         ]
@@ -309,20 +309,20 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
         id: 'officers',
         name: 'Officers Mess',
         desc: 'Active officer status, Commander renewals, and Geologist boosts',
-        icon: '⏱️',
+        icon: 'icons/themes/sci-fi/stopwatch-96.png',
         rules: [
           {
             id: 'officer_expiring',
             name: 'Officer Expiration Window (<12h)',
             desc: 'Alerts when active officers will expire within the configured window',
-            icon: '⏱️',
+            icon: 'icons/themes/sci-fi/hourglass-96.png',
             defaultSeverity: 'warning'
           },
           {
             id: 'officer_alert',
             name: 'Inactive Geologist Alert',
             desc: 'Alerts when inactive Geologist drops daily mine production by -10%',
-            icon: '⚠️',
+            icon: 'icons/themes/sci-fi/high-priority-96.png',
             defaultSeverity: 'warning'
           }
         ]
@@ -333,19 +333,19 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
     id: 'fleet_tactical',
     name: 'Fleet & Tactical Recon',
     desc: 'Stationary fleet safety, scanned galaxy debris, and mystery container dealer',
-    icon: '🛡️',
+    icon: 'icons/themes/sci-fi/protect-96.png',
     subCategories: [
       {
         id: 'fleet_safety',
         name: 'Fleet Security',
         desc: 'Stationary fleet protection and exposed asset reminders',
-        icon: '🔔',
+        icon: 'icons/themes/sci-fi/bell-96.png',
         rules: [
           {
             id: 'fleet_save',
             name: 'Stationary Fleet Save Reminder',
             desc: 'Alerts when stationary fleets and resources are sitting exposed without fleetsave',
-            icon: '🔔',
+            icon: 'icons/themes/sci-fi/high-risk-96.png',
             defaultSeverity: 'warning'
           }
         ]
@@ -354,13 +354,13 @@ export const OVERSEER_TAXONOMY: TaxonomyDomainDef[] = [
         id: 'galaxy_intel',
         name: 'Galaxy Recon',
         desc: 'Scanned galaxy debris fields and harvest opportunities',
-        icon: '☄️',
+        icon: 'icons/themes/sci-fi/debris-field-144.png',
         rules: [
           {
             id: 'debris_opportunity',
             name: 'Galaxy Debris Field Opportunities',
             desc: 'Alerts when a scanned galaxy debris field exceeds the configured MSU threshold',
-            icon: '☄️',
+            icon: 'icons/themes/sci-fi/debris-field-144.png',
             defaultSeverity: 'info'
           }
         ]

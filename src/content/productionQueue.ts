@@ -129,10 +129,32 @@ export async function fetchEmpireProductionQueue(
     // Sort by soonest completion
     items.sort((a, b) => a.endTimestamp - b.endTimestamp);
 
+    // Calculate server time offset to ensure countdowns match OGame's clock down to the exact second
+    let serverTimeOffset = 0;
+    try {
+      const dateHeader = res.headers.get('date');
+      if (dateHeader) {
+        const serverMs = Date.parse(dateHeader);
+        if (!isNaN(serverMs) && serverMs > 0) {
+          serverTimeOffset = serverMs - Date.now();
+        }
+      }
+      if (!serverTimeOffset) {
+        const metaTs = document.querySelector("meta[name='ogame-timestamp']")?.getAttribute("content");
+        if (metaTs) {
+          const metaMs = Number(metaTs) * 1000;
+          if (!isNaN(metaMs) && metaMs > 0) {
+            serverTimeOffset = metaMs - Date.now();
+          }
+        }
+      }
+    } catch (e) {}
+
     const queueData: EmpireProductionQueueData = {
       items,
       lastUpdated: Date.now(),
-      hasActiveResearch
+      hasActiveResearch,
+      serverTimeOffset
     };
 
     // Save to local storage (both global and player-specific keys)
@@ -140,6 +162,7 @@ export async function fetchEmpireProductionQueue(
       await chrome.storage.local.set({
         'nexus_production_queue': queueData,
         'nexus_production_queue_time': Date.now(),
+        'nexus_server_time_offset': serverTimeOffset,
         [storageKey]: queueData
       });
     }

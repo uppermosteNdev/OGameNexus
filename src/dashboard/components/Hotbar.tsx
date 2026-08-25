@@ -1,35 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Activity,
-    Database,
-    Ship,
-    Moon,
-    Package,
-    Search,
-    Info,
-    Box,
-    MapPin,
-    History,
-    Globe,
-    Compass,
-    Dna,
-    Calculator,
-    Shield,
-    Target,
     ArrowUpRight,
-    Zap,
     X,
     Plus,
     Check,
     ChevronDown,
-    ChevronUp,
-    Swords,
-    Orbit,
-    Rocket,
-    Wrench,
-    Settings
+    ChevronUp
 } from 'lucide-react';
+import { ThemeIcon } from './ThemeIcon';
 
 interface HotbarProps {
     onSelect?: (viewId: string) => void;
@@ -61,69 +40,69 @@ const SHORTCUT_CATEGORIES: CategoryGroup[] = [
     {
         id: 'expeditions',
         name: 'Expeditions',
-        icon: <Compass size={18} />,
+        icon: <ThemeIcon name="navigation" size={20} />,
         color: '#22c55e',
         glowColor: 'rgba(34, 197, 94, 0.4)',
         shortcuts: [
-            { id: 'expeditions-overview', label: 'Overview', icon: <Activity size={16} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'overview' },
-            { id: 'expeditions-resources', label: 'Resources', icon: <Database size={16} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'resources' },
-            { id: 'expeditions-ships', label: 'Ships', icon: <Ship size={16} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'ships' },
-            { id: 'expeditions-darkMatter', label: 'Dark Matter', icon: <Moon size={16} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'darkMatter' },
-            { id: 'expeditions-items', label: 'Items List', icon: <Package size={16} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'items' },
-            { id: 'expeditions-depletion', label: 'Depletion', icon: <Search size={16} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'depletion' },
-            { id: 'expeditions-info', label: 'Info Summary', icon: <Info size={16} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'info' },
+            { id: 'expeditions-overview', label: 'Overview', icon: <ThemeIcon name="bar-chart" size={18} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'overview' },
+            { id: 'expeditions-resources', label: 'Resources', icon: <ThemeIcon name="diamond" size={18} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'resources' },
+            { id: 'expeditions-ships', label: 'Ships', icon: <ThemeIcon name="rocket" size={18} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'ships' },
+            { id: 'expeditions-darkMatter', label: 'Dark Matter', icon: <ThemeIcon name="sparkling" size={18} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'darkMatter' },
+            { id: 'expeditions-items', label: 'Items List', icon: <ThemeIcon name="shopping-basket" size={18} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'items' },
+            { id: 'expeditions-depletion', label: 'Depletion', icon: <ThemeIcon name="radar" size={18} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'depletion' },
+            { id: 'expeditions-info', label: 'Info Summary', icon: <ThemeIcon name="help-question-mark" size={18} />, color: '#22c55e', glowColor: 'rgba(34, 197, 94, 0.3)', view: 'expeditions', tab: 'info' },
         ]
     },
     {
         id: 'combat',
         name: 'Combats',
-        icon: <Swords size={18} />,
+        icon: <ThemeIcon name="sword" size={20} />,
         color: '#ef4444',
         glowColor: 'rgba(239, 68, 68, 0.4)',
         shortcuts: [
-            { id: 'combat-overview', label: 'Overview', icon: <Activity size={16} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'overview' },
-            { id: 'combat-resources', label: 'Loot & Recovery', icon: <Box size={16} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'resources' },
-            { id: 'combat-zones', label: 'Tactical Hotspots', icon: <MapPin size={16} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'zones' },
-            { id: 'combat-history', label: 'History Log', icon: <History size={16} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'history' },
+            { id: 'combat-overview', label: 'Overview', icon: <ThemeIcon name="bar-chart" size={18} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'overview' },
+            { id: 'combat-resources', label: 'Loot & Recovery', icon: <ThemeIcon name="shopping-basket" size={18} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'resources' },
+            { id: 'combat-zones', label: 'Tactical Hotspots', icon: <ThemeIcon name="place-marker" size={18} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'zones' },
+            { id: 'combat-history', label: 'History Log', icon: <ThemeIcon name="stopwatch" size={18} />, color: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.3)', view: 'combat', tab: 'history' },
         ]
     },
     {
         id: 'debris',
         name: 'Debris Fields',
-        icon: <Orbit size={18} />,
+        icon: <ThemeIcon name="debris-field" size={20} />,
         color: '#eab308',
         glowColor: 'rgba(234, 179, 8, 0.4)',
         shortcuts: [
-            { id: 'debris-overview', label: 'Overview', icon: <Activity size={16} />, color: '#eab308', glowColor: 'rgba(234, 179, 8, 0.3)', view: 'debris', tab: 'overview' },
-            { id: 'debris-system', label: 'System Fields', icon: <Globe size={16} />, color: '#eab308', glowColor: 'rgba(234, 179, 8, 0.3)', view: 'debris', tab: 'system' },
-            { id: 'debris-expedition', label: 'Expedition Fields', icon: <Compass size={16} />, color: '#eab308', glowColor: 'rgba(234, 179, 8, 0.3)', view: 'debris', tab: 'expedition' },
+            { id: 'debris-overview', label: 'Overview', icon: <ThemeIcon name="bar-chart" size={18} />, color: '#eab308', glowColor: 'rgba(234, 179, 8, 0.3)', view: 'debris', tab: 'overview' },
+            { id: 'debris-system', label: 'System Fields', icon: <ThemeIcon name="debris-field" size={18} />, color: '#eab308', glowColor: 'rgba(234, 179, 8, 0.3)', view: 'debris', tab: 'system' },
+            { id: 'debris-expedition', label: 'Expedition Fields', icon: <ThemeIcon name="debris-field" size={18} />, color: '#eab308', glowColor: 'rgba(234, 179, 8, 0.3)', view: 'debris', tab: 'expedition' },
         ]
     },
     {
         id: 'empire',
         name: 'Empire',
-        icon: <Rocket size={18} />,
+        icon: <ThemeIcon name="skyscrapers" size={20} />,
         color: '#00f2ff',
         glowColor: 'rgba(0, 242, 255, 0.4)',
         shortcuts: [
-            { id: 'empire-lifeform', label: 'Lifeforms', icon: <Dna size={16} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'empire', tab: 'lifeform' },
-            { id: 'empire-infrastructure', label: 'Infrastructure', icon: <Box size={16} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'empire', tab: 'infrastructure' },
-            { id: 'empire-amortization', label: 'Amortization', icon: <Calculator size={16} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'empire', tab: 'amortization' },
+            { id: 'empire-lifeform', label: 'Lifeforms', icon: <ThemeIcon name="leaf" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'empire', tab: 'lifeform' },
+            { id: 'empire-infrastructure', label: 'Infrastructure', icon: <ThemeIcon name="city-buildings" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'empire', tab: 'infrastructure' },
+            { id: 'empire-amortization', label: 'Amortization', icon: <ThemeIcon name="combo-chart" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'empire', tab: 'amortization' },
         ]
     },
     {
         id: 'tools',
         name: 'Command Tools',
-        icon: <Wrench size={18} />,
+        icon: <ThemeIcon name="tools" size={20} />,
         color: '#14b8a6',
         glowColor: 'rgba(20, 184, 166, 0.4)',
         shortcuts: [
-            { id: 'tools-scrap-optimizer', label: 'Scrap Merchant', icon: <Package size={16} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'scrap-optimizer' },
-            { id: 'tools-combat-sim', label: 'Combat Analysis', icon: <Shield size={16} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'combat-sim', inTesting: true },
-            { id: 'tools-exp-calc', label: 'Expedition Calculator', icon: <Calculator size={16} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'exp-calc' },
-            { id: 'tools-acs-splitter', label: 'ACS Splitter', icon: <Target size={16} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'acs-splitter', isBeta: true },
-            { id: 'tools-plasma-optimizer', label: 'Plasma Tech', icon: <Zap size={16} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'plasma-optimizer' },
-            { id: 'tools-discoverer-optimizer', label: 'Discoverer Tech', icon: <Globe size={16} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'discoverer-optimizer' },
+            { id: 'tools-scrap-optimizer', label: 'Scrap Merchant', icon: <ThemeIcon name="broom" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'scrap-optimizer' },
+            { id: 'tools-combat-sim', label: 'Combat Analysis', icon: <ThemeIcon name="sniper-crosshair" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'combat-sim', inTesting: true },
+            { id: 'tools-exp-calc', label: 'Expedition Calculator', icon: <ThemeIcon name="calculator" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'exp-calc' },
+            { id: 'tools-acs-splitter', label: 'ACS Splitter', icon: <ThemeIcon name="pie-chart" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'acs-splitter', isBeta: true },
+            { id: 'tools-plasma-optimizer', label: 'Plasma Tech', icon: <ThemeIcon name="flash-on-lightning" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'plasma-optimizer' },
+            { id: 'tools-discoverer-optimizer', label: 'Discoverer Tech', icon: <ThemeIcon name="artificial-intelligence-brain" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'discoverer-optimizer' },
         ]
     }
 ];
@@ -696,7 +675,7 @@ const Hotbar: React.FC<HotbarProps> = ({ onSelect }) => {
                                                 outline: 'none'
                                             }}
                                         >
-                                            <Settings size={18} />
+                                            <ThemeIcon name="adjust-settings" size={20} />
                                         </motion.button>
                                     </motion.div>
                                 );

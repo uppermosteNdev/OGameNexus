@@ -109,6 +109,7 @@ export interface EmpireProductionQueueData {
     items: ProductionQueueItem[];
     lastUpdated: number;
     hasActiveResearch: boolean;
+    serverTimeOffset?: number;
 }
 
 export interface ActiveResearchInfo {

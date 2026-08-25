@@ -3,12 +3,22 @@ import { InventoryItem } from '../db';
 /**
  * Gets cached player inventory from chrome.storage.local
  */
-export async function getStoredPlayerInventory(): Promise<InventoryItem[]> {
+export async function getStoredPlayerInventory(playerId?: string): Promise<InventoryItem[]> {
   try {
+    const targetPlayerId = playerId || document.querySelector("meta[name='ogame-player-id']")?.getAttribute("content") || '';
     if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.storage && chrome.storage.local) {
-      const cached = await chrome.storage.local.get('nexus_player_inventory');
-      if (cached && Array.isArray(cached.nexus_player_inventory)) {
-        return cached.nexus_player_inventory as InventoryItem[];
+      if (targetPlayerId) {
+        const playerKey = `nexus_player_inventory_${targetPlayerId}`;
+        const cached = await chrome.storage.local.get([playerKey]);
+        if (cached && Array.isArray(cached[playerKey])) {
+          return cached[playerKey] as InventoryItem[];
+        }
+        return [];
+      } else {
+        const cached = await chrome.storage.local.get('nexus_player_inventory');
+        if (cached && Array.isArray(cached.nexus_player_inventory)) {
+          return cached.nexus_player_inventory as InventoryItem[];
+        }
       }
     }
   } catch (e: any) {
@@ -24,16 +34,22 @@ export async function getStoredPlayerInventory(): Promise<InventoryItem[]> {
  */
 export async function savePlayerInventory(items: InventoryItem[], playerId?: string): Promise<void> {
   try {
+    const targetPlayerId = playerId || document.querySelector("meta[name='ogame-player-id']")?.getAttribute("content") || '';
     if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.storage && chrome.storage.local) {
-      await chrome.storage.local.set({
+      const payload: Record<string, any> = {
         'nexus_player_inventory': items,
         'nexus_player_inventory_time': Date.now()
-      });
+      };
+      if (targetPlayerId) {
+        payload[`nexus_player_inventory_${targetPlayerId}`] = items;
+        payload[`nexus_player_inventory_time_${targetPlayerId}`] = Date.now();
+      }
+      await chrome.storage.local.set(payload);
     }
-    if (playerId && typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.sendMessage) {
+    if (targetPlayerId && typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({
         type: 'UPDATE_PLAYER_INVENTORY',
-        playerId,
+        playerId: targetPlayerId,
         inventory: items,
         timestamp: Date.now()
       }, () => {});
@@ -86,8 +102,14 @@ export function formatDuration(rawDuration: any, title?: string): string {
  */
 function categorizeItem(name: string): string {
   const lowerName = (name || '').toLowerCase();
-  if (lowerName.includes('kraken')) return 'building_speedup';
-  if (lowerName.includes('newtron')) return 'research_speedup';
+  const isLifeform = lowerName.includes('lifeform') || lowerName.includes('life forms') || lowerName.includes('lf');
+
+  if (lowerName.includes('kraken')) {
+    return isLifeform ? 'lf_building_speedup' : 'building_speedup';
+  }
+  if (lowerName.includes('newtron')) {
+    return isLifeform ? 'lf_research_speedup' : 'research_speedup';
+  }
   if (lowerName.includes('detroid')) return 'shipyard_speedup';
   if (lowerName.includes('metal booster')) return 'metal_booster';
   if (lowerName.includes('crystal booster')) return 'crystal_booster';

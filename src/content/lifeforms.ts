@@ -5,36 +5,68 @@ function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
 }
 
+function parseLifeformElement(msg: Element): any | null {
+    const messageId = msg.closest('.msg')?.getAttribute('data-msg-id');
+    if (!messageId) return null;
+
+    const timestamp = msg.getAttribute('data-raw-timestamp');
+    const coords = msg.getAttribute('data-raw-coords');
+    const lifeform = msg.getAttribute('data-raw-lifeform');
+    const discoveryType = msg.getAttribute('data-raw-discoverytype');
+    const xp = msg.getAttribute('data-raw-lifeformgainedexperience');
+    const artifacts = msg.getAttribute('data-raw-artifactsfound');
+    const artifactSize = msg.getAttribute('data-raw-artifactssize');
+
+    if (timestamp && coords) {
+        return {
+            messageId,
+            timestamp: parseInt(timestamp),
+            coords,
+            lifeform: lifeform ? parseInt(lifeform) : undefined,
+            discoveryType: discoveryType || 'nothing',
+            lifeformGainedExperience: xp ? parseInt(xp) : undefined,
+            artifactsFound: artifacts ? parseInt(artifacts) : undefined,
+            artifactSize: artifactSize || undefined
+        };
+    }
+    return null;
+}
+
+const processedLifeformIds = new Set<string>();
+
 export function scrapeLifeformMessages() {
     const messages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]:not([data-og-nexus-processed="true"])');
     const results = [];
 
     for (const msg of messages) {
-        const messageId = msg.closest('.msg')?.getAttribute('data-msg-id');
-        if (!messageId) continue;
-
-        const timestamp = msg.getAttribute('data-raw-timestamp');
-        const coords = msg.getAttribute('data-raw-coords');
-        const lifeform = msg.getAttribute('data-raw-lifeform');
-        const discoveryType = msg.getAttribute('data-raw-discoverytype');
-        const xp = msg.getAttribute('data-raw-lifeformgainedexperience');
-        const artifacts = msg.getAttribute('data-raw-artifactsfound');
-        const artifactSize = msg.getAttribute('data-raw-artifactssize');
-
-        if (timestamp && coords) {
-            results.push({
-                messageId,
-                timestamp: parseInt(timestamp),
-                coords,
-                lifeform: lifeform ? parseInt(lifeform) : undefined,
-                discoveryType: discoveryType || 'nothing',
-                lifeformGainedExperience: xp ? parseInt(xp) : undefined,
-                artifactsFound: artifacts ? parseInt(artifacts) : undefined,
-                artifactSize: artifactSize || undefined
-            });
-
-            // Mark as processed
+        const item = parseLifeformElement(msg);
+        if (item) {
             msg.setAttribute('data-og-nexus-processed', 'true');
+            if (!processedLifeformIds.has(item.messageId)) {
+                processedLifeformIds.add(item.messageId);
+                results.push(item);
+            }
+        }
+    }
+    return results;
+}
+
+export function scrapeRawLifeformHTML(htmls: string[]) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmls.join(''), 'text/html');
+    const messages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]');
+    const results = [];
+
+    for (const msg of messages) {
+        const item = parseLifeformElement(msg);
+        if (item) {
+            const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="61"]`);
+            if (domMsg) domMsg.setAttribute('data-og-nexus-processed', 'true');
+
+            if (!processedLifeformIds.has(item.messageId)) {
+                processedLifeformIds.add(item.messageId);
+                results.push(item);
+            }
         }
     }
     return results;
@@ -111,6 +143,79 @@ export async function trackLifeformDiscoveries(playerId: string) {
             }
 
             // Re-init tooltips once after batch update
+            triggerSiteTooltips();
+        }
+    });
+}
+
+export async function trackRawLifeformDiscoveries(playerId: string, htmls: string[]) {
+    if (!isExtensionStillValid()) return;
+
+    const discoveryData = scrapeRawLifeformHTML(htmls);
+    if (discoveryData.length === 0) return;
+
+    const unprocessedDiscoveries = discoveryData;
+
+    let removeOGLight = true;
+    try {
+        const localData = await chrome.storage.local.get('globalSettings');
+        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
+            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
+        }
+    } catch (e) {
+        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
+    }
+
+    injectTodaySummaryCard(playerId, false);
+
+    chrome.runtime.sendMessage({
+        type: "TRACK_LIFEFORMS",
+        data: { discoveries: unprocessedDiscoveries, playerId }
+    }, (response) => {
+        if (response?.success) {
+            let maxRarity = 0;
+            response.data.forEach((disc: any) => {
+                const msgElement = document.querySelector(`.msg[data-msg-id="${disc.messageId}"]`) as HTMLElement;
+                if (msgElement) {
+                    msgElement.classList.add('og-nexus-tracked');
+                    updateLifeformDiscoveryVisuals(msgElement, disc, removeOGLight);
+
+                    if (disc.isNew && disc.discoveryType !== 'nothing' && disc.discoveryType !== 'ship-lost') {
+                        setTimeout(() => {
+                            let iconPath = '';
+                            if (disc.discoveryType === 'artifacts') {
+                                iconPath = chrome.runtime.getURL('icons/lifeforms/artifact-icon-large.png');
+                            } else if (disc.discoveryType === 'lifeform-xp') {
+                                const lfNames = ['humans', 'rocktal', 'mechas', 'kaelesh'];
+                                const lfName = lfNames[(disc.lifeform || 1) - 1] || 'humans';
+                                iconPath = chrome.runtime.getURL(`icons/lifeforms/${lfName}-icon-large.jpg`);
+                            }
+                            if (iconPath) {
+                                flyToNexusButton(msgElement, [iconPath]);
+                            }
+                        }, 100);
+                    }
+                }
+
+                if (disc.discoveryType === 'artifacts' && disc.artifactSize) {
+                    const size = disc.artifactSize.toLowerCase();
+                    let rarity = 0;
+                    if (size === 'huge') rarity = 2;
+                    else if (size === 'big') rarity = 1;
+
+                    if (rarity > maxRarity) maxRarity = rarity;
+                }
+            });
+
+            if (response.newCount && response.newCount > 0) {
+                const newItems = response.data.filter((disc: any) => disc.isNew).map((disc: any) => ({ ...disc, type: 'lifeform' }));
+                if (newItems.length > 0) {
+                    addSessionTrackedItems(newItems);
+                    setNewBadgeActive(true);
+                }
+                injectTodaySummaryCard(playerId, true, maxRarity);
+            }
+
             triggerSiteTooltips();
         }
     });

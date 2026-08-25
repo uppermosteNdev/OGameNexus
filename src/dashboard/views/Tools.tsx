@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Calculator, Shield, Cpu, Target, Zap, Globe, ArrowUpRight, RefreshCw, X, ArrowRight } from 'lucide-react';
+import { ArrowUpRight, RefreshCw, X, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import './Tools.css';
+import { ThemeIcon } from '../components/ThemeIcon';
 import ScrapOptimizer from './tools/ScrapOptimizer';
 import ExpeditionCalculator from './tools/ExpeditionCalculator';
 import AcsSplitter from './tools/AcsSplitter';
@@ -27,7 +28,7 @@ const Tools: React.FC = () => {
             id: 'empire-amortization',
             name: 'Empire Amortization',
             description: 'Optimize building and lifeform research ROI across the Empire',
-            icon: <Calculator size={20} />,
+            icon: <ThemeIcon name="combo-chart" size={22} />,
             component: <div />,
             isShortcut: true,
             shortcutView: 'empire',
@@ -37,14 +38,14 @@ const Tools: React.FC = () => {
             id: 'scrap-optimizer',
             name: 'Scrap Merchant',
             description: 'Optimize fleet scrapping for maximum resource return',
-            icon: <Package size={20} />,
+            icon: <ThemeIcon name="broom" size={22} />,
             component: <ScrapOptimizer />
         },
         {
             id: 'combat-sim',
             name: 'Combat Analysis',
             description: 'Advanced battle simulation and fleet compositions',
-            icon: <Shield size={20} />,
+            icon: <ThemeIcon name="sniper-crosshair" size={22} />,
             component: <div className="text-center py-20 text-[var(--text-muted)] italic">Module synchronization in progress...</div>,
             inTesting: true
         },
@@ -52,14 +53,14 @@ const Tools: React.FC = () => {
             id: 'exp-calc',
             name: 'Expedition Calculator',
             description: 'Optimize fleet composition and calculate max potential yields',
-            icon: <Calculator size={20} />,
+            icon: <ThemeIcon name="calculator" size={22} />,
             component: <ExpeditionCalculator />
         },
         {
             id: 'acs-splitter',
             name: 'ACS Splitter',
             description: 'Split combat results across multiple alliance members',
-            icon: <Target size={20} />,
+            icon: <ThemeIcon name="pie-chart" size={22} />,
             component: <AcsSplitter />,
             isBeta: true
         },
@@ -67,14 +68,14 @@ const Tools: React.FC = () => {
             id: 'plasma-optimizer',
             name: 'Plasma Tech Optimizer',
             description: 'Optimize Improved Stellarator levels to minimize research costs',
-            icon: <Zap size={20} />,
+            icon: <ThemeIcon name="flash-on-lightning" size={22} />,
             component: <PlasmaTechOptimizer />
         },
         {
             id: 'discoverer-optimizer',
             name: 'Discoverer Optimizer',
             description: 'Optimize T18 Kaelesh Tech and lab building costs',
-            icon: <Globe size={20} />,
+            icon: <ThemeIcon name="geography-globe" size={22} />,
             component: <DiscovererOptimizer />
         }
     ];
@@ -281,7 +282,7 @@ const Tools: React.FC = () => {
                                     <div className="path-glow" />
                                     <div className="path-header">
                                         <div className="path-icon-wrapper zap">
-                                            <Zap size={24} fill="currentColor" />
+                                            <ThemeIcon name="flash-on-lightning" size={24} />
                                         </div>
                                         <div className="path-title-group">
                                             <div className="path-label">METHOD A</div>
@@ -316,7 +317,7 @@ const Tools: React.FC = () => {
                                     <div className="path-glow" />
                                     <div className="path-header">
                                         <div className="path-icon-wrapper target">
-                                            <Target size={24} />
+                                            <ThemeIcon name="sniper-crosshair" size={24} />
                                         </div>
                                         <div className="path-title-group">
                                             <div className="path-label">METHOD B</div>

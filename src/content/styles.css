@@ -2792,6 +2792,120 @@ body.low-animation .og-nexus-epic-pulse {
   display: none;
 }
 
+/* Sleek Mouse Wheel Scroll Indicator */
+#og-nexus-assistant-bar .nexus-overseer-scroll-hint {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 22px;
+  border-radius: 4px;
+  background: rgba(10, 15, 26, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+#og-nexus-assistant-bar .nexus-overseer-scroll-hint:hover {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  transform: translateY(-50%) scale(1.08);
+}
+
+#og-nexus-assistant-bar .nexus-mouse-icon {
+  width: 9px;
+  height: 14px;
+  border: 1.2px solid rgba(148, 163, 184, 0.7);
+  border-radius: 5px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+
+#og-nexus-assistant-bar .nexus-overseer-scroll-hint:hover .nexus-mouse-icon {
+  border-color: #38bdf8;
+}
+
+#og-nexus-assistant-bar .nexus-mouse-wheel {
+  width: 1.6px;
+  height: 3px;
+  background: #38bdf8;
+  border-radius: 1px;
+  position: absolute;
+  top: 2px;
+  box-shadow: 0 0 4px #38bdf8;
+  animation: nexus-wheel-scroll-anim 1.8s infinite ease-in-out;
+}
+
+@keyframes nexus-wheel-scroll-anim {
+  0% {
+    transform: translateY(0);
+    opacity: 0.2;
+  }
+  30% {
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(4.5px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(5.5px);
+    opacity: 0;
+  }
+}
+
+/* Rich hover tooltip for overseer scroll hint - appears ABOVE the bar */
+#og-nexus-assistant-bar .nexus-overseer-scroll-hint.nexus-tooltip::after {
+  content: attr(data-nexus-tooltip);
+  white-space: pre-line;
+  width: max-content;
+  max-width: 320px;
+  bottom: calc(100% + 8px);
+  top: auto;
+  right: 0;
+  left: auto;
+  transform: translateY(4px);
+  text-align: right;
+  line-height: 1.45;
+  font-size: 10.5px;
+  color: #cbd5e1;
+  padding: 6px 11px;
+  background: rgba(10, 15, 26, 0.98);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 14px rgba(56, 189, 248, 0.25);
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 999999;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+}
+
+#og-nexus-assistant-bar .nexus-overseer-scroll-hint.nexus-tooltip:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+#og-nexus-assistant-bar .nexus-overseer-scroll-hint.nexus-tooltip::before {
+  display: none;
+}
+
 /* ==========================================================================
    2. CONTENT CHAMBER
    ========================================================================== */
@@ -3400,43 +3514,126 @@ body.low-animation .og-nexus-epic-pulse {
   gap: 8px;
 }
 
-.nexus-modal-refresh-btn {
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  color: #38bdf8;
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 11px;
+.hdr-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.hdr-btn-icon .nexus-assistant-icon-img {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  filter: drop-shadow(0 0 4px rgba(0, 242, 255, 0.6));
+}
+
+.nexus-modal-sync-btn {
+  background: linear-gradient(135deg, rgba(0, 242, 255, 0.12) 0%, rgba(14, 165, 233, 0.22) 100%);
+  border: 1px solid rgba(0, 242, 255, 0.45);
+  color: #00f2ff;
+  padding: 6px 13px;
+  height: 32px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  font-size: 11.5px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.nexus-modal-sync-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(0, 242, 255, 0.28) 0%, rgba(14, 165, 233, 0.4) 100%);
+  color: #ffffff;
+  border-color: #00f2ff;
+  box-shadow: 0 0 14px rgba(0, 242, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.nexus-modal-sync-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.nexus-modal-sync-btn.syncing,
+.nexus-modal-sync-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  border-color: rgba(0, 242, 255, 0.35);
+}
+
+@keyframes nexus-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.nexus-modal-refresh-btn {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(30, 58, 138, 0.2) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  padding: 6px 13px;
+  height: 32px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .nexus-modal-refresh-btn:hover {
-  background: rgba(56, 189, 248, 0.28);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.24) 0%, rgba(30, 58, 138, 0.38) 100%);
   color: #ffffff;
   border-color: #38bdf8;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.nexus-modal-refresh-btn:active {
+  transform: translateY(0);
 }
 
 .nexus-modal-close-btn {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #f87171;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .nexus-modal-close-btn:hover {
-  background: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.32);
+  border-color: #ef4444;
   color: #ffffff;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+  transform: translateY(-1px);
+}
+
+.nexus-modal-close-btn:active {
+  transform: translateY(0);
 }
 
 /* Tabs */
@@ -3477,6 +3674,10 @@ body.low-animation .og-nexus-epic-pulse {
 
 .tab-icon {
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .tab-badge {
@@ -3635,27 +3836,82 @@ body.low-animation .og-nexus-epic-pulse {
 .nexus-assistant-icon-img {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
-  object-fit: cover;
+  object-fit: contain;
   vertical-align: middle;
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
   display: inline-block;
   cursor: help;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s ease, filter 0.18s ease;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.18s ease;
 }
 
-.nexus-assistant-icon-img:hover {
-  transform: scale(1.18);
-  filter: brightness(1.2);
-  border-color: rgba(56, 189, 248, 0.7);
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+.nexus-assistant-icon-img.nexus-game-icon-img {
+  border-radius: 4px;
+  object-fit: cover;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.nexus-assistant-icon-img.nexus-theme-icon-img {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.4));
+}
+
+.nexus-assistant-icon-img.nexus-theme-icon-img:hover {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.8));
 }
 
 .nexus-ticker-icon .nexus-assistant-icon-img {
   width: 15px;
   height: 15px;
   margin-right: 2px;
+}
+
+.tab-icon .nexus-assistant-icon-img {
+  width: 15px;
+  height: 15px;
+  margin-right: 2px;
+}
+
+.bc-icon .nexus-assistant-icon-img {
+  width: 13px;
+  height: 13px;
+  margin-right: 2px;
+}
+
+.opt-icon .nexus-assistant-icon-img {
+  width: 14px;
+  height: 14px;
+}
+
+.domain-icon .nexus-assistant-icon-img {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}
+
+.subcat-icon .nexus-assistant-icon-img {
+  width: 15px;
+  height: 15px;
+  margin-right: 2px;
+}
+
+.rule-icon .nexus-assistant-icon-img {
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
+}
+
+.snooze-icon .nexus-assistant-icon-img {
+  width: 16px;
+  height: 16px;
+}
+
+.section-icon .nexus-assistant-icon-img {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
 }
 
 /* ==========================================================================
@@ -5279,5 +5535,473 @@ body.low-animation .og-nexus-epic-pulse {
 .todo-btn-dispatch:hover .todo-btn-arrow {
   transform: translateX(2px);
 }
+
+/* ==========================================================================
+   OGame Nexus - Production Box Speedup Item Rows
+   ========================================================================== */
+.nexus-queue-speedup-row {
+  margin: 6px 4px 8px 4px;
+  padding: 5px 6px;
+  background: rgba(10, 17, 30, 0.85);
+  border: 1px solid rgba(0, 242, 255, 0.25);
+  border-radius: 7px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 3px 10px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  backdrop-filter: blur(4px);
+}
+
+.nexus-speedup-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+
+.nexus-speedup-card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  text-decoration: none;
+  box-sizing: border-box;
+  padding: 0;
+  box-shadow: none;
+}
+
+.nexus-speedup-card:hover {
+  border-color: var(--speedup-border, #00f2ff);
+  background: rgba(25, 38, 60, 0.95);
+  box-shadow: none;
+  filter: none;
+  z-index: 5;
+}
+
+/* Rarity Accents */
+.nexus-speedup-card.r-bronze {
+  --speedup-border: #cd7f32;
+  border-color: #cd7f32;
+}
+.nexus-speedup-card.r-silver {
+  --speedup-border: #c0c0c0;
+  border-color: #c0c0c0;
+}
+.nexus-speedup-card.r-gold {
+  --speedup-border: #ffd700;
+  border-color: #ffd700;
+}
+.nexus-speedup-card.r-platinum {
+  --speedup-border: #00f2ff;
+  border-color: #00f2ff;
+}
+
+.nexus-speedup-img-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.nexus-speedup-img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.nexus-speedup-count-pill {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #ffffff;
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 4.5px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  line-height: 1.1;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.7);
+  letter-spacing: -0.02em;
+  pointer-events: none;
+}
+
+/* Custom Floating Cyber Tooltip */
+.nexus-speedup-floating-tooltip {
+  position: fixed;
+  display: none;
+  z-index: 99999999;
+  background: rgba(8, 14, 26, 0.96);
+  border: 1px solid rgba(0, 242, 255, 0.4);
+  border-radius: 6px;
+  padding: 8px 11px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 14px rgba(0, 242, 255, 0.25);
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  min-width: 150px;
+  max-width: 220px;
+  box-sizing: border-box;
+  animation: nexusFadeIn 0.12s ease-out;
+}
+
+@keyframes nexusFadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   OGame Nexus - In-Game Messages Changelog Tab & Donations View
+   ========================================================================== */
+
+.nexus_boardMessageTab {
+  padding: 7px 8px 0;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nexus_boardMessageTab .newMessagesCount {
+  color: #fff;
+  text-align: center;
+  background-color: #242d37;
+  border: 1px solid #40c4c1;
+  border-radius: 8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 16px;
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.75);
+}
+
+.nexus_boardMessageTab.marker {
+  background: url(https://gf1.geo.gfsrv.net/cdn69/112960c1ace80c7dcb03ca88d4b6fc.png) no-repeat !important;
+}
+
+.nexus_boardMessageTab .tabLabel {
+  margin-top: 6px;
+  color: #848484;
+  text-align: center;
+  font-size: 11px;
+}
+
+.nexus_boardMessageTab.marker .tabLabel {
+  color: #6f9fc8 !important;
+  font-weight: 700;
+}
+
+.nexus_boardMessageTab .tabImage {
+  cursor: pointer !important;
+  background: linear-gradient(135deg, #375063 33.33%, #23394a 33.33%, #23394a 50%, #375063 50%, #375063 83.33%, #23394a 83.33%, #23394a 100%) 0 0 / 3px 3px !important;
+  border: 1px solid #385365 !important;
+  border-left: 2px solid #3c596c !important;
+  border-right: 2px solid #3c596c !important;
+  border-radius: 7px !important;
+  width: 48px !important;
+  height: 50px !important;
+  margin-top: 1px !important;
+  text-decoration: none !important;
+  position: relative !important;
+  box-shadow: inset 0 0 10px 6px #1c2831, 0 0 1px 1px #000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.nexus_boardMessageTab .tabImage:hover {
+  filter: brightness(1.2);
+}
+
+.nexus_boardMessageTab .tabImage:before {
+  content: "";
+  filter: blur(0.5px);
+  opacity: 0.6;
+  background: #395467;
+  border-radius: 6px;
+  height: calc(50% + 2px);
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+}
+
+.nexus_boardMessageTab .tabImage:after {
+  content: "";
+  filter: blur(1px);
+  opacity: 0.6;
+  background: #395467;
+  border-radius: 7px;
+  height: 4px;
+  position: absolute;
+  bottom: 2px;
+  left: 3px;
+  right: 3px;
+}
+
+.nexus-main-tab-img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.6));
+  position: relative;
+  z-index: 1;
+}
+
+.nexus_hidden {
+  display: none !important;
+}
+
+#nexusBoardTab {
+  width: 100%;
+}
+
+#nexusBoardTab * {
+  max-width: 100%;
+}
+
+/* Custom Sleek Scrollbar */
+.og-nexus-changelog-view::-webkit-scrollbar {
+  width: 8px;
+}
+.og-nexus-changelog-view::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+.og-nexus-changelog-view::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+}
+.og-nexus-changelog-view::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.5);
+}
+
+.nexus-changelog-inner {
+  padding: 24px 28px;
+}
+
+.nexus-changelog-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  padding-bottom: 14px;
+  margin-bottom: 24px;
+}
+
+.nexus-logo-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nexus-header-icon {
+  font-size: 20px;
+}
+
+.nexus-changelog-main-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.nexus-changelog-section {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.nexus-changelog-section:last-of-type {
+  border-bottom: none;
+}
+
+.nexus-changelog-version-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.nexus-changelog-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.nexus-changelog-date {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.nexus-changelog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nexus-changelog-item {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #cbd5e1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.nexus-changelog-tag {
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+  letter-spacing: 0.2px;
+}
+
+.nexus-changelog-tag.tag-feature {
+  color: #c084fc;
+}
+
+.nexus-changelog-tag.tag-bugfix {
+  color: #fbbf24;
+}
+
+.nexus-changelog-tag.tag-data {
+  color: #34d399;
+}
+
+.nexus-changelog-tag.tag-polishing {
+  color: #38bdf8;
+}
+
+.nexus-changelog-tag.tag-external {
+  color: #2dd4bf;
+}
+
+.nexus-changelog-text {
+  color: #e2e8f0;
+}
+
+/* Donations Box Component */
+.nexus-donations-box {
+  margin-top: 36px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+}
+
+.nexus-donations-header {
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.2), rgba(15, 23, 42, 0.95));
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #38bdf8;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+.nexus-donations-content {
+  padding: 20px 24px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #cbd5e1;
+}
+
+.nexus-donations-intro {
+  margin: 0 0 14px 0;
+  font-size: 13.5px;
+}
+
+.nexus-donation-option {
+  margin-bottom: 18px;
+}
+
+.option-line {
+  margin: 0 0 6px 0;
+}
+
+.option-sub {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.nexus-kofi-link,
+.nexus-affiliate-link {
+  color: #38bdf8;
+  font-weight: 600;
+  text-decoration: underline;
+  transition: color 0.15s ease, text-shadow 0.15s ease;
+}
+
+.nexus-kofi-link:hover,
+.nexus-affiliate-link:hover {
+  color: #7dd3fc;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+
+.nexus-donation-steps {
+  list-style: none;
+  margin: 8px 0 10px 0;
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nexus-donation-steps li {
+  color: #e2e8f0;
+}
+
+.highlight-orange {
+  color: #f97316;
+  font-weight: 700;
+}
+
+.highlight-underline {
+  text-decoration: underline;
+}
+
+.nexus-affiliate-note {
+  margin: 8px 0 0 0;
+  font-size: 12.5px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.nexus-donation-footer {
+  margin-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+  text-align: right;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
 
 

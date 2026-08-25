@@ -26,6 +26,7 @@ import {
     Monitor
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ThemeIcon } from '../components/ThemeIcon';
 
 
 interface TutorialsProps {
@@ -77,7 +78,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
         {
             id: "empire-sync",
             title: "Empire Synchronization",
-            icon: <LayoutDashboard size={24} color="#00f2ff" />,
+            icon: <ThemeIcon name="skyscrapers" size={24} />,
             desc: "Fully integrate your active OGame account with the OGame Nexus Command Deck. Automatically ingest planet and moon coordinates, resources settings, and passive species bonuses in seconds.",
             badge: "Core Integration",
             badgeColor: "rgba(0, 242, 255, 0.15)",
@@ -111,7 +112,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
         {
             id: "data-telemetry",
             title: "Data Safeguard & Telemetry",
-            icon: <Database size={24} color="#00ff66" />,
+            icon: <ThemeIcon name="database" size={24} />,
             desc: "Keep your strategic operations backed up. Export your customized planetary grids and historical telemetry into encrypted JSON files, or restore configuration backups on new command devices.",
             badge: "Data Security",
             badgeColor: "rgba(0, 255, 102, 0.15)",
@@ -140,7 +141,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
         {
             id: "interface-mastery",
             title: "Interface Mastery",
-            icon: <Layers size={24} color="#bd00ff" />,
+            icon: <ThemeIcon name="control-panel" size={24} />,
             desc: "Learn how OGame Nexus enriches the in-game interface with Expedition, Lifeform, Overview and To-Do data.",
             badge: "In-Game UI",
             badgeColor: "rgba(189, 0, 255, 0.15)",
@@ -174,7 +175,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
         {
             id: "lifeform-sandbox",
             title: "Lifeform Sandbox",
-            icon: <Dna size={24} color="#00ffb7" />,
+            icon: <ThemeIcon name="leaf" size={24} />,
             desc: "Experiment and theory-craft your dream Lifeform setups in a localized simulator, entirely separate from your live game environment.",
             badge: "Simulation Matrix",
             badgeColor: "rgba(0, 255, 183, 0.15)",
@@ -218,7 +219,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
         {
             id: "signature-forge",
             title: "Signature Forge",
-            icon: <Sparkles size={24} color="#ffaa00" />,
+            icon: <ThemeIcon name="sparkling" size={24} />,
             desc: "Craft gorgeous, dynamic cybernetic signature graphics showcasing your live empire statistics to display on community forums.",
             badge: "Social Media",
             badgeColor: "rgba(255, 170, 0, 0.15)",
@@ -237,7 +238,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
         {
             id: "raid-radar",
             title: "Raid Radar",
-            icon: <Activity size={24} color="#00f2ff" />,
+            icon: <ThemeIcon name="radar" size={24} />,
             desc: "Master the empirical inactive player target tracking and resource accumulation projection. Learn how to configure limits, spy targets, and analyze productivity yields around your planets.",
             badge: "Target Radar",
             badgeColor: "rgba(0, 242, 255, 0.15)",
@@ -590,7 +591,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
     return (
         <div className="view" style={{ maxWidth: '1400px', margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
-                <BookOpen size={40} color="var(--primary)" style={{ filter: 'drop-shadow(0 0 8px var(--primary-glow))' }} />
+                <ThemeIcon name="open-book" size={44} glow />
                 <h1 style={{
                     fontFamily: 'var(--font-title)',
                     fontSize: '3.2rem',

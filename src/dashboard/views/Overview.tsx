@@ -28,6 +28,7 @@ import { db } from '../../db';
 import { SHIP_DATA } from '../../db/staticData';
 import { renderAnalyticsTab } from '../../content/analytics';
 import { calculateEmpireProduction, safeArray } from '../../utils/amortizationCalc';
+import { ThemeIcon } from '../components/ThemeIcon';
 
 import {
     ResponsiveContainer,
@@ -199,6 +200,68 @@ const GlobalStyles = () => (
             background: radial-gradient(circle at top right, rgba(255,255,255,0.05), transparent);
             pointer-events: none;
         }
+        .nexus-yield-info-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(111, 159, 200, 0.4);
+            color: #8bb3d6;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 10px;
+            font-weight: 700;
+            font-style: italic;
+            line-height: 1;
+            cursor: help;
+            user-select: none;
+            position: relative;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .nexus-yield-info-btn:hover {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: #38bdf8;
+            color: #38bdf8;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+            transform: scale(1.15);
+            z-index: 1000;
+        }
+        .nexus-yield-info-btn::after {
+            content: attr(data-nexus-tooltip);
+            white-space: pre-line;
+            width: 320px;
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            text-align: left;
+            line-height: 1.5;
+            font-size: 11px;
+            color: #cbd5e1;
+            padding: 10px 14px;
+            background: rgba(10, 15, 26, 0.98);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 14px rgba(56, 189, 248, 0.25);
+            border-radius: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 400;
+            font-style: normal;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            z-index: 9999999 !important;
+            transform: translateY(4px);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-sizing: border-box;
+        }
+        .nexus-yield-info-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
     `}</style>
 );
 const RESOURCE_COLORS = {
@@ -296,8 +359,13 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
     // Expedition Stats Calculation
     const expStats = useMemo(() => {
         if (expeditions.length === 0) return null;
-        const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+        const nowSec = Date.now() / 1000;
+        const last7Days = nowSec - (7 * 24 * 60 * 60);
         const recentExps = expeditions.filter(e => e.timestamp >= last7Days);
+
+        const validTimestamps = expeditions.map(e => e.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
+        const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
+        const daysTracked = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
 
         const counts = { resources: 0, ships: 0, dm: 0, fail: 0, common: 0, large: 0, epic: 0 };
         let points = 0;
@@ -361,21 +429,22 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
         return {
             total: expeditions.length,
             recent: recentExps.length,
+            daysTracked,
             successRate: (((expeditions.length - counts.fail) / expeditions.length) * 100).toFixed(1),
             totalResources: points,
             rarity: counts,
             mostRecent: expeditions.sort((a, b) => b.timestamp - a.timestamp)[0],
             avgResDaily: {
-                metal: res7d.metal / 7,
-                crystal: res7d.crystal / 7,
-                deuterium: res7d.deuterium / 7,
-                msu: res7d.msu / 7
+                metal: res7d.metal / daysTracked,
+                crystal: res7d.crystal / daysTracked,
+                deuterium: res7d.deuterium / daysTracked,
+                msu: res7d.msu / daysTracked
             },
             avgShipDaily: {
-                metal: ship7d.metal / 7,
-                crystal: ship7d.crystal / 7,
-                deuterium: ship7d.deuterium / 7,
-                msu: ship7d.msu / 7
+                metal: ship7d.metal / daysTracked,
+                crystal: ship7d.crystal / daysTracked,
+                deuterium: ship7d.deuterium / daysTracked,
+                msu: ship7d.msu / daysTracked
             }
         };
     }, [expeditions, mMultiplier, cMultiplier, dMultiplier]);
@@ -383,8 +452,13 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
     // Combat Stats Calculation
     const combatStats = useMemo(() => {
         if (combatReports.length === 0) return null;
-        const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+        const nowSec = Date.now() / 1000;
+        const last7Days = nowSec - (7 * 24 * 60 * 60);
         const recentCombats = combatReports.filter(c => c.timestamp >= last7Days && c.winner === 'attacker');
+
+        const validTimestamps = combatReports.map(c => c.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
+        const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
+        const daysTracked = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
 
         const res7d = { metal: 0, crystal: 0, deuterium: 0, msu: 0 };
         recentCombats.forEach(c => {
@@ -403,11 +477,12 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
             total: combatReports.length,
             wins: combatReports.filter(c => c.winner === 'attacker').length,
             losses: combatReports.filter(c => c.winner === 'defender').length,
+            daysTracked,
             avgDaily: {
-                metal: res7d.metal / 7,
-                crystal: res7d.crystal / 7,
-                deuterium: res7d.deuterium / 7,
-                msu: res7d.msu / 7
+                metal: res7d.metal / daysTracked,
+                crystal: res7d.crystal / daysTracked,
+                deuterium: res7d.deuterium / daysTracked,
+                msu: res7d.msu / daysTracked
             }
         };
     }, [combatReports, mMultiplier, cMultiplier, dMultiplier]);
@@ -415,8 +490,13 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
     // Debris Stats Calculation
     const debrisStats = useMemo(() => {
         if (debrisHarvests.length === 0) return null;
-        const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+        const nowSec = Date.now() / 1000;
+        const last7Days = nowSec - (7 * 24 * 60 * 60);
         const recentDebris = debrisHarvests.filter(d => d.timestamp >= last7Days && d.recycledResources);
+
+        const validTimestamps = debrisHarvests.map(d => d.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
+        const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
+        const daysTracked = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
 
         const res7d = { metal: 0, crystal: 0, deuterium: 0, msu: 0 };
         recentDebris.forEach(d => {
@@ -431,11 +511,12 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
 
         return {
             total: debrisHarvests.length,
+            daysTracked,
             avgDaily: {
-                metal: res7d.metal / 7,
-                crystal: res7d.crystal / 7,
-                deuterium: res7d.deuterium / 7,
-                msu: res7d.msu / 7
+                metal: res7d.metal / daysTracked,
+                crystal: res7d.crystal / daysTracked,
+                deuterium: res7d.deuterium / daysTracked,
+                msu: res7d.msu / daysTracked
             }
         };
     }, [debrisHarvests, mMultiplier, cMultiplier, dMultiplier]);
@@ -825,7 +906,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 {/* Production Summary - ECONOMIC CORE REDESIGN */}
                 <BentoCard
                     title="Empire Power Core"
-                    icon={<Gem size={18} />}
+                    icon={<ThemeIcon name="diamond" size={18} />}
                     gridArea="1 / 1 / 3 / 6"
                 >
                     {(() => {
@@ -903,9 +984,17 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         </div>
                                     </div>
 
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800, letterSpacing: '0.15em' }}>EMPIRE DAILY YIELD</div>
-                                        <div style={{ fontSize: '2.8rem', fontWeight: 900, color: '#fff', lineHeight: 1, margin: '6px 0', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                    <div style={{ flex: 1, position: 'relative' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative', zIndex: 50 }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800, letterSpacing: '0.15em' }}>EMPIRE DAILY YIELD</div>
+                                            <span
+                                                className="nexus-yield-info-btn"
+                                                data-nexus-tooltip={`Empire Daily Yield Calculation\n\n• Planetary Mines: 24h theoretical output based on live mine levels, plasma tech, lifeforms & active bonuses.\n• Expeditions, Fleet Salvage, Combat & Debris: Rolling daily average calculated over the last 7 days (or available tracked days if < 7d).\n• MSU (Metal Standard Units): Standardized revenue based on your conversion rates (${rates.metal}:${rates.crystal}:${rates.deuterium}).`}
+                                            >
+                                                i
+                                            </span>
+                                        </div>
+                                        <div style={{ fontSize: '2.8rem', fontWeight: 900, color: '#fff', lineHeight: 1, margin: '6px 0', display: 'flex', alignItems: 'baseline', gap: '8px', position: 'relative', zIndex: 1 }}>
                                             {formatNumber(totalRevenue)}
                                             <span style={{ fontSize: '1.1rem', fontWeight: 800, color: THEME_CYAN, opacity: 0.8 }}>MSU</span>
                                         </div>
@@ -970,7 +1059,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 {/* Lifeform Summary - THE CIVILIZATION HUB */}
                 <BentoCard
                     title="Lifeform Hub"
-                    icon={<Dna size={18} color="#43D159" />}
+                    icon={<ThemeIcon name="leaf" size={18} />}
                     gridArea="1 / 6 / 3 / 13"
                 >
                     {!lfStats ? (
@@ -1075,7 +1164,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 {/* At-A-Glance Overview Card */}
                 <BentoCard
                     title="At-A-Glance"
-                    icon={<Activity size={18} />}
+                    icon={<ThemeIcon name="bar-chart" size={18} />}
                     gridArea="3 / 1 / 5 / 13"
                 >
                     <AtAGlancePanel
@@ -1092,7 +1181,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 isOpen={activeModal === 'mines'}
                 onClose={() => setActiveModal(null)}
                 title="Planetary Network Efficiency"
-                icon={<Globe size={28} />}
+                icon={<ThemeIcon name="city-buildings" size={28} />}
             >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '24px' }}>
                     {/* TOP CHART BAR */}
@@ -1180,7 +1269,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 isOpen={activeModal === 'expedition'}
                 onClose={() => setActiveModal(null)}
                 title="7-Day Expedition Resource Analysis"
-                icon={<TrendingUp size={28} />}
+                icon={<ThemeIcon name="navigation" size={28} />}
             >
                 <div style={{ height: '500px', minHeight: '400px' }}>
                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
@@ -1241,7 +1330,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 isOpen={activeModal === 'fleet'}
                 onClose={() => setActiveModal(null)}
                 title="7-Day Expedition Salvage Value"
-                icon={<BarChart3 size={28} />}
+                icon={<ThemeIcon name="rocket" size={28} />}
             >
                 <div style={{ height: '500px', minHeight: '400px' }}>
                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
@@ -1302,7 +1391,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 isOpen={activeModal === 'combats'}
                 onClose={() => setActiveModal(null)}
                 title="7-Day Combat Profit Analysis"
-                icon={<BarChart3 size={28} />}
+                icon={<ThemeIcon name="sword" size={28} />}
             >
                 <div style={{ height: '500px', minHeight: '400px' }}>
                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
@@ -1363,7 +1452,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 isOpen={activeModal === 'debris'}
                 onClose={() => setActiveModal(null)}
                 title="7-Day Debris Field Harvesting"
-                icon={<BarChart3 size={28} />}
+                icon={<ThemeIcon name="debris-field" size={28} />}
             >
                 <div style={{ height: '500px', minHeight: '400px' }}>
                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>

@@ -259,7 +259,9 @@ export function renderAssistantIcon(icon?: string): string {
         src = icon;
       }
     }
-    return `<img src="${src}" class="nexus-assistant-icon-img" alt="" />`;
+    const isThemeIcon = icon.includes('themes/sci-fi') || icon.endsWith('.png');
+    const typeClass = isThemeIcon ? 'nexus-theme-icon-img' : 'nexus-game-icon-img';
+    return `<img src="${src}" class="nexus-assistant-icon-img ${typeClass}" alt="" />`;
   }
   return icon;
 }
@@ -311,7 +313,14 @@ export async function openAssistantModal(
             </div>
           </div>
           <div class="nexus-modal-header-actions">
-            <button class="nexus-modal-refresh-btn" title="Re-scan empire status">↻ Re-scan</button>
+            <button class="nexus-modal-sync-btn" title="Fetch fresh account data and re-sync empire">
+              <span class="hdr-btn-icon">${renderAssistantIcon('icons/themes/sci-fi/flash-on-lightning-96.png')}</span>
+              <span>Re-sync Empire</span>
+            </button>
+            <button class="nexus-modal-refresh-btn" title="Re-scan local alerts and empire status">
+              <span class="hdr-btn-icon">${renderAssistantIcon('icons/themes/sci-fi/sync-96.png')}</span>
+              <span>Re-scan</span>
+            </button>
             <button class="nexus-modal-close-btn" title="Close Overseer Terminal" aria-label="Close">✕</button>
           </div>
         </div>
@@ -319,19 +328,19 @@ export async function openAssistantModal(
         <!-- Navigation Tabs -->
         <div class="nexus-modal-tabs">
           <button class="nexus-modal-tab ${currentTab === 'critical' ? 'active' : ''}" data-tab="critical">
-            <span class="tab-icon">🚨</span> Warnings <span class="tab-badge ${criticalNotes.length > 0 ? 'badge-danger' : ''}">${criticalNotes.length}</span>
+            <span class="tab-icon">${renderAssistantIcon('icons/themes/sci-fi/high-priority-96.png')}</span> Warnings <span class="tab-badge ${criticalNotes.length > 0 ? 'badge-danger' : ''}">${criticalNotes.length}</span>
           </button>
           <button class="nexus-modal-tab ${currentTab === 'reminder' ? 'active' : ''}" data-tab="reminder">
-            <span class="tab-icon">🔔</span> Reminders <span class="tab-badge ${reminderNotes.length > 0 ? 'badge-reminder' : ''}">${reminderNotes.length}</span>
+            <span class="tab-icon">${renderAssistantIcon('icons/themes/sci-fi/bell-96.png')}</span> Reminders <span class="tab-badge ${reminderNotes.length > 0 ? 'badge-reminder' : ''}">${reminderNotes.length}</span>
           </button>
           <button class="nexus-modal-tab ${currentTab === 'logistics' ? 'active' : ''}" data-tab="logistics">
-            <span class="tab-icon">⏳</span> Logistics <span class="tab-badge ${logisticsNotes.length > 0 ? 'badge-warning' : ''}">${logisticsNotes.length}</span>
+            <span class="tab-icon">${renderAssistantIcon('icons/themes/sci-fi/stopwatch-96.png')}</span> Logistics <span class="tab-badge ${logisticsNotes.length > 0 ? 'badge-warning' : ''}">${logisticsNotes.length}</span>
           </button>
           <button class="nexus-modal-tab ${currentTab === 'intel' ? 'active' : ''}" data-tab="intel">
-            <span class="tab-icon">📦</span> Intel <span class="tab-badge">${intelNotes.length}</span>
+            <span class="tab-icon">${renderAssistantIcon('icons/themes/sci-fi/idea-96.png')}</span> Intel <span class="tab-badge">${intelNotes.length}</span>
           </button>
           <button class="nexus-modal-tab ${currentTab === 'settings' ? 'active' : ''}" data-tab="settings">
-            <span class="tab-icon">⚙️</span> Overseer Rules & Thresholds <span class="tab-badge ${snoozedEntries.length > 0 ? 'badge-snoozed' : ''}">${snoozedEntries.length}</span>
+            <span class="tab-icon">${renderAssistantIcon('icons/themes/sci-fi/adjust-settings-96.png')}</span> Overseer Rules & Thresholds <span class="tab-badge ${snoozedEntries.length > 0 ? 'badge-snoozed' : ''}">${snoozedEntries.length}</span>
           </button>
         </div>
 
@@ -419,7 +428,7 @@ export async function openAssistantModal(
                 <div class="card-taxonomy-breadcrumb">
                   <div class="nexus-breadcrumb-item nexus-dropdown-wrapper" style="position: relative !important; z-index: ${isDomainMenuOpen ? '9999999 !important;' : '1;'};">
                     <button class="breadcrumb-btn ${isDomainMenuOpen ? 'active' : ''}" data-toggle-breadcrumb="domain_${note.id}" title="Click to mute or snooze ${domainTitle}">
-                      <span class="bc-icon">${domainDef?.icon || '🪐'}</span>
+                      <span class="bc-icon">${domainDef?.icon ? renderAssistantIcon(domainDef.icon) : '🪐'}</span>
                       <span class="bc-name">${domainTitle}</span>
                       <span class="bc-arrow">▾</span>
                     </button>
@@ -427,11 +436,11 @@ export async function openAssistantModal(
                       <div class="nexus-breadcrumb-menu" style="position: absolute !important; top: calc(100% + 6px) !important; left: 0 !important; min-width: 220px !important; background-color: #080d1a !important; background: #080d1a !important; border: 1px solid rgba(56, 189, 248, 0.6) !important; border-radius: 8px !important; box-shadow: 0 20px 60px rgba(0, 0, 0, 1), 0 0 25px rgba(0, 0, 0, 1), 0 0 14px rgba(56, 189, 248, 0.3) !important; padding: 6px !important; z-index: 99999999 !important;">
                         <div class="breadcrumb-menu-header" style="font-size: 9.5px !important; font-weight: 800 !important; letter-spacing: 0.08em !important; text-transform: uppercase !important; color: #38bdf8 !important; padding: 4px 8px 6px 8px !important; border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important; margin-bottom: 6px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;">Category: ${domainTitle}</div>
                         <button class="breadcrumb-menu-opt" data-breadcrumb-action="snooze" data-mute-level="domain" data-mute-key="${note.domain}" data-mute-type="until" data-mute-title="${domainTitle}" data-mute-icon="${domainDef?.icon}" style="width: 100% !important; box-sizing: border-box !important; background-color: #101726 !important; background: #101726 !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 6px !important; padding: 7px 10px !important; display: flex !important; align-items: center !important; gap: 8px !important; text-align: left !important; cursor: pointer !important; color: #f1f5f9 !important; font-size: 11px !important; font-weight: 600 !important; margin-bottom: 4px !important;">
-                          <span class="opt-icon">⏱️</span>
+                          <span class="opt-icon">${renderAssistantIcon('icons/themes/sci-fi/stopwatch-96.png')}</span>
                           <span class="opt-text">Snooze Category (24h)</span>
                         </button>
                         <button class="breadcrumb-menu-opt opt-danger" data-breadcrumb-action="mute" data-mute-level="domain" data-mute-key="${note.domain}" data-mute-type="forever" data-mute-title="${domainTitle}" data-mute-icon="${domainDef?.icon}" style="width: 100% !important; box-sizing: border-box !important; background-color: rgba(239, 68, 68, 0.12) !important; background: rgba(239, 68, 68, 0.12) !important; border: 1px solid rgba(239, 68, 68, 0.35) !important; border-radius: 6px !important; padding: 7px 10px !important; display: flex !important; align-items: center !important; gap: 8px !important; text-align: left !important; cursor: pointer !important; color: #fca5a5 !important; font-size: 11px !important; font-weight: 600 !important; margin-bottom: 0 !important;">
-                          <span class="opt-icon">🛑</span>
+                          <span class="opt-icon">${renderAssistantIcon('icons/themes/sci-fi/cancel-144.png')}</span>
                           <span class="opt-text">Mute Category (Forever)</span>
                         </button>
                       </div>
@@ -450,11 +459,11 @@ export async function openAssistantModal(
                       <div class="nexus-breadcrumb-menu" style="position: absolute !important; top: calc(100% + 6px) !important; left: 0 !important; min-width: 220px !important; background-color: #080d1a !important; background: #080d1a !important; border: 1px solid rgba(56, 189, 248, 0.6) !important; border-radius: 8px !important; box-shadow: 0 20px 60px rgba(0, 0, 0, 1), 0 0 25px rgba(0, 0, 0, 1), 0 0 14px rgba(56, 189, 248, 0.3) !important; padding: 6px !important; z-index: 99999999 !important;">
                         <div class="breadcrumb-menu-header" style="font-size: 9.5px !important; font-weight: 800 !important; letter-spacing: 0.08em !important; text-transform: uppercase !important; color: #38bdf8 !important; padding: 4px 8px 6px 8px !important; border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important; margin-bottom: 6px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;">Sub-Category: ${subCatTitle}</div>
                         <button class="breadcrumb-menu-opt" data-breadcrumb-action="snooze" data-mute-level="subCategory" data-mute-key="${note.subCategory}" data-mute-type="until" data-mute-title="${subCatTitle}" data-mute-icon="${subCatDef?.icon}" style="width: 100% !important; box-sizing: border-box !important; background-color: #101726 !important; background: #101726 !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 6px !important; padding: 7px 10px !important; display: flex !important; align-items: center !important; gap: 8px !important; text-align: left !important; cursor: pointer !important; color: #f1f5f9 !important; font-size: 11px !important; font-weight: 600 !important; margin-bottom: 4px !important;">
-                          <span class="opt-icon">⏱️</span>
+                          <span class="opt-icon">${renderAssistantIcon('icons/themes/sci-fi/stopwatch-96.png')}</span>
                           <span class="opt-text">Snooze Sub-Category (24h)</span>
                         </button>
                         <button class="breadcrumb-menu-opt opt-danger" data-breadcrumb-action="mute" data-mute-level="subCategory" data-mute-key="${note.subCategory}" data-mute-type="forever" data-mute-title="${subCatTitle}" data-mute-icon="${subCatDef?.icon}" style="width: 100% !important; box-sizing: border-box !important; background-color: rgba(239, 68, 68, 0.12) !important; background: rgba(239, 68, 68, 0.12) !important; border: 1px solid rgba(239, 68, 68, 0.35) !important; border-radius: 6px !important; padding: 7px 10px !important; display: flex !important; align-items: center !important; gap: 8px !important; text-align: left !important; cursor: pointer !important; color: #fca5a5 !important; font-size: 11px !important; font-weight: 600 !important; margin-bottom: 0 !important;">
-                          <span class="opt-icon">🔕</span>
+                          <span class="opt-icon">${renderAssistantIcon('icons/themes/sci-fi/cancel-144.png')}</span>
                           <span class="opt-text">Mute Sub-Category (Forever)</span>
                         </button>
                       </div>
@@ -473,11 +482,11 @@ export async function openAssistantModal(
                       <div class="nexus-breadcrumb-menu" style="position: absolute !important; top: calc(100% + 6px) !important; left: 0 !important; min-width: 220px !important; background-color: #080d1a !important; background: #080d1a !important; border: 1px solid rgba(56, 189, 248, 0.6) !important; border-radius: 8px !important; box-shadow: 0 20px 60px rgba(0, 0, 0, 1), 0 0 25px rgba(0, 0, 0, 1), 0 0 14px rgba(56, 189, 248, 0.3) !important; padding: 6px !important; z-index: 99999999 !important;">
                         <div class="breadcrumb-menu-header" style="font-size: 9.5px !important; font-weight: 800 !important; letter-spacing: 0.08em !important; text-transform: uppercase !important; color: #38bdf8 !important; padding: 4px 8px 6px 8px !important; border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important; margin-bottom: 6px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;">Rule: ${ruleTitle}</div>
                         <button class="breadcrumb-menu-opt" data-breadcrumb-action="snooze" data-mute-level="rule" data-mute-key="${note.ruleId}" data-mute-type="until" data-mute-title="${ruleTitle}" data-mute-icon="${ruleDef?.icon}" style="width: 100% !important; box-sizing: border-box !important; background-color: #101726 !important; background: #101726 !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 6px !important; padding: 7px 10px !important; display: flex !important; align-items: center !important; gap: 8px !important; text-align: left !important; cursor: pointer !important; color: #f1f5f9 !important; font-size: 11px !important; font-weight: 600 !important; margin-bottom: 4px !important;">
-                          <span class="opt-icon">⏱️</span>
+                          <span class="opt-icon">${renderAssistantIcon('icons/themes/sci-fi/stopwatch-96.png')}</span>
                           <span class="opt-text">Snooze Rule (24h)</span>
                         </button>
                         <button class="breadcrumb-menu-opt opt-danger" data-breadcrumb-action="mute" data-mute-level="rule" data-mute-key="${note.ruleId}" data-mute-type="forever" data-mute-title="${ruleTitle}" data-mute-icon="${ruleDef?.icon}" style="width: 100% !important; box-sizing: border-box !important; background-color: rgba(239, 68, 68, 0.12) !important; background: rgba(239, 68, 68, 0.12) !important; border: 1px solid rgba(239, 68, 68, 0.35) !important; border-radius: 6px !important; padding: 7px 10px !important; display: flex !important; align-items: center !important; gap: 8px !important; text-align: left !important; cursor: pointer !important; color: #fca5a5 !important; font-size: 11px !important; font-weight: 600 !important; margin-bottom: 0 !important;">
-                          <span class="opt-icon">🔕</span>
+                          <span class="opt-icon">${renderAssistantIcon('icons/themes/sci-fi/cancel-144.png')}</span>
                           <span class="opt-text">Mute Rule (Forever)</span>
                         </button>
                       </div>
@@ -563,7 +572,7 @@ export async function openAssistantModal(
                 <div class="nexus-domain-header" data-toggle-section="domain_${domain.id}">
                   <div class="domain-info-left">
                     <span class="domain-expand-chevron">${isDomainExpanded ? '▼' : '▶'}</span>
-                    <span class="domain-icon">${domain.icon}</span>
+                    <span class="domain-icon">${domain.icon ? renderAssistantIcon(domain.icon) : '🪐'}</span>
                     <div>
                       <div class="domain-title-row">
                         <span class="domain-name">${domain.name}</span>
@@ -697,7 +706,7 @@ export async function openAssistantModal(
         <!-- MUTED & SNOOZED OVERVIEW TABLE -->
         <div class="nexus-settings-section">
           <div class="section-header">
-            <span class="section-icon">🔇</span>
+            <span class="section-icon">${renderAssistantIcon('icons/themes/sci-fi/cancel-144.png')}</span>
             <h3>Currently Muted & Snoozed Items (${snoozedEntries.length})</h3>
             ${snoozedEntries.length > 1 ? `
               <button class="nexus-btn-restore-all" id="restore-all-snoozes-btn">Restore All</button>
@@ -751,7 +760,7 @@ export async function openAssistantModal(
         <!-- DETECTION THRESHOLDS -->
         <div class="nexus-settings-section">
           <div class="section-header">
-            <span class="section-icon">⚙️</span>
+            <span class="section-icon">${renderAssistantIcon('icons/themes/sci-fi/adjust-settings-96.png')}</span>
             <h3>Overseer Detection Thresholds</h3>
           </div>
           <div class="nexus-settings-row">
@@ -834,10 +843,46 @@ export async function openAssistantModal(
       }
     });
 
+    // Re-sync Empire button
+    overlay.querySelector('.nexus-modal-sync-btn')?.addEventListener('click', async () => {
+      const btn = overlay.querySelector('.nexus-modal-sync-btn') as HTMLButtonElement | null;
+      if (!btn || btn.classList.contains('syncing')) return;
+
+      btn.classList.add('syncing');
+      btn.innerHTML = `<span class="hdr-btn-icon nexus-sync-spinner" style="display:inline-flex; align-items:center; animation: nexus-spin 0.8s linear infinite;">${renderAssistantIcon('icons/themes/sci-fi/sync-96.png')}</span> <span>Syncing...</span>`;
+      btn.disabled = true;
+
+      const onSyncFinished = async () => {
+        window.removeEventListener('ogame-nexus-empire-sync-completed', onSyncFinished);
+        activeNotifications = await evaluateAllNotifications(playerId);
+        settings = await getAssistantSettings();
+        renderModalContent();
+        if (onUpdateCallback) onUpdateCallback();
+      };
+
+      window.addEventListener('ogame-nexus-empire-sync-completed', onSyncFinished);
+      window.dispatchEvent(new CustomEvent('ogame-nexus-trigger-empire-sync'));
+
+      // Safety fallback timeout
+      setTimeout(async () => {
+        window.removeEventListener('ogame-nexus-empire-sync-completed', onSyncFinished);
+        if (btn && btn.classList.contains('syncing')) {
+          activeNotifications = await evaluateAllNotifications(playerId);
+          settings = await getAssistantSettings();
+          renderModalContent();
+          if (onUpdateCallback) onUpdateCallback();
+        }
+      }, 10000);
+    });
+
     // Refresh / Re-scan button
     overlay.querySelector('.nexus-modal-refresh-btn')?.addEventListener('click', async () => {
       const btn = overlay.querySelector('.nexus-modal-refresh-btn') as HTMLElement | null;
-      if (btn) btn.style.opacity = '0.5';
+      if (btn) {
+        btn.classList.add('scanning');
+        const iconSpan = btn.querySelector('.hdr-btn-icon') as HTMLElement | null;
+        if (iconSpan) iconSpan.style.animation = 'nexus-spin 0.6s linear infinite';
+      }
       activeNotifications = await evaluateAllNotifications(playerId);
       settings = await getAssistantSettings();
       renderModalContent();

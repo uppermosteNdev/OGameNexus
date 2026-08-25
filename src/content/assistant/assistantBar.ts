@@ -105,7 +105,13 @@ export async function initAssistantBar(playerId: string): Promise<void> {
   if (!planetEl) return;
 
   lastEvaluatedPlayerId = playerId;
-  notifications = await evaluateAllNotifications(playerId);
+
+  // 1. Mount and render Overseer bar into the DOM immediately (0ms visual delay)
+  renderAssistantBar(playerId);
+
+  // 2. Evaluate fresh notifications and update ticker seamlessly
+  const freshNotes = await evaluateAllNotifications(playerId);
+  notifications = freshNotes;
   updateShuffledOrder(notifications.length);
 
   renderAssistantBar(playerId);
@@ -213,12 +219,17 @@ export function renderAssistantBar(playerId: string): void {
             <table cellspacing="0" cellpadding="0" class="construction active" style="width: 100%;">
               <tbody>
                 <tr>
-                  <td class="idle" style="padding: 6px 16px; text-align: center;">
+                  <td class="idle" style="padding: 6px 36px 6px 16px; text-align: center;">
                     <div class="nexus-ticker-wrapper"></div>
                   </td>
                 </tr>
               </tbody>
             </table>
+            <div class="nexus-overseer-scroll-hint nexus-tooltip" data-nexus-tooltip="💡 Scroll mouse wheel to cycle through notifications">
+              <div class="nexus-mouse-icon">
+                <div class="nexus-mouse-wheel"></div>
+              </div>
+            </div>
           </div>
           <div class="content-cap-right"></div>
         </div>
@@ -268,7 +279,7 @@ export function renderAssistantBar(playerId: string): void {
     updateShuffledOrder(notifications.length);
   }
 
-  const actualIndex = shuffledOrder.length > 0 ? (shuffledOrder[cycleIndex] ?? 0) : 0;
+  const actualIndex = shuffledOrder.length > 0 ? (shuffledOrder[cycleIndex % shuffledOrder.length] ?? 0) : 0;
   const currentItem = notifications.length > 0 ? notifications[actualIndex] : null;
 
   const currentTickerKey = currentItem
@@ -318,11 +329,57 @@ export function renderAssistantBar(playerId: string): void {
     }
     tickerWrapper.innerHTML = tickerHtml;
   }
+
+  const scrollHintEl = barEl.querySelector('.nexus-overseer-scroll-hint') as HTMLElement | null;
+  if (scrollHintEl) {
+    if (notifications.length > 1) {
+      scrollHintEl.style.display = 'flex';
+      const currentIndex = shuffledOrder.length > 0 ? (cycleIndex % shuffledOrder.length) + 1 : 1;
+      const total = shuffledOrder.length || notifications.length;
+      scrollHintEl.setAttribute('data-nexus-tooltip', `💡 Scroll mouse wheel to cycle (${currentIndex}/${total})`);
+    } else {
+      scrollHintEl.style.display = 'none';
+    }
+  }
 }
 
 function attachBarEvents(barEl: HTMLElement, playerId: string): void {
   barEl.onmouseenter = () => { isPaused = true; };
   barEl.onmouseleave = () => { isPaused = false; };
+
+  // Scroll wheel navigation for notifications
+  barEl.addEventListener('wheel', (e: WheelEvent) => {
+    if (notifications.length <= 1) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const total = shuffledOrder.length || notifications.length;
+    if (total <= 1) return;
+
+    if (e.deltaY > 0) {
+      // Scroll DOWN -> Next notification
+      cycleIndex = (cycleIndex + 1) % total;
+    } else if (e.deltaY < 0) {
+      // Scroll UP -> Previous notification
+      cycleIndex = (cycleIndex - 1 + total) % total;
+    }
+
+    const targetId = playerId || lastEvaluatedPlayerId || document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+    renderAssistantBar(targetId);
+  }, { passive: false });
+
+  const scrollHint = barEl.querySelector('.nexus-overseer-scroll-hint') as HTMLElement | null;
+  if (scrollHint) {
+    scrollHint.onclick = (e) => {
+      e.stopPropagation();
+      const total = shuffledOrder.length || notifications.length;
+      if (total <= 1) return;
+      cycleIndex = (cycleIndex + 1) % total;
+      const targetId = playerId || lastEvaluatedPlayerId || document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+      renderAssistantBar(targetId);
+    };
+  }
 
   const infoBtn = barEl.querySelector('.nexus-overseer-info-btn') as HTMLElement | null;
   if (infoBtn) {

@@ -23,6 +23,7 @@ import {
     Search
 } from 'lucide-react';
 import { db } from '../../db';
+import { ThemeIcon } from '../components/ThemeIcon';
 
 interface Account {
     playerName: string;
@@ -413,7 +414,7 @@ const DataManagement: React.FC = () => {
                             background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)'
                         }}>
-                            <Database size={22} />
+                            <ThemeIcon name="save" size={24} />
                         </div>
                         <div>
                             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>Command Deck Backup</h2>
@@ -452,13 +453,13 @@ const DataManagement: React.FC = () => {
                             {/* Database numbers summary */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                 {[
-                                    { label: 'Planets Structure', count: nexusStatsSummary?.planets || 0, icon: <Server size={14} /> },
-                                    { label: 'Expedition Database', count: nexusStatsSummary?.expeditions || 0, icon: <Compass size={14} /> },
-                                    { label: 'Combat Reports Log', count: nexusStatsSummary?.combats || 0, icon: <Swords size={14} /> },
-                                    { label: 'Debris field harvests', count: nexusStatsSummary?.debris || 0, icon: <Rocket size={14} /> },
-                                    { label: 'Lifeform Discoveries', count: nexusStatsSummary?.lifeforms || 0, icon: <Activity size={14} /> },
-                                    { label: 'Saved Build Orders', count: nexusStatsSummary?.todos || 0, icon: <Clock size={14} /> },
-                                    { label: 'Raid Radar Targets', count: nexusStatsSummary?.spiedPlanets || 0, icon: <Search size={14} /> },
+                                    { label: 'Planets Structure', count: nexusStatsSummary?.planets || 0, icon: <ThemeIcon name="geography-globe" size={16} /> },
+                                    { label: 'Expedition Database', count: nexusStatsSummary?.expeditions || 0, icon: <ThemeIcon name="navigation" size={16} /> },
+                                    { label: 'Combat Reports Log', count: nexusStatsSummary?.combats || 0, icon: <ThemeIcon name="sword" size={16} /> },
+                                    { label: 'Debris field harvests', count: nexusStatsSummary?.debris || 0, icon: <ThemeIcon name="debris-field" size={16} /> },
+                                    { label: 'Lifeform Discoveries', count: nexusStatsSummary?.lifeforms || 0, icon: <ThemeIcon name="leaf" size={16} /> },
+                                    { label: 'Saved Build Orders', count: nexusStatsSummary?.todos || 0, icon: <ThemeIcon name="goal" size={16} /> },
+                                    { label: 'Raid Radar Targets', count: nexusStatsSummary?.spiedPlanets || 0, icon: <ThemeIcon name="radar" size={16} /> },
                                 ].map((item, index) => (
                                     <div key={index} style={{
                                         padding: '12px 16px', borderRadius: '14px',
@@ -466,7 +467,7 @@ const DataManagement: React.FC = () => {
                                         border: '1px solid rgba(255,255,255,0.03)',
                                         display: 'flex', alignItems: 'center', gap: '12px'
                                     }}>
-                                        <span style={{ color: 'var(--primary)', opacity: 0.8 }}>{item.icon}</span>
+                                        <span style={{ display: 'flex', alignItems: 'center' }}>{item.icon}</span>
                                         <div>
                                             <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fff' }}>{item.count.toLocaleString()}</div>
                                             <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{item.label}</div>

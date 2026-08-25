@@ -146,18 +146,30 @@ export function parseProduction(html: string): ScrapedProduction | null {
     };
 
     const settings: Record<string, number> = {};
-    const selectRegex = /<select[^>]*?name=["']last(\d+)["'][^>]*>([\s\S]*?)<\/select>/gi;
+    const selectRegex = /<select[^>]*?name=["'](?:productionFactor\[(\d+)\]|last(\d+))["'][^>]*>([\s\S]*?)<\/select>/gi;
     let sMatch;
     while ((sMatch = selectRegex.exec(html)) !== null) {
-        const techId = parseInt(sMatch[1], 10);
-        const optionsHtml = sMatch[2];
+        const techId = parseInt(sMatch[1] || sMatch[2], 10);
+        const optionsHtml = sMatch[3];
         const selectedMatch = optionsHtml.match(/<option[^>]*?value=["'](\d+)["'][^>]*?selected/i) || 
-                              optionsHtml.match(/selected[^>]*?value=["'](\d+)["']/i);
+                              optionsHtml.match(/<option[^>]*?selected[^>]*?value=["'](\d+)["']/i);
         const key = mapTechIdToSettingKey(techId);
         if (key && selectedMatch) {
             settings[key] = parseInt(selectedMatch[1], 10);
         }
     }
+
+    const rowRegex = /<tr[^>]*?data-techid=["'](\d+)["'][^>]*>[\s\S]*?<a[^>]*?data-value=["'](\d+)["']/gi;
+    let rMatch;
+    while ((rMatch = rowRegex.exec(html)) !== null) {
+        const techId = parseInt(rMatch[1], 10);
+        const val = parseInt(rMatch[2], 10);
+        const key = mapTechIdToSettingKey(techId);
+        if (key && !isNaN(val) && settings[key] === undefined) {
+            settings[key] = val;
+        }
+    }
+
     if (Object.keys(settings).length > 0) {
         data.productionSettings = settings;
     }

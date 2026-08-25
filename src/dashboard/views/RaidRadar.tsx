@@ -16,6 +16,7 @@ import {
     Ship
 } from 'lucide-react';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
+import { ThemeIcon } from '../components/ThemeIcon';
 
 const THEME_CYAN = '#0062ff';
 const RESOURCE_COLORS = {
@@ -648,26 +649,10 @@ const RaidRadar: React.FC = () => {
 
     return (
         <div className="view">
-            {/* Header with pulsing animated radar overlay */}
+            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px', position: 'relative' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <div style={{ position: 'relative', width: '50px', height: '50px' }}>
-                        <div className="radar-circle-glow" />
-                        <div className="radar-pulse" />
-                        <div style={{
-                            width: '50px',
-                            height: '50px',
-                            borderRadius: '50%',
-                            background: 'rgba(0, 98, 255, 0.2)',
-                            border: '2px solid #0062ff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#00f2ff'
-                        }}>
-                            <Activity size={24} className="radar-spin" />
-                        </div>
-                    </div>
+                    <ThemeIcon name="radar" size={44} glow />
                     <div>
                         <h1 style={{ color: '#fff', fontSize: '2.5rem', fontWeight: 800, margin: 0 }}>Raid Radar</h1>
                         <p style={{ color: 'var(--text-muted)', margin: '4px 0 0' }}>Empirical target tracking and resource projection for inactive farming.</p>

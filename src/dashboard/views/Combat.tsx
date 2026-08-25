@@ -76,6 +76,33 @@ const formatYAxis = (value: number) => {
     return value.toString();
 };
 
+export const getAttackerName = (cr: any): string => {
+    if (cr.attackerName && cr.attackerName !== 'Unknown') return cr.attackerName;
+    if (Array.isArray(cr.rawFleets)) {
+        const attacker = cr.rawFleets.find((p: any) => p.side === 'attacker' || p.isAttacker);
+        if (attacker?.player?.name) return attacker.player.name;
+        if (attacker?.name) return attacker.name;
+        if (attacker?.playerName) return attacker.playerName;
+    }
+    return cr.attackerName || 'Unknown';
+};
+
+export const getDefenderName = (cr: any): string => {
+    if (cr.defenderName && cr.defenderName !== 'Unknown') return cr.defenderName;
+    if (Array.isArray(cr.rawFleets)) {
+        const defender = cr.rawFleets.find((p: any) => p.side === 'defender' || p.isDefender);
+        if (defender?.player?.name) return defender.player.name;
+        if (defender?.name) return defender.name;
+        if (defender?.playerName) return defender.playerName;
+    }
+    if (cr.isExpedition || (cr.coords && String(cr.coords).trim().endsWith(':16'))) {
+        if (cr.expeditionAttackType === 1) return 'Pirates';
+        if (cr.expeditionAttackType === 2) return 'Aliens';
+        return 'Expedition Hostiles';
+    }
+    return cr.defenderName || 'Unknown';
+};
+
 const Combat: React.FC = () => {
     const account = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const combatReports = useLiveQuery(
@@ -156,18 +183,42 @@ const Combat: React.FC = () => {
 
     const getWinnerName = (cr: any) => {
         if (cr.winner === 'none') return 'NONE';
-        if (cr.winner === 'attacker') return cr.attackerName || 'YOU';
+        const attName = getAttackerName(cr);
+        const defName = getDefenderName(cr);
+        if (cr.winner === 'attacker') return attName !== 'Unknown' ? attName : (playerName || 'YOU');
         if (cr.winner === 'defender') {
-            if (cr.isExpedition || cr.coords.trim().endsWith(':16')) {
-                const defName = String(cr.defenderName || '').toLowerCase();
-                if (cr.expeditionAttackType === 1 || defName.includes('pirat')) return 'Pirates';
-                if (cr.expeditionAttackType === 2 || defName.includes('alien')) return 'Aliens';
+            if (cr.isExpedition || (cr.coords && String(cr.coords).trim().endsWith(':16'))) {
+                const lowerDef = String(defName || '').toLowerCase();
+                if (cr.expeditionAttackType === 1 || lowerDef.includes('pirat')) return 'Pirates';
+                if (cr.expeditionAttackType === 2 || lowerDef.includes('alien')) return 'Aliens';
                 return 'Expedition Hostiles';
             }
-            return cr.defenderName || 'Defender';
+            return defName !== 'Unknown' ? defName : 'Defender';
         }
         return cr.winner.toUpperCase();
     };
+
+    // Retroactively heal any legacy combat reports in DB that have "Unknown" names if rawFleets has the data
+    useEffect(() => {
+        const healCombatReports = async () => {
+            try {
+                const unknownCombats = await db.combatReports
+                    .filter(c => (!c.attackerName || c.attackerName === 'Unknown' || !c.defenderName || c.defenderName === 'Unknown') && Array.isArray(c.rawFleets) && c.rawFleets.length > 0)
+                    .toArray();
+                if (unknownCombats.length > 0) {
+                    const updates = unknownCombats.map(c => ({
+                        ...c,
+                        attackerName: getAttackerName(c),
+                        defenderName: getDefenderName(c)
+                    }));
+                    await db.combatReports.bulkPut(updates);
+                }
+            } catch (e) {
+                console.error('Failed to retroactively heal combat report names:', e);
+            }
+        };
+        healCombatReports();
+    }, []);
 
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -745,8 +796,8 @@ const Combat: React.FC = () => {
         if (filterText) {
             const lowFilter = filterText.toLowerCase();
             filtered = filtered.filter(cr => 
-                (cr.attackerName?.toLowerCase().includes(lowFilter)) || 
-                (cr.defenderName?.toLowerCase().includes(lowFilter))
+                (getAttackerName(cr).toLowerCase().includes(lowFilter)) || 
+                (getDefenderName(cr).toLowerCase().includes(lowFilter))
             );
         }
         
@@ -1511,8 +1562,10 @@ const Combat: React.FC = () => {
                                                 const dMSU = (debris.metal * mMultiplier) + (debris.crystal * cMultiplier) + (debris.deuterium * dMultiplier);
 
                                                 const winnerName = getWinnerName(cr);
-                                                const isAccountWin = (cr.winner === 'attacker' && cr.attackerName === playerName) ||
-                                                                    (cr.winner === 'defender' && cr.defenderName === playerName);
+                                                const aName = getAttackerName(cr);
+                                                const dName = getDefenderName(cr);
+                                                const isAccountWin = (cr.winner === 'attacker' && aName === playerName) ||
+                                                                    (cr.winner === 'defender' && dName === playerName);
                                                 const isTie = cr.winner === 'none';
                                                 
                                                 const statusColor = isAccountWin ? '#22c55e' : (isTie ? '#eab308' : '#ef4444');
@@ -1537,16 +1590,16 @@ const Combat: React.FC = () => {
                                                             <div style={{ fontSize: '0.65rem', opacity: 0.4 }}>{new Date(cr.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                                                         </td>
                                                         <td style={{ padding: '10px 8px' }}>
-                                                            <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }} title={cr.attackerName}>
-                                                                {cr.attackerName || 'Unknown'}
+                                                            <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }} title={aName}>
+                                                                {aName}
                                                             </div>
                                                         </td>
                                                         <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                                                             <SwordIcon size={12} style={{ opacity: 0.3 }} />
                                                         </td>
                                                         <td style={{ padding: '10px 8px' }}>
-                                                            <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }} title={cr.defenderName}>
-                                                                {cr.defenderName || 'Unknown'}
+                                                            <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }} title={dName}>
+                                                                {dName}
                                                             </div>
                                                         </td>
                                                         <td style={{ padding: '10px 8px' }}>
@@ -2154,8 +2207,10 @@ const Combat: React.FC = () => {
                                         const debris = cr.debris || { metal: 0, crystal: 0, deuterium: 0 };
                                         
                                         const winnerName = getWinnerName(cr);
-                                        const isAccountWin = (cr.winner === 'attacker' && cr.attackerName === playerName) ||
-                                                            (cr.winner === 'defender' && cr.defenderName === playerName);
+                                        const aName = getAttackerName(cr);
+                                        const dName = getDefenderName(cr);
+                                        const isAccountWin = (cr.winner === 'attacker' && aName === playerName) ||
+                                                            (cr.winner === 'defender' && dName === playerName);
                                         const isTie = cr.winner === 'none';
 
                                         const rowBg = isAccountWin ? 'rgba(34, 197, 94, 0.05)' : (isTie ? 'rgba(234, 179, 8, 0.05)' : 'rgba(239, 68, 68, 0.05)');
@@ -2177,9 +2232,9 @@ const Combat: React.FC = () => {
                                                 className="combat-row-hover"
                                             >
                                                 <td style={{ padding: '16px', color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem' }}>{new Date(cr.timestamp * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
-                                                <td style={{ padding: '16px', fontWeight: 700 }}>{cr.attackerName || 'Unknown'}</td>
+                                                <td style={{ padding: '16px', fontWeight: 700 }}>{aName}</td>
                                                 <td style={{ padding: '16px', textAlign: 'center' }}><SwordIcon size={14} style={{ opacity: 0.3 }} /></td>
-                                                <td style={{ padding: '16px', fontWeight: 700 }}>{cr.defenderName || 'Unknown'}</td>
+                                                <td style={{ padding: '16px', fontWeight: 700 }}>{dName}</td>
                                                 <td style={{ padding: '16px', textAlign: 'center' }}>
                                                     <span style={{
                                                         padding: '4px 10px',
@@ -2317,8 +2372,11 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
     const account = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const accountPlayerName = account?.playerName || 'YOU';
     
-    const isAccountWin = (report.winner === 'attacker' && report.attackerName === accountPlayerName) ||
-                        (report.winner === 'defender' && report.defenderName === accountPlayerName);
+    const aName = getAttackerName(report);
+    const dName = getDefenderName(report);
+
+    const isAccountWin = (report.winner === 'attacker' && aName === accountPlayerName) ||
+                        (report.winner === 'defender' && dName === accountPlayerName);
     const isTie = report.winner === 'none';
                         
     const themeColor = isAccountWin ? '#22c55e' : (isTie ? '#eab308' : '#ef4444');
@@ -2468,7 +2526,7 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px', justifyContent: 'flex-end' }}>
                                 <div style={{ textAlign: 'right' }}>
                                     <div style={{ fontSize: '0.7rem', opacity: 0.4, fontWeight: 800, textTransform: 'uppercase' }}>Assault Leader</div>
-                                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff' }}>Attacker ({report.attackerName || 'Unknown'})</div>
+                                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff' }}>Attacker ({aName})</div>
                                 </div>
                                 <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', border: '2px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <Sword size={32} color="#ef4444" />
@@ -2501,7 +2559,7 @@ const CombatDetailModal = ({ report, onClose, rates, mMultiplier, cMultiplier, d
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '0.7rem', opacity: 0.4, fontWeight: 800, textTransform: 'uppercase' }}>Planetary Defense</div>
-                                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff' }}>Defender ({report.defenderName || 'Unknown'})</div>
+                                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff' }}>Defender ({dName})</div>
                                 </div>
                             </div>
                             {renderFleet(defenders, '#22c55e')}
@@ -2623,15 +2681,17 @@ const SystemCombatsModal = ({
 
     const getWinnerName = (cr: any) => {
         if (cr.winner === 'none') return 'NONE';
-        if (cr.winner === 'attacker') return cr.attackerName || 'YOU';
+        const attName = getAttackerName(cr);
+        const defName = getDefenderName(cr);
+        if (cr.winner === 'attacker') return attName !== 'Unknown' ? attName : (accountPlayerName || 'YOU');
         if (cr.winner === 'defender') {
-            if (cr.isExpedition || cr.coords.trim().endsWith(':16')) {
-                const defName = String(cr.defenderName || '').toLowerCase();
-                if (cr.expeditionAttackType === 1 || defName.includes('pirat')) return 'Pirates';
-                if (cr.expeditionAttackType === 2 || defName.includes('alien')) return 'Aliens';
+            if (cr.isExpedition || (cr.coords && String(cr.coords).trim().endsWith(':16'))) {
+                const lowerDef = String(defName || '').toLowerCase();
+                if (cr.expeditionAttackType === 1 || lowerDef.includes('pirat')) return 'Pirates';
+                if (cr.expeditionAttackType === 2 || lowerDef.includes('alien')) return 'Aliens';
                 return 'Expedition Hostiles';
             }
-            return cr.defenderName || 'Defender';
+            return defName !== 'Unknown' ? defName : 'Defender';
         }
         return cr.winner.toUpperCase();
     };
@@ -2742,8 +2802,10 @@ const SystemCombatsModal = ({
                                         const debris = cr.debris || { metal: 0, crystal: 0, deuterium: 0 };
                                         
                                         const winnerName = getWinnerName(cr);
-                                        const isAccountWin = (cr.winner === 'attacker' && cr.attackerName === accountPlayerName) ||
-                                                            (cr.winner === 'defender' && cr.defenderName === accountPlayerName);
+                                        const aName = getAttackerName(cr);
+                                        const dName = getDefenderName(cr);
+                                        const isAccountWin = (cr.winner === 'attacker' && aName === accountPlayerName) ||
+                                                            (cr.winner === 'defender' && dName === accountPlayerName);
                                         const isTie = cr.winner === 'none';
 
                                         const rowBg = isAccountWin ? 'rgba(34, 197, 94, 0.03)' : (isTie ? 'rgba(234, 179, 8, 0.03)' : 'rgba(239, 68, 68, 0.03)');
@@ -2772,9 +2834,9 @@ const SystemCombatsModal = ({
                                                         {new Date(cr.timestamp * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '16px 8px', fontWeight: 700 }}>{cr.attackerName || 'Unknown'}</td>
+                                                <td style={{ padding: '16px 8px', fontWeight: 700 }}>{aName}</td>
                                                 <td style={{ padding: '16px 8px', textAlign: 'center' }}><SwordIcon size={12} style={{ opacity: 0.3 }} /></td>
-                                                <td style={{ padding: '16px 8px', fontWeight: 700 }}>{cr.defenderName || 'Unknown'}</td>
+                                                <td style={{ padding: '16px 8px', fontWeight: 700 }}>{dName}</td>
                                                 <td style={{ padding: '16px 8px' }}>
                                                     <span style={{
                                                         padding: '3px 8px',

@@ -140,6 +140,11 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
 
     const universeSpeed = account?.universeSpeed || 1;
 
+    const crawlersSettingsFactor = (planet.productionSettings?.crawlers !== undefined ? planet.productionSettings.crawlers : 100) / 100;
+    const maxCrawlers = ((planet.metalMine || 0) + (planet.crystalMine || 0) + (planet.deuteriumMine || 0)) * universeSpeed;
+    const activeCrawlers = Math.min(planet.crawlers || 0, maxCrawlers);
+    const crawlerBonus = activeCrawlers * 0.0002 * crawlersSettingsFactor;
+
     let slot = 0;
     try { slot = parseInt(planet.coords.split(':')[2]); } catch (e) { }
     let metalPosFactor = 1;
@@ -433,6 +438,13 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
                                     metal={formatBonusDetail(boostM, baseM)} 
                                     crystal={formatBonusDetail(boostC, baseC)} 
                                     deuterium={formatBonusDetail(boostD, baseD)} 
+                                />
+
+                                <BreakdownRow 
+                                    label={`Crawlers (${activeCrawlers} active${crawlersSettingsFactor !== 1 ? ` @ ${(crawlersSettingsFactor * 100).toFixed(0)}%` : ''})`}
+                                    metal={formatBonusDetail(crawlerBonus, baseM)} 
+                                    crystal={formatBonusDetail(crawlerBonus, baseC)} 
+                                    deuterium={formatBonusDetail(crawlerBonus, baseD)} 
                                 />
 
                                 <BreakdownRow 

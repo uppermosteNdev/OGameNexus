@@ -11,6 +11,7 @@ import { db } from '../../db';
 import { calculateEmpireProduction, getLifeformExpLevel, safeArray } from '../../utils/amortizationCalc';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA, BUILDING_DATA, RESEARCH_DATA, DEFENCE_DATA, LIFEFORM_BUILDING_DATA } from '../../db/staticData';
+import { ThemeIcon } from '../components/ThemeIcon';
 import './CostsPlanner.css';
 
 // ----------------------------------------------------
@@ -1334,10 +1335,16 @@ const CostsPlanner: React.FC = () => {
         }
         const mineDailyMSU = ((metalHourly * mMultiplier) + (crystalHourly * cMultiplier) + (deuteriumHourly * dMultiplier)) * 24;
 
+        const nowSec = Date.now() / 1000;
+        const last7Days = nowSec - (7 * 24 * 60 * 60);
+
         let expResMsu7d = 0;
         let expShipMsu7d = 0;
+        let expDays = 7;
         if (expeditions.length > 0) {
-            const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+            const validTimestamps = expeditions.map(e => e.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
+            const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
+            expDays = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
             const recentExps = expeditions.filter(e => e.timestamp >= last7Days);
 
             const shipCostMap: Record<number, any> = {};
@@ -1370,12 +1377,15 @@ const CostsPlanner: React.FC = () => {
                 }
             });
         }
-        const expResDailyMSU = expResMsu7d / 7;
-        const expShipDailyMSU = expShipMsu7d / 7;
+        const expResDailyMSU = expResMsu7d / expDays;
+        const expShipDailyMSU = expShipMsu7d / expDays;
 
         let combatMsu7d = 0;
+        let combatDays = 7;
         if (combatReports.length > 0) {
-            const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+            const validTimestamps = combatReports.map(c => c.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
+            const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
+            combatDays = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
             const recentCombats = combatReports.filter(c => c.timestamp >= last7Days && c.winner === 'attacker');
 
             recentCombats.forEach(c => {
@@ -1387,11 +1397,14 @@ const CostsPlanner: React.FC = () => {
                 }
             });
         }
-        const combatDailyMSU = combatMsu7d / 7;
+        const combatDailyMSU = combatMsu7d / combatDays;
 
         let debrisMsu7d = 0;
+        let debrisDays = 7;
         if (debrisHarvests.length > 0) {
-            const last7Days = Date.now() / 1000 - (7 * 24 * 60 * 60);
+            const validTimestamps = debrisHarvests.map(d => d.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
+            const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
+            debrisDays = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
             const recentDebris = debrisHarvests.filter(d => d.timestamp >= last7Days && d.recycledResources);
 
             recentDebris.forEach(d => {
@@ -1401,7 +1414,7 @@ const CostsPlanner: React.FC = () => {
                 debrisMsu7d += (m * mMultiplier) + (cr * cMultiplier) + (det * dMultiplier);
             });
         }
-        const debrisDailyMSU = debrisMsu7d / 7;
+        const debrisDailyMSU = debrisMsu7d / debrisDays;
 
         return mineDailyMSU + expResDailyMSU + combatDailyMSU + debrisDailyMSU || 1;
     }, [planets, calcResults, expeditions, combatReports, debrisHarvests, mMultiplier, cMultiplier, dMultiplier, rates]);
@@ -1535,9 +1548,7 @@ const CostsPlanner: React.FC = () => {
             {/* Header */}
             <header className="view-header relative">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ padding: '10px', borderRadius: '16px', background: 'rgba(0, 242, 255, 0.1)', color: 'var(--primary)', filter: 'drop-shadow(0 0 10px rgba(0, 242, 255, 0.3))' }}>
-                        <ShoppingCart size={28} />
-                    </div>
+                    <ThemeIcon name="shopping-cart" size={44} glow />
                     <div>
                         <h1 className="view-title">Costs Planner</h1>
                         <p className="view-subtitle">Simulate building upgrades, technologies, and fleet costs in a cohesive queue</p>

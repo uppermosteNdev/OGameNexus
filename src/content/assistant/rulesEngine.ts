@@ -279,7 +279,14 @@ function formatDurationLabel(hours: number): string {
 
 // --- Background Data Fetcher Bridge ---
 
-function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; account: Account | undefined; todayExpeditions: any[]; todoProjects: any[] }> {
+function fetchAssistantData(playerId: string, retries = 2): Promise<{
+  planets: Planet[];
+  account: Account | undefined;
+  todayExpeditions: any[];
+  todoProjects: any[];
+  expoAverages?: any;
+  rates?: any;
+}> {
   return new Promise((resolve) => {
     if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.sendMessage) {
       try {
@@ -287,7 +294,16 @@ function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; acco
           if (chrome.runtime.lastError) {
             const err = chrome.runtime.lastError;
             const msg = err?.message || '';
-            if (!msg.includes('Extension context invalidated') && !msg.includes('Receiving end does not exist')) {
+
+            // If background service worker was asleep/waking up, retry gracefully
+            if (retries > 0 && !msg.includes('Extension context invalidated')) {
+              setTimeout(() => {
+                fetchAssistantData(playerId, retries - 1).then(resolve);
+              }, 250);
+              return;
+            }
+
+            if (!msg.includes('Extension context invalidated') && !msg.includes('Receiving end does not exist') && !msg.includes('message port closed')) {
               console.warn('OGame Nexus Overseer: Message error fetching data', err);
             }
             resolve({ planets: [], account: undefined, todayExpeditions: [], todoProjects: [] });
@@ -298,9 +314,17 @@ function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; acco
               planets: res.planets || [],
               account: res.account,
               todayExpeditions: res.todayExpeditions || [],
-              todoProjects: res.todoProjects || []
+              todoProjects: res.todoProjects || [],
+              expoAverages: res.expoAverages,
+              rates: res.rates
             });
           } else {
+            if (retries > 0) {
+              setTimeout(() => {
+                fetchAssistantData(playerId, retries - 1).then(resolve);
+              }, 250);
+              return;
+            }
             resolve({ planets: [], account: undefined, todayExpeditions: [], todoProjects: [] });
           }
         });
@@ -320,7 +344,7 @@ function fetchAssistantData(playerId: string): Promise<{ planets: Planet[]; acco
 
 export async function evaluateAllNotifications(playerId: string): Promise<AssistantNotification[]> {
   const settings = await getAssistantSettings();
-  const { planets, account, todayExpeditions, todoProjects } = await fetchAssistantData(playerId);
+  const { planets, account, todayExpeditions, todoProjects, expoAverages, rates } = await fetchAssistantData(playerId);
 
   const effectiveAccount: Account = account || {
     playerId: playerId || 'unknown',
@@ -391,7 +415,7 @@ export async function evaluateAllNotifications(playerId: string): Promise<Assist
   notifications.push(...importExportNotes);
 
   // Optimal Amortization Upgrade Recommendation
-  const amortizationNotes = evaluateAmortization(planets, effectiveAccount, settings);
+  const amortizationNotes = evaluateAmortization(planets, effectiveAccount, settings, expoAverages, rates);
   notifications.push(...amortizationNotes);
 
   // Planet Amortization To-Dos (Top 3 scheduled projects on the current active planet)
@@ -653,15 +677,19 @@ function evaluateStorageOverflow(planets: Planet[], account: Account, settings: 
     ];
 
     resources.forEach(res => {
-      if (res.cap <= 0 || res.prod <= 0) return;
+      if (res.cap <= 0) return;
+
+      const isFull = res.current >= res.cap;
+
+      // If not full and has zero/negative production, it won't overflow
+      if (!isFull && res.prod <= 0) return;
 
       const remainingCap = res.cap - res.current;
-      const hoursToOverflow = remainingCap <= 0 ? 0 : remainingCap / res.prod;
+      const hoursToOverflow = isFull ? 0 : (res.prod > 0 ? remainingCap / res.prod : 0);
 
-      if (hoursToOverflow <= overflowThresholdHours) {
+      if (isFull || hoursToOverflow <= overflowThresholdHours) {
         const id = `storage_overflow_${p.id}_${res.key}`;
         const ruleId = `storage_overflow_${res.key}`;
-        const isFull = hoursToOverflow <= 0;
         const timeStr = formatHoursToTime(hoursToOverflow);
         const severity = isFull || hoursToOverflow <= 1 ? 'danger' : 'warning';
 
@@ -1001,7 +1029,13 @@ async function evaluateImportExport(account: Account, settings: AssistantSetting
 // ==========================================================================
 // RULE 7: Optimal Amortization Upgrade Recommendation
 // ==========================================================================
-function evaluateAmortization(planets: Planet[], account: Account, settings: AssistantSettings): AssistantNotification[] {
+function evaluateAmortization(
+  planets: Planet[],
+  account: Account,
+  settings: AssistantSettings,
+  expoAverages?: any,
+  rates?: any
+): AssistantNotification[] {
   const results: AssistantNotification[] = [];
   const validPlanets = (planets || []).filter(p => p && p.type !== 'moon');
   if (!validPlanets || validPlanets.length === 0) return results;
@@ -1016,7 +1050,7 @@ function evaluateAmortization(planets: Planet[], account: Account, settings: Ass
       [AmortizationType.PlasmaTechnology]: true
     };
 
-    const items = rankAmortizationItems(validPlanets, account, filters, DEFAULT_RATES, 1);
+    const items = rankAmortizationItems(validPlanets, account, filters, rates || DEFAULT_RATES, 1, expoAverages);
     if (!items || items.length === 0) return results;
 
     const topItem = items[0];
@@ -1655,7 +1689,7 @@ async function evaluateProductionBoosterGaps(
   const results: AssistantNotification[] = [];
 
   try {
-    const inventory = await getStoredPlayerInventory();
+    const inventory = await getStoredPlayerInventory(account?.playerId);
     if (!inventory || inventory.length === 0) return results;
 
     // Separate stored boosters by category
@@ -1854,14 +1888,15 @@ async function evaluateIdleResearch(
     // 1. Check production queue object first (most accurate and real-time across entire empire)
     const storedQueue = account.productionQueue || await getStoredProductionQueue(account.playerId);
     if (storedQueue) {
+      const curServerTime = Date.now() + (storedQueue.serverTimeOffset || 0);
       if (storedQueue.hasActiveResearch) {
         const activeResearchItem = storedQueue.items?.find(i => i.type === 'research');
-        if (!activeResearchItem || activeResearchItem.endTimestamp > Date.now()) {
+        if (!activeResearchItem || activeResearchItem.endTimestamp > curServerTime) {
           return []; // Active research is running!
         }
       } else if (storedQueue.items) {
         const activeResearchItem = storedQueue.items.find(i => i.type === 'research');
-        if (activeResearchItem && activeResearchItem.endTimestamp > Date.now()) {
+        if (activeResearchItem && activeResearchItem.endTimestamp > curServerTime) {
           return []; // Active research is running!
         }
       }

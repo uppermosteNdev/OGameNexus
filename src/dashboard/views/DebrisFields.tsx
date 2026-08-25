@@ -25,6 +25,7 @@ import {
     ChevronLeft,
     ChevronRight,
 } from 'lucide-react';
+import { ThemeIcon } from '../components/ThemeIcon';
 
 const THEME_CYAN = '#0062ff';
 const RESOURCE_COLORS = {
@@ -242,9 +243,9 @@ const DebrisFields: React.FC = () => {
     }, []);
 
     const TABS = [
-        { id: 'overview', label: 'Overview', icon: Activity },
-        { id: 'system', label: 'System Debris Fields', icon: Globe },
-        { id: 'expedition', label: 'Expedition Debris Fields', icon: Compass },
+        { id: 'overview', label: 'Overview', iconName: 'bar-chart' },
+        { id: 'system', label: 'System Debris Fields', iconName: 'debris-field' },
+        { id: 'expedition', label: 'Expedition Debris Fields', iconName: 'navigation' },
     ];
 
     const filteredHarvests = useMemo(() => {
@@ -316,9 +317,12 @@ const DebrisFields: React.FC = () => {
     return (
         <div className="view">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
-                <div>
-                    <h1>Debris Fields</h1>
-                    <p style={{ color: 'var(--text-muted)' }}>Track harvested debris fields and recycling efficiency.</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <ThemeIcon name="debris-field" size={44} glow />
+                    <div>
+                        <h1 style={{ margin: 0 }}>Debris Fields</h1>
+                        <p style={{ color: 'var(--text-muted)', margin: '4px 0 0 0' }}>Track harvested debris fields and recycling efficiency.</p>
+                    </div>
                 </div>
             </div>
 
@@ -343,7 +347,7 @@ const DebrisFields: React.FC = () => {
                             transition: 'all 0.2s'
                         }}
                     >
-                        <tab.icon size={18} />
+                        <ThemeIcon name={tab.iconName} size={18} glow={activeTab === tab.id} />
                         {tab.label}
                         {activeTab === tab.id && (
                             <motion.div

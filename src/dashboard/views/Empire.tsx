@@ -5,6 +5,7 @@ import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from '../../db/lifeformBonusData';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Globe, Zap, Layers, Box, Cpu, Swords, Activity, Target, Orbit, Dna, Compass, Info, ShieldCheck, Sparkles, Calculator } from 'lucide-react';
+import { ThemeIcon } from '../components/ThemeIcon';
 import AmortizationView from './AmortizationView';
 
 const THEME_CYAN = '#00f2ff';
@@ -58,8 +59,13 @@ const Empire: React.FC = () => {
 
     const getLfColor = (lfId?: number) => {
         if (!lfId) return 'rgba(255,255,255,0.2)';
-        const colors = ['#22c55e', '#ef4444', '#3b82f6', '#a855f7']; // Humans, Rock'tal, Mechas, Kaelesh
-        return colors[lfId - 1];
+        switch (lfId) {
+            case 1: return '#3b82f6'; // Humans
+            case 2: return '#eab308'; // Rock'tal
+            case 3: return '#a855f7'; // Mechas
+            case 4: return '#06b6d4'; // Kaelesh
+            default: return 'var(--primary)';
+        }
     };
 
     const getLfIcon = (lfId?: number) => {
@@ -91,7 +97,7 @@ const Empire: React.FC = () => {
     };
 
     return (
-        <div className="view-container" style={{ padding: '0 24px 40px 24px' }}>
+        <div style={{ padding: '0px', maxWidth: '1600px', margin: '0 auto', color: '#fff' }}>
             <style>
                 {`
                     .intelligence-track::-webkit-scrollbar {
@@ -116,10 +122,13 @@ const Empire: React.FC = () => {
                 `}
             </style>
 
-            <header className="view-header" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                <div>
-                    <h1 className="view-title" style={{ fontSize: '2.8rem', fontWeight: 950, color: '#fff', margin: 0, letterSpacing: '-0.03em' }}>Empire Intelligence</h1>
-                    <p className="view-subtitle" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '1.15rem', marginTop: '2px', fontWeight: 500 }}>Global Lifeform Infrastructure & Research Status</p>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '28px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <ThemeIcon name="skyscrapers" size={44} glow />
+                    <div>
+                        <h1 className="view-title" style={{ fontSize: '2.8rem', fontWeight: 950, color: '#fff', margin: 0, letterSpacing: '-0.03em' }}>Empire Intelligence</h1>
+                        <p className="view-subtitle" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '1.15rem', marginTop: '2px', fontWeight: 500 }}>Global Lifeform Infrastructure & Research Status</p>
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -128,21 +137,21 @@ const Empire: React.FC = () => {
                         className={activeTab === 'lifeform' ? 'tab-active' : ''}
                         style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid transparent', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
-                        <Dna size={16} /> LIFEFORM
+                        <ThemeIcon name="leaf" size={16} /> LIFEFORM
                     </button>
                     <button
                         onClick={() => setActiveTab('infrastructure')}
                         className={activeTab === 'infrastructure' ? 'tab-active' : ''}
                         style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid transparent', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
-                        <Box size={16} /> INFRASTRUCTURE
+                        <ThemeIcon name="city-buildings" size={16} /> INFRASTRUCTURE
                     </button>
                     <button
                         onClick={() => setActiveTab('amortization')}
                         className={activeTab === 'amortization' ? 'tab-active' : ''}
                         style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid transparent', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
-                        <Calculator size={16} /> AMORTIZATION
+                        <ThemeIcon name="combo-chart" size={16} /> AMORTIZATION
                     </button>
                 </div>
             </header>

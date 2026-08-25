@@ -377,24 +377,38 @@ export function parseExternalDataExportJson(data: any): {
     }
 
     // 4. Planets & Moons
-    if (data.planets && typeof data.planets === 'object' && !Array.isArray(data.planets)) {
-        Object.values(data.planets).forEach((rawP: any) => {
-            if (!rawP || !rawP.id) return;
+    const rawEntities: { rawP: any; defaultType?: 'planet' | 'moon' }[] = [];
+    if (data.planets && typeof data.planets === 'object') {
+        const list = Array.isArray(data.planets) ? data.planets : Object.values(data.planets);
+        list.forEach((rawP: any) => rawEntities.push({ rawP, defaultType: 'planet' }));
+    }
+    if (data.moons && typeof data.moons === 'object') {
+        const list = Array.isArray(data.moons) ? data.moons : Object.values(data.moons);
+        list.forEach((rawP: any) => rawEntities.push({ rawP, defaultType: 'moon' }));
+    }
+    if (data.celestialObjects && typeof data.celestialObjects === 'object') {
+        const list = Array.isArray(data.celestialObjects) ? data.celestialObjects : Object.values(data.celestialObjects);
+        list.forEach((rawP: any) => rawEntities.push({ rawP }));
+    }
 
-            const objectId = Number(rawP.id);
-            const isMoon = typeMap[objectId] === 'moon';
+    rawEntities.forEach(({ rawP, defaultType }) => {
+        if (!rawP || !rawP.id) return;
 
-            const planet: Partial<Planet> = {
-                id: String(rawP.id),
-                name: rawP.name || (isMoon ? "Moon" : "Planet"),
-                coords: `${rawP.galaxy}:${rawP.system}:${rawP.position}`,
-                type: isMoon ? 'moon' : 'planet',
-                ships: {},
-                defenses: {},
-                lifeformBuildings: [],
-                lifeformSetup: [],
-                lastUpdated: Date.now()
-            };
+        const objectId = Number(rawP.id);
+        const isMoon = defaultType === 'moon' || rawP.type === 3 || rawP.type === 'moon' || typeMap[objectId] === 'moon';
+
+        const planet: Partial<Planet> = {
+            id: String(rawP.id),
+            name: rawP.name || (isMoon ? "Moon" : "Planet"),
+            coords: `${rawP.galaxy}:${rawP.system}:${rawP.position}`,
+            type: isMoon ? 'moon' : 'planet',
+            parentPlanetId: rawP.siblingId ? String(rawP.siblingId) : undefined,
+            ships: {},
+            defenses: {},
+            lifeformBuildings: [],
+            lifeformSetup: [],
+            lastUpdated: Date.now()
+        };
 
             // Resources (from externaldataexport)
             if (rawP.resources) {
@@ -623,7 +637,6 @@ export function parseExternalDataExportJson(data: any): {
                 planets.push(planet);
             }
         });
-    }
 
     return {
         planets,

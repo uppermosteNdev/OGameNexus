@@ -1,13 +1,13 @@
 
 import { Planet, ActiveResearchInfo } from '../db';
-import { trackExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
-import { trackLifeformDiscoveries } from './lifeforms';
+import { trackExpeditions, trackRawExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
+import { trackLifeformDiscoveries, trackRawLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson, parseExternalDataExportJson } from './empire';
 import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier, getAmortizationEntry } from '../utils/amortizationCalc';
 import { findItemByStyle, findItemByName, getLegacyTypeAndBonus, getProductionBoosters, sanitizeItemTitle } from '../utils/items';
 import itemsMapping from '../db/items_mapping.json';
 import { trackDebrisHarvests } from './harvests';
-import { trackCombatReports, injectTodayCombatSummaryCard } from './combats';
+import { trackCombatReports, trackRawCombatReports, injectTodayCombatSummaryCard } from './combats';
 import { trackEspionageReports, trackRawEspionageReports } from './espionage';
 import { renderAnalyticsTab } from './analytics';
 import { initGalaxyView, cleanupGalaxyView } from './galaxy';
@@ -15,7 +15,9 @@ import { initAssistantBar, refreshAssistantBar, debouncedRefreshAssistantBar, is
 import { scrapeImportExportDom, initImportExportListener, saveImportExportInfo } from './assistant/importExport';
 import { fetchPlayerInventory, parseInventoryHtml, savePlayerInventory } from './inventory';
 import { fetchEmpireProductionQueue } from './productionQueue';
+import { initProductionBoxSpeedups, updateProductionBoxSpeedups } from './productionBoxSpeedups';
 import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom } from './fleetMovement';
+import { injectChangelogTab } from './changelogTab';
 import {
   SHIP_DATA,
   RESEARCH_DATA,
@@ -562,54 +564,61 @@ function parseResourceSettings(doc: Document | HTMLElement) {
       }
   };
 
-  const elements = doc.querySelectorAll('select, input');
-  
-  elements.forEach(el => {
-    const name = el.getAttribute('name') || '';
-    const idAttr = el.getAttribute('id') || '';
-    const typeAttr = el.getAttribute('type') || '';
-    
-    // Ignore hidden inputs, submit buttons, etc. that do not represent settings
-    if (typeAttr === 'hidden' || typeAttr === 'submit' || typeAttr === 'button') {
-      // Only keep 'last' hidden inputs (e.g. disabled fields placeholders)
-      if (!name.startsWith('last') && !idAttr.startsWith('last')) return;
-    }
-
+  // 1. Direct row lookup using data-techid or tr class
+  const rows = doc.querySelectorAll('tr[data-techid], tr[data-technology], .listOfResourceSettingsPerPlanet tr');
+  rows.forEach(row => {
     let techId: number | null = null;
-
-    // Must start with 'last' to match the actual settings select/input
-    if (name.startsWith('last')) {
-      const nameMatch = name.match(/\d+/);
-      if (nameMatch) {
-        techId = parseInt(nameMatch[0], 10);
-      }
-    } else if (idAttr.startsWith('last')) {
-      const idMatch = idAttr.match(/\d+/);
-      if (idMatch) {
-        techId = parseInt(idMatch[0], 10);
-      }
-    }
-
-    // Try parent row data-technology or data-techid as fallback (only if element name/id doesn't conflict)
-    if (!techId && (name.startsWith('last') || idAttr.startsWith('last'))) {
-      const parentRow = el.closest('tr, li, div');
-      if (parentRow) {
-        const rowTech = parentRow.getAttribute('data-technology') || 
-                        parentRow.getAttribute('data-techid') || 
-                        parentRow.getAttribute('data-tech');
-        if (rowTech) {
-          techId = parseInt(rowTech, 10);
-        }
-      }
+    const rowTech = row.getAttribute('data-techid') || row.getAttribute('data-technology') || row.getAttribute('data-tech');
+    if (rowTech) {
+      techId = parseInt(rowTech, 10);
+    } else {
+      const clsMatch = row.className.match(/\b(1|2|3|4|12|212|217)\b/);
+      if (clsMatch) techId = parseInt(clsMatch[1], 10);
     }
 
     if (techId) {
       const key = mapTechIdToSettingKey(techId);
       if (key) {
-        const val = parseInt((el as HTMLSelectElement | HTMLInputElement).value || '100', 10);
-        if (!isNaN(val)) {
-          settings[key] = val;
+        const select = row.querySelector('select') as HTMLSelectElement | null;
+        if (select) {
+          const selectedOption = select.querySelector('option[selected]') as HTMLOptionElement | null;
+          const valStr = selectedOption ? selectedOption.value : select.value;
+          const val = parseInt(valStr || '100', 10);
+          if (!isNaN(val)) settings[key] = val;
+        } else {
+          const dropdownLink = row.querySelector('.dropdown a[data-value]') as HTMLElement | null;
+          if (dropdownLink) {
+            const valStr = dropdownLink.getAttribute('data-value');
+            const val = parseInt(valStr || '100', 10);
+            if (!isNaN(val)) settings[key] = val;
+          }
         }
+      }
+    }
+  });
+
+  // 2. Fallback: Select elements with name matching productionFactor[techId] or last[techId]
+  const selects = doc.querySelectorAll('select[name*="productionFactor"], select[name^="last"], select');
+  selects.forEach(el => {
+    const name = el.getAttribute('name') || '';
+    let techId: number | null = null;
+
+    const pfMatch = name.match(/productionFactor\[(\d+)\]/i);
+    if (pfMatch) {
+      techId = parseInt(pfMatch[1], 10);
+    } else {
+      const nameMatch = name.match(/(?:last|setting|tech)?(\d+)/i);
+      if (nameMatch) techId = parseInt(nameMatch[1], 10);
+    }
+
+    if (techId) {
+      const key = mapTechIdToSettingKey(techId);
+      if (key && settings[key] === undefined) {
+        const selectEl = el as HTMLSelectElement;
+        const selectedOption = selectEl.querySelector('option[selected]') as HTMLOptionElement | null;
+        const valStr = selectedOption ? selectedOption.value : selectEl.value;
+        const val = parseInt(valStr || '100', 10);
+        if (!isNaN(val)) settings[key] = val;
       }
     }
   });
@@ -2078,16 +2087,16 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
                 <span class="nexus-prod-coords-badge">${p.coords}</span>
               </div>
             </td>
-            <td class="nexus-prod-resource-cell" title="Metal Mine Level: ${m}">
+            <td class="nexus-prod-resource-cell" title="Metal Mine Level: ${m}${metalMineSettingsFactor !== 1 ? ` (${Math.round(metalMineSettingsFactor * 100)}% production)` : ''}">
               <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg')}');"></div>
               <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-metal"></div>
-              <div class="nexus-prod-mine-level nexus-prod-mine-level-metal">${m}</div>
+              <div class="nexus-prod-mine-level nexus-prod-mine-level-metal">${m}${metalMineSettingsFactor !== 1 ? `<span style="font-size: 8.5px; opacity: 0.85; margin-left: 2px;">(${Math.round(metalMineSettingsFactor * 100)}%)</span>` : ''}</div>
             </td>
             <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #ff8d33; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseM).toLocaleString()}</td>
             ${renderBonusCell(baseM, lfbMetal, '#ff8d33', '#38bdf8')}
             ${renderBonusCell(baseM, globalEuroMetal, '#ff8d33', '#c084fc')}
             ${renderBonusCell(baseM, plasmaMetal, '#ff8d33', '#f472b6')}
-            ${renderBonusCell(baseM, crawlerBonus, '#ff8d33', '#fbbf24', activeCrawlers > 0 ? `${activeCrawlers} cr` : "")}
+            ${renderBonusCell(baseM, crawlerBonus, '#ff8d33', '#fbbf24', activeCrawlers > 0 ? (crawlersSettingsFactor !== 1 ? `${activeCrawlers} cr (${Math.round(crawlersSettingsFactor * 100)}%)` : `${activeCrawlers} cr`) : "")}
             ${renderItemColumnCell(p.activeItems, 'metal', baseM, '#ff8d33')}
             ${renderBonusCell(baseM, geologistBonus + staffBonus, '#ff8d33', '#22d3ee')}
             ${renderBonusCell(baseM, classMetal + allyTraderBonus, '#ff8d33', '#fb923c')}
@@ -2095,16 +2104,16 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           </tr>
           <!-- Crystal Row -->
           <tr class="nexus-prod-row">
-            <td class="nexus-prod-resource-cell" title="Crystal Mine Level: ${c}">
+            <td class="nexus-prod-resource-cell" title="Crystal Mine Level: ${c}${crystalMineSettingsFactor !== 1 ? ` (${Math.round(crystalMineSettingsFactor * 100)}% production)` : ''}">
               <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg')}');"></div>
               <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-crystal"></div>
-              <div class="nexus-prod-mine-level nexus-prod-mine-level-crystal">${c}</div>
+              <div class="nexus-prod-mine-level nexus-prod-mine-level-crystal">${c}${crystalMineSettingsFactor !== 1 ? `<span style="font-size: 8.5px; opacity: 0.85; margin-left: 2px;">(${Math.round(crystalMineSettingsFactor * 100)}%)</span>` : ''}</div>
             </td>
             <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #33b2ff; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseC).toLocaleString()}</td>
             ${renderBonusCell(baseC, lfbCrystal, '#33b2ff', '#38bdf8')}
             ${renderBonusCell(baseC, globalEuroCrystal, '#33b2ff', '#c084fc')}
             ${renderBonusCell(baseC, plasmaCrystal, '#33b2ff', '#f472b6')}
-            ${renderBonusCell(baseC, crawlerBonus, '#33b2ff', '#fbbf24', activeCrawlers > 0 ? `${activeCrawlers} cr` : "")}
+            ${renderBonusCell(baseC, crawlerBonus, '#33b2ff', '#fbbf24', activeCrawlers > 0 ? (crawlersSettingsFactor !== 1 ? `${activeCrawlers} cr (${Math.round(crawlersSettingsFactor * 100)}%)` : `${activeCrawlers} cr`) : "")}
             ${renderItemColumnCell(p.activeItems, 'crystal', baseC, '#33b2ff')}
             ${renderBonusCell(baseC, geologistBonus + staffBonus, '#33b2ff', '#22d3ee')}
             ${renderBonusCell(baseC, classCrystal + allyTraderBonus, '#33b2ff', '#fb923c')}
@@ -2112,16 +2121,16 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           </tr>
           <!-- Deuterium Row -->
           <tr class="nexus-prod-row" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-            <td class="nexus-prod-resource-cell" title="Deuterium Synthesizer Level: ${d}">
+            <td class="nexus-prod-resource-cell" title="Deuterium Synthesizer Level: ${d}${deuteriumMineSettingsFactor !== 1 ? ` (${Math.round(deuteriumMineSettingsFactor * 100)}% production)` : ''}">
               <div class="nexus-prod-resource-bg" style="background-image: url('${chrome.runtime.getURL('icons/resources/deuterium-icon-medium.jpg')}');"></div>
               <div class="nexus-prod-resource-overlay nexus-prod-resource-overlay-deuterium"></div>
-              <div class="nexus-prod-mine-level nexus-prod-mine-level-deuterium">${d}</div>
+              <div class="nexus-prod-mine-level nexus-prod-mine-level-deuterium">${d}${deuteriumMineSettingsFactor !== 1 ? `<span style="font-size: 8.5px; opacity: 0.85; margin-left: 2px;">(${Math.round(deuteriumMineSettingsFactor * 100)}%)</span>` : ''}</div>
             </td>
             <td class="og-nexus-value" style="padding: 12px 8px; text-align: center; font-weight: 700; color: #22c55e; border-right: 1px solid rgba(255, 255, 255, 0.015);">${Math.round(baseD).toLocaleString()}</td>
             ${renderBonusCell(baseD, lfbDeut, '#22c55e', '#38bdf8')}
             ${renderBonusCell(baseD, globalEuroDeut, '#22c55e', '#c084fc')}
             ${renderBonusCell(baseD, plasmaDeut, '#22c55e', '#f472b6')}
-            ${renderBonusCell(baseD, crawlerBonus, '#22c55e', '#fbbf24', activeCrawlers > 0 ? `${activeCrawlers} cr` : "")}
+            ${renderBonusCell(baseD, crawlerBonus, '#22c55e', '#fbbf24', activeCrawlers > 0 ? (crawlersSettingsFactor !== 1 ? `${activeCrawlers} cr (${Math.round(crawlersSettingsFactor * 100)}%)` : `${activeCrawlers} cr`) : "")}
             ${renderItemColumnCell(p.activeItems, 'deuterium', baseD, '#22c55e')}
             ${renderBonusCell(baseD, geologistBonus + staffBonus, '#22c55e', '#22d3ee')}
             ${renderBonusCell(baseD, classDeut + allyTraderBonus, '#22c55e', '#fb923c')}
@@ -2637,6 +2646,14 @@ const throttledObserverLogic = throttle(() => {
     scrapeAndSyncArtifacts();
   }
 
+  // In-Game Messages Changelog & Support Tab
+  if (document.querySelector('.mainTabs')) {
+    injectChangelogTab();
+  }
+
+  // Live Production Queue Speedup Items (Kraken / Newtron / Detroid / LF speedups)
+  updateProductionBoxSpeedups();
+
   // OGame Nexus Assistant Info Bar (Restricted strictly to Overview page)
   const isOverview = window.location.href.includes("component=overview") ||
                      window.location.href.includes("page=overview") ||
@@ -2668,6 +2685,9 @@ initFleetMovementListener();
 
 // Initialize Import/Export Passive Tracker
 initImportExportListener();
+
+// Initialize Production Box Speedups Monitor
+initProductionBoxSpeedups();
 
 function processActiveMessages() {
   if (!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id)) return;
@@ -2757,16 +2777,31 @@ window.addEventListener('ogame-nexus-ajax-messages-loaded', () => {
 
   messagesProcessTimeout = setTimeout(() => {
     processActiveMessages();
+    injectChangelogTab();
   }, 50);
 
   messagesBackupTimeout = setTimeout(() => {
     processActiveMessages();
+    injectChangelogTab();
   }, 250);
 });
 
 scrapeAndSync();
 injectButton();
 processActiveMessages();
+injectChangelogTab();
+
+window.addEventListener('ogame-nexus-trigger-empire-sync', async () => {
+  try {
+    await performBackgroundEmpireSync(true);
+    const now = Date.now();
+    await chrome.storage.local.set({ 'last_empire_sync_time': now });
+    window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: true } }));
+  } catch (err) {
+    console.warn('OGame Nexus: Empire sync via event failed', err);
+    window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: false, error: err } }));
+  }
+});
 
 
 async function performBackgroundEmpireSync(ignoreDelay = false) {
@@ -2783,6 +2818,41 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   let allianceClassFromApi: number | undefined = undefined;
   let playerClassFromApi: number | undefined = undefined;
   let syncedViaAccountInfo = false;
+
+  const fetchEmpireJson = async (planetType: number) => {
+    let res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      redirect: 'manual'
+    });
+
+    if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
+      res = await fetch(`/game/index.php?page=ajax&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        redirect: 'manual'
+      });
+    }
+
+    if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
+      res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        redirect: 'manual'
+      });
+    }
+
+    if (!res.ok || res.type === 'opaqueredirect') throw new Error(`Failed to fetch empire data for planetType ${planetType} (HTTP ${res.status})`);
+
+    const text = await res.text();
+    const trimmed = text ? text.trim() : '';
+    if (!trimmed || trimmed.startsWith('<')) {
+      throw new Error("Invalid response: Received HTML redirect/login page instead of JSON");
+    }
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      throw new Error(`Invalid JSON format from Empire AJAX endpoint`);
+    }
+    return JSON.parse(trimmed);
+  };
 
   // 1. Primary: Try OGame v13+ externaldataexport accountInfo GET endpoint
   try {
@@ -2814,47 +2884,28 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
     // Quiet fallback to legacy empire AJAX
   }
 
+  // If externaldataexport didn't provide moon data (OGame accountInfo only exports planets), fetch moons via empire AJAX if Commander is active
+  if (moonsData.planets.length === 0) {
+    const officers = scrapeOfficers();
+    if (officers.hasCommander) {
+      try {
+        const moonsJson = await fetchEmpireJson(1);
+        const parsedMoons = parseAjaxEmpireJson(moonsJson, true);
+        if (parsedMoons.planets.length > 0) {
+          moonsData = parsedMoons;
+        }
+      } catch (err) {
+        // Moons might not exist or AJAX failed
+      }
+    }
+  }
+
   // Fallback to legacy empire AJAX endpoints if externaldataexport is unavailable
   if (!syncedViaAccountInfo) {
     const officers = scrapeOfficers();
     if (!officers.hasCommander) {
       throw new Error("Background sync requires Commander active");
     }
-
-    const fetchEmpireJson = async (planetType: number) => {
-      let res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        redirect: 'manual'
-      });
-
-      if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
-        res = await fetch(`/game/index.php?page=ajax&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
-          method: 'POST',
-          headers: { 'X-Requested-With': 'XMLHttpRequest' },
-          redirect: 'manual'
-        });
-      }
-
-      if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
-        res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
-          headers: { 'X-Requested-With': 'XMLHttpRequest' },
-          redirect: 'manual'
-        });
-      }
-
-      if (!res.ok || res.type === 'opaqueredirect') throw new Error(`Failed to fetch empire data for planetType ${planetType} (HTTP ${res.status})`);
-
-      const text = await res.text();
-      const trimmed = text ? text.trim() : '';
-      if (!trimmed || trimmed.startsWith('<')) {
-        throw new Error("Invalid response: Received HTML redirect/login page instead of JSON");
-      }
-      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-        throw new Error(`Invalid JSON format from Empire AJAX endpoint`);
-      }
-      return JSON.parse(trimmed);
-    };
 
     const planetsJson = await fetchEmpireJson(0);
     const moonsJson = await fetchEmpireJson(1);
@@ -3065,20 +3116,25 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
       playerClass: playerClassFromApi !== undefined ? playerClassFromApi : scrapePlayerClass(),
       allianceClass: allianceClassFromApi !== undefined ? allianceClassFromApi : scrapeAllianceClass(),
       officers: scrapeOfficers(),
-      syncedVia: syncedViaAccountInfo ? 'externaldataexport' : 'empire AJAX',
-      planetsCount: totalPlanets.length,
+      syncedVia: syncedViaAccountInfo ? (moonsData.planets.length > 0 ? 'externaldataexport + moon AJAX' : 'externaldataexport') : 'empire AJAX',
+      planetsCount: planetsData.planets.length,
+      moonsCount: moonsData.planets.length,
+      totalEntities: totalPlanets.length,
       researchesCount: researchCount,
       lifeformTechsCount: lfTechsCount,
       lifeformBuildingsCount: lfBuildingsCount,
       planets: totalPlanets.map(p => ({
         id: p.id,
         name: p.name,
+        type: p.type || 'planet',
         coords: p.coords,
         lifeformId: p.lifeformId,
         activeItems: p.activeItems || [],
         lifeformSetup: p.lifeformSetup,
         lifeformBuildings: p.lifeformBuildings,
-        resources: p.resources
+        resources: p.resources,
+        ships: p.ships,
+        defenses: p.defenses
       }))
     }
   );
@@ -3123,6 +3179,9 @@ window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
     const playerId = getMetaContent("ogame-player-id");
     if (playerId) {
       trackRawEspionageReports(playerId, content);
+      trackRawExpeditions(playerId, content);
+      trackRawLifeformDiscoveries(playerId, content);
+      trackRawCombatReports(playerId, content);
     }
   }
 });

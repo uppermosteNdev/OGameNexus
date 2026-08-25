@@ -19,147 +19,187 @@ export function formatNumber(num: number): string {
     return Math.round(n).toString();
 }
 
+function parseCombatElement(msg: Element): any | null {
+    const parentMsg = msg.closest('.msg');
+    const messageId = parentMsg?.getAttribute('data-msg-id');
+    if (!messageId) return null;
+
+    const timestamp = msg.getAttribute('data-raw-timestamp');
+    const coordsRaw = msg.getAttribute('data-raw-coords');
+    const resultRaw = msg.getAttribute('data-raw-result');
+    const fleetsRaw = msg.getAttribute('data-raw-fleets');
+
+    if (timestamp && coordsRaw && resultRaw) {
+        try {
+            const result = JSON.parse(resultRaw);
+            const coords = coordsRaw.replace(/[\[\]]/g, '');
+
+            // Extract Loot
+            const loot: any = { metal: 0, crystal: 0, deuterium: 0, food: 0 };
+            if (result.loot && Array.isArray(result.loot.resources)) {
+                result.loot.resources.forEach((r: any) => {
+                    if (loot.hasOwnProperty(r.resource)) {
+                        loot[r.resource] = r.amount;
+                    }
+                });
+            }
+
+            // Extract Debris
+            const debris: any = { metal: 0, crystal: 0, deuterium: 0 };
+            if (result.debris && Array.isArray(result.debris.resources)) {
+                result.debris.resources.forEach((r: any) => {
+                    if (debris.hasOwnProperty(r.resource)) {
+                        debris[r.resource] = r.total;
+                    }
+                });
+            }
+
+            // Extract Losses
+            let attackerLosses = 0;
+            let defenderLosses = 0;
+            if (Array.isArray(result.totalValueOfUnitsLost)) {
+                result.totalValueOfUnitsLost.forEach((l: any) => {
+                    if (l.side === 'attacker') attackerLosses = l.value;
+                    else if (l.side === 'defender') defenderLosses = l.value;
+                });
+            }
+
+            // Parse Fleets
+            let parsedFleets: any[] = [];
+            try {
+                parsedFleets = JSON.parse(fleetsRaw || '[]');
+            } catch (e) {
+                parsedFleets = [];
+            }
+
+            // Check for ACS
+            let isAcs = false;
+            if (Array.isArray(parsedFleets) && parsedFleets.length > 2) {
+                isAcs = true;
+            }
+
+            // Identify expedition
+            const isExpedition = coords.trim().endsWith(':16');
+
+            // Extract participants from parsedFleets or fallback to result
+            const attackers = Array.isArray(parsedFleets)
+                ? parsedFleets.filter((p: any) => p.side === 'attacker' || p.isAttacker)
+                : [];
+            const defenders = Array.isArray(parsedFleets)
+                ? parsedFleets.filter((p: any) => p.side === 'defender' || p.isDefender)
+                : [];
+
+            // Primary extraction from fleets metadata (player.name or name or playerName)
+            let attackerName = attackers[0]?.player?.name || attackers[0]?.name || attackers[0]?.playerName || (result.attackers && result.attackers[0]?.name) || 'Unknown';
+            let defenderName = defenders[0]?.player?.name || defenders[0]?.name || defenders[0]?.playerName || (result.defenders && result.defenders[0]?.name) || 'Unknown';
+
+            if (isExpedition && defenderName === 'Unknown') {
+                defenderName = 'Expedition Hostile';
+            }
+
+            // FALLBACK: Parse from message head if metadata is missing names
+            if (attackerName === 'Unknown' || (defenderName === 'Unknown' && !isExpedition)) {
+                const header = parentMsg?.querySelector('.msg_title, .msg_head, .msgHead, .msgHeadInternal, .msg_title_text');
+                const headText = header?.textContent || '';
+                
+                const parenMatch = headText.match(/\((.*?)\)/);
+                if (parenMatch) {
+                    const content = parenMatch[1];
+                    const parts = content.split(',').map(p => p.trim());
+                    if (parts.length >= 2) {
+                        const aContent = parts[0];
+                        const dContent = parts[1];
+                        
+                        const aColonIdx = aContent.indexOf(':');
+                        const dColonIdx = dContent.indexOf(':');
+                        
+                        if (attackerName === 'Unknown' && aColonIdx !== -1) {
+                            attackerName = aContent.substring(aColonIdx + 1).trim();
+                        }
+                        if (defenderName === 'Unknown' && dColonIdx !== -1) {
+                            defenderName = dContent.substring(dColonIdx + 1).trim();
+                        }
+                    }
+                }
+            }
+
+            // FALLBACK 2: Parse from message body if still Unknown
+            if (attackerName === 'Unknown' || defenderName === 'Unknown' || defenderName === 'Expedition Hostile' || (isExpedition && (defenderName === 'Pirates' || defenderName === 'Aliens'))) {
+                const bodyText = parentMsg?.querySelector('.msgContent, .msg_content')?.textContent || '';
+                
+                if (bodyText) {
+                    const aMatch = bodyText.match(/(?:Attacker|Angreifer|Attaquant|Attaccante|Agresor|Atacante):\s*\((.*?)\)/i);
+                    const dMatch = bodyText.match(/(?:Defender|Verteidiger|Défenseur|Difensore|Defensor):\s*\((.*?)\)/i);
+                    
+                    if (attackerName === 'Unknown' && aMatch) attackerName = aMatch[1].trim();
+                    
+                    if ((defenderName === 'Unknown' || defenderName === 'Expedition Hostile' || defenderName === 'Pirates' || defenderName === 'Aliens') && dMatch) {
+                        defenderName = dMatch[1].trim();
+                    }
+                }
+            }
+
+            return {
+                messageId,
+                timestamp: parseInt(timestamp),
+                coords,
+                winner: result.winner || 'none',
+                loot,
+                debris,
+                attackerLosses,
+                defenderLosses,
+                attackerName,
+                defenderName,
+                honor: result.honor?.attacker || 0,
+                moonChance: result.moonCreation?.chance || 0,
+                isAcs,
+                isExpedition,
+                tracked: false,
+                rawFleets: parsedFleets,
+                rawResult: result
+            };
+        } catch (e) {
+            console.error('OGame Nexus: Failed to parse combat report JSON', e);
+        }
+    }
+    return null;
+}
+
+const processedCombatIds = new Set<string>();
+
 export function scrapeCombatMessages() {
     const combatMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]:not([data-og-nexus-processed="true"])');
     const results = [];
 
     for (const msg of combatMessages) {
-        const messageId = msg.closest('.msg')?.getAttribute('data-msg-id');
-        if (!messageId) continue;
+        const item = parseCombatElement(msg);
+        if (item) {
+            msg.setAttribute('data-og-nexus-processed', 'true');
+            if (!processedCombatIds.has(item.messageId)) {
+                processedCombatIds.add(item.messageId);
+                results.push(item);
+            }
+        }
+    }
 
-        const timestamp = msg.getAttribute('data-raw-timestamp');
-        const coordsRaw = msg.getAttribute('data-raw-coords');
-        const resultRaw = msg.getAttribute('data-raw-result');
-        const fleetsRaw = msg.getAttribute('data-raw-fleets');
+    return results;
+}
 
-        if (timestamp && coordsRaw && resultRaw) {
-            try {
-                const result = JSON.parse(resultRaw);
-                const coords = coordsRaw.replace(/[\[\]]/g, '');
+export function scrapeRawCombatHTML(htmls: string[]) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmls.join(''), 'text/html');
+    const combatMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]');
+    const results = [];
 
-                // Extract Loot
-                const loot: any = { metal: 0, crystal: 0, deuterium: 0, food: 0 };
-                if (result.loot && Array.isArray(result.loot.resources)) {
-                    result.loot.resources.forEach((r: any) => {
-                        if (loot.hasOwnProperty(r.resource)) {
-                            loot[r.resource] = r.amount;
-                        }
-                    });
-                }
+    for (const msg of combatMessages) {
+        const item = parseCombatElement(msg);
+        if (item) {
+            const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="25"]`);
+            if (domMsg) domMsg.setAttribute('data-og-nexus-processed', 'true');
 
-                // Extract Debris
-                const debris: any = { metal: 0, crystal: 0, deuterium: 0 };
-                if (result.debris && Array.isArray(result.debris.resources)) {
-                    result.debris.resources.forEach((r: any) => {
-                        if (debris.hasOwnProperty(r.resource)) {
-                            debris[r.resource] = r.total;
-                        }
-                    });
-                }
-
-                // Extract Losses
-                let attackerLosses = 0;
-                let defenderLosses = 0;
-                if (Array.isArray(result.totalValueOfUnitsLost)) {
-                    result.totalValueOfUnitsLost.forEach((l: any) => {
-                        if (l.side === 'attacker') attackerLosses = l.value;
-                        else if (l.side === 'defender') defenderLosses = l.value;
-                    });
-                }
-
-                // Check for ACS
-                let isAcs = false;
-                try {
-                    const fleets = JSON.parse(fleetsRaw || '[]');
-                    // If multiple participants on either side, it's ACS (or at least looks like it)
-                    if (Array.isArray(fleets) && fleets.length > 2) {
-                        isAcs = true;
-                    }
-                } catch (e) { }
-
-                // Identify expedition and names
-                const isExpedition = coords.trim().endsWith(':16');
-                const attackers = Array.isArray(result.attackers) ? result.attackers : [];
-                const defenders = Array.isArray(result.defenders) ? result.defenders : [];
-                
-                // Usually take the first name as primary
-                let attackerName = attackers[0]?.name || 'Unknown';
-                let defenderName = defenders[0]?.name || 'Unknown';
-
-                // FALLBACK: Parse from message head if metadata is missing names
-                if (attackerName === 'Unknown' || (defenderName === 'Unknown' && !isExpedition)) {
-                    // Try multiple possible header selectors
-                    const msgContainer = msg.closest('.msg');
-                    const header = msgContainer?.querySelector('.msg_title, .msg_head, .msgHead, .msgHeadInternal, .msg_title_text');
-                    const headText = header?.textContent || '';
-                    
-                    const parenMatch = headText.match(/\((.*?)\)/);
-                    if (parenMatch) {
-                        const content = parenMatch[1];
-                        const parts = content.split(',').map(p => p.trim());
-                        if (parts.length >= 2) {
-                            // Split by first colon to handle names that might contain colons
-                            const aContent = parts[0];
-                            const dContent = parts[1];
-                            
-                            const aColonIdx = aContent.indexOf(':');
-                            const dColonIdx = dContent.indexOf(':');
-                            
-                            if (attackerName === 'Unknown' && aColonIdx !== -1) {
-                                attackerName = aContent.substring(aColonIdx + 1).trim();
-                            }
-                            if (defenderName === 'Unknown' && dColonIdx !== -1) {
-                                defenderName = dContent.substring(dColonIdx + 1).trim();
-                            }
-                        }
-                    }
-                }
-
-                // FALLBACK 2: Parse from message body if still Unknown
-                if (attackerName === 'Unknown' || defenderName === 'Unknown' || defenderName === 'Expedition Hostile' || (isExpedition && (defenderName === 'Pirates' || defenderName === 'Aliens'))) {
-                    const msgContainer = msg.closest('.msg');
-                    const bodyText = msgContainer?.querySelector('.msgContent, .msg_content')?.textContent || '';
-                    
-                    if (bodyText) {
-                        // Regex to find "Attacker: (Name)" or "Defender: (Name)"
-                        // We support multiple languages by looking for the colon and parentheses pattern
-                        // Examples: "Attacker: (Aliens)", "Defender: (Vendetta)", "Angreifer: (Discovery)"
-                        const aMatch = bodyText.match(/(?:Attacker|Angreifer|Attaquant|Attaccante|Agresor|Atacante):\s*\((.*?)\)/i);
-                        const dMatch = bodyText.match(/(?:Defender|Verteidiger|Défenseur|Difensore|Defensor):\s*\((.*?)\)/i);
-                        
-                        if (attackerName === 'Unknown' && aMatch) attackerName = aMatch[1].trim();
-                        
-                        // For Defender, if it's already "Pirates" or "Aliens" from the header, we might want to keep the body's name if it's more specific
-                        if ((defenderName === 'Unknown' || defenderName === 'Expedition Hostile' || defenderName === 'Pirates' || defenderName === 'Aliens') && dMatch) {
-                            defenderName = dMatch[1].trim();
-                        }
-                    }
-                }
-
-                results.push({
-                    messageId,
-                    timestamp: parseInt(timestamp),
-                    coords,
-                    winner: result.winner || 'none',
-                    loot,
-                    debris,
-                    attackerLosses,
-                    defenderLosses,
-                    attackerName,
-                    defenderName,
-                    honor: result.honor?.attacker || 0,
-                    moonChance: result.moonCreation?.chance || 0,
-                    isAcs,
-                    isExpedition,
-                    tracked: false,
-                    rawFleets: JSON.parse(fleetsRaw || '[]'),
-                    rawResult: result
-                });
-
-                // Mark as processed
-                msg.setAttribute('data-og-nexus-processed', 'true');
-            } catch (e) {
-                console.error('OGame Nexus: Failed to parse combat report JSON', e);
+            if (!processedCombatIds.has(item.messageId)) {
+                processedCombatIds.add(item.messageId);
+                results.push(item);
             }
         }
     }
@@ -197,6 +237,57 @@ export async function trackCombatReports(playerId: string) {
                         setTimeout(() => {
                             const icons: string[] = [];
                             // Animation with combat icon and resource icons
+                            icons.push(chrome.runtime.getURL('icons/misc/expedition-ships-icon-medium.png'));
+                            if (combat.loot?.metal > 0 || combat.debris?.metal > 0) icons.push(chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg'));
+                            if (combat.loot?.crystal > 0 || combat.debris?.crystal > 0) icons.push(chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg'));
+
+                            flyToNexusButton(msgElement, icons);
+                        }, 100);
+                    }
+                }
+            });
+            if (response.newCount && response.newCount > 0) {
+                newCombatsCount += response.newCount;
+                injectTodayCombatSummaryCard(playerId, true);
+            }
+            triggerSiteTooltips();
+        }
+    });
+}
+
+export async function trackRawCombatReports(playerId: string, htmls: string[]) {
+    if (!isExtensionStillValid()) return;
+
+    const combatData = scrapeRawCombatHTML(htmls);
+    if (combatData.length === 0) return;
+
+    const unprocessedCombats = combatData;
+
+    let removeOGLight = true;
+    try {
+        const localData = await chrome.storage.local.get("globalSettings");
+        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
+            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
+        }
+    } catch (e) {
+        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
+    }
+
+    injectTodayCombatSummaryCard(playerId, false);
+
+    chrome.runtime.sendMessage({
+        type: "TRACK_COMBATS",
+        data: { combats: unprocessedCombats, playerId }
+    }, (response) => {
+        if (response?.success) {
+            response.data.forEach((combat: any) => {
+                const msgElement = document.querySelector(`.msg[data-msg-id="${combat.messageId}"]`) as HTMLElement;
+                if (msgElement) {
+                    updateCombatVisuals(msgElement, combat, removeOGLight);
+
+                    if (combat.isNew) {
+                        setTimeout(() => {
+                            const icons: string[] = [];
                             icons.push(chrome.runtime.getURL('icons/misc/expedition-ships-icon-medium.png'));
                             if (combat.loot?.metal > 0 || combat.debris?.metal > 0) icons.push(chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg'));
                             if (combat.loot?.crystal > 0 || combat.debris?.crystal > 0) icons.push(chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg'));
