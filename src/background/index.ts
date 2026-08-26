@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { parseProduction, parseOverview, parsePlayerDataXml, parseSupplies, parseResearches, parseLifeformResearch, parseLifeformBuildings, parseLifeformBonuses, parseServerDataXml } from "./scrapers";
+import { parseOverview, parsePlayerDataXml, parseSupplies, parseResearches, parseLifeformResearch, parseLifeformBuildings, parseLifeformBonuses, parseServerDataXml } from "./scrapers";
 import { LIFEFORM_BUILDING_DATA, SHIP_DATA } from "../db/staticData";
 import { LIFEFORM_TECH_DATA, getLfTech, isLifeformBuilding } from "../db/lifeformTechData";
 import { AMORTIZATION_TABLE, calculateEmpireProduction, calculateMSU, DEFAULT_RATES, Cost } from "../utils/amortizationCalc";
@@ -89,18 +89,6 @@ function mergeLifeformSetup(existing: any[], incoming: any[], fromEmpire: boolea
     });
 
     return Array.from(slotMap.values()).sort((a, b) => a.slotNumber - b.slotNumber);
-}
-
-async function fetchPlanetProduction(serverUrl: string, planetId: string) {
-    const url = `${serverUrl}/game/index.php?page=ingame&component=resourcesettings&cp=${planetId}`;
-    try {
-        const response = await fetch(url);
-        const html = await response.text();
-        return parseProduction(html);
-    } catch (err) {
-        console.error(`Background: Error fetching production for planet ${planetId}`, err);
-        return null;
-    }
 }
 
 async function fetchPlanetSupplies(serverUrl: string, planetId: string) {
@@ -198,40 +186,6 @@ let debrisTrackingLock: Promise<any> = Promise.resolve();
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "OPEN_DASHBOARD") {
         chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
-    }
-
-    if (message.type === "FETCH_LATEST_CAPACITIES") {
-        const { planetId } = message;
-        (async () => {
-            try {
-                const planet = await db.planets.get(planetId);
-                const account = await db.accounts.get(planet?.playerId || "");
-                if (planet && account?.serverUrl) {
-                    const scraped = await fetchPlanetProduction(account.serverUrl, planetId);
-                    if (scraped) {
-                        await db.planets.update(planetId, {
-                            metalCapacity: scraped.metalCapacity,
-                            crystalCapacity: scraped.crystalCapacity,
-                            deuteriumCapacity: scraped.deuteriumCapacity,
-                            production: {
-                                metal: scraped.metal,
-                                crystal: scraped.crystal,
-                                deuterium: scraped.deuterium,
-                                lastUpdated: scraped.lastUpdated
-                            },
-                            ...(scraped.productionSettings ? { productionSettings: scraped.productionSettings } : {})
-                        });
-                        sendResponse({ success: true });
-                        return;
-                    }
-                }
-                sendResponse({ success: false });
-            } catch (err) {
-                console.error("OGame Nexus: Error in FETCH_LATEST_CAPACITIES", err);
-                sendResponse({ success: false });
-            }
-        })();
-        return true;
     }
 
     if (message.type === "UPDATE_FLYING_RESOURCES") {
@@ -504,7 +458,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                         sensorPhalanx: safeFacilities.find((f: any) => f.id === 42)?.level,
                                         jumpGate: safeFacilities.find((f: any) => f.id === 43)?.level
                                     } : {}),
-                                    crawlers: supplies?.crawlers !== undefined ? supplies.crawlers : (empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers),
+                                    crawlers: supplies?.crawlers !== undefined ? supplies.crawlers : (empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : (empirePlanet?.ships?.[217] ?? (empirePlanet?.ships as any)?.[`217`] ?? existing?.ships?.[217] ?? (existing?.ships as any)?.[`217`] ?? existing?.crawlers ?? 0)),
                                     lifeformId: resolvedLifeformId,
 
                                     // Security: LF Tech levels can only go up. Merge incoming with existing.
@@ -529,7 +483,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     name: resolvedName,
                                     activeItems: resolvedActiveItems,
                                     lifeformId: resolvedLifeformId,
-                                    crawlers: empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : existing?.crawlers,
+                                    crawlers: empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : (empirePlanet?.ships?.[217] ?? (empirePlanet?.ships as any)?.[`217`] ?? existing?.ships?.[217] ?? (existing?.ships as any)?.[`217`] ?? existing?.crawlers ?? 0),
                                     ships: empirePlanet?.ships || existing?.ships,
                                     defenses: empirePlanet?.defenses || existing?.defenses,
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || [], resolvedLifeformId),

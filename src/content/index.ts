@@ -3,7 +3,7 @@ import { Planet, ActiveResearchInfo } from '../db';
 import { trackExpeditions, trackRawExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
 import { trackLifeformDiscoveries, trackRawLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson, parseExternalDataExportJson } from './empire';
-import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier, getAmortizationEntry } from '../utils/amortizationCalc';
+import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier, getAmortizationEntry, findMatchingQueueItem, getCollectorClassBoost } from '../utils/amortizationCalc';
 import { findItemByStyle, findItemByName, getLegacyTypeAndBonus, getProductionBoosters, sanitizeItemTitle } from '../utils/items';
 import itemsMapping from '../db/items_mapping.json';
 import { trackDebrisHarvests } from './harvests';
@@ -14,7 +14,7 @@ import { initGalaxyView, cleanupGalaxyView } from './galaxy';
 import { initAssistantBar, refreshAssistantBar, debouncedRefreshAssistantBar, isOverseerDisabled } from './assistant/assistantBar';
 import { scrapeImportExportDom, initImportExportListener, saveImportExportInfo } from './assistant/importExport';
 import { fetchPlayerInventory, parseInventoryHtml, savePlayerInventory } from './inventory';
-import { fetchEmpireProductionQueue } from './productionQueue';
+import { fetchEmpireProductionQueue, getStoredProductionQueue } from './productionQueue';
 import { initProductionBoxSpeedups, updateProductionBoxSpeedups } from './productionBoxSpeedups';
 import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom } from './fleetMovement';
 import { injectChangelogTab } from './changelogTab';
@@ -1634,7 +1634,13 @@ const renderItemColumnCell = (activeItems: any[] | undefined, resourceType: 'met
   `;
 };
 
+let todoLiveTimer: number | null = null;
+
 async function renderTabContent(tabId: string, container: HTMLElement) {
+  if (todoLiveTimer) {
+    window.clearInterval(todoLiveTimer);
+    todoLiveTimer = null;
+  }
   container.innerHTML = '';
   container.style.animation = 'nexus-fade-in 0.2s ease-out';
 
@@ -1669,7 +1675,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
     container.appendChild(sub);
 
     // Fetch from background/DB
-    chrome.runtime.sendMessage({ type: "GET_AMORTIZATION_TODOS", playerId }, (response) => {
+    chrome.runtime.sendMessage({ type: "GET_AMORTIZATION_TODOS", playerId }, async (response) => {
       const todos = response?.todos || [];
 
       if (todos.length === 0) {
@@ -1682,6 +1688,28 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         `;
         container.appendChild(empty);
       } else {
+        let queueData = await getStoredProductionQueue(playerId || undefined);
+        if (!queueData || !queueData.lastUpdated || (Date.now() - queueData.lastUpdated > 20000)) {
+          const fresh = await fetchEmpireProductionQueue(playerId || undefined, true);
+          if (fresh) queueData = fresh;
+        }
+
+        const queueItems = queueData?.items || [];
+        const offset = queueData?.serverTimeOffset || 0;
+
+        const formatCountdown = (ms: number): string => {
+          if (ms <= 0) return '0s';
+          const totalSec = Math.floor(ms / 1000);
+          const d = Math.floor(totalSec / 86400);
+          const h = Math.floor((totalSec % 86400) / 3600);
+          const m = Math.floor((totalSec % 3600) / 60);
+          const s = totalSec % 60;
+          if (d > 0) return `${d}d ${h}h`;
+          if (h > 0) return `${h}h ${m}m ${s}s`;
+          if (m > 0) return `${m}m ${s}s`;
+          return `${s}s`;
+        };
+
         const list = document.createElement('div');
         list.style.cssText = `display: flex; flex-direction: column; gap: 16px;`;
 
@@ -1722,6 +1750,43 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           const borderColor = getBorderColor(item.type, item.name);
           const iconUrl = fallbackIconMapper(item);
 
+          const ongoingQueue = findMatchingQueueItem(item, queueItems, item.coords);
+          const currentServerTime = Date.now() + offset;
+          const remainingMs = ongoingQueue && ongoingQueue.endTimestamp > 0 ? Math.max(0, ongoingQueue.endTimestamp - currentServerTime) : 0;
+          const remainingTimeStr = ongoingQueue && ongoingQueue.endTimestamp > 0 ? formatCountdown(remainingMs) : '';
+
+          const ongoingBadgeHtml = ongoingQueue ? `
+            <div class="todo-ongoing-badge" style="
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.12) 100%);
+              border: 1px solid rgba(245, 158, 11, 0.45);
+              box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+              padding: 2px 7px;
+              border-radius: 5px;
+              font-size: 10px;
+              font-weight: 800;
+              color: #fbbf24;
+              letter-spacing: 0.02em;
+              vertical-align: middle;
+            ">
+              <span style="
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: #f59e0b;
+                box-shadow: 0 0 5px #f59e0b;
+                display: inline-block;
+                animation: ogNexusPulse 1.5s infinite;
+              "></span>
+              <span>ONGOING</span>
+              <span class="nexus-todo-countdown-timer" data-end-ts="${ongoingQueue.endTimestamp}" style="opacity: 0.9; font-size: 9.5px; font-family: monospace; margin-left: 2px;">
+                (${remainingTimeStr})
+              </span>
+            </div>
+          ` : '';
+
           card.style.cssText = `
             background: rgba(30, 41, 59, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1749,11 +1814,12 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           `;
 
           const info = document.createElement('div');
-          info.style.cssText = `flex-grow: 1; min-width: 0;`; // min-width: 0 allows ellipsis to work on children in flex
+          info.style.cssText = `flex-grow: 1; min-width: 0;`;
           info.innerHTML = `
-            <div style="font-size: 16px; font-weight: 800; color: #f1f5f9; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+            <div style="font-size: 16px; font-weight: 800; color: #f1f5f9; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;">${item.name}</span>
               <span style="font-size: 11px; background: rgba(52, 152, 219, 0.15); color: #3498db; padding: 2px 8px; border-radius: 99px; flex-shrink: 0;">Lv.${item.targetLevel}</span>
+              ${ongoingBadgeHtml}
             </div>
             <div style="color: #64748b; font-size: 12px; display: flex; gap: 16px;">
               <span>Coords: <b style="color: #94a3b8">${item.coords || 'Empire'}</b></span>
@@ -1803,6 +1869,31 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           list.appendChild(card);
         });
         container.appendChild(list);
+
+        // Start live ticking countdown (updates every second)
+        todoLiveTimer = window.setInterval(() => {
+          if (!document.contains(container)) {
+            if (todoLiveTimer) {
+              window.clearInterval(todoLiveTimer);
+              todoLiveTimer = null;
+            }
+            return;
+          }
+
+          const now = Date.now() + offset;
+          const timers = container.querySelectorAll<HTMLElement>('.nexus-todo-countdown-timer[data-end-ts]');
+          timers.forEach(timerSpan => {
+            const endTs = parseInt(timerSpan.getAttribute('data-end-ts') || '0', 10);
+            if (endTs > 0) {
+              const rem = Math.max(0, endTs - now);
+              if (rem <= 0) {
+                timerSpan.textContent = '(Completed)';
+              } else {
+                timerSpan.textContent = `(${formatCountdown(rem)})`;
+              }
+            }
+          });
+        }, 1000);
       }
     });
 
@@ -1859,12 +1950,18 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
       let globalEuroCrystal = 0;
       let globalEuroDeut = 0;
 
+      const collectorClassBoost = playerClass === 1 ? getCollectorClassBoost({ account, planets }) : 0;
+      const effectiveCollectorFactor = playerClass === 1 ? (1.5 + collectorClassBoost) : 1.0;
+      const crawlerCapacityMult = (playerClass === 1 && account?.hasGeologist) ? 8.8 : 8.0;
+
       planets.forEach((p: any) => {
         const techMult = getPlanetTechMultiplier(p, account);
         p.lifeformSetup?.forEach((t: any) => {
           const level = t.level || 0;
           const entry = getAmortizationEntry(t);
           if (entry && entry.effect && (entry.effect as any).target === 'global') {
+            // Rock'tal Collector Enhancement (id 70) boosts class bonus specifically
+            if (entry.id === 70) return;
             const val = (entry.effect as any).value * level * techMult;
             if ((entry.effect as any).type === 'metal') globalEuroMetal += val;
             if ((entry.effect as any).type === 'crystal') globalEuroCrystal += val;
@@ -1921,9 +2018,9 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                 </div>
               </th>
-              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Crawlers" style="width: 115px; text-align: center;">
+              <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Crawlers (Max 50% mine production bonus)" style="width: 115px; text-align: center;">
                 <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06-.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06-.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </div>
               </th>
               <th class="nexus-prod-th nexus-tooltip" data-nexus-tooltip="Items" style="width: 95px; text-align: center;">
@@ -1976,7 +2073,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         const crystalMineSettingsFactor = (prodSettings.crystalMine !== undefined ? prodSettings.crystalMine : 100) / 100;
         const deuteriumMineSettingsFactor = (prodSettings.deuteriumMine !== undefined ? prodSettings.deuteriumMine : 100) / 100;
         const fusionReactorSettingsFactor = (prodSettings.fusionReactor !== undefined ? prodSettings.fusionReactor : 100) / 100;
-        const crawlersSettingsFactor = (prodSettings.crawlers !== undefined ? prodSettings.crawlers : 100) / 100;
+        const crawlersSettingsFactor = (prodSettings.crawlers !== undefined ? prodSettings.crawlers : (playerClass === 1 ? 150 : 100)) / 100;
 
         const baseMetalHourly = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor * metalMineSettingsFactor;
         const baseCrystalHourly = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor * crystalMineSettingsFactor;
@@ -1999,10 +2096,14 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           if (b.id === 11108) { lfbCrystal += b.level * 0.015; lfbDeut += b.level * 0.01; }
         });
 
-        // Crawlers
-        const maxCrawlers = (m + c + d) * universeSpeed;
-        const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);
-        const crawlerBonus = activeCrawlers * 0.0002 * crawlersSettingsFactor;
+        // Crawlers (canonical OGame formula + 50% hard cap)
+        const bonusPerCrawler = 0.0002 * effectiveCollectorFactor * crawlersSettingsFactor;
+        const mineCapacity = Math.floor((m + c + d) * crawlerCapacityMult);
+        const capCrawlers = bonusPerCrawler > 0 ? Math.ceil(0.50 / bonusPerCrawler) : mineCapacity;
+        const maxUsableCrawlers = Math.min(mineCapacity, capCrawlers);
+        const currentCrawlers = p.ships?.[217] ?? (p.ships as any)?.[`217`] ?? p.crawlers ?? 0;
+        const activeCrawlers = Math.min(currentCrawlers, maxUsableCrawlers);
+        const crawlerBonus = Math.min(0.50, activeCrawlers * bonusPerCrawler);
 
         // Boosters/Items
         const dynamicBoosters = getProductionBoosters(p.activeItems);
@@ -2013,7 +2114,8 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
         // Class
         let classMetal = 0, classCrystal = 0, classDeut = 0;
         if (playerClass === 1) {
-          classMetal = 0.25; classCrystal = 0.25; classDeut = 0.25;
+          const classMineBonus = 0.25 * (1 + collectorClassBoost);
+          classMetal = classMineBonus; classCrystal = classMineBonus; classDeut = classMineBonus;
         }
 
         // Flat base daily rate
@@ -2073,6 +2175,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
           `;
         };
 
+        const crawlerSubtext = activeCrawlers > 0 ? (crawlerBonus >= 0.50 ? `${activeCrawlers} cr (MAX 50%)` : (crawlersSettingsFactor !== 1 ? `${activeCrawlers} cr (${Math.round(crawlersSettingsFactor * 100)}%)` : `${activeCrawlers} cr`)) : "";
         const pImgUrl = p.imgUrl || chrome.runtime.getURL('icons/resources/metal_mine_large.jpg');
 
         planetRowsHtml += `
@@ -2096,7 +2199,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
             ${renderBonusCell(baseM, lfbMetal, '#ff8d33', '#38bdf8')}
             ${renderBonusCell(baseM, globalEuroMetal, '#ff8d33', '#c084fc')}
             ${renderBonusCell(baseM, plasmaMetal, '#ff8d33', '#f472b6')}
-            ${renderBonusCell(baseM, crawlerBonus, '#ff8d33', '#fbbf24', activeCrawlers > 0 ? (crawlersSettingsFactor !== 1 ? `${activeCrawlers} cr (${Math.round(crawlersSettingsFactor * 100)}%)` : `${activeCrawlers} cr`) : "")}
+            ${renderBonusCell(baseM, crawlerBonus, '#ff8d33', '#fbbf24', crawlerSubtext)}
             ${renderItemColumnCell(p.activeItems, 'metal', baseM, '#ff8d33')}
             ${renderBonusCell(baseM, geologistBonus + staffBonus, '#ff8d33', '#22d3ee')}
             ${renderBonusCell(baseM, classMetal + allyTraderBonus, '#ff8d33', '#fb923c')}
@@ -2113,7 +2216,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
             ${renderBonusCell(baseC, lfbCrystal, '#33b2ff', '#38bdf8')}
             ${renderBonusCell(baseC, globalEuroCrystal, '#33b2ff', '#c084fc')}
             ${renderBonusCell(baseC, plasmaCrystal, '#33b2ff', '#f472b6')}
-            ${renderBonusCell(baseC, crawlerBonus, '#33b2ff', '#fbbf24', activeCrawlers > 0 ? (crawlersSettingsFactor !== 1 ? `${activeCrawlers} cr (${Math.round(crawlersSettingsFactor * 100)}%)` : `${activeCrawlers} cr`) : "")}
+            ${renderBonusCell(baseC, crawlerBonus, '#33b2ff', '#fbbf24', crawlerSubtext)}
             ${renderItemColumnCell(p.activeItems, 'crystal', baseC, '#33b2ff')}
             ${renderBonusCell(baseC, geologistBonus + staffBonus, '#33b2ff', '#22d3ee')}
             ${renderBonusCell(baseC, classCrystal + allyTraderBonus, '#33b2ff', '#fb923c')}
@@ -2130,7 +2233,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
             ${renderBonusCell(baseD, lfbDeut, '#22c55e', '#38bdf8')}
             ${renderBonusCell(baseD, globalEuroDeut, '#22c55e', '#c084fc')}
             ${renderBonusCell(baseD, plasmaDeut, '#22c55e', '#f472b6')}
-            ${renderBonusCell(baseD, crawlerBonus, '#22c55e', '#fbbf24', activeCrawlers > 0 ? (crawlersSettingsFactor !== 1 ? `${activeCrawlers} cr (${Math.round(crawlersSettingsFactor * 100)}%)` : `${activeCrawlers} cr`) : "")}
+            ${renderBonusCell(baseD, crawlerBonus, '#22c55e', '#fbbf24', crawlerSubtext)}
             ${renderItemColumnCell(p.activeItems, 'deuterium', baseD, '#22c55e')}
             ${renderBonusCell(baseD, geologistBonus + staffBonus, '#22c55e', '#22d3ee')}
             ${renderBonusCell(baseD, classDeut + allyTraderBonus, '#22c55e', '#fb923c')}
@@ -2613,9 +2716,9 @@ const throttledObserverLogic = throttle(() => {
     (window as any)._contentScraped = false;
   }
 
-  // Fallback: If we're on the messages page and there are unprocessed raw messages, process them
+  // Fallback: If we're on the messages page and there are unprocessed raw messages or un-beautified cards, process them
   if (window.location.href.includes('page=ingame&component=messages')) {
-    const hasUnprocessed = !!document.querySelector('div.rawMessageData:not([data-og-nexus-processed="true"])');
+    const hasUnprocessed = !!document.querySelector('div.rawMessageData:not([data-og-nexus-processed="true"]), .msg:not([data-og-nexus-visuals-applied="true"]) div.rawMessageData');
     if (hasUnprocessed) {
       processActiveMessages();
     }
@@ -2689,6 +2792,32 @@ initImportExportListener();
 // Initialize Production Box Speedups Monitor
 initProductionBoxSpeedups();
 
+function isFleetMessageTabActive(): boolean {
+  // 1. Check marked main tab (has class 'marker')
+  const markedTab = document.querySelector('div.singleTab.marker[data-category-id]');
+  if (markedTab) {
+    return markedTab.getAttribute('data-category-id') === '2';
+  }
+
+  // 2. Check active main tab if marker class is absent
+  const activeTab = document.querySelector('div.singleTab.active[data-category-id]');
+  if (activeTab) {
+    return activeTab.getAttribute('data-category-id') === '2';
+  }
+
+  // 3. Check active subtab (must be under Fleets category: 20=All, 21=Combat, 22=Expeditions, 24=Other)
+  const activeSubtab = document.querySelector('div.innerTabItem.active[data-subtab-id]');
+  if (activeSubtab) {
+    const subtabId = activeSubtab.getAttribute('data-subtab-id');
+    if (subtabId && ['20', '21', '22', '24'].includes(subtabId)) {
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
 function processActiveMessages() {
   if (!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id)) return;
 
@@ -2724,43 +2853,47 @@ function processActiveMessages() {
         window.dispatchEvent(new CustomEvent('ogame-nexus-request-raw-messages'));
       }
 
-      // Espionage reports tracking (runs on any tab if elements are loaded)
-      const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]:not([data-og-nexus-processed="true"])');
-      if (espionageMessages.length > 0) {
-        trackEspionageReports(playerId);
+      // Espionage reports tracking (runs on any tab except Communication)
+      const isCommTabActive = !!document.querySelector('div.singleTab.marker[data-category-id="1"]') ||
+                              !!document.querySelector('div.innerTabItem.active[data-subtab-id="10"]') ||
+                              !!document.querySelector('div.innerTabItem.active[data-subtab-id="11"]') ||
+                              !!document.querySelector('div.innerTabItem.active[data-subtab-id="12"]') ||
+                              !!document.querySelector('div.innerTabItem.active[data-subtab-id="13"]') ||
+                              !!document.querySelector('div.innerTabItem.active[data-subtab-id="14"]');
+
+      if (!isCommTabActive) {
+        const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]:not([data-og-nexus-processed="true"])');
+        if (espionageMessages.length > 0) {
+          trackEspionageReports(playerId);
+        }
       }
 
-      // 2. Ensure we only track if the "Fleets" tab (data-category-id="2") is active
-      const isFleetTabActive = !!document.querySelector('div.singleTab.marker[data-category-id="2"]') ||
-                               !!document.querySelector('div.singleTab.active[data-category-id="2"]') ||
-                               !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]') ||
-                               !!document.querySelector('div.innerTabItem.active[data-subtab-id="21"]') ||
-                               !!document.querySelector('div.innerTabItem.active[data-subtab-id="24"]');
-
-      if (isFleetTabActive) {
+      // 2. Ensure we only track fleets/expeditions/combats if the "Fleets" tab (data-category-id="2") is active
+      if (isFleetMessageTabActive()) {
         // 3. Specialized tracking for expedition messages (Type 41)
-        const expeditionMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]:not([data-og-nexus-processed="true"])');
+        const expeditionMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]');
         if (expeditionMessages.length > 0) {
           trackExpeditions(playerId);
         }
 
         // 4. Specialized tracking for lifeform Discovery messages (Type 61)
-        const lifeformMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]:not([data-og-nexus-processed="true"])');
+        const lifeformMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]');
         if (lifeformMessages.length > 0) {
           trackLifeformDiscoveries(playerId);
         }
 
         // 5. Specialized tracking for Debris harvests (Type 32) - Ensure we are on the "Other" tab
-        const isOtherTabActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="24"]');
+        const isOtherTabActive = !!document.querySelector('div.innerTabItem.active[data-subtab-id="24"]') ||
+                                 !!document.querySelector('div.innerTabItem.active[data-subtab-id="20"]');
         if (isOtherTabActive) {
-          const harvestMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="32"]:not([data-og-nexus-processed="true"])');
+          const harvestMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="32"]');
           if (harvestMessages.length > 0) {
             trackDebrisHarvests(playerId);
           }
         }
 
         // 6. Specialized tracking for Combat reports (Type 25)
-        const combatMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]:not([data-og-nexus-processed="true"])');
+        const combatMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]');
         if (combatMessages.length > 0) {
           trackCombatReports(playerId);
         }
@@ -2785,6 +2918,17 @@ window.addEventListener('ogame-nexus-ajax-messages-loaded', () => {
     injectChangelogTab();
   }, 250);
 });
+
+// Fast-scroll message listener: triggers immediate sync visual processing as new messages scroll into view
+let messageScrollThrottle: any = null;
+window.addEventListener('scroll', () => {
+  if (window.location.href.includes('page=ingame&component=messages')) {
+    if (messageScrollThrottle) clearTimeout(messageScrollThrottle);
+    messageScrollThrottle = setTimeout(() => {
+      processActiveMessages();
+    }, 20);
+  }
+}, { passive: true });
 
 scrapeAndSync();
 injectButton();
@@ -3178,10 +3322,22 @@ window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
   if (Array.isArray(content) && content.length > 0) {
     const playerId = getMetaContent("ogame-player-id");
     if (playerId) {
-      trackRawEspionageReports(playerId, content);
-      trackRawExpeditions(playerId, content);
-      trackRawLifeformDiscoveries(playerId, content);
-      trackRawCombatReports(playerId, content);
+      const isCommTab = !!document.querySelector('div.singleTab.marker[data-category-id="1"]') ||
+                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="10"]') ||
+                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="11"]') ||
+                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="12"]') ||
+                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="13"]') ||
+                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="14"]');
+
+      if (!isCommTab) {
+        trackRawEspionageReports(playerId, content);
+      }
+
+      if (isFleetMessageTabActive()) {
+        trackRawExpeditions(playerId, content);
+        trackRawLifeformDiscoveries(playerId, content);
+        trackRawCombatReports(playerId, content);
+      }
     }
   }
 });

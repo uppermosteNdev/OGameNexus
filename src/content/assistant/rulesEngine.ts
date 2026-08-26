@@ -9,7 +9,7 @@ import {
   OVERSEER_TAXONOMY
 } from './types';
 import { getStoredImportExportInfo } from './importExport';
-import { getPlanetTechMultiplier, rankAmortizationItems, AmortizationType, DEFAULT_RATES, formatROI, getItemIcon, AMORTIZATION_TABLE } from '../../utils/amortizationCalc';
+import { getPlanetTechMultiplier, rankAmortizationItems, AmortizationType, DEFAULT_RATES, formatROI, getItemIcon, findMatchingQueueItem, AMORTIZATION_TABLE, getCollectorClassBoost } from '../../utils/amortizationCalc';
 import { getStoredFleetMovements, countActiveMissions, FleetMovementsData } from '../fleetMovement';
 import { SHIP_DATA } from '../../db/staticData';
 import { getProductionBoosters } from '../../utils/items';
@@ -415,11 +415,11 @@ export async function evaluateAllNotifications(playerId: string): Promise<Assist
   notifications.push(...importExportNotes);
 
   // Optimal Amortization Upgrade Recommendation
-  const amortizationNotes = evaluateAmortization(planets, effectiveAccount, settings, expoAverages, rates);
+  const amortizationNotes = await evaluateAmortization(planets, effectiveAccount, settings, expoAverages, rates);
   notifications.push(...amortizationNotes);
 
   // Planet Amortization To-Dos (Top 3 scheduled projects on the current active planet)
-  const planetTodoNotes = evaluatePlanetAmortizationTodos(planets, effectiveAccount, todoProjects, settings);
+  const planetTodoNotes = await evaluatePlanetAmortizationTodos(planets, effectiveAccount, todoProjects, settings);
   notifications.push(...planetTodoNotes);
 
   // Galaxy Debris Field Opportunities (scanned via Galaxy view)
@@ -1029,13 +1029,13 @@ async function evaluateImportExport(account: Account, settings: AssistantSetting
 // ==========================================================================
 // RULE 7: Optimal Amortization Upgrade Recommendation
 // ==========================================================================
-function evaluateAmortization(
+async function evaluateAmortization(
   planets: Planet[],
   account: Account,
   settings: AssistantSettings,
   expoAverages?: any,
   rates?: any
-): AssistantNotification[] {
+): Promise<AssistantNotification[]> {
   const results: AssistantNotification[] = [];
   const validPlanets = (planets || []).filter(p => p && p.type !== 'moon');
   if (!validPlanets || validPlanets.length === 0) return results;
@@ -1063,6 +1063,11 @@ function evaluateAmortization(
     const roiStr = formatROI(topItem.roiHours);
     const msuIncFormatted = formatNumber(Math.round(topItem.productionIncrease * 24)); // Daily MSU boost
     const costMsuFormatted = formatNumber(Math.round(topItem.msuCost));
+
+    // Check if topItem is currently ongoing in production queue
+    const storedQueue = account.productionQueue || (account.playerId ? await getStoredProductionQueue(account.playerId) : null);
+    const ongoingQueue = findMatchingQueueItem(topItem, storedQueue?.items || [], coords);
+    const ongoingTag = ongoingQueue ? ' (ongoing)' : '';
 
     let actionLabel: string | undefined = undefined;
     let actionUrl: string | undefined = undefined;
@@ -1108,9 +1113,9 @@ function evaluateAmortization(
       icon: itemIcon,
       iconTooltip: topItem.name,
       badgeText: 'INTEL',
-      title: `Next Best Build: ${topItem.name} ${nextLvl}`,
-      message: `💡 Amortization Recommendation: Upgrade ${topItem.name} to Level ${nextLvl}${locationText}. Payback: ${roiStr} (+${msuIncFormatted} MSU/day for ${costMsuFormatted} MSU).`,
-      shortMessage: `Build ${topItem.name} ${nextLvl}${locationText ? ` on ${planetName}` : ''}!`,
+      title: `Next Best Build: ${topItem.name} ${nextLvl}${ongoingTag}`,
+      message: `💡 Amortization Recommendation: Upgrade ${topItem.name} to Level ${nextLvl}${locationText}${ongoingTag}. Payback: ${roiStr} (+${msuIncFormatted} MSU/day for ${costMsuFormatted} MSU).`,
+      shortMessage: `Build ${topItem.name} ${nextLvl}${locationText ? ` on ${planetName}` : ''}${ongoingTag}!`,
       timestamp: Date.now(),
       planetId: topItem.planetId,
       planetName,
@@ -1118,7 +1123,7 @@ function evaluateAmortization(
       coords,
       actionLabel,
       actionUrl,
-      meta: { topItem, nextLvl, roiStr, msuCost: topItem.msuCost, prodIncrease: topItem.productionIncrease }
+      meta: { topItem, nextLvl, roiStr, msuCost: topItem.msuCost, prodIncrease: topItem.productionIncrease, isOngoing: !!ongoingQueue }
     });
   } catch (err: any) {
     if (!err?.message?.includes('Extension context invalidated')) {
@@ -1132,12 +1137,12 @@ function evaluateAmortization(
 // ==========================================================================
 // RULE: Planet To-Dos (Amortization Projects on Current Active Planet)
 // ==========================================================================
-function evaluatePlanetAmortizationTodos(
+async function evaluatePlanetAmortizationTodos(
   planets: Planet[],
   account: Account,
   todoProjects: any[],
   settings: AssistantSettings
-): AssistantNotification[] {
+): Promise<AssistantNotification[]> {
   if (!todoProjects || todoProjects.length === 0 || !planets || planets.length === 0) {
     return [];
   }
@@ -1206,6 +1211,8 @@ function evaluatePlanetAmortizationTodos(
     actionUrl = `/game/index.php?page=ingame&component=research&cp=${currentPlanet.id}`;
   }
 
+  const storedQueue = account.productionQueue || (account.playerId ? await getStoredProductionQueue(account.playerId) : null);
+
   return [{
     id: `planet_todos_${currentPlanet.id}`,
     ruleId: 'planet_amortization_todos',
@@ -1231,7 +1238,8 @@ function evaluatePlanetAmortizationTodos(
       planetName: currentPlanet.name,
       coords: currentPlanet.coords,
       todos: top3,
-      totalPlanetTodos: planetTodos.length
+      totalPlanetTodos: planetTodos.length,
+      productionQueue: storedQueue
     }
   }];
 }
@@ -1624,6 +1632,8 @@ function evaluateCrawlerDeficit(planets: Planet[], account: Account, settings: A
   const hasGeologist = Boolean(account.hasGeologist);
   // Base is 8 crawlers per total mine level, Collector with Geologist gets +10% (8.8)
   const crawlerFactor = (isCollector && hasGeologist) ? 8.8 : 8.0;
+  const collectorBoost = isCollector ? getCollectorClassBoost({ account, planets } as any) : 0;
+  const effectiveCollectorFactor = isCollector ? (1.5 + collectorBoost) : 1.0;
 
   planets.forEach(p => {
     // Only check planets (not moons)
@@ -1636,13 +1646,20 @@ function evaluateCrawlerDeficit(planets: Planet[], account: Account, settings: A
 
     if (totalMineLevels === 0) return; // No mines on planet yet
 
-    const maxCrawlers = Math.floor(totalMineLevels * crawlerFactor);
-    const currentCrawlers = Number(p.crawlers || 0);
+    const prodSettings = p.productionSettings || {};
+    const crawlersSettingsFactor = (prodSettings.crawlers !== undefined ? prodSettings.crawlers : (isCollector ? 150 : 100)) / 100;
+    const bonusPerCrawler = 0.0002 * effectiveCollectorFactor * crawlersSettingsFactor;
+
+    const mineCapacity = Math.floor(totalMineLevels * crawlerFactor);
+    const capCrawlers = bonusPerCrawler > 0 ? Math.ceil(0.50 / bonusPerCrawler) : mineCapacity;
+    const maxCrawlers = Math.min(mineCapacity, capCrawlers);
+    const currentCrawlers = Number(p.ships?.[217] ?? (p.ships as any)?.[`217`] ?? p.crawlers ?? 0);
 
     if (currentCrawlers < maxCrawlers) {
       const missing = maxCrawlers - currentCrawlers;
       const isZero = currentCrawlers === 0;
       const coordsText = p.coords ? `[${p.coords}]` : '';
+      const isCapLimited = capCrawlers < mineCapacity;
 
       results.push({
         id: `crawler_deficit_${p.id}`,
@@ -1655,7 +1672,7 @@ function evaluateCrawlerDeficit(planets: Planet[], account: Account, settings: A
         iconTooltip: 'Crawler',
         badgeText: 'CRAWLERS',
         title: `Crawler Shortage: ${p.name || 'Planet'} ${coordsText}`.trim(),
-        message: `Crawler Saturation Deficit: ${p.name || 'Planet'} ${coordsText} currently has ${currentCrawlers.toLocaleString('en-US')}/${maxCrawlers.toLocaleString('en-US')} usable Crawlers (${missing.toLocaleString('en-US')} missing). Constructing ${missing.toLocaleString('en-US')} additional Crawlers in the Shipyard will maximize your mines' production output.`.trim(),
+        message: `Crawler Saturation Deficit: ${p.name || 'Planet'} ${coordsText} currently has ${currentCrawlers.toLocaleString('en-US')}/${maxCrawlers.toLocaleString('en-US')} usable Crawlers (${missing.toLocaleString('en-US')} missing${isCapLimited ? ' — limited by 50% max production cap' : ''}). Constructing ${missing.toLocaleString('en-US')} additional Crawlers in the Shipyard will maximize your mines' production output.`.trim(),
         shortMessage: `Crawlers ${coordsText}: ${currentCrawlers}/${maxCrawlers} (${missing} missing)`.trim(),
         timestamp: Date.now(),
         planetId: String(p.id),
@@ -1669,7 +1686,9 @@ function evaluateCrawlerDeficit(planets: Planet[], account: Account, settings: A
           maxCrawlers,
           missing,
           totalMineLevels,
-          crawlerFactor
+          crawlerFactor,
+          capCrawlers,
+          mineCapacity
         }
       });
     }

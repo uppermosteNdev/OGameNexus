@@ -29,10 +29,62 @@ function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
 }
 
+export function isSharedMessage(el: Element): boolean {
+    if (!el) return false;
+    const msg = el.closest('.msg') || el;
+    
+    // 1. Check data attributes
+    if (msg.getAttribute('data-raw-shared') === 'true' || msg.getAttribute('data-shared') === 'true') {
+        return true;
+    }
+    
+    // 2. Check classes
+    if (msg.classList.contains('shared') || msg.classList.contains('msg_shared')) {
+        return true;
+    }
+    
+    // 3. Check shared sender elements
+    const sharedEl = msg.querySelector('.shared_by, .shared_by_user, .sharedBy, .msg_sender_shared');
+    if (sharedEl && !sharedEl.classList.contains('share_button') && !sharedEl.classList.contains('icon_share')) {
+        return true;
+    }
+    
+    // 4. Check header text for "Shared by" (multi-language support)
+    const msgHead = msg.querySelector('.msg_head, .msgHead, .fright, .msg_title, .msgHeadInternal') || msg;
+    const headText = msgHead.textContent || '';
+    if (/(?:shared by|geteilt von|partag[eé] par|compartido por|condiviso da|podzieli[lł] si[eę]|compartilhado por)/i.test(headText)) {
+        return true;
+    }
+    
+    // 5. Check if inside communication tab / subtab container
+    const tabContainer = msg.closest('[data-category-id="1"], [data-subtab-id="10"], [data-subtab-id="11"], [data-subtab-id="12"], [data-subtab-id="13"], [data-subtab-id="14"]');
+    if (tabContainer) {
+        return true;
+    }
+
+    // 6. If looking at DOM and Communication tab is currently marked/active
+    if (typeof document !== 'undefined') {
+        const markedCommTab = document.querySelector('div.singleTab.marker[data-category-id="1"], div.singleTab.active[data-category-id="1"]');
+        if (markedCommTab && document.contains(msg)) {
+            return true;
+        }
+        const activeCommSubtab = document.querySelector('div.innerTabItem.active[data-subtab-id="10"], div.innerTabItem.active[data-subtab-id="11"], div.innerTabItem.active[data-subtab-id="12"], div.innerTabItem.active[data-subtab-id="13"], div.innerTabItem.active[data-subtab-id="14"]');
+        if (activeCommSubtab && document.contains(msg)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 function parseExpeditionElement(msg: Element): any | null {
     const parentMsg = msg.closest('.msg');
     const messageId = parentMsg?.getAttribute('data-msg-id');
     if (!messageId) return null;
+
+    if (isSharedMessage(parentMsg || msg)) {
+        return null;
+    }
 
     const timestamp = msg.getAttribute('data-raw-timestamp');
     const coords = msg.getAttribute('data-raw-coords') || msg.getAttribute('data-raw-coordinates');
@@ -109,35 +161,49 @@ function parseExpeditionElement(msg: Element): any | null {
 }
 
 export function scrapeExpeditionMessages() {
-    // Only scrape messages that haven't been marked as processed yet
-    const expeditionMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]:not([data-og-nexus-processed="true"])');
-    const results = [];
+    const expeditionMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]');
+    const newItemsToTrack: any[] = [];
 
-    for (const msg of expeditionMessages) {
-        const item = parseExpeditionElement(msg);
-        if (item) {
-            msg.setAttribute('data-og-nexus-processed', 'true');
+    for (const rawEl of expeditionMessages) {
+        const item = parseExpeditionElement(rawEl);
+        if (!item) continue;
+
+        // 1. Immediately and synchronously apply visual transformation to DOM if not already applied
+        const parentMsg = (rawEl.closest('.msg') || document.querySelector(`.msg[data-msg-id="${item.messageId}"]`)) as HTMLElement | null;
+        if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
+            updateExpeditionVisuals(parentMsg, item, true);
+        }
+
+        // 2. Queue for background tracking if not already processed in this session
+        if (!rawEl.hasAttribute('data-og-nexus-processed')) {
+            rawEl.setAttribute('data-og-nexus-processed', 'true');
             if (!processedExpeditionIds.has(item.messageId)) {
                 processedExpeditionIds.add(item.messageId);
-                results.push(item);
+                newItemsToTrack.push(item);
             }
         }
     }
 
-    return results;
+    return newItemsToTrack;
 }
 
 export function scrapeRawExpeditionHTML(htmls: string[]) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmls.join(''), 'text/html');
     const expeditionMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]');
-    const results = [];
+    const results: any[] = [];
 
     for (const msg of expeditionMessages) {
         const item = parseExpeditionElement(msg);
         if (item) {
             const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="41"]`);
-            if (domMsg) domMsg.setAttribute('data-og-nexus-processed', 'true');
+            if (domMsg) {
+                domMsg.setAttribute('data-og-nexus-processed', 'true');
+                const parentMsg = domMsg.closest('.msg') as HTMLElement;
+                if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
+                    updateExpeditionVisuals(parentMsg, item, true);
+                }
+            }
 
             if (!processedExpeditionIds.has(item.messageId)) {
                 processedExpeditionIds.add(item.messageId);
@@ -1237,6 +1303,7 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
 
     // Check if we've already applied visuals to this message element
     if (msgElement.hasAttribute('data-og-nexus-visuals-applied')) return;
+    msgElement.setAttribute('data-og-nexus-visuals-applied', 'true');
 
     const resType = (exp.result || '').toLowerCase();
     const size = exp.size ?? 2;

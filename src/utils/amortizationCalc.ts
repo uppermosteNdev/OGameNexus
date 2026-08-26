@@ -26,6 +26,7 @@ export interface Cost {
 
 export interface AmortizationItem {
     id?: number | null;
+    techId?: number;
     name: string;
     type: AmortizationType;
     cost: Cost;
@@ -125,7 +126,7 @@ export const AMORTIZATION_TABLE = [
     { name: "Artificial Swarm Intelligence", id: 51, type: AmortizationType.LifeformProductionResearches, baseCost: { metal: 200000, crystal: 100000, deuterium: 100000 }, multiplier: 1.5, lifeformId: 3, reduction: "research_centers", effect: { type: "all", value: 0.0006, target: "global" } },
 
     // Level * 1.7 scale
-    { name: "Rock’tal Collector Enhancement", id: 70, type: AmortizationType.LifeformProductionResearches, baseCost: { metal: 300000, crystal: 180000, deuterium: 120000 }, multiplier: 1.7, lifeformId: 2, reduction: "research_centers", effect: { type: "all", value: 0.002, target: "global" } },
+    { name: "Rock’tal Collector Enhancement", id: 70, type: AmortizationType.LifeformProductionResearches, baseCost: { metal: 300000, crystal: 180000, deuterium: 120000 }, multiplier: 1.7, lifeformId: 2, reduction: "research_centers", effect: { type: "rocktal_collector_adv", value: 0.002, target: "global" } },
     { name: "Kaelesh Discoverer Enhancement", id: 72, type: AmortizationType.LifeformExpeditionResearches, baseCost: { metal: 300000, crystal: 180000, deuterium: 120000 }, multiplier: 1.7, lifeformId: 4, reduction: "research_centers", effect: { type: "kaelesh_discovery_adv", value: 0.002 } },
 
     // Plasma
@@ -170,6 +171,118 @@ export function getItemIcon(item: AmortizationItem): string {
         }
     }
     return '';
+}
+
+export function getAmortizationTechId(item: { id?: number | null, name?: string, type?: any }): number | undefined {
+    if (!item) return undefined;
+    const typeStr = String(item.type ?? '');
+    if (item.type === AmortizationType.Mines || typeStr === 'Mines' || typeStr === '1' || (item.name && item.name.toLowerCase().includes('mine'))) {
+        const low = (item.name || '').toLowerCase();
+        if (low.includes('metal')) return 1;
+        if (low.includes('crystal')) return 2;
+        if (low.includes('deuterium')) return 3;
+        return typeof item.id === 'number' ? item.id : undefined;
+    }
+    if (item.type === AmortizationType.PlasmaTechnology || typeStr === 'PlasmaTechnology' || typeStr === '6' || item.id === 122) {
+        return 122;
+    }
+    if (
+        item.type === AmortizationType.LifeformResearchBuildings ||
+        item.type === AmortizationType.LifeformProductionBuildings ||
+        typeStr === 'LifeformResearchBuildings' ||
+        typeStr === 'LifeformProductionBuildings' ||
+        typeStr === '2' ||
+        typeStr === '3'
+    ) {
+        if (typeof item.id === 'number' && item.id > 10000) return item.id;
+        const entry = AMORTIZATION_TABLE.find(e => e.name === item.name);
+        if (entry?.id) return entry.id;
+        return typeof item.id === 'number' ? item.id : undefined;
+    }
+    if (
+        item.type === AmortizationType.LifeformProductionResearches ||
+        item.type === AmortizationType.LifeformExpeditionResearches ||
+        typeStr === 'LifeformProductionResearches' ||
+        typeStr === 'LifeformExpeditionResearches' ||
+        typeStr === '4' ||
+        typeStr === '5'
+    ) {
+        let slotId = typeof item.id === 'number' ? item.id : undefined;
+        if (!slotId) {
+            const entry = AMORTIZATION_TABLE.find(e => e.name === item.name);
+            if (entry?.id) slotId = entry.id;
+        }
+        if (slotId) {
+            if (slotId > 10000) return slotId;
+            const tech = getLfTech(slotId);
+            if (tech?.gkId) return tech.gkId;
+            return slotId;
+        }
+    }
+    return typeof item.id === 'number' ? item.id : undefined;
+}
+
+export function findMatchingQueueItem(
+    item: { techId?: number; id?: number | null; name?: string; type?: any; planetId?: string },
+    queueItems: any[],
+    planetCoords?: string
+): any | undefined {
+    if (!queueItems || queueItems.length === 0) return undefined;
+
+    const targetTechId = item.techId ?? getAmortizationTechId(item);
+    const cleanItemName = (item.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    return queueItems.find((q: any) => {
+        // 1. Language-Agnostic Tech ID Matching (Primary)
+        let isTechMatch = false;
+        if (targetTechId && q.techId) {
+            if (targetTechId === q.techId) {
+                isTechMatch = true;
+            } else if (
+                item.type === AmortizationType.LifeformProductionResearches ||
+                item.type === AmortizationType.LifeformExpeditionResearches ||
+                String(item.type) === 'LifeformProductionResearches' ||
+                String(item.type) === 'LifeformExpeditionResearches' ||
+                String(item.type) === '4' ||
+                String(item.type) === '5'
+            ) {
+                const tech = getLfTech(item.id);
+                if (tech?.gkId === q.techId || tech?.id === q.techId) {
+                    isTechMatch = true;
+                }
+            }
+        }
+
+        // 2. Name Matching Fallback
+        if (!isTechMatch) {
+            const cleanQueueName = (q.itemName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanQueueName && cleanItemName && (cleanQueueName === cleanItemName || cleanQueueName.includes(cleanItemName) || cleanItemName.includes(cleanQueueName))) {
+                isTechMatch = true;
+            }
+        }
+
+        if (!isTechMatch) return false;
+
+        // 3. Global Empire Research (Plasma)
+        if (item.type === AmortizationType.PlasmaTechnology || String(item.type) === 'PlasmaTechnology' || String(item.type) === '6' || !item.planetId || targetTechId === 122) {
+            return q.type === 'research' || q.planetId === 'global' || q.techId === 122;
+        }
+
+        // 4. Planet-Specific Items
+        if (item.planetId && q.planetId && q.planetId !== 'unknown' && q.planetId !== 'global') {
+            const pId1 = String(q.planetId).replace(/\D/g, '');
+            const pId2 = String(item.planetId).replace(/\D/g, '');
+            if (pId1 && pId2 && pId1 === pId2) return true;
+        }
+
+        if (planetCoords && q.coords) {
+            const c1 = planetCoords.replace(/[\[\]\s]/g, '');
+            const c2 = q.coords.replace(/[\[\]\s]/g, '');
+            if (c1 && c2 && c1 === c2) return true;
+        }
+
+        return false;
+    });
 }
 
 export function calculateMSU(cost: Cost, rates: any = DEFAULT_RATES): number {
@@ -310,6 +423,22 @@ function calculateTotalExpeditionBonus(state: EmpireState, type: 'expo_res' | 'e
     return totalBonus;
 }
 
+export function getCollectorClassBoost(state: EmpireState): number {
+    let totalBoost = 0;
+    const planets = safeArray(state?.planets);
+    planets.forEach((p: any) => {
+        const techMult = getPlanetTechMultiplier(p, state?.account);
+        const safeSetup = safeArray(p.lifeformSetup);
+        safeSetup.forEach((t: any) => {
+            const level = t.level || 0;
+            const entry = getAmortizationEntry(t);
+            if (entry && entry.id === 70 && level > 0) {
+                totalBoost += 0.002 * level * techMult; // +0.2% per level * planet tech multiplier
+            }
+        });
+    });
+    return totalBoost;
+}
 
 export interface EmpireState {
     account: any;
@@ -325,7 +454,7 @@ export interface ProductionResults {
             total: { metal: number; crystal: number; deuterium: number };
         }
     };
-        globalBonuses: { metal: number; crystal: number; deuterium: number };
+    globalBonuses: { metal: number; crystal: number; deuterium: number };
 }
 
 export function calculateEmpireProduction(state: EmpireState): ProductionResults {
@@ -333,6 +462,10 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
     const planets = safeArray(state.planets).filter((p: any) => p && p.type !== 'moon');
     const universeSpeed = account?.universeSpeed || 1;
     const playerClass = account?.playerClass || 0; // 1 = Collector
+
+    const collectorClassBoost = playerClass === 1 ? getCollectorClassBoost(state) : 0;
+    const effectiveCollectorFactor = playerClass === 1 ? (1.5 + collectorClassBoost) : 1.0;
+    const crawlerCapacityMult = (playerClass === 1 && account?.hasGeologist) ? 8.8 : 8.0;
 
     let globalEuroMetal = 0, globalEuroCrystal = 0, globalEuroDeut = 0;
 
@@ -343,6 +476,8 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
             const level = t.level || 0;
             const entry = getAmortizationEntry(t);
             if (entry && entry.effect && (entry.effect as any).target === 'global') {
+                // Rock'tal Collector Enhancement (id 70) boosts class bonus specifically
+                if (entry.id === 70) return;
                 const val = (entry.effect as any).value * level * techMult;
                 if ((entry.effect as any).type === 'metal') globalEuroMetal += val;
                 if ((entry.effect as any).type === 'crystal') globalEuroCrystal += val;
@@ -385,7 +520,7 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
         const crystalMineSettingsFactor = (prodSettings.crystalMine !== undefined ? prodSettings.crystalMine : 100) / 100;
         const deuteriumMineSettingsFactor = (prodSettings.deuteriumMine !== undefined ? prodSettings.deuteriumMine : 100) / 100;
         const fusionReactorSettingsFactor = (prodSettings.fusionReactor !== undefined ? prodSettings.fusionReactor : 100) / 100;
-        const crawlersSettingsFactor = (prodSettings.crawlers !== undefined ? prodSettings.crawlers : 100) / 100;
+        const crawlersSettingsFactor = (prodSettings.crawlers !== undefined ? prodSettings.crawlers : (playerClass === 1 ? 150 : 100)) / 100;
 
         const baseMetal = 30 * m * Math.pow(1.1, m) * universeSpeed * metalPosFactor * metalMineSettingsFactor;
         const baseCrystal = 20 * c * Math.pow(1.1, c) * universeSpeed * crystalPosFactor * crystalMineSettingsFactor;
@@ -416,16 +551,21 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
 
         let classMetal = 0, classCrystal = 0, classDeut = 0;
         if (playerClass === 1) {
-            classMetal = 0.25; classCrystal = 0.25; classDeut = 0.25;
+            const classMineBonus = 0.25 * (1 + collectorClassBoost);
+            classMetal = classMineBonus; classCrystal = classMineBonus; classDeut = classMineBonus;
         }
 
         const geologistBonus = account?.hasGeologist ? 0.1 : 0;
         const staffBonus = (account?.hasCommander && account?.hasAdmiral && account?.hasEngineer && account?.hasGeologist && account?.hasTechnocrat) ? 0.02 : 0;
         const allyTraderBonus = (account?.allianceClass === 2 || account?.allianceClass === 1) ? 0.05 : 0;
 
-        const maxCrawlers = (m + c + d) * universeSpeed;
-        const activeCrawlers = Math.min(p.crawlers || 0, maxCrawlers);
-        const crawlerBonus = activeCrawlers * 0.0002 * crawlersSettingsFactor;
+        const bonusPerCrawler = 0.0002 * effectiveCollectorFactor * crawlersSettingsFactor;
+        const mineCapacity = Math.floor((m + c + d) * crawlerCapacityMult);
+        const capCrawlers = bonusPerCrawler > 0 ? Math.ceil(0.50 / bonusPerCrawler) : mineCapacity;
+        const maxUsableCrawlers = Math.min(mineCapacity, capCrawlers);
+        const currentCrawlers = p.ships?.[217] ?? (p.ships as any)?.[`217`] ?? p.crawlers ?? 0;
+        const activeCrawlers = Math.min(currentCrawlers, maxUsableCrawlers);
+        const crawlerBonus = Math.min(0.50, activeCrawlers * bonusPerCrawler);
 
         const dynamicBoosters = getProductionBoosters(p.activeItems);
         const boosterMetal = dynamicBoosters.metal;
@@ -508,6 +648,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
 
     for (let i = 0; i < limit; i++) {
         const prodData = calculateEmpireProduction(state);
+        const collectorClassBoost = state.account?.playerClass === 1 ? getCollectorClassBoost(state) : 0;
         const candidates: AmortizationItem[] = [];
 
         // Pre-calculate current expedition bonuses for simulated state
@@ -744,6 +885,67 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             };
                             prodIncrease = calculateMSU(prodDelta, rates);
                         }
+                    } else if (effect.type === 'rocktal_collector_adv') {
+                        if (state.account?.playerClass === 1) {
+                            const techMult = getPlanetTechMultiplier(p, state.account);
+                            const boostInc = 0.002 * techMult; // +0.2% * techMult Collector boost increment
+
+                            // 1. Direct Mine Class Bonus Gain across all planets (+25% class bonus boosted)
+                            const classDeltaPercent = 0.25 * boostInc;
+                            const directM = prodData.empireBase.metal * classDeltaPercent;
+                            const directC = prodData.empireBase.crystal * classDeltaPercent;
+                            const directD = prodData.empireBase.deuterium * classDeltaPercent;
+
+                            // 2. Crawler efficiency gain across all planets
+                            let crawlerDeltaM = 0;
+                            let crawlerDeltaC = 0;
+                            let crawlerDeltaD = 0;
+
+                            const oldCollectorFactor = 1.5 + collectorClassBoost;
+                            const newCollectorFactor = oldCollectorFactor + boostInc;
+                            const crawlerCapacityMult = state.account?.hasGeologist ? 8.8 : 8.0;
+
+                            state.planets.forEach((pl: any) => {
+                                const pData = prodData.planets[pl.id];
+                                if (!pData) return;
+                                const mLevel = pl.metalMine || 0;
+                                const cLevel = pl.crystalMine || 0;
+                                const dLevel = pl.deuteriumMine || 0;
+                                const prodStg = pl.productionSettings || {};
+                                const crSettingsFactor = (prodStg.crawlers !== undefined ? prodStg.crawlers : 150) / 100;
+                                const currentCr = pl.ships?.[217] ?? (pl.ships as any)?.[`217`] ?? pl.crawlers ?? 0;
+
+                                const oldBonusPerCr = 0.0002 * oldCollectorFactor * crSettingsFactor;
+                                const newBonusPerCr = 0.0002 * newCollectorFactor * crSettingsFactor;
+
+                                const mineCap = Math.floor((mLevel + cLevel + dLevel) * crawlerCapacityMult);
+                                const oldCapCr = oldBonusPerCr > 0 ? Math.ceil(0.50 / oldBonusPerCr) : mineCap;
+                                const newCapCr = newBonusPerCr > 0 ? Math.ceil(0.50 / newBonusPerCr) : mineCap;
+
+                                const oldActiveCr = Math.min(currentCr, Math.min(mineCap, oldCapCr));
+                                const newActiveCr = Math.min(currentCr, Math.min(mineCap, newCapCr));
+
+                                const oldCrBonus = Math.min(0.50, oldActiveCr * oldBonusPerCr);
+                                const newCrBonus = Math.min(0.50, newActiveCr * newBonusPerCr);
+                                const deltaCrBonus = Math.max(0, newCrBonus - oldCrBonus);
+
+                                if (deltaCrBonus > 0) {
+                                    crawlerDeltaM += pData.base.metal * deltaCrBonus;
+                                    crawlerDeltaC += pData.base.crystal * deltaCrBonus;
+                                    crawlerDeltaD += pData.base.deuterium * deltaCrBonus;
+                                }
+                            });
+
+                            prodDelta = {
+                                metal: directM + crawlerDeltaM,
+                                crystal: directC + crawlerDeltaC,
+                                deuterium: directD + crawlerDeltaD
+                            };
+                            prodIncrease = calculateMSU(prodDelta, rates);
+                        } else {
+                            prodDelta = { metal: 0, crystal: 0, deuterium: 0 };
+                            prodIncrease = 0;
+                        }
                     } else if (effect.type === 'mine_cost_reduction') {
                         const temp = p.tempMax || 20;
                         let slot = 0;
@@ -816,13 +1018,10 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                     if (i === 0) {
                         let breakdownStr = "";
                         if (entry.type === AmortizationType.Mines) {
-                            const pData = prodData.planets[p.id];
-                            const resKey = entry.name === "Metal Mine" ? "metal" : (entry.name === "Crystal Mine" ? "crystal" : "deuterium");
-                            const m = pData.mult[resKey as keyof typeof pData.mult];
-
-                            // Re-calculate components for logging
+                            const resKey = entry.name === "Metal Mine" ? "metal" : entry.name === "Crystal Mine" ? "crystal" : "deuterium";
+                            const m = prodData.planets[p.id].mult[resKey as keyof typeof prodData.planets[typeof p.id]['mult']];
                             const plasmaLevel = getResearchLevel(state.account, 122);
-                            const plasmaB = resKey === "metal" ? plasmaLevel * 0.01 : (resKey === "crystal" ? plasmaLevel * (0.66 / 100) : plasmaLevel * (0.33 / 100));
+                            const plasmaB = resKey === 'metal' ? plasmaLevel * 0.01 : resKey === 'crystal' ? plasmaLevel * 0.0066 : plasmaLevel * 0.0033;
 
                             let lfbB = 0;
                             const activePrefix = p.lifeformId ? `1${p.lifeformId}` : null;
@@ -844,15 +1043,23 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             });
 
                             const techB = prodData.globalBonuses[resKey as keyof typeof prodData.globalBonuses];
-                            const classB = (state.account.playerClass === 1) ? 0.25 : 0;
+                            const classB = (state.account.playerClass === 1) ? 0.25 * (1 + collectorClassBoost) : 0;
 
                             const mVal = p.metalMine || 0;
                             const cVal = p.crystalMine || 0;
                             const dVal = p.deuteriumMine || 0;
-                            const uSpeed = state.account?.universeSpeed || 1;
-                            const maxCr = (mVal + cVal + dVal) * uSpeed;
-                            const activeCr = Math.min(p.crawlers || 0, maxCr);
-                            const crawlerB = activeCr * 0.0002;
+                            const isColl = state.account.playerClass === 1;
+                            const effCollFactor = isColl ? (1.5 + collectorClassBoost) : 1.0;
+                            const pStg = p.productionSettings || {};
+                            const crSettings = (pStg.crawlers !== undefined ? pStg.crawlers : (isColl ? 150 : 100)) / 100;
+                            const bonusPerCr = 0.0002 * effCollFactor * crSettings;
+                            const crCapMult = (isColl && state.account?.hasGeologist) ? 8.8 : 8.0;
+                            const mineCap = Math.floor((mVal + cVal + dVal) * crCapMult);
+                            const capCr = bonusPerCr > 0 ? Math.ceil(0.50 / bonusPerCr) : mineCap;
+                            const maxCr = Math.min(mineCap, capCr);
+                            const currentCr = p.ships?.[217] ?? (p.ships as any)?.[`217`] ?? p.crawlers ?? 0;
+                            const activeCr = Math.min(currentCr, maxCr);
+                            const crawlerB = Math.min(0.50, activeCr * bonusPerCr);
 
                             breakdownStr = `\n                            - Multiplier Breakdown (${resKey}): ${(m * 100).toFixed(1)}% 
                                 [100% Base + ${(plasmaB * 100).toFixed(1)}% Plasma + ${(lfbB * 100).toFixed(1)}% LF Buildings + ${(techB * 100).toFixed(1)}% LF Techs + ${(classB * 100).toFixed(0)}% Class + ${(crawlerB * 100).toFixed(1)}% Crawlers]`;
@@ -862,7 +1069,10 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             const effectiveValue = effect.value * techMult;
                             let details: string[] = [];
 
-                            if (effect.type === 'expo_res' || effect.type === 'expo_si' || effect.type === 'kaelesh_discovery_adv') {
+                            if (effect.type === 'rocktal_collector_adv') {
+                                details.push(`Collector Class Boost: +${(0.002 * techMult * 100).toFixed(4)}% across empire (Mine Class: +${(0.0005 * techMult * 100).toFixed(4)}% & boosted Crawler efficiency)`);
+                                details.push(`Total Empire Production Gain: +${prodIncrease.toFixed(2)} MSU/h`);
+                            } else if (effect.type === 'expo_res' || effect.type === 'expo_si' || effect.type === 'kaelesh_discovery_adv') {
                                 const isKaeleshAdv = effect.type === 'kaelesh_discovery_adv';
                                 const isRes = effect.type === 'expo_res' || isKaeleshAdv;
                                 const isShips = effect.type === 'expo_si' || isKaeleshAdv;
@@ -1008,8 +1218,10 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                         }
                     }
 
+                    const universalTechId = getAmortizationTechId({ id: entry.id, name: entry.name, type: entry.type });
                     candidates.push({
                         id: entry.id,
+                        techId: universalTechId,
                         name: entry.name,
                         type: entry.type,
                         cost: cost,

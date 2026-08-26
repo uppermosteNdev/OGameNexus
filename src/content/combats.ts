@@ -1,5 +1,6 @@
 
 import { flyToNexusButton } from './effects';
+import { isSharedMessage } from './expeditions';
 
 function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
@@ -23,6 +24,10 @@ function parseCombatElement(msg: Element): any | null {
     const parentMsg = msg.closest('.msg');
     const messageId = parentMsg?.getAttribute('data-msg-id');
     if (!messageId) return null;
+
+    if (isSharedMessage(parentMsg || msg)) {
+        return null;
+    }
 
     const timestamp = msg.getAttribute('data-raw-timestamp');
     const coordsRaw = msg.getAttribute('data-raw-coords');
@@ -167,7 +172,7 @@ function parseCombatElement(msg: Element): any | null {
 
 const processedCombatIds = new Set<string>();
 
-export function scrapeCombatMessages() {
+export function scrapeCombatMessages(removeOGLight: boolean = true) {
     const combatMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]:not([data-og-nexus-processed="true"])');
     const results = [];
 
@@ -175,6 +180,13 @@ export function scrapeCombatMessages() {
         const item = parseCombatElement(msg);
         if (item) {
             msg.setAttribute('data-og-nexus-processed', 'true');
+
+            // Immediately apply visuals to DOM element when rendered on screen (handles pagination seamlessly)
+            const msgElement = msg.closest('.msg') as HTMLElement || document.querySelector(`.msg[data-msg-id="${item.messageId}"]`) as HTMLElement;
+            if (msgElement) {
+                updateCombatVisuals(msgElement, item, removeOGLight);
+            }
+
             if (!processedCombatIds.has(item.messageId)) {
                 processedCombatIds.add(item.messageId);
                 results.push(item);
@@ -185,7 +197,7 @@ export function scrapeCombatMessages() {
     return results;
 }
 
-export function scrapeRawCombatHTML(htmls: string[]) {
+export function scrapeRawCombatHTML(htmls: string[], removeOGLight: boolean = true) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmls.join(''), 'text/html');
     const combatMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]');
@@ -195,7 +207,13 @@ export function scrapeRawCombatHTML(htmls: string[]) {
         const item = parseCombatElement(msg);
         if (item) {
             const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="25"]`);
-            if (domMsg) domMsg.setAttribute('data-og-nexus-processed', 'true');
+            if (domMsg) {
+                domMsg.setAttribute('data-og-nexus-processed', 'true');
+                const domMsgElement = domMsg.closest('.msg') as HTMLElement;
+                if (domMsgElement) {
+                    updateCombatVisuals(domMsgElement, item, removeOGLight);
+                }
+            }
 
             if (!processedCombatIds.has(item.messageId)) {
                 processedCombatIds.add(item.messageId);
@@ -210,9 +228,6 @@ export function scrapeRawCombatHTML(htmls: string[]) {
 export async function trackCombatReports(playerId: string) {
     if (!isExtensionStillValid()) return;
 
-    const combatData = scrapeCombatMessages();
-    if (combatData.length === 0) return;
-
     let removeOGLight = true;
     try {
         const localData = await chrome.storage.local.get("globalSettings");
@@ -222,6 +237,13 @@ export async function trackCombatReports(playerId: string) {
     } catch (e) {
         console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
     }
+
+    const combatData = scrapeCombatMessages(removeOGLight);
+    triggerSiteTooltips();
+
+    if (combatData.length === 0) return;
+
+    injectTodayCombatSummaryCard(playerId, false);
 
     chrome.runtime.sendMessage({
         type: "TRACK_COMBATS",
@@ -236,7 +258,6 @@ export async function trackCombatReports(playerId: string) {
                     if (combat.isNew) {
                         setTimeout(() => {
                             const icons: string[] = [];
-                            // Animation with combat icon and resource icons
                             icons.push(chrome.runtime.getURL('icons/misc/expedition-ships-icon-medium.png'));
                             if (combat.loot?.metal > 0 || combat.debris?.metal > 0) icons.push(chrome.runtime.getURL('icons/resources/metal-icon-medium.jpg'));
                             if (combat.loot?.crystal > 0 || combat.debris?.crystal > 0) icons.push(chrome.runtime.getURL('icons/resources/crystal-icon-medium.jpg'));
@@ -258,11 +279,6 @@ export async function trackCombatReports(playerId: string) {
 export async function trackRawCombatReports(playerId: string, htmls: string[]) {
     if (!isExtensionStillValid()) return;
 
-    const combatData = scrapeRawCombatHTML(htmls);
-    if (combatData.length === 0) return;
-
-    const unprocessedCombats = combatData;
-
     let removeOGLight = true;
     try {
         const localData = await chrome.storage.local.get("globalSettings");
@@ -273,11 +289,14 @@ export async function trackRawCombatReports(playerId: string, htmls: string[]) {
         console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
     }
 
+    const combatData = scrapeRawCombatHTML(htmls, removeOGLight);
+    if (combatData.length === 0) return;
+
     injectTodayCombatSummaryCard(playerId, false);
 
     chrome.runtime.sendMessage({
         type: "TRACK_COMBATS",
-        data: { combats: unprocessedCombats, playerId }
+        data: { combats: combatData, playerId }
     }, (response) => {
         if (response?.success) {
             response.data.forEach((combat: any) => {

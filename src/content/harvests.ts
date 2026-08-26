@@ -1,4 +1,5 @@
 import { flyToNexusButton } from './effects';
+import { isSharedMessage } from './expeditions';
 
 export function formatExactNumber(num: number): string {
     return new Intl.NumberFormat().format(num);
@@ -20,8 +21,9 @@ export function scrapeDebrisHarvestMessages() {
     const results: any[] = [];
 
     for (const msg of harvestMessages) {
-        const messageId = msg.closest('.msg')?.getAttribute('data-msg-id');
-        if (!messageId) continue;
+        const parentMsg = msg.closest('.msg');
+        const messageId = parentMsg?.getAttribute('data-msg-id');
+        if (!messageId || isSharedMessage(parentMsg || msg)) continue;
 
         const timestamp = msg.getAttribute('data-raw-timestamp');
         const coords = msg.getAttribute('data-raw-targetcoordinates');

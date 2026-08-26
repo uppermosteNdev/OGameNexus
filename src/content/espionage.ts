@@ -1,3 +1,5 @@
+import { isSharedMessage } from './expeditions';
+
 function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
 }
@@ -76,7 +78,7 @@ export function scrapeEspionageMessages(): ScrapedEspionage[] {
     for (const msg of espionageMessages) {
         const msgContainer = msg.closest('.msg');
         const messageId = msgContainer?.getAttribute('data-msg-id');
-        if (!messageId) continue;
+        if (!messageId || isSharedMessage(msgContainer || msg)) continue;
 
         // Only track planets (planet type 1), skip moons (planet type 3)
         const targetPlanetType = msg.getAttribute('data-raw-targetplanettype');
@@ -195,7 +197,7 @@ export function scrapeRawEspionageHTML(htmls: string[]): ScrapedEspionage[] {
     for (const msg of espionageMessages) {
         const msgContainer = msg.closest('.msg');
         const messageId = msgContainer?.getAttribute('data-msg-id');
-        if (!messageId) continue;
+        if (!messageId || isSharedMessage(msgContainer || msg)) continue;
 
         // Only track planets (planet type 1), skip moons (planet type 3)
         const targetPlanetType = msg.getAttribute('data-raw-targetplanettype');

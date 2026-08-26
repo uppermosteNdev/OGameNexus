@@ -9,6 +9,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { calculateEmpireProduction, getLifeformExpLevel, safeArray } from '../../utils/amortizationCalc';
+import { calculateTotalEmpireDailyYield, formatGatherTime } from '../../utils/empireYield';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA, BUILDING_DATA, RESEARCH_DATA, DEFENCE_DATA, LIFEFORM_BUILDING_DATA } from '../../db/staticData';
 import { ThemeIcon } from '../components/ThemeIcon';
@@ -1299,157 +1300,34 @@ const CostsPlanner: React.FC = () => {
     }, [cart, rates]);
 
     const packageMetrics = useMemo(() => {
-        const metalPackageMSU = dailyProduction.metal;
-        const crystalPackageMSU = dailyProduction.crystal * (rates.metal / rates.crystal);
-        const deuteriumPackageMSU = dailyProduction.deuterium * (rates.metal / rates.deuterium);
-
-        const metalPacksNeeded = metalPackageMSU > 0 ? (cartSummary.msu / metalPackageMSU) : 0;
-        const crystalPacksNeeded = crystalPackageMSU > 0 ? (cartSummary.msu / crystalPackageMSU) : 0;
-        const deuteriumPacksNeeded = deuteriumPackageMSU > 0 ? (cartSummary.msu / deuteriumPackageMSU) : 0;
+        const metalPacksNeeded = dailyProduction.metal > 0 ? (cartSummary.cost.metal / dailyProduction.metal) : 0;
+        const crystalPacksNeeded = dailyProduction.crystal > 0 ? (cartSummary.cost.crystal / dailyProduction.crystal) : 0;
+        const deuteriumPacksNeeded = dailyProduction.deuterium > 0 ? (cartSummary.cost.deuterium / dailyProduction.deuterium) : 0;
 
         return {
             metalPacksNeeded,
             crystalPacksNeeded,
             deuteriumPacksNeeded
         };
-    }, [dailyProduction, cartSummary.msu, rates]);
+    }, [dailyProduction, cartSummary.cost]);
 
     // Dynamic multipliers for daily yield MSU calculation
     const mMultiplier = 1;
     const cMultiplier = useMemo(() => rates.metal / rates.crystal, [rates]);
     const dMultiplier = useMemo(() => rates.metal / rates.deuterium, [rates]);
 
-    const totalEmpireDailyYieldMSU = useMemo(() => {
-        let metalHourly = 0;
-        let crystalHourly = 0;
-        let deuteriumHourly = 0;
-        if (calcResults) {
-            planets.forEach(p => {
-                const prod = calcResults.planets[p.id]?.total;
-                if (prod) {
-                    metalHourly += prod.metal || 0;
-                    crystalHourly += prod.crystal || 0;
-                    deuteriumHourly += prod.deuterium || 0;
-                }
-            });
-        }
-        const mineDailyMSU = ((metalHourly * mMultiplier) + (crystalHourly * cMultiplier) + (deuteriumHourly * dMultiplier)) * 24;
+    const yieldBreakdown = useMemo(() => {
+        return calculateTotalEmpireDailyYield({
+            activeAccount,
+            planets,
+            expeditions,
+            combatReports,
+            debrisHarvests,
+            rates
+        });
+    }, [activeAccount, planets, expeditions, combatReports, debrisHarvests, rates]);
 
-        const nowSec = Date.now() / 1000;
-        const last7Days = nowSec - (7 * 24 * 60 * 60);
-
-        let expResMsu7d = 0;
-        let expShipMsu7d = 0;
-        let expDays = 7;
-        if (expeditions.length > 0) {
-            const validTimestamps = expeditions.map(e => e.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
-            const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
-            expDays = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
-            const recentExps = expeditions.filter(e => e.timestamp >= last7Days);
-
-            const shipCostMap: Record<number, any> = {};
-            SHIP_DATA.forEach(s => shipCostMap[s.id] = s.metadata?.cost || { metal: 0, crystal: 0, deuterium: 0 });
-
-            recentExps.forEach(e => {
-                const res = (e.result || '').toLowerCase();
-                if (e.resultDetails) {
-                    const m = Number(e.resultDetails.metal) || 0;
-                    const c = Number(e.resultDetails.crystal) || 0;
-                    const d = Number(e.resultDetails.deuterium) || 0;
-
-                    expResMsu7d += (m * mMultiplier) + (c * cMultiplier) + (d * dMultiplier);
-
-                    if (res.includes('ship') || res.includes('wreck')) {
-                        Object.entries(e.resultDetails).forEach(([id, data]: [string, any]) => {
-                            const sid = parseInt(id);
-                            const cost = shipCostMap[sid];
-                            if (cost) {
-                                const amount = data.amount || data;
-                                const amt = typeof amount === 'number' ? amount : amount.amount || 0;
-                                const sm = (cost.metal || 0) * amt;
-                                const sc = (cost.crystal || 0) * amt;
-                                const sd = (cost.deuterium || 0) * amt;
-
-                                expShipMsu7d += (sm * mMultiplier) + (sc * cMultiplier) + (sd * dMultiplier);
-                            }
-                        });
-                    }
-                }
-            });
-        }
-        const expResDailyMSU = expResMsu7d / expDays;
-        const expShipDailyMSU = expShipMsu7d / expDays;
-
-        let combatMsu7d = 0;
-        let combatDays = 7;
-        if (combatReports.length > 0) {
-            const validTimestamps = combatReports.map(c => c.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
-            const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
-            combatDays = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
-            const recentCombats = combatReports.filter(c => c.timestamp >= last7Days && c.winner === 'attacker');
-
-            recentCombats.forEach(c => {
-                if (c.loot) {
-                    const m = c.loot.metal || 0;
-                    const cr = c.loot.crystal || 0;
-                    const d = c.loot.deuterium || 0;
-                    combatMsu7d += (m * mMultiplier) + (cr * cMultiplier) + (d * dMultiplier);
-                }
-            });
-        }
-        const combatDailyMSU = combatMsu7d / combatDays;
-
-        let debrisMsu7d = 0;
-        let debrisDays = 7;
-        if (debrisHarvests.length > 0) {
-            const validTimestamps = debrisHarvests.map(d => d.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
-            const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
-            debrisDays = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
-            const recentDebris = debrisHarvests.filter(d => d.timestamp >= last7Days && d.recycledResources);
-
-            recentDebris.forEach(d => {
-                const m = d.recycledResources?.metal || 0;
-                const cr = d.recycledResources?.crystal || 0;
-                const det = d.recycledResources?.deuterium || 0;
-                debrisMsu7d += (m * mMultiplier) + (cr * cMultiplier) + (det * dMultiplier);
-            });
-        }
-        const debrisDailyMSU = debrisMsu7d / debrisDays;
-
-        return mineDailyMSU + expResDailyMSU + combatDailyMSU + debrisDailyMSU || 1;
-    }, [planets, calcResults, expeditions, combatReports, debrisHarvests, mMultiplier, cMultiplier, dMultiplier, rates]);
-
-    const formatGatherTime = (days: number): string => {
-        if (days <= 0 || isNaN(days) || !isFinite(days)) return 'Instant';
-
-        let remainingMinutes = Math.round(days * 24 * 60);
-        
-        const minutesInYear = 365 * 24 * 60;
-        const minutesInMonth = 30 * 24 * 60;
-        const minutesInDay = 24 * 60;
-        const minutesInHour = 60;
-
-        const years = Math.floor(remainingMinutes / minutesInYear);
-        remainingMinutes %= minutesInYear;
-
-        const months = Math.floor(remainingMinutes / minutesInMonth);
-        remainingMinutes %= minutesInMonth;
-
-        const targetDays = Math.floor(remainingMinutes / minutesInDay);
-        remainingMinutes %= minutesInDay;
-
-        const hours = Math.floor(remainingMinutes / minutesInHour);
-        const minutes = remainingMinutes % minutesInHour;
-
-        const parts: string[] = [];
-        if (years > 0) parts.push(`${years}y`);
-        if (months > 0) parts.push(`${months}m`);
-        if (targetDays > 0) parts.push(`${targetDays}d`);
-        if (hours > 0) parts.push(`${hours}h`);
-        if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
-
-        return parts.slice(0, 3).join(' ');
-    };
+    const totalEmpireDailyYieldMSU = yieldBreakdown.totalDailyYieldMSU;
 
     const daysToGather = useMemo(() => {
         return cartSummary.msu / totalEmpireDailyYieldMSU;
@@ -2713,7 +2591,7 @@ const CostsPlanner: React.FC = () => {
                                 <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#38bdf8" />
-                                        <span>EST. GATHER TIME</span>
+                                        <span>REMAINING GATHER TIME</span>
                                         <span className="gather-info-icon" title={remainingGatherDateText}>
                                             <Info size={12} />
                                         </span>

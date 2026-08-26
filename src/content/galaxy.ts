@@ -221,6 +221,73 @@ const formatAbbreviatedRate = (num: number): string => {
   return Math.floor(num).toString();
 };
 
+export function parseMSUInput(val: string): number {
+  if (!val) return 0;
+  let clean = val.trim().replace(/,/g, '').toLowerCase();
+  clean = clean.replace(/msu(\/h)?/g, '').replace(/res/g, '').trim();
+  if (!clean || clean === 'none' || clean === 'off' || clean === 'unlimited') return 0;
+  
+  if (clean.endsWith('b') || clean.endsWith('g')) {
+    const num = parseFloat(clean.slice(0, -1));
+    return isNaN(num) ? 0 : Math.min(1000000000, Math.max(0, num * 1000000000));
+  }
+  if (clean.endsWith('m') || clean.endsWith('kk')) {
+    const num = parseFloat(clean.slice(0, -1));
+    return isNaN(num) ? 0 : Math.min(1000000000, Math.max(0, num * 1000000));
+  }
+  if (clean.endsWith('k')) {
+    const num = parseFloat(clean.slice(0, -1));
+    return isNaN(num) ? 0 : Math.min(1000000000, Math.max(0, num * 1000));
+  }
+  const num = parseFloat(clean);
+  return isNaN(num) ? 0 : Math.min(1000000000, Math.max(0, num));
+}
+
+export function sliderPosToMSU(pos: number): number {
+  if (pos <= 0) return 0;
+  if (pos >= 1000) return 1000000000;
+  // Non-linear cubic power curve: increases at a higher rate up to 1B
+  const raw = 1000000000 * Math.pow(pos / 1000, 3);
+  
+  if (raw < 100000) {
+    return Math.round(raw / 10000) * 10000; // Snap to 10k
+  } else if (raw < 1000000) {
+    return Math.round(raw / 50000) * 50000; // Snap to 50k
+  } else if (raw < 10000000) {
+    return Math.round(raw / 250000) * 250000; // Snap to 250k
+  } else if (raw < 100000000) {
+    return Math.round(raw / 1000000) * 1000000; // Snap to 1M
+  } else {
+    return Math.round(raw / 10000000) * 10000000; // Snap to 10M
+  }
+}
+
+export function msuToSliderPos(msu: number): number {
+  if (msu <= 0) return 0;
+  if (msu >= 1000000000) return 1000;
+  const fraction = Math.cbrt(msu / 1000000000);
+  return Math.min(1000, Math.max(0, Math.round(fraction * 1000)));
+}
+
+export function calculatePlanetPredictedMSU(planet: SpiedPlanet): number {
+  if (!planet) return 0;
+  const now = Date.now() / 1000;
+  const dT = Math.max(0, now - (planet.lastSpiedTimestamp || 0)) / 3600; // hours elapsed
+
+  const metalAccumulated = (planet.metalPerHour || 0) * dT;
+  const crystalAccumulated = (planet.crystalPerHour || 0) * dT;
+  const deuteriumAccumulated = (planet.deuteriumPerHour || 0) * dT;
+
+  const metalCap = planet.metalCapacity !== undefined && planet.metalCapacity !== null ? planet.metalCapacity : Infinity;
+  const crystalCap = planet.crystalCapacity !== undefined && planet.crystalCapacity !== null ? planet.crystalCapacity : Infinity;
+  const deuteriumCap = planet.deuteriumCapacity !== undefined && planet.deuteriumCapacity !== null ? planet.deuteriumCapacity : Infinity;
+
+  const metalTotal = Math.max(planet.lastSpiedMetal || 0, Math.min(metalCap, (planet.lastSpiedMetal || 0) + metalAccumulated));
+  const crystalTotal = Math.max(planet.lastSpiedCrystal || 0, Math.min(crystalCap, (planet.lastSpiedCrystal || 0) + crystalAccumulated));
+  const deuteriumTotal = Math.max(planet.lastSpiedDeuterium || 0, Math.min(deuteriumCap, (planet.lastSpiedDeuterium || 0) + deuteriumAccumulated));
+  return metalTotal + crystalTotal * 1.5 + deuteriumTotal * 3.0;
+}
+
 // Tooltip helpers
 function createTooltipElement() {
   if (tooltipElement) return;
@@ -522,6 +589,10 @@ function buildSidebarLayout(sidebar: HTMLElement) {
   const maxRange = savedRange ? parseInt(savedRange, 10) : 500;
   const rangeDisplay = maxRange === 500 ? 'Unlimited' : `${maxRange} sys`;
 
+  const savedMinMsu = parseFloat(localStorage.getItem('og-nexus-intel-min-msu') || '0') || 0;
+  const initialSliderPos = msuToSliderPos(savedMinMsu);
+  const initialMsuText = savedMinMsu > 0 ? `${formatCompactNumber(savedMinMsu)} MSU` : 'None';
+
   sidebar.innerHTML = `
     <div class="og-nexus-intel-sidebar-header">
       <h2 class="og-nexus-intel-sidebar-title">Raid Helper</h2>
@@ -538,6 +609,14 @@ function buildSidebarLayout(sidebar: HTMLElement) {
         </div>
         <input type="range" id="og-nexus-intel-range-slider" min="1" max="500" value="${maxRange}" class="og-nexus-intel-range-slider">
         <div id="og-nexus-intel-range-warning-wrapper"></div>
+
+        <div class="og-nexus-intel-min-msu-wrapper">
+          <div class="og-nexus-intel-range-header">
+            <span class="range-label">Min predicted Resource MSU on planet:</span>
+            <input type="text" id="og-nexus-intel-min-msu-input" class="og-nexus-intel-editable-val" value="${initialMsuText}" title="Click to edit exact MSU threshold (e.g. 500k, 15M, 1B)" autocomplete="off" />
+          </div>
+          <input type="range" id="og-nexus-intel-min-msu-slider" min="0" max="1000" value="${initialSliderPos}" class="og-nexus-intel-range-slider">
+        </div>
       </div>
 
       <table class="og-nexus-intel-table">
@@ -594,10 +673,55 @@ function buildSidebarLayout(sidebar: HTMLElement) {
     updateSidebarData();
   });
 
+  const minMsuSlider = sidebar.querySelector('#og-nexus-intel-min-msu-slider') as HTMLInputElement | null;
+  const minMsuInput = sidebar.querySelector('#og-nexus-intel-min-msu-input') as HTMLInputElement | null;
+
+  minMsuSlider?.addEventListener('input', (e) => {
+    const pos = parseInt((e.target as HTMLInputElement).value, 10);
+    const msuVal = sliderPosToMSU(pos);
+    localStorage.setItem('og-nexus-intel-min-msu', String(msuVal));
+    if (minMsuInput && document.activeElement !== minMsuInput) {
+      minMsuInput.value = msuVal > 0 ? `${formatCompactNumber(msuVal)} MSU` : 'None';
+    }
+    updateSidebarData();
+    applyGalaxyRings();
+  });
+
+  minMsuInput?.addEventListener('input', (e) => {
+    const rawVal = (e.target as HTMLInputElement).value;
+    const msuVal = parseMSUInput(rawVal);
+    localStorage.setItem('og-nexus-intel-min-msu', String(msuVal));
+    if (minMsuSlider) {
+      minMsuSlider.value = String(msuToSliderPos(msuVal));
+    }
+    updateSidebarData();
+    applyGalaxyRings();
+  });
+
+  minMsuInput?.addEventListener('blur', () => {
+    const saved = parseFloat(localStorage.getItem('og-nexus-intel-min-msu') || '0') || 0;
+    if (minMsuInput) {
+      minMsuInput.value = saved > 0 ? `${formatCompactNumber(saved)} MSU` : 'None';
+    }
+  });
+
+  minMsuInput?.addEventListener('focus', () => {
+    const saved = parseFloat(localStorage.getItem('og-nexus-intel-min-msu') || '0') || 0;
+    if (minMsuInput && saved > 0) {
+      minMsuInput.select();
+    }
+  });
+
   // Delegated click event listener for coordinates links inside tbody
   const tbody = sidebar.querySelector('#og-nexus-intel-tbody');
   tbody?.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
+    const row = target.closest('.og-nexus-intel-row');
+    if (row && row.classList.contains('og-nexus-intel-row-disabled')) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     const link = target.closest('.og-nexus-intel-coords-link');
     if (link) {
       e.preventDefault();
@@ -650,12 +774,13 @@ function rebuildGTabs(sidebar: HTMLElement) {
 function getSidebarStateKey(): string {
   const savedRange = sessionStorage.getItem('og-nexus-intel-max-range');
   const maxRange = savedRange ? parseInt(savedRange, 10) : 500;
+  const minMsu = localStorage.getItem('og-nexus-intel-min-msu') || '0';
   
   const flying = getFlyingEspionageCoords().join(',');
   const recently = Object.entries(getRecentlySpied())
     .map(([coords, ts]) => `${coords}:${ts}`)
     .join(',');
-  return `${selectedGalaxyTab}|${sidebarCurrentPage}|${sidebarSortMode}|${maxRange}|${flying}|${recently}`;
+  return `${selectedGalaxyTab}|${sidebarCurrentPage}|${sidebarSortMode}|${maxRange}|${minMsu}|${flying}|${recently}`;
 }
 
 function updateSidebarData(force = false) {
@@ -756,6 +881,7 @@ function updateSidebarData(force = false) {
   } else {
     const flyingCoords = getFlyingEspionageCoords();
     const recentlySpied = getRecentlySpied();
+    const savedMinMsu = parseFloat(localStorage.getItem('og-nexus-intel-min-msu') || '0') || 0;
 
     paginatedTargets.forEach(target => {
       const prodMSU = target.metalPerHour + target.crystalPerHour * 1.5 + target.deuteriumPerHour * 3.0;
@@ -763,8 +889,15 @@ function updateSidebarData(force = false) {
       const isLong = target.playerStatus.includes('longinactive');
       const espionageStatus = getEspionageStatus(target.coords, flyingCoords, recentlySpied);
       
+      const predictedMSU = calculatePlanetPredictedMSU(target);
+      const isBelowMinMSU = savedMinMsu > 0 && predictedMSU < savedMinMsu;
+      const rowDisabledClass = isBelowMinMSU ? 'og-nexus-intel-row-disabled' : '';
+      const tooltipDisabledInfo = isBelowMinMSU 
+        ? `title="Predicted Resource MSU on planet (${formatCompactNumber(predictedMSU)}) is below minimum threshold (${formatCompactNumber(savedMinMsu)})"` 
+        : '';
+
       rowsHTML += `
-        <tr class="og-nexus-intel-row">
+        <tr class="og-nexus-intel-row ${rowDisabledClass}" ${tooltipDisabledInfo}>
           <td class="og-nexus-intel-cell-player">
             <span class="og-nexus-intel-player-name" title="${target.playerName}">${target.playerName}</span>
             <span class="og-nexus-intel-player-status ${isLong ? 'status-long-inactive' : 'status-inactive'}">
@@ -777,7 +910,7 @@ function updateSidebarData(force = false) {
             </span>
           </td>
           <td class="og-nexus-intel-cell-coords">
-            <a href="#" class="og-nexus-intel-coords-link" data-coords="${target.coords}">[${target.coords}]</a>
+            <a href="#" class="og-nexus-intel-coords-link" data-coords="${target.coords}" ${isBelowMinMSU ? 'tabindex="-1"' : ''}>[${target.coords}]</a>
           </td>
           <td class="og-nexus-intel-cell-prod" style="color: ${getRingColor(prodMSU)}; text-shadow: 0 0 3px ${getRingColor(prodMSU)}40;">
             ${formattedProd}<span class="msu-unit">MSU/h</span>
@@ -1120,6 +1253,15 @@ export function applyGalaxyRings() {
     else if (group === 2) shouldShow = showGroup2;
     else if (group === 1) shouldShow = showGroup1;
     else shouldShow = showGroup0;
+
+    // Minimum predicted Resource MSU on inactive planets filter
+    const minMsu = parseFloat(localStorage.getItem('og-nexus-intel-min-msu') || '0') || 0;
+    if (minMsu > 0) {
+      const predMsu = planet ? calculatePlanetPredictedMSU(planet) : 0;
+      if (predMsu < minMsu) {
+        shouldShow = false;
+      }
+    }
 
     if (!shouldShow) {
       rowEl.style.opacity = '0.35';

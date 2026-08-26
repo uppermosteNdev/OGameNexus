@@ -12,6 +12,20 @@ import {
   formatNumber,
   formatROI
 } from './rulesEngine';
+import { findMatchingQueueItem } from '../../utils/amortizationCalc';
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return '0s';
+  const totalSec = Math.floor(ms / 1000);
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
 
 function renderPlanetTodosZone(note: AssistantNotification): string {
   const todos: any[] = note.meta?.todos;
@@ -20,6 +34,10 @@ function renderPlanetTodosZone(note: AssistantNotification): string {
   }
 
   const totalPlanetTodos = note.meta?.totalPlanetTodos || todos.length;
+  const queueData = note.meta?.productionQueue;
+  const queueItems: any[] = queueData?.items || [];
+  const offset = queueData?.serverTimeOffset || 0;
+  const currentServerTime = Date.now() + offset;
 
   return `
     <div class="nexus-todo-matrix">
@@ -40,6 +58,43 @@ function renderPlanetTodosZone(note: AssistantNotification): string {
           const msuCost = formatNumber(Math.round(t.msuCost));
           const msuDaily = formatNumber(Math.round((t.productionIncrease || 0) * 24));
           const roi = formatROI(t.roiHours);
+
+          const ongoingQueue = findMatchingQueueItem(t, queueItems, note.coords);
+          const remainingMs = ongoingQueue && ongoingQueue.endTimestamp > 0 ? Math.max(0, ongoingQueue.endTimestamp - currentServerTime) : 0;
+          const remainingTimeStr = ongoingQueue && ongoingQueue.endTimestamp > 0 ? formatCountdown(remainingMs) : '';
+
+          const ongoingBadgeHtml = ongoingQueue ? `
+            <div class="todo-ongoing-badge" style="
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.12) 100%);
+              border: 1px solid rgba(245, 158, 11, 0.45);
+              box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+              padding: 2px 7px;
+              border-radius: 5px;
+              font-size: 10px;
+              font-weight: 800;
+              color: #fbbf24;
+              letter-spacing: 0.02em;
+              margin-left: 6px;
+              vertical-align: middle;
+            ">
+              <span style="
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: #f59e0b;
+                box-shadow: 0 0 5px #f59e0b;
+                display: inline-block;
+                animation: ogNexusPulse 1.5s infinite;
+              "></span>
+              <span>ONGOING</span>
+              <span class="nexus-todo-countdown-timer" data-end-ts="${ongoingQueue.endTimestamp}" style="opacity: 0.9; font-size: 9.5px; font-family: monospace; margin-left: 2px;">
+                (${remainingTimeStr})
+              </span>
+            </div>
+          ` : '';
           
           let iconUrl = t.icon || 'icons/resources/metal_mine_large.jpg';
           if (!iconUrl.startsWith('http') && !iconUrl.startsWith('chrome-extension://') && !iconUrl.startsWith('/')) {
@@ -74,6 +129,7 @@ function renderPlanetTodosZone(note: AssistantNotification): string {
                 <div class="todo-title-row">
                   <span class="todo-name">${t.name}</span>
                   <span class="todo-target-lvl">Level ${t.targetLevel}</span>
+                  ${ongoingBadgeHtml}
                 </div>
                 <div class="todo-stats-row">
                   <span class="todo-stat-pill"><span class="lbl">Cost:</span> <span class="val-cost">${msuCost} MSU</span></span>
@@ -831,17 +887,57 @@ export async function openAssistantModal(
     `;
   };
 
+  let modalLiveTimer: number | null = null;
+
   const attachModalEvents = () => {
+    const closeModal = () => {
+      if (modalLiveTimer) {
+        window.clearInterval(modalLiveTimer);
+        modalLiveTimer = null;
+      }
+      overlay.remove();
+    };
+
     // Close button & outside click
-    overlay.querySelector('.nexus-modal-close-btn')?.addEventListener('click', () => overlay.remove());
+    overlay.querySelector('.nexus-modal-close-btn')?.addEventListener('click', closeModal);
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
+      if (e.target === overlay) closeModal();
       // Close open breadcrumb menus on outside click
       if (openBreadcrumbMenuKey && !(e.target as HTMLElement).closest('.nexus-dropdown-wrapper')) {
         openBreadcrumbMenuKey = null;
         renderModalContent();
       }
     });
+
+    if (modalLiveTimer) {
+      window.clearInterval(modalLiveTimer);
+      modalLiveTimer = null;
+    }
+
+    const timerElements = overlay.querySelectorAll<HTMLElement>('.nexus-todo-countdown-timer[data-end-ts]');
+    if (timerElements.length > 0) {
+      modalLiveTimer = window.setInterval(() => {
+        if (!document.contains(overlay)) {
+          if (modalLiveTimer) {
+            window.clearInterval(modalLiveTimer);
+            modalLiveTimer = null;
+          }
+          return;
+        }
+        const now = Date.now();
+        overlay.querySelectorAll<HTMLElement>('.nexus-todo-countdown-timer[data-end-ts]').forEach(el => {
+          const endTs = parseInt(el.getAttribute('data-end-ts') || '0', 10);
+          if (endTs > 0) {
+            const rem = Math.max(0, endTs - now);
+            if (rem <= 0) {
+              el.textContent = '(Completed)';
+            } else {
+              el.textContent = `(${formatCountdown(rem)})`;
+            }
+          }
+        });
+      }, 1000);
+    }
 
     // Re-sync Empire button
     overlay.querySelector('.nexus-modal-sync-btn')?.addEventListener('click', async () => {

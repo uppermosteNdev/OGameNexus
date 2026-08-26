@@ -7,7 +7,7 @@ import {
     AlertTriangle, CheckCircle, ChevronDown, ChevronUp,
     MapPin, Thermometer, Database, HelpCircle
 } from 'lucide-react';
-import { calculateEmpireProduction, DEFAULT_RATES, Cost, getResearchLevel, safeArray } from '../../utils/amortizationCalc';
+import { calculateEmpireProduction, DEFAULT_RATES, Cost, getResearchLevel, safeArray, getCollectorClassBoost } from '../../utils/amortizationCalc';
 import { getProductionBoosters, getItemDurationText } from '../../utils/items';
 
 const formatLargeNumber = (num: number) => {
@@ -63,7 +63,7 @@ const BreakdownRow: React.FC<BreakdownRowProps> = ({ label, metal, crystal, deut
     );
 };
 
-const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }> = ({ planet, account, calcData }) => {
+const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any, collectorClassBoost: number }> = ({ planet, account, calcData, collectorClassBoost }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     
     // Scraped values
@@ -111,9 +111,11 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
         if (b.id === 11108) { lfbC += b.level * 0.015; lfbD += b.level * 0.01; }
     });
 
-    const classM = account?.playerClass === 1 ? 0.25 : 0;
-    const classC = account?.playerClass === 1 ? 0.25 : 0;
-    const classD = account?.playerClass === 1 ? 0.25 : 0;
+    const isCollector = account?.playerClass === 1;
+    const classMineBonus = isCollector ? 0.25 * (1 + collectorClassBoost) : 0;
+    const classM = classMineBonus;
+    const classC = classMineBonus;
+    const classD = classMineBonus;
 
     const geologistM = account?.hasGeologist ? 0.1 : 0;
     const geologistC = account?.hasGeologist ? 0.1 : 0;
@@ -140,10 +142,16 @@ const PlanetDebugCard: React.FC<{ planet: Planet, account: any, calcData: any }>
 
     const universeSpeed = account?.universeSpeed || 1;
 
-    const crawlersSettingsFactor = (planet.productionSettings?.crawlers !== undefined ? planet.productionSettings.crawlers : 100) / 100;
-    const maxCrawlers = ((planet.metalMine || 0) + (planet.crystalMine || 0) + (planet.deuteriumMine || 0)) * universeSpeed;
-    const activeCrawlers = Math.min(planet.crawlers || 0, maxCrawlers);
-    const crawlerBonus = activeCrawlers * 0.0002 * crawlersSettingsFactor;
+    const effectiveCollectorFactor = isCollector ? (1.5 + collectorClassBoost) : 1.0;
+    const crawlerCapacityMult = (isCollector && account?.hasGeologist) ? 8.8 : 8.0;
+    const crawlersSettingsFactor = (planet.productionSettings?.crawlers !== undefined ? planet.productionSettings.crawlers : (isCollector ? 150 : 100)) / 100;
+    const bonusPerCrawler = 0.0002 * effectiveCollectorFactor * crawlersSettingsFactor;
+    const mineCapacity = Math.floor(((planet.metalMine || 0) + (planet.crystalMine || 0) + (planet.deuteriumMine || 0)) * crawlerCapacityMult);
+    const capCrawlers = bonusPerCrawler > 0 ? Math.ceil(0.50 / bonusPerCrawler) : mineCapacity;
+    const maxCrawlers = Math.min(mineCapacity, capCrawlers);
+    const currentCrawlers = planet.ships?.[217] ?? (planet.ships as any)?.[`217`] ?? planet.crawlers ?? 0;
+    const activeCrawlers = Math.min(currentCrawlers, maxCrawlers);
+    const crawlerBonus = Math.min(0.50, activeCrawlers * bonusPerCrawler);
 
     let slot = 0;
     try { slot = parseInt(planet.coords.split(':')[2]); } catch (e) { }
@@ -580,6 +588,7 @@ const TestingProduction: React.FC = () => {
     // Run empire production calculations
     const empireState = { account: activeAccount, planets: planetsData };
     const calcResults = calculateEmpireProduction(empireState);
+    const collectorClassBoost = activeAccount.playerClass === 1 ? getCollectorClassBoost(empireState as any) : 0;
 
     // Calculate overall statistics
     let totalScrapedM = 0, totalScrapedC = 0, totalScrapedD = 0;
@@ -826,6 +835,7 @@ const TestingProduction: React.FC = () => {
                         planet={planet} 
                         account={activeAccount} 
                         calcData={calcResults}
+                        collectorClassBoost={collectorClassBoost}
                     />
                 ))}
             </div>

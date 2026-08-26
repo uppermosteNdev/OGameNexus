@@ -1,4 +1,4 @@
-import { injectTodaySummaryCard, addSessionTrackedItems, setNewBadgeActive } from './expeditions';
+import { injectTodaySummaryCard, addSessionTrackedItems, setNewBadgeActive, isSharedMessage } from './expeditions';
 import { flyToNexusButton } from './effects';
 
 function isExtensionStillValid() {
@@ -6,8 +6,13 @@ function isExtensionStillValid() {
 }
 
 function parseLifeformElement(msg: Element): any | null {
-    const messageId = msg.closest('.msg')?.getAttribute('data-msg-id');
+    const parentMsg = msg.closest('.msg');
+    const messageId = parentMsg?.getAttribute('data-msg-id');
     if (!messageId) return null;
+
+    if (isSharedMessage(parentMsg || msg)) {
+        return null;
+    }
 
     const timestamp = msg.getAttribute('data-raw-timestamp');
     const coords = msg.getAttribute('data-raw-coords');
@@ -35,33 +40,50 @@ function parseLifeformElement(msg: Element): any | null {
 const processedLifeformIds = new Set<string>();
 
 export function scrapeLifeformMessages() {
-    const messages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]:not([data-og-nexus-processed="true"])');
-    const results = [];
+    const messages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]');
+    const newItemsToTrack: any[] = [];
 
     for (const msg of messages) {
         const item = parseLifeformElement(msg);
-        if (item) {
+        if (!item) continue;
+
+        // 1. Immediately and synchronously apply visual transformation to DOM if not already applied
+        const parentMsg = (msg.closest('.msg') || document.querySelector(`.msg[data-msg-id="${item.messageId}"]`)) as HTMLElement | null;
+        if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
+            parentMsg.classList.add('og-nexus-tracked');
+            updateLifeformDiscoveryVisuals(parentMsg, item, true);
+        }
+
+        // 2. Queue for background tracking if not already processed in this session
+        if (!msg.hasAttribute('data-og-nexus-processed')) {
             msg.setAttribute('data-og-nexus-processed', 'true');
             if (!processedLifeformIds.has(item.messageId)) {
                 processedLifeformIds.add(item.messageId);
-                results.push(item);
+                newItemsToTrack.push(item);
             }
         }
     }
-    return results;
+    return newItemsToTrack;
 }
 
 export function scrapeRawLifeformHTML(htmls: string[]) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmls.join(''), 'text/html');
     const messages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]');
-    const results = [];
+    const results: any[] = [];
 
     for (const msg of messages) {
         const item = parseLifeformElement(msg);
         if (item) {
             const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="61"]`);
-            if (domMsg) domMsg.setAttribute('data-og-nexus-processed', 'true');
+            if (domMsg) {
+                domMsg.setAttribute('data-og-nexus-processed', 'true');
+                const parentMsg = domMsg.closest('.msg') as HTMLElement;
+                if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
+                    parentMsg.classList.add('og-nexus-tracked');
+                    updateLifeformDiscoveryVisuals(parentMsg, item, true);
+                }
+            }
 
             if (!processedLifeformIds.has(item.messageId)) {
                 processedLifeformIds.add(item.messageId);

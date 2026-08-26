@@ -41,6 +41,38 @@ export async function fetchEmpireProductionQueue(
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
+const OGAME_TECH_TOKENS: Record<string, number> = {
+  // Mines & Facilities
+  'metalmine': 1, 'supply1': 1,
+  'crystalmine': 2, 'supply2': 2,
+  'deuteriumsynthesizer': 3, 'deuteriummine': 3, 'supply3': 3,
+  'solarplant': 4, 'fusionplant': 12, 'fusionreactor': 12,
+  'roboticsfactory': 14, 'nanitefactory': 15, 'shipyard': 21,
+  'metalstorage': 22, 'crystalstorage': 23, 'deuteriumstorage': 24, 'deuteriumtank': 24,
+  'researchlaboratory': 31, 'researchlab': 31, 'terraformer': 33, 'alliancedepot': 34,
+  'spacedock': 36, 'lunarbase': 41, 'sensorphalanx': 42, 'jumpgate': 43, 'missilesilo': 44,
+
+  // Research
+  'espionagetechnology': 106, 'computertechnology': 108, 'weaponstechnology': 109,
+  'shieldingtechnology': 110, 'armourtechnology': 111, 'energytechnology': 113,
+  'hyperspacetechnology': 114, 'combustiondrive': 115, 'impulsedrive': 117,
+  'hyperspacedrive': 118, 'lasertechnology': 120, 'iontechnology': 121,
+  'plasmatechnology': 122, 'intergalacticresearchnetwork': 123, 'astrophysics': 124,
+  'gravitontechnology': 199,
+
+  // Ships
+  'smallcargo': 202, 'largecargo': 203, 'lightfighter': 204, 'heavyfighter': 205,
+  'cruiser': 206, 'battleship': 207, 'colonyship': 208, 'recycler': 209,
+  'espionageprobe': 210, 'bomber': 211, 'solarsatellite': 212, 'destroyer': 213,
+  'deathstar': 214, 'battlecruiser': 215, 'crawler': 217, 'reaper': 218, 'pathfinder': 219,
+
+  // Defense
+  'rocketlauncher': 401, 'lightlaser': 402, 'heavylaser': 403, 'gausscannon': 404,
+  'ioncannon': 405, 'plasmaturret': 406, 'smallshielddome': 407, 'largeshielddome': 408,
+  'antiballisticmissile': 502, 'antiballisticmissiles': 502,
+  'interplanetarymissile': 503, 'interplanetarymissiles': 503
+};
+
     // Build planet coordinate/name map from sidebar if available
     const planetMap: Record<string, { name: string; coords: string }> = {};
     document.querySelectorAll('#planetList .smallplanet, .smallplanet').forEach(el => {
@@ -55,13 +87,50 @@ export async function fetchEmpireProductionQueue(
     const items: ProductionQueueItem[] = [];
     let hasActiveResearch = false;
 
-    // Parse all countdown / data-end time elements
+    // Parse all active production items
     doc.querySelectorAll('time[data-end], .countdown[data-end]').forEach(timeEl => {
       const cls = timeEl.className || '';
-      const details = timeEl.closest('.productionDetails') || timeEl.closest('.production');
+      const prodEl = timeEl.closest('.production') || timeEl.closest('.productionDetails') || timeEl.parentElement;
+      const parentQueue = timeEl.closest('.singleQueue');
+      const parentPlanet = timeEl.closest('.planetQueues');
+
+      // Extract Planet Info & Planet ID
+      const planetNameFromDoc = parentPlanet?.querySelector('.planetName')?.textContent?.trim() || '';
+      const coordsFromDoc = parentPlanet?.querySelector('.planetCoods')?.textContent?.trim() || '';
+      const targetUrl = parentQueue?.getAttribute('data-target-url') || '';
+      let planetId = targetUrl.match(/cp=(\d+)/)?.[1] || '';
+      if (!planetId && cls) {
+        const idMatch = cls.match(/\d+/);
+        if (idMatch) planetId = idMatch[0];
+      }
+
+      // Extract Universal Tech ID from <technology-icon>
+      const iconEl = prodEl?.querySelector('technology-icon') || prodEl?.querySelector('.productionIcon *');
+      const iconHtml = iconEl ? iconEl.outerHTML : (prodEl?.querySelector('.productionIcon')?.outerHTML || '');
+      
+      let techId: number | undefined = undefined;
+      const lfTechMatch = iconHtml.match(/lifeformtech(\d+)/i);
+      const lfBuildMatch = iconHtml.match(/lifeformbuilding(\d+)/i);
+      const standardTechMatch = iconHtml.match(/(?:^|\s|["'_])tech(\d+)/i);
+
+      if (lfTechMatch) {
+        techId = parseInt(lfTechMatch[1], 10);
+      } else if (lfBuildMatch) {
+        techId = parseInt(lfBuildMatch[1], 10);
+      } else if (standardTechMatch) {
+        techId = parseInt(standardTechMatch[1], 10);
+      } else {
+        const attrTokens = (iconHtml.toLowerCase().match(/[a-z0-9]+/g) || []);
+        for (const token of attrTokens) {
+          if (OGAME_TECH_TOKENS[token] !== undefined) {
+            techId = OGAME_TECH_TOKENS[token];
+            break;
+          }
+        }
+      }
 
       // Extract Name
-      const nameEl = details?.querySelector('.productionName');
+      const nameEl = prodEl?.querySelector('.productionName');
       let name = '';
       if (nameEl) {
         const clone = nameEl.cloneNode(true) as HTMLElement;
@@ -69,11 +138,11 @@ export async function fetchEmpireProductionQueue(
         name = clone.textContent?.trim() || '';
       }
       if (!name) {
-        name = details?.querySelector('.productionName')?.childNodes[0]?.textContent?.trim() || 'Unknown';
+        name = prodEl?.querySelector('.productionName')?.childNodes[0]?.textContent?.trim() || 'Unknown';
       }
 
       // Extract Level
-      const levelRaw = details?.querySelector('.productionLevel')?.textContent?.trim() || '';
+      const levelRaw = prodEl?.querySelector('.productionLevel')?.textContent?.trim() || '';
       const levelNum = parseInt(levelRaw.replace(/\D/g, ''), 10);
       const level = !isNaN(levelNum) ? levelNum : undefined;
       const levelText = levelRaw || (level !== undefined ? `Lvl ${level}` : undefined);
@@ -87,42 +156,47 @@ export async function fetchEmpireProductionQueue(
       let typeLabel = 'Base Building';
       const lowerCls = cls.toLowerCase();
 
-      if (lowerCls.includes('lifeformresearch')) {
+      if (lowerCls.includes('lifeformresearch') || (techId && techId > 10000 && String(techId)[2] === '2')) {
         type = 'lifeform_research';
         typeLabel = 'LF Research';
-      } else if (lowerCls.includes('lifeformbuilding')) {
+      } else if (lowerCls.includes('lifeformbuilding') || (techId && techId > 10000 && String(techId)[2] === '1')) {
         type = 'lifeform_building';
         typeLabel = 'LF Building';
       } else if (lowerCls.includes('ship_2nd')) {
         type = 'mecha_shipyard';
         typeLabel = 'Mecha Shipyard';
-      } else if (lowerCls.includes('ship')) {
+      } else if (lowerCls.includes('ship') || (techId && techId >= 200 && techId < 300)) {
         type = 'shipyard';
         typeLabel = 'Shipyard';
-      } else if (lowerCls.includes('research')) {
+      } else if (lowerCls.includes('research') || (techId && techId >= 100 && techId < 200)) {
         type = 'research';
         typeLabel = 'Research';
         hasActiveResearch = true;
-      } else if (lowerCls.includes('building')) {
+        planetId = 'global';
+      } else if (lowerCls.includes('building') || (techId && techId >= 1 && techId < 100)) {
         type = 'building';
         typeLabel = 'Base Building';
       }
 
-      // Extract Planet ID from class (e.g. Building33700826 -> 33700826)
-      const idMatch = cls.match(/\d+/);
-      const planetId = idMatch ? idMatch[0] : (type === 'research' ? 'global' : 'unknown');
+      if (!planetId) {
+        planetId = (type === 'research' ? 'global' : 'unknown');
+      }
+
       const planetInfo = planetMap[planetId];
+      const finalCoords = coordsFromDoc || planetInfo?.coords;
+      const finalPlanetName = planetNameFromDoc || planetInfo?.name;
 
       items.push({
         type,
         typeLabel,
         planetId,
-        planetName: planetInfo?.name,
-        coords: planetInfo?.coords,
+        planetName: finalPlanetName,
+        coords: finalCoords,
         itemName: name,
         level,
         levelText,
-        endTimestamp
+        endTimestamp,
+        techId
       });
     });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, Globe, X, Maximize2, ChevronDown, Rocket, RefreshCw } from 'lucide-react';
+import { Trash2, Globe, X, Maximize2, ChevronDown, Rocket } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../db';
 
@@ -67,7 +67,6 @@ const ScrapOptimizer: React.FC = () => {
         }
     );
     const [results, setResults] = useState<{ ships: Record<string, number>, totals: { m: number, c: number, d: number } } | null>(null);
-    const [isSyncing, setIsSyncing] = useState(false);
 
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -82,25 +81,6 @@ const ScrapOptimizer: React.FC = () => {
                 c: planet.crystalCapacity || 0,
                 d: planet.deuteriumCapacity || 0
             });
-        }
-    };
-
-    const syncCapacities = async () => {
-        if (!activePlanet || isSyncing) return;
-        setIsSyncing(true);
-        try {
-            chrome.runtime.sendMessage({
-                type: "FETCH_LATEST_CAPACITIES",
-                planetId: activePlanet.id
-            }, (response) => {
-                if (response?.success) {
-                    // Success!
-                }
-                setIsSyncing(false);
-            });
-        } catch (e) {
-            console.error("Failed to sync capacities", e);
-            setIsSyncing(false);
         }
     };
 
@@ -328,18 +308,7 @@ const ScrapOptimizer: React.FC = () => {
                         </div>
 
                         <div className="config-card merchant">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <label>Scrap Merchant %</label>
-                                {activePlanet && (
-                                    <button
-                                        className={`btn-sync-caps ${isSyncing ? 'spinning' : ''}`}
-                                        onClick={syncCapacities}
-                                        title="Sync storage capacities from game"
-                                    >
-                                        <RefreshCw size={10} />
-                                    </button>
-                                )}
-                            </div>
+                            <label>Scrap Merchant %</label>
                             <input
                                 type="number"
                                 value={scrapPercent}

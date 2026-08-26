@@ -28,6 +28,7 @@ import { db } from '../../db';
 import { SHIP_DATA } from '../../db/staticData';
 import { renderAnalyticsTab } from '../../content/analytics';
 import { calculateEmpireProduction, safeArray } from '../../utils/amortizationCalc';
+import { calculateTotalEmpireDailyYield } from '../../utils/empireYield';
 import { ThemeIcon } from '../components/ThemeIcon';
 
 import {
@@ -910,12 +911,20 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                     gridArea="1 / 1 / 3 / 6"
                 >
                     {(() => {
-                        const mineDaily = totalMSUPerHour * 24;
-                        const expResDaily = expStats?.avgResDaily.msu || 0;
-                        const expShipDaily = expStats?.avgShipDaily.msu || 0;
-                        const combatDaily = combatStats?.avgDaily.msu || 0;
-                        const debrisDaily = debrisStats?.avgDaily.msu || 0;
-                        const totalRevenue = mineDaily + expResDaily + expShipDaily + combatDaily + debrisDaily || 1;
+                        const yieldBreakdown = calculateTotalEmpireDailyYield({
+                            activeAccount,
+                            planets,
+                            expeditions,
+                            combatReports,
+                            debrisHarvests,
+                            rates
+                        });
+                        const mineDaily = yieldBreakdown.mineDailyMSU;
+                        const expResDaily = yieldBreakdown.expResDailyMSU;
+                        const expShipDaily = yieldBreakdown.expShipDailyMSU;
+                        const combatDaily = yieldBreakdown.combatDailyMSU;
+                        const debrisDaily = yieldBreakdown.debrisDailyMSU;
+                        const totalRevenue = yieldBreakdown.totalDailyYieldMSU;
 
                         const mineProp = (mineDaily / totalRevenue) * 283;
                         const expResProp = (expResDaily / totalRevenue) * 283;

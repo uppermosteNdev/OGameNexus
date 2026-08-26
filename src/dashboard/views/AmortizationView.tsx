@@ -10,7 +10,8 @@ import {
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, TodoProject, ProductionQueueItem, EmpireProductionQueueData } from '../../db';
-import { AmortizationItem, AmortizationType, rankAmortizationItems, DEFAULT_RATES, formatROI, Cost, calculateMSU, getItemIcon, AMORTIZATION_TABLE as STATIC_TABLE } from '../../utils/amortizationCalc';
+import { AmortizationItem, AmortizationType, rankAmortizationItems, DEFAULT_RATES, formatROI, Cost, calculateMSU, getItemIcon, getAmortizationTechId, findMatchingQueueItem, AMORTIZATION_TABLE as STATIC_TABLE } from '../../utils/amortizationCalc';
+import { getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA } from '../../db/staticData';
 
 interface AmortizationViewProps {
@@ -132,37 +133,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     }, [liveAccount?.productionQueue, cachedQueue, account?.productionQueue]);
 
     const findOngoingQueueItem = (item: AmortizationItem, planetCoords?: string): ProductionQueueItem | undefined => {
-        if (!queueItems || queueItems.length === 0) return undefined;
-        const cleanItemName = (item.name || '').toLowerCase().trim();
-
-        return queueItems.find(q => {
-            const cleanQueueName = (q.itemName || '').toLowerCase().trim();
-            const nameMatch = cleanQueueName === cleanItemName ||
-                              cleanQueueName.includes(cleanItemName) ||
-                              cleanItemName.includes(cleanQueueName);
-            if (!nameMatch) return false;
-
-            // For global empire research (e.g. Plasma Technology)
-            if (item.type === AmortizationType.PlasmaTechnology || !item.planetId) {
-                return q.type === 'research' || q.planetId === 'global';
-            }
-
-            // For planet-specific items
-            if (item.planetId) {
-                const pId1 = String(q.planetId || '').replace(/\D/g, '');
-                const pId2 = String(item.planetId || '').replace(/\D/g, '');
-                if (pId1 && pId2 && pId1 === pId2) return true;
-            }
-
-            // Fallback match by coordinates
-            if (planetCoords && q.coords) {
-                const c1 = planetCoords.replace(/[\[\]]/g, '').trim();
-                const c2 = q.coords.replace(/[\[\]]/g, '').trim();
-                if (c1 && c1 === c2) return true;
-            }
-
-            return false;
-        });
+        return findMatchingQueueItem(item, queueItems, planetCoords);
     };
 
     const todoList = useLiveQuery(

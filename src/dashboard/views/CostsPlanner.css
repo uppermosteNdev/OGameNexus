@@ -2027,3 +2027,15 @@
     transform: scale(1.15);
     filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6));
 }
+
+.msu-formula-sub {
+    font-size: 0.68rem;
+    color: rgba(255, 255, 255, 0.45);
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    text-align: center;
+    margin-top: 3px;
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

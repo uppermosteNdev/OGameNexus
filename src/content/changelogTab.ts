@@ -14,6 +14,18 @@ export interface ChangelogVersion {
 
 export const NEXUS_CHANGELOGS: ChangelogVersion[] = [
   {
+    version: 'v1.2.4',
+    items: [
+      { type: 'Feature', text: 'Raid Helper Min MSU Filter: Exponential 0–1B slider with editable value to filter and dim inactive planets below your desired Resource MSU in Raid Helper & Galaxy view.' },
+      { type: 'Bugfix', text: 'Collector & Crawler Calculations: Fixed 50% mine bonus hard cap, overload %, geologist multiplier (8.8x/8.0x), and empire-wide Rock\'tal T18 Collector boost.' },
+      { type: 'Feature', text: 'Ongoing Upgrades in Amortization & Overseer: Active building and research queues now display live countdown timers in Amortization To-Do and the Overseer bar.' },
+      { type: 'Polishing', text: 'Costs Planner Gather Times: Total and Remaining Gather Times now accurately calculate using shopping cart MSU cost and total empire resources divided by Empire Daily Yield.' },
+      { type: 'Bugfix', text: 'Language-Agnostic Queues: Fixed building and research queue scraping across all non-English OGame servers.' },
+      { type: 'Bugfix', text: 'Alliance Shared Expeditions: Prevented shared alliance expedition reports from being counted in personal stats.' },
+      { type: 'Polishing', text: 'Background Sync: Removed redundant CP calls from background workers.' }
+    ]
+  },
+  {
     version: 'v1.2.3',
     items: [
       { type: 'Feature', text: 'Instant Multi-Page Message Scanning: Opening Expeditions or Combat Reports tabs automatically imports and saves all pending reports across all pages in 1 background shot without needing to click through pagination.' },
