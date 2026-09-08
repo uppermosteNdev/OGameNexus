@@ -1164,6 +1164,9 @@ export function applyGalaxyRings() {
   const allDebrisRows = document.querySelectorAll('.galaxyRow.ctContentRow, .expeditionDebrisSlotBoxRow, #galaxyRow16');
   scanGalaxyDebrisFields(galaxy, system, allDebrisRows);
 
+  // Sync scanned system to Nexus Overwatch (debounced + verified DOM settlement to prevent stale data on fast scrolling)
+  scheduleGalaxySyncToOverwatch(galaxy, system);
+
   rows.forEach(row => {
     const posCell = row.querySelector('.cellPosition');
     const playerCell = row.querySelector('.cellPlayerName') as HTMLElement | null;
@@ -1611,6 +1614,392 @@ export async function scanGalaxyDebrisFields(galaxy: number, system: number, row
     }
   } catch (err) {
     console.error('OGame Nexus: Error scanning galaxy debris fields', err);
+  }
+}
+
+// ==========================================================================
+// Nexus Overwatch Galaxy Live Telemetry Sync (Passive & Zero-Lag)
+// ==========================================================================
+
+let lastOverwatchSyncCoords = '';
+let lastOverwatchSyncTime = 0;
+
+function extractDirectText(el: Element | null): string {
+  if (!el) return '';
+  for (let i = 0; i < el.childNodes.length; i++) {
+    const node = el.childNodes[i];
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent?.trim() || '';
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+/**
+ * Verifies that the OGame Galaxy DOM has genuinely settled and belongs to target coordinates.
+ * Prevents transient/stale DOM from being scraped during rapid user scrolling.
+ */
+function isGalaxyDOMFullySettled(targetGalaxy: number, targetSystem: number, rows: NodeListOf<Element>): boolean {
+  if (!rows || rows.length < 15) return false;
+
+  // 1. Check if galaxyLoading indicator is active
+  const loadingEl = document.getElementById('galaxyLoading');
+  if (loadingEl) {
+    const isVisible = window.getComputedStyle(loadingEl).display !== 'none' && loadingEl.style.display !== 'none';
+    if (isVisible) return false;
+
+    const currentPos = loadingEl.getAttribute('data-currentposition');
+    if (currentPos) {
+      const parts = currentPos.split(':').map(Number);
+      if (parts.length === 2 && (parts[0] !== targetGalaxy || parts[1] !== targetSystem)) {
+        return false; // Loading position doesn't match target
+      }
+    }
+  }
+
+  // 2. Cross-verify coordinates embedded in interactive row elements (spy links, discovery, colonize, move)
+  let foundAnyCoords = false;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+
+    // A. Check data-spy-coords (e.g. "5:187:1:1")
+    const spyLink = row.querySelector('[data-spy-coords]');
+    if (spyLink) {
+      const coordsStr = spyLink.getAttribute('data-spy-coords') || '';
+      const parts = coordsStr.split(':').map(Number);
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        foundAnyCoords = true;
+        if (parts[0] !== targetGalaxy || parts[1] !== targetSystem) {
+          return false; // Row belongs to a different/stale system!
+        }
+      }
+    }
+
+    // B. Check onclick action strings (discoverPlanet, movePlanet, sendShips)
+    const actionEl = row.querySelector('[onclick*="discoverPlanet"], [onclick*="movePlanet"], [onclick*="sendShips"]');
+    if (actionEl) {
+      const onclickStr = actionEl.getAttribute('onclick') || '';
+      const match = onclickStr.match(/'galaxy':\s*(\d+),\s*'system':\s*(\d+)/) ||
+                    onclickStr.match(/sendShips\(\s*\d+,\s*(\d+),\s*(\d+)/);
+      if (match) {
+        const rowG = parseInt(match[1], 10);
+        const rowS = parseInt(match[2], 10);
+        if (!isNaN(rowG) && !isNaN(rowS)) {
+          foundAnyCoords = true;
+          if (rowG !== targetGalaxy || rowS !== targetSystem) {
+            return false; // Row belongs to a different/stale system!
+          }
+        }
+      }
+    }
+  }
+
+  return foundAnyCoords;
+}
+
+let galaxySyncDebounceTimer: any = null;
+
+/**
+ * Debounced dispatcher for Galaxy telemetry sync.
+ * When users scroll rapidly, previous timers are cancelled so only the final settled system is synced.
+ */
+export function scheduleGalaxySyncToOverwatch(galaxy: number, system: number) {
+  if (galaxySyncDebounceTimer) {
+    clearTimeout(galaxySyncDebounceTimer);
+    galaxySyncDebounceTimer = null;
+  }
+
+  galaxySyncDebounceTimer = setTimeout(() => {
+    const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
+    const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
+    const targetGalaxy = gInput ? parseInt(gInput.value, 10) : galaxy;
+    const targetSystem = sInput ? parseInt(sInput.value, 10) : system;
+
+    if (isNaN(targetGalaxy) || isNaN(targetSystem)) return;
+
+    const currentRows = document.querySelectorAll('.galaxyRow.ctContentRow');
+    if (isGalaxyDOMFullySettled(targetGalaxy, targetSystem, currentRows)) {
+      syncGalaxyToOverwatch(targetGalaxy, targetSystem, currentRows);
+    }
+  }, 350);
+}
+
+export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows: NodeListOf<Element>) {
+  if (!rows || rows.length === 0) return;
+  if (!isContextValid()) return;
+
+  // Coordinate detection from inputs or row elements
+  let targetGalaxy = galaxy;
+  let targetSystem = system;
+
+  if (!targetGalaxy || !targetSystem || isNaN(targetGalaxy) || isNaN(targetSystem)) {
+    const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
+    const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
+    if (gInput && sInput) {
+      targetGalaxy = parseInt(gInput.value, 10);
+      targetSystem = parseInt(sInput.value, 10);
+    }
+  }
+
+  if (!targetGalaxy || !targetSystem || isNaN(targetGalaxy) || isNaN(targetSystem)) return;
+
+  // Final sanity verification before extraction
+  if (!isGalaxyDOMFullySettled(targetGalaxy, targetSystem, rows)) return;
+
+  const currentCoords = `${targetGalaxy}:${targetSystem}`;
+  const now = Date.now();
+  // Debounce duplicate scans within 3 seconds
+  if (currentCoords === lastOverwatchSyncCoords && now - lastOverwatchSyncTime < 3000) {
+    return;
+  }
+  lastOverwatchSyncCoords = currentCoords;
+  lastOverwatchSyncTime = now;
+
+  try {
+    const store = await chrome.storage.local.get(['nexus_overwatch_config']);
+    const config = store.nexus_overwatch_config;
+    if (!config || !config.allianceId || !config.authToken || config.permissions?.shareGalaxy === false) {
+      return;
+    }
+
+    const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content') || config.universeId || 's267-en';
+    const ownPlayerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+    const ownPlayerName = document.querySelector('meta[name="ogame-player-name"]')?.getAttribute('content') || '';
+    const ownAllianceTag = document.querySelector('meta[name="ogame-alliance-tag"]')?.getAttribute('content') ||
+                           document.querySelector('meta[name="ogame-alliance-name"]')?.getAttribute('content') || '';
+    const ownAllianceId = document.querySelector('meta[name="ogame-alliance-id"]')?.getAttribute('content') || '';
+
+    const ownCoordsList = getOwnCoordinatesList();
+
+    const slots: any[] = [];
+    rows.forEach(row => {
+      const posCell = row.querySelector('.cellPosition');
+      let slot = posCell ? parseInt(posCell.textContent || '', 10) : 0;
+      if (isNaN(slot) || slot <= 0) {
+        const rowIdMatch = row.id?.match(/galaxyRow(\d+)/i);
+        if (rowIdMatch) slot = parseInt(rowIdMatch[1], 10);
+      }
+      if (isNaN(slot) || slot <= 0 || slot > 16) return;
+
+      const isEmpty = row.classList.contains('empty_filter');
+      const slotCoord = `${targetGalaxy}:${targetSystem}:${slot}`;
+
+      // A slot is ONLY own planet if its exact coordinates match the player's planet list
+      const isOwnPlanet = ownCoordsList.includes(slotCoord);
+
+      // 1. Planet ID & Name
+      const microplanet = row.querySelector('.microplanet');
+      const planetId = microplanet?.getAttribute('data-planet-id') || null;
+
+      let planetName: string | null = null;
+      const planetNameSpan = row.querySelector('.cellPlanetName span:not([class*="ogl_"])');
+      if (planetNameSpan) {
+        planetName = planetNameSpan.textContent?.trim() || null;
+      } else if (microplanet) {
+        const nameInTooltip = row.querySelector('.cellPlanet .spaceObjectName')?.textContent?.trim();
+        if (nameInTooltip) planetName = nameInTooltip;
+      }
+
+      // If empty slot filter is on and no planet ID or name is found
+      if (isEmpty || (!planetId && !planetName && !isOwnPlanet)) {
+        planetName = null;
+      }
+
+      // 2. Moon Status & Size
+      const micromoon = row.querySelector('.micromoon');
+      const hasMoon = (micromoon || row.querySelector('.cellMoon [data-moon-id]')) ? 1 : 0;
+      const moonId = micromoon?.getAttribute('data-moon-id') || null;
+      let moonSize: number | null = null;
+
+      if (hasMoon) {
+        const moonSizeEl = row.querySelector('#moonsize');
+        if (moonSizeEl) {
+          const sizeParsed = parseInt(moonSizeEl.textContent?.replace(/\D/g, '') || '', 10);
+          if (!isNaN(sizeParsed)) moonSize = sizeParsed;
+        }
+        if (!moonSize) {
+          const moonTooltip = row.querySelector('.cellMoon')?.textContent || '';
+          const sizeMatch = moonTooltip.match(/(\d+[\.,]?\d*)\s*(?:km|км)/i);
+          if (sizeMatch) {
+            moonSize = parseInt(sizeMatch[1].replace(/[^\d]/g, ''), 10) || 8000;
+          }
+        }
+      }
+
+      // 3. Player ID, Name, Status & Rank
+      let playerId: string | null = null;
+      let playerName: string | null = null;
+      let playerStatus = 'active';
+      let playerRank: number | null = null;
+
+      if (planetName || planetId || isOwnPlanet) {
+        const playerCell = row.querySelector('.cellPlayerName');
+        if (playerCell) {
+          // Player ID
+          const directPlayerId = playerCell.querySelector('[data-playerid]')?.getAttribute('data-playerid') ||
+                                 playerCell.querySelector('[data-uid]')?.getAttribute('data-uid');
+          if (directPlayerId) {
+            playerId = directPlayerId;
+          } else {
+            const playerRel = playerCell.querySelector('.playerName[rel], span[rel^="player"]')?.getAttribute('rel');
+            if (playerRel) {
+              const match = playerRel.match(/player(\d+)/i);
+              if (match) playerId = match[1];
+            }
+          }
+
+          // Player Name (extract direct text before nested tooltip div, never take pure rank numbers)
+          const pNameEl = playerCell.querySelector('.playerName, .playername, span[class*="player"]');
+          if (pNameEl) {
+            const directText = extractDirectText(pNameEl);
+            if (directText && !/^\d+$/.test(directText)) {
+              playerName = directText;
+            } else {
+              const h1Name = pNameEl.querySelector('h1 .playerName, .htmlTooltip .playerName')?.textContent?.trim();
+              if (h1Name && !/^\d+$/.test(h1Name)) {
+                playerName = h1Name;
+              }
+            }
+          }
+
+          // Fallback for player name if empty or number
+          if (!playerName || /^\d+$/.test(playerName)) {
+            const clone = playerCell.cloneNode(true) as HTMLElement;
+            clone.querySelectorAll('.htmlTooltip, .ogl_ranking, .rank, .honorRank, .ogl_tagPicker, .ogl_flagPicker, pre, script, style').forEach(el => el.remove());
+            const clean = clone.textContent?.trim().replace(/\s+/g, ' ') || '';
+            const sanitized = clean.replace(/\([^)]*\)/g, '').replace(/#\d+/g, '').trim();
+            if (sanitized && !/^\d+$/.test(sanitized)) {
+              playerName = sanitized;
+            }
+          }
+
+          // Player Status (Primary source of truth: data-status-tag)
+          const statusTagEl = playerCell.querySelector('[data-status-tag]');
+          const directTag = statusTagEl?.getAttribute('data-status-tag')?.trim();
+
+          // We only track objective universal player statuses: v (vacation), I (long inactive), i (inactive), b (banned)
+          // Relative statuses like hp (honorable), bandit, outlaw depend on viewer score and are excluded
+          const allowedStatus = new Set(['v', 'I', 'i', 'b']);
+
+          if (directTag) {
+            const parsedTags = directTag
+              .split(',')
+              .map(t => t.trim())
+              .filter(t => allowedStatus.has(t));
+            playerStatus = parsedTags.length > 0 ? parsedTags.join(',') : 'active';
+          } else {
+            // Fallback parsing if data-status-tag is absent
+            const statusParts: string[] = [];
+            const statusClasses = playerCell.className + ' ' + (playerCell.querySelector('span[class*="status_abbr_"]')?.className || '');
+            if (statusClasses.includes('status_abbr_vacation') || playerCell.textContent?.includes('(v)')) statusParts.push('v');
+            if (statusClasses.includes('status_abbr_longinactive') || playerCell.textContent?.includes('(I)')) statusParts.push('I');
+            else if (statusClasses.includes('status_abbr_inactive') || playerCell.textContent?.includes('(i)')) statusParts.push('i');
+            if (statusClasses.includes('status_abbr_banned') || playerCell.textContent?.includes('(b)')) statusParts.push('b');
+
+            playerStatus = statusParts.length > 0 ? statusParts.join(',') : 'active';
+          }
+
+          // Player Rank
+          const rankEl = playerCell.querySelector('.rank a, .ogl_ranking');
+          if (rankEl) {
+            const rankNum = parseInt(rankEl.textContent?.replace(/\D/g, '') || '', 10);
+            if (!isNaN(rankNum)) playerRank = rankNum;
+          }
+        }
+
+        // If this coordinate is the user's own planet and no foreign player was extracted
+        if (isOwnPlanet && (!playerName || !playerId)) {
+          playerId = ownPlayerId || playerId;
+          playerName = ownPlayerName || playerName;
+          playerStatus = 'active';
+        }
+      }
+
+      // 4. Alliance Tag & ID
+      let allianceTag: string | null = null;
+      let allianceId: string | null = null;
+      if (planetName || planetId || isOwnPlanet) {
+        const allyCell = row.querySelector('.cellAlliance');
+        if (allyCell) {
+          const allySpan = allyCell.querySelector('span');
+          if (allySpan) {
+            allianceTag = extractDirectText(allySpan);
+            const allyRel = allySpan.getAttribute('rel');
+            if (allyRel) {
+              const match = allyRel.match(/alliance(\d+)/i);
+              if (match) allianceId = match[1];
+            }
+          }
+        }
+
+        if (isOwnPlanet && !allianceTag && (ownAllianceTag || ownAllianceId)) {
+          allianceTag = ownAllianceTag || null;
+          allianceId = ownAllianceId || null;
+        }
+      }
+
+      // 5. Activity Marker
+      let activityMarker: string | null = null;
+      const actEl = row.querySelector('.activity, .minute15, .minute');
+      if (actEl) {
+        activityMarker = actEl.textContent?.trim() || '*';
+      }
+
+      // 6. Debris Field
+      let debrisMetal = 0;
+      let debrisCrystal = 0;
+      const debrisCell = row.querySelector('.cellDebris');
+      if (debrisCell) {
+        const t = debrisCell.textContent || '';
+        if (t.toLowerCase().includes('metal') || t.toLowerCase().includes('crystal')) {
+          const metalMatch = t.match(/metal[:\s]*([\d,\.]+)/i);
+          const crystalMatch = t.match(/crystal[:\s]*([\d,\.]+)/i);
+          if (metalMatch) debrisMetal = parseInt(metalMatch[1].replace(/[^\d]/g, ''), 10) || 0;
+          if (crystalMatch) debrisCrystal = parseInt(crystalMatch[1].replace(/[^\d]/g, ''), 10) || 0;
+        }
+      }
+
+      slots.push({
+        slot,
+        planetId,
+        planetName,
+        playerId,
+        playerName,
+        playerStatus,
+        playerRank,
+        allianceTag,
+        allianceId,
+        hasMoon,
+        moonId,
+        moonSize,
+        debrisMetal,
+        debrisCrystal,
+        activityMarker,
+        activityTimestamp: activityMarker ? Date.now() : null,
+      });
+    });
+
+    if (slots.length === 0) return;
+
+    // Send payload quietly in background to Edge API
+    const apiUrl = 'http://127.0.0.1:8787';
+    fetch(`${apiUrl}/api/v1/galaxy/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.authToken}`,
+      },
+      body: JSON.stringify({
+        universeId: universe,
+        galaxy: targetGalaxy,
+        system: targetSystem,
+        scannedAt: Date.now(),
+        slots,
+      }),
+    }).catch(() => {});
+  } catch (e) {
+    // Zero lag impact on OGame page
   }
 }
 

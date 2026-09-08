@@ -20,6 +20,7 @@ import WelcomeModal from './components/WelcomeModal';
 import ChangelogModal from './components/ChangelogModal';
 import Tutorials from './views/Tutorials';
 import RaidRadar from './views/RaidRadar';
+import Overwatch from './views/Overwatch';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import './index.css';
@@ -97,6 +98,13 @@ const App: React.FC = () => {
     }, [lowAnimationEnabled]);
 
     useEffect(() => {
+        // Support URL parameters or hash on initial load: ?view=overwatch or #overwatch
+        const params = new URLSearchParams(window.location.search);
+        const viewParam = params.get('view') || window.location.hash.replace(/^#/, '');
+        if (viewParam) {
+            setCurrentView(viewParam);
+        }
+
         const handleNav = (e: Event) => {
             const detail = (e as CustomEvent).detail;
             if (detail && detail.view) {
@@ -247,6 +255,7 @@ const App: React.FC = () => {
                     {currentView === 'dataManagement' && <DataManagement />}
                     {currentView === 'empire' && <Empire />}
                     {currentView === 'costsPlanner' && <CostsPlanner />}
+                    {currentView === 'overwatch' && <Overwatch onSelect={setCurrentView} />}
                     {currentView === 'tools' && <Tools />}
                     {currentView === 'signature' && <SignatureMaker onBack={() => setCurrentView('overview')} />}
                     {currentView === 'tutorials' && <Tutorials onNavigate={setCurrentView} />}

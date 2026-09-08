@@ -185,7 +185,8 @@ let debrisTrackingLock: Promise<any> = Promise.resolve();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "OPEN_DASHBOARD") {
-        chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+        const view = message.view ? `?view=${encodeURIComponent(message.view)}` : '';
+        chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${view}`) });
     }
 
     if (message.type === "UPDATE_FLYING_RESOURCES") {

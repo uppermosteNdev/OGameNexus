@@ -1,0 +1,22 @@
+{
+  "name": "nexus-sync-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Edge API & D1 Database backend for OGame Nexus Overwatch",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init:local": "wrangler d1 execute DB --local --file=./schema.sql",
+    "db:init:remote": "wrangler d1 execute DB --remote --file=./schema.sql",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "itty-router": "^5.0.18",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241022.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.114.17"
+  }
+}

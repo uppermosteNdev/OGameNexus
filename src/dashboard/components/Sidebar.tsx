@@ -36,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
         { id: 'debris', label: 'Debris Fields', iconName: 'debris-field' },
         { id: 'empire', label: 'Empire', iconName: 'skyscrapers' },
         { id: 'costsPlanner', label: 'Costs Planner', iconName: 'shopping-cart' },
+        { id: 'overwatch', label: 'Nexus Overwatch', iconName: 'radar' },
         { id: 'tools', label: 'Tools', iconName: 'tools' },
         { id: 'signature', label: 'Signature Forge', iconName: 'sparkling' },
         { id: 'dataManagement', label: 'Data Management', iconName: 'circuit' },

@@ -1,5 +1,6 @@
 import { injectTodaySummaryCard, addSessionTrackedItems, setNewBadgeActive, isSharedMessage } from './expeditions';
 import { flyToNexusButton } from './effects';
+import { isRemoveOGLightDuplicatesEnabled } from './settings';
 
 function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
@@ -47,11 +48,13 @@ export function scrapeLifeformMessages() {
         const item = parseLifeformElement(msg);
         if (!item) continue;
 
+        const removeOGLight = isRemoveOGLightDuplicatesEnabled();
+
         // 1. Immediately and synchronously apply visual transformation to DOM if not already applied
         const parentMsg = (msg.closest('.msg') || document.querySelector(`.msg[data-msg-id="${item.messageId}"]`)) as HTMLElement | null;
         if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
             parentMsg.classList.add('og-nexus-tracked');
-            updateLifeformDiscoveryVisuals(parentMsg, item, true);
+            updateLifeformDiscoveryVisuals(parentMsg, item, removeOGLight);
         }
 
         // 2. Queue for background tracking if not already processed in this session
@@ -71,6 +74,7 @@ export function scrapeRawLifeformHTML(htmls: string[]) {
     const doc = parser.parseFromString(htmls.join(''), 'text/html');
     const messages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]');
     const results: any[] = [];
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
 
     for (const msg of messages) {
         const item = parseLifeformElement(msg);
@@ -81,7 +85,7 @@ export function scrapeRawLifeformHTML(htmls: string[]) {
                 const parentMsg = domMsg.closest('.msg') as HTMLElement;
                 if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
                     parentMsg.classList.add('og-nexus-tracked');
-                    updateLifeformDiscoveryVisuals(parentMsg, item, true);
+                    updateLifeformDiscoveryVisuals(parentMsg, item, removeOGLight);
                 }
             }
 
@@ -97,16 +101,7 @@ export function scrapeRawLifeformHTML(htmls: string[]) {
 export async function trackLifeformDiscoveries(playerId: string) {
     if (!isExtensionStillValid()) return;
 
-    let removeOGLight = true;
-    try {
-        const localData = await chrome.storage.local.get('globalSettings');
-        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
-            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
-        }
-    } catch (e) {
-        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
-    }
-
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
     const discoveryData = scrapeLifeformMessages();
 
     // Initial card display if needed (shared with expeditions)
@@ -173,20 +168,11 @@ export async function trackLifeformDiscoveries(playerId: string) {
 export async function trackRawLifeformDiscoveries(playerId: string, htmls: string[]) {
     if (!isExtensionStillValid()) return;
 
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
     const discoveryData = scrapeRawLifeformHTML(htmls);
     if (discoveryData.length === 0) return;
 
     const unprocessedDiscoveries = discoveryData;
-
-    let removeOGLight = true;
-    try {
-        const localData = await chrome.storage.local.get('globalSettings');
-        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
-            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
-        }
-    } catch (e) {
-        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
-    }
 
     injectTodaySummaryCard(playerId, false);
 
@@ -249,6 +235,10 @@ function cleanOGLightDOM(msgElement: HTMLElement) {
     duplicates.forEach(el => {
         el.remove();
     });
+    const content = msgElement.querySelector('.msgContent');
+    if (content) {
+        content.classList.remove('ogl_hidden');
+    }
 }
 
 function updateLifeformDiscoveryVisuals(msgElement: HTMLElement, discovery: any, removeOGLight: boolean = true) {

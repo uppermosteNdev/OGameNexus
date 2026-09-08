@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nexus-sync-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-10-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nexus-overwatch-db",
+      "database_id": "nexus-overwatch-db-local"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development",
+    "SERVER_PEPPER": "nexus_overwatch_secret_pepper_2026"
+  }
+}

@@ -1,5 +1,6 @@
 import { SHIP_DATA } from '../db/staticData';
 import { flyToNexusButton } from './effects';
+import { isRemoveOGLightDuplicatesEnabled } from './settings';
 
 let sessionRecentExpeditions: any[] = [];
 let newBadgeActive = false;
@@ -163,6 +164,7 @@ function parseExpeditionElement(msg: Element): any | null {
 export function scrapeExpeditionMessages() {
     const expeditionMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]');
     const newItemsToTrack: any[] = [];
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
 
     for (const rawEl of expeditionMessages) {
         const item = parseExpeditionElement(rawEl);
@@ -171,7 +173,7 @@ export function scrapeExpeditionMessages() {
         // 1. Immediately and synchronously apply visual transformation to DOM if not already applied
         const parentMsg = (rawEl.closest('.msg') || document.querySelector(`.msg[data-msg-id="${item.messageId}"]`)) as HTMLElement | null;
         if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
-            updateExpeditionVisuals(parentMsg, item, true);
+            updateExpeditionVisuals(parentMsg, item, removeOGLight);
         }
 
         // 2. Queue for background tracking if not already processed in this session
@@ -192,6 +194,7 @@ export function scrapeRawExpeditionHTML(htmls: string[]) {
     const doc = parser.parseFromString(htmls.join(''), 'text/html');
     const expeditionMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]');
     const results: any[] = [];
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
 
     for (const msg of expeditionMessages) {
         const item = parseExpeditionElement(msg);
@@ -201,7 +204,7 @@ export function scrapeRawExpeditionHTML(htmls: string[]) {
                 domMsg.setAttribute('data-og-nexus-processed', 'true');
                 const parentMsg = domMsg.closest('.msg') as HTMLElement;
                 if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
-                    updateExpeditionVisuals(parentMsg, item, true);
+                    updateExpeditionVisuals(parentMsg, item, removeOGLight);
                 }
             }
 
@@ -1105,16 +1108,7 @@ function animateValue(obj: HTMLElement, start: number, end: number, duration: nu
 export async function trackExpeditions(playerId: string) {
     if (!isExtensionStillValid()) return;
 
-    let removeOGLight = true;
-    try {
-        const localData = await chrome.storage.local.get('globalSettings');
-        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
-            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
-        }
-    } catch (e) {
-        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
-    }
-
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
     const expeditionData = scrapeExpeditionMessages();
     injectTodaySummaryCard(playerId, false);
 
@@ -1180,18 +1174,9 @@ const processedRawExpeditionIds = new Set<string>();
 export async function trackRawExpeditions(playerId: string, htmls: string[]) {
     if (!isExtensionStillValid()) return;
 
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
     const expeditionData = scrapeRawExpeditionHTML(htmls);
     if (expeditionData.length === 0) return;
-
-    let removeOGLight = true;
-    try {
-        const localData = await chrome.storage.local.get('globalSettings');
-        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
-            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
-        }
-    } catch (e) {
-        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
-    }
 
     injectTodaySummaryCard(playerId, false);
 
@@ -1292,6 +1277,10 @@ function cleanOGLightDOM(msgElement: HTMLElement) {
     duplicates.forEach(el => {
         el.remove();
     });
+    const content = msgElement.querySelector('.msgContent');
+    if (content) {
+        content.classList.remove('ogl_hidden');
+    }
 }
 
 function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLight: boolean = true) {

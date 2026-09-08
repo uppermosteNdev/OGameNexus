@@ -1,3 +1,17 @@
+/* ==========================================================================
+   OGLight Conflict Elimination Rules
+   Instantly suppresses OGLight visual cards (.ogl_battle) with 0ms paint delay
+   when the 'Clean OGLight Duplicate Visuals' setting is active.
+   ========================================================================== */
+html[data-nexus-clean-oglight="true"] .ogl_battle,
+body[data-nexus-clean-oglight="true"] .ogl_battle {
+  display: none !important;
+}
+
+html[data-nexus-clean-oglight="true"] .msg .msgContent.ogl_hidden {
+  display: block;
+}
+
 #og-nexus-button-container {
   margin-top: 10px;
   cursor: pointer;
@@ -6073,6 +6087,123 @@ body.low-animation .og-nexus-epic-pulse {
   font-weight: 600;
   color: #38bdf8;
 }
+
+/* ==========================================================================
+   OGame Nexus — In-Game Alliance Overwatch Banner Styling
+   ========================================================================== */
+.og-nexus-overwatch-banner {
+  position: relative;
+  margin: 12px 0 16px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(13, 22, 38, 0.95) 0%, rgba(6, 12, 22, 0.98) 100%);
+  border: 1px solid rgba(0, 242, 255, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 0 25px rgba(0, 242, 255, 0.15), inset 0 0 15px rgba(0, 242, 255, 0.05);
+  overflow: hidden;
+  font-family: 'Segoe UI', 'Roboto', 'Inter', system-ui, sans-serif;
+  color: #f1f5f9;
+  box-sizing: border-box;
+}
+
+.og-nexus-banner-glow {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 150px;
+  height: 150px;
+  background: radial-gradient(circle, rgba(0, 242, 255, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.og-nexus-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.og-nexus-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.og-nexus-banner-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(0, 242, 255, 0.08);
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.2);
+}
+
+.og-nexus-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.og-nexus-banner-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fff;
+}
+
+.og-nexus-banner-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 242, 255, 0.15);
+  border: 1px solid rgba(0, 242, 255, 0.4);
+  color: #00f2ff;
+  text-transform: uppercase;
+}
+
+.og-nexus-banner-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.og-nexus-banner-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #00f2ff 0%, #0088ff 100%);
+  color: #02060c;
+  box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.og-nexus-banner-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(0, 242, 255, 0.5);
+}
+
+.og-nexus-banner-btn:active {
+  transform: translateY(0);
+}
+
 
 
 

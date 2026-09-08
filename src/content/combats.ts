@@ -1,6 +1,7 @@
 
 import { flyToNexusButton } from './effects';
 import { isSharedMessage } from './expeditions';
+import { isRemoveOGLightDuplicatesEnabled } from './settings';
 
 function isExtensionStillValid() {
     return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
@@ -172,7 +173,7 @@ function parseCombatElement(msg: Element): any | null {
 
 const processedCombatIds = new Set<string>();
 
-export function scrapeCombatMessages(removeOGLight: boolean = true) {
+export function scrapeCombatMessages(removeOGLight: boolean = isRemoveOGLightDuplicatesEnabled()) {
     const combatMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]:not([data-og-nexus-processed="true"])');
     const results = [];
 
@@ -197,7 +198,7 @@ export function scrapeCombatMessages(removeOGLight: boolean = true) {
     return results;
 }
 
-export function scrapeRawCombatHTML(htmls: string[], removeOGLight: boolean = true) {
+export function scrapeRawCombatHTML(htmls: string[], removeOGLight: boolean = isRemoveOGLightDuplicatesEnabled()) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmls.join(''), 'text/html');
     const combatMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]');
@@ -228,16 +229,7 @@ export function scrapeRawCombatHTML(htmls: string[], removeOGLight: boolean = tr
 export async function trackCombatReports(playerId: string) {
     if (!isExtensionStillValid()) return;
 
-    let removeOGLight = true;
-    try {
-        const localData = await chrome.storage.local.get("globalSettings");
-        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
-            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
-        }
-    } catch (e) {
-        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
-    }
-
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
     const combatData = scrapeCombatMessages(removeOGLight);
     triggerSiteTooltips();
 
@@ -279,16 +271,7 @@ export async function trackCombatReports(playerId: string) {
 export async function trackRawCombatReports(playerId: string, htmls: string[]) {
     if (!isExtensionStillValid()) return;
 
-    let removeOGLight = true;
-    try {
-        const localData = await chrome.storage.local.get("globalSettings");
-        if (localData?.globalSettings?.removeOGLightDuplicates !== undefined) {
-            removeOGLight = localData.globalSettings.removeOGLightDuplicates;
-        }
-    } catch (e) {
-        console.error("OGame Nexus: Failed to load OGLight duplicate settings", e);
-    }
-
+    const removeOGLight = isRemoveOGLightDuplicatesEnabled();
     const combatData = scrapeRawCombatHTML(htmls, removeOGLight);
     if (combatData.length === 0) return;
 
@@ -332,6 +315,10 @@ export function updateCombatVisuals(msgElement: HTMLElement, combat: any, remove
     if (removeOGLight) {
         const duplicates = msgElement.querySelectorAll('.ogl_battle');
         duplicates.forEach(el => el.remove());
+        const content = msgElement.querySelector('.msgContent');
+        if (content) {
+            content.classList.remove('ogl_hidden');
+        }
     }
 
     // 1. Add tracked icon in footer

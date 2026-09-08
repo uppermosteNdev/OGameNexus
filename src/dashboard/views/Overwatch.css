@@ -1,0 +1,941 @@
+/* ============================================================================
+   NEXUS OVERWATCH — TACTICAL COMMAND DECK (DESIGN-TASTE-FRONTEND V2)
+   Single Accent Lock: #00f2ff | Neutral Slate Base: #030712 to #0b1120
+   Tabular Numerics | Asymmetric Split | Zero Slop | WCAG AA Contrast
+   ============================================================================ */
+
+.ow-root {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 8px 16px 64px 16px;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Ambient Backlight (Singular Accent) */
+.ow-backlight {
+  position: absolute;
+  top: -80px;
+  left: 25%;
+  width: 500px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(0, 242, 255, 0.05) 0%, transparent 70%);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================================================
+   TACTICAL MODULE CHASSIS (UNIFORM RADIUS SYSTEM)
+   ============================================================================ */
+.ow-module {
+  position: relative;
+  background: #090e1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 28px 32px;
+  box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.6);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  z-index: 1;
+  box-sizing: border-box;
+}
+
+.ow-module:hover {
+  border-color: rgba(0, 242, 255, 0.22);
+  box-shadow: 0 16px 44px -8px rgba(0, 0, 0, 0.7), 0 0 24px -4px rgba(0, 242, 255, 0.06);
+}
+
+/* ============================================================================
+   TOP TELEMETRY HEADER
+   ============================================================================ */
+.ow-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.ow-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.ow-brand-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(0, 242, 255, 0.08);
+  border: 1px solid rgba(0, 242, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 16px rgba(0, 242, 255, 0.15);
+}
+
+.ow-eyebrow {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #00f2ff;
+  margin-bottom: 4px;
+}
+
+.ow-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+.ow-subtitle {
+  margin: 3px 0 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.ow-telemetry-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ow-telemetry-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ow-telemetry-pill.active-edge {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+}
+
+.ow-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+/* ============================================================================
+   ASYMMETRIC SPLIT COMMAND LAYOUT
+   ============================================================================ */
+.ow-split-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+@media (max-width: 992px) {
+  .ow-split-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ow-section-title {
+  margin: 0 0 8px 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+.ow-section-desc {
+  margin: 0 0 20px 0;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.55;
+}
+
+/* ============================================================================
+   GLYPH CIPHER CONSOLE (LEFT PANEL)
+   ============================================================================ */
+.ow-cipher-box {
+  background: #040712;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.ow-cipher-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.ow-cipher-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #64748b;
+}
+
+.ow-cipher-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: #02040a;
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #00f2ff;
+  box-sizing: border-box;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ow-cipher-input:focus {
+  outline: none;
+  border-color: #00f2ff;
+  box-shadow: 0 0 16px rgba(0, 242, 255, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+.ow-cipher-input::placeholder {
+  color: #475569;
+  font-weight: 400;
+}
+
+/* Feature Capabilities Grid */
+.ow-capabilities-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.ow-cap-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.ow-cap-item svg {
+  color: #00f2ff;
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   COMMISSIONING SPECS & FORM (RIGHT PANEL)
+   ============================================================================ */
+.ow-specs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ow-spec-cell {
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.ow-spec-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  margin-bottom: 3px;
+}
+
+.ow-spec-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #00f2ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ow-text-field {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #040712;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  margin-bottom: 14px;
+}
+
+.ow-text-field:focus {
+  outline: none;
+  border-color: #00f2ff;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.2);
+}
+
+.ow-license-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(0, 242, 255, 0.04);
+  border: 1px solid rgba(0, 242, 255, 0.2);
+  margin-bottom: 20px;
+}
+
+.ow-license-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #93c5fd;
+}
+
+.ow-license-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #22c55e;
+  padding: 2px 8px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 4px;
+}
+
+/* ============================================================================
+   TACTICAL BUTTON SYSTEM (NO WRAPPING, CRISP SPRINGS)
+   ============================================================================ */
+.ow-btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: #00f2ff;
+  color: #020817;
+  box-shadow: 0 4px 16px rgba(0, 242, 255, 0.3);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  white-space: nowrap;
+}
+
+.ow-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(0, 242, 255, 0.45);
+}
+
+.ow-btn-primary:active {
+  transform: scale(0.985);
+}
+
+.ow-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.ow-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.ow-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(0, 242, 255, 0.3);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.ow-btn-ghost.danger {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.ow-btn-ghost.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ============================================================================
+   CONNECTED STATE COMMAND DECK
+   ============================================================================ */
+.ow-connected-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.ow-glyph-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #040712;
+  border: 1px solid rgba(0, 242, 255, 0.25);
+  font-family: ui-monospace, monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #00f2ff;
+  letter-spacing: 0.06em;
+}
+
+.ow-tab-bar {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+.ow-tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ow-tab-link:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ow-tab-link.active {
+  color: #00f2ff;
+  background: rgba(0, 242, 255, 0.08);
+  border-color: rgba(0, 242, 255, 0.25);
+}
+
+/* Data Table Precision */
+.ow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ow-table th {
+  padding: 12px 14px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.ow-table td {
+  padding: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+}
+
+.ow-table tr:hover td {
+  background: rgba(0, 242, 255, 0.02);
+}
+
+.ow-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ow-tag.green {
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.ow-tag.red {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.ow-tag.amber {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+/* ============================================================================
+   UNIVERSE MAP CONTROLS & SLIDERS
+   ============================================================================ */
+.ow-map-header-grid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.ow-map-controls-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 20px;
+  background: #040712;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .ow-map-controls-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ow-galaxy-pills-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ow-galaxy-pill-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ow-galaxy-pill-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ow-galaxy-pill-btn.active {
+  color: #020817;
+  background: #00f2ff;
+  border-color: #00f2ff;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.35);
+}
+
+.ow-system-slider-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ow-slider-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+}
+
+.ow-slider-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ow-system-slider-input {
+  flex: 1;
+  accent-color: #00f2ff;
+  height: 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.ow-step-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.ow-step-btn:hover:not(:disabled) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ow-step-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.ow-coord-num-input {
+  width: 58px;
+  padding: 6px 6px;
+  background: #02040a;
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  border-radius: 6px;
+  color: #00f2ff;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* Chrome, Safari, Edge, Opera: hide native number spinner arrows */
+input.ow-coord-num-input::-webkit-outer-spin-button,
+input.ow-coord-num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox: hide native number spinner arrows */
+input.ow-coord-num-input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.ow-coord-num-input:focus {
+  outline: none;
+  border-color: #00f2ff;
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+}
+
+.ow-btn-resync-xml {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: rgba(0, 242, 255, 0.08);
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  color: #00f2ff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ow-btn-resync-xml:hover:not(:disabled) {
+  background: rgba(0, 242, 255, 0.18);
+  border-color: #00f2ff;
+  box-shadow: 0 0 14px rgba(0, 242, 255, 0.3);
+}
+
+.ow-btn-resync-xml:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ow-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.ow-refresh-btn:hover {
+  background: rgba(0, 242, 255, 0.1);
+  border-color: rgba(0, 242, 255, 0.4);
+  color: #00f2ff;
+}
+
+.ow-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes ow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ow-spinning {
+  animation: ow-spin 0.8s linear infinite;
+}
+
+/* Stationary Table Layout */
+.ow-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(2, 4, 10, 0.6);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.ow-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* Ensures columns NEVER jump or tremble during slider changes */
+}
+
+.ow-table th,
+.ow-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 52px; /* Fixed row height eliminates vertical shifting */
+  box-sizing: border-box;
+}
+
+.ow-table th {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ow-table-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background-color 0.15s ease;
+}
+
+.ow-table-row:last-child {
+  border-bottom: none;
+}
+
+.ow-table-row.colonized {
+  opacity: 1;
+}
+
+.ow-table-row.uncolonized {
+  opacity: 0.45;
+}
+
+.ow-table-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ow-empty-slot-text {
+  color: #475569;
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Intel Details Inspection Popover */
+.ow-intel-cell {
+  overflow: visible !important;
+  position: relative;
+}
+
+.ow-intel-tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.ow-intel-brief-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 12.5px;
+}
+
+.ow-intel-info-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 242, 255, 0.08);
+  border: 1px solid rgba(0, 242, 255, 0.25);
+  color: #00f2ff;
+  opacity: 0.75;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ow-intel-tooltip-trigger:hover .ow-intel-info-badge {
+  opacity: 1;
+  background: rgba(0, 242, 255, 0.2);
+  border-color: #00f2ff;
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+}
+
+.ow-intel-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 320px;
+  max-width: 420px;
+  background: rgba(6, 11, 25, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 242, 255, 0.35);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.85), 0 0 20px rgba(0, 242, 255, 0.15);
+  border-radius: 8px;
+  padding: 12px 14px;
+  z-index: 99999;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+  pointer-events: none;
+}
+
+.ow-intel-tooltip-trigger:hover .ow-intel-popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.ow-intel-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ow-intel-popover-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #00f2ff;
+}
+
+.ow-intel-popover-coords {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.ow-intel-diff-grid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ow-intel-diff-box {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.ow-intel-diff-box.before {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.ow-intel-diff-box.after {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+.ow-intel-diff-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 3px;
+  opacity: 0.85;
+}
+
+.ow-intel-diff-val {
+  font-weight: 600;
+}
+
+.ow-intel-diff-arrow {
+  color: #64748b;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ow-intel-popover-footer {
+  font-size: 10.5px;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+  text-align: right;
+}
+

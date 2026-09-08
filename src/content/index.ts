@@ -1,6 +1,9 @@
 
 import { Planet, ActiveResearchInfo } from '../db';
+import { initContentSettings } from './settings';
 import { trackExpeditions, trackRawExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
+
+initContentSettings();
 import { trackLifeformDiscoveries, trackRawLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson, parseExternalDataExportJson } from './empire';
 import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier, getAmortizationEntry, findMatchingQueueItem, getCollectorClassBoost } from '../utils/amortizationCalc';
@@ -18,6 +21,7 @@ import { fetchEmpireProductionQueue, getStoredProductionQueue } from './producti
 import { initProductionBoxSpeedups, updateProductionBoxSpeedups } from './productionBoxSpeedups';
 import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom } from './fleetMovement';
 import { injectChangelogTab } from './changelogTab';
+import { initAllianceOverwatchBanner } from './allianceBanner';
 import {
   SHIP_DATA,
   RESEARCH_DATA,
@@ -2754,6 +2758,11 @@ const throttledObserverLogic = throttle(() => {
     injectChangelogTab();
   }
 
+  // In-Game Alliance Overwatch Banner (Alliance Page)
+  if (document.querySelector('.alliance_wrapper, #alliance, #inhalt #planet[data-name="alliance"]')) {
+    initAllianceOverwatchBanner();
+  }
+
   // Live Production Queue Speedup Items (Kraken / Newtron / Detroid / LF speedups)
   updateProductionBoxSpeedups();
 
@@ -2902,21 +2911,18 @@ function processActiveMessages() {
   }
 }
 
-let messagesProcessTimeout: any = null;
 let messagesBackupTimeout: any = null;
 window.addEventListener('ogame-nexus-ajax-messages-loaded', () => {
-  if (messagesProcessTimeout) clearTimeout(messagesProcessTimeout);
+  // 1. Immediately and synchronously process messages (0ms delay) to prevent any flicker/delay
+  processActiveMessages();
+  injectChangelogTab();
+
+  // 2. Backup trigger in case of delayed or split DOM insertions by game client
   if (messagesBackupTimeout) clearTimeout(messagesBackupTimeout);
-
-  messagesProcessTimeout = setTimeout(() => {
-    processActiveMessages();
-    injectChangelogTab();
-  }, 50);
-
   messagesBackupTimeout = setTimeout(() => {
     processActiveMessages();
     injectChangelogTab();
-  }, 250);
+  }, 200);
 });
 
 // Fast-scroll message listener: triggers immediate sync visual processing as new messages scroll into view
