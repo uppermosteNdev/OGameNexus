@@ -174,16 +174,23 @@ function parseCombatElement(msg: Element): any | null {
 const processedCombatIds = new Set<string>();
 
 export function scrapeCombatMessages(removeOGLight: boolean = isRemoveOGLightDuplicatesEnabled()) {
-    const combatMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]:not([data-og-nexus-processed="true"])');
+    const combatMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]');
     const results = [];
 
     for (const msg of combatMessages) {
+        // Strip legacy attribute from rawMessageData if present
+        if (msg.hasAttribute('data-og-nexus-processed')) {
+            msg.removeAttribute('data-og-nexus-processed');
+        }
+
         const item = parseCombatElement(msg);
         if (item) {
-            msg.setAttribute('data-og-nexus-processed', 'true');
+            const msgElement = (msg.closest('.msg') || document.querySelector(`.msg[data-msg-id="${item.messageId}"]`)) as HTMLElement | null;
+            if (msgElement && !msgElement.hasAttribute('data-og-nexus-processed')) {
+                msgElement.setAttribute('data-og-nexus-processed', 'true');
+            }
 
             // Immediately apply visuals to DOM element when rendered on screen (handles pagination seamlessly)
-            const msgElement = msg.closest('.msg') as HTMLElement || document.querySelector(`.msg[data-msg-id="${item.messageId}"]`) as HTMLElement;
             if (msgElement) {
                 updateCombatVisuals(msgElement, item, removeOGLight);
             }
@@ -198,22 +205,115 @@ export function scrapeCombatMessages(removeOGLight: boolean = isRemoveOGLightDup
     return results;
 }
 
+function parseCombatFromHTMLString(html: string): any | null {
+    const idMatch = html.match(/data-msg-id=['"](\d+)['"]/i);
+    if (!idMatch) return null;
+    const messageId = idMatch[1];
+
+    const timeMatch = html.match(/data-raw-timestamp=['"](\d+)['"]/i);
+    const coordsMatch = html.match(/data-raw-coords=['"]([^'"]+)['"]/i);
+    const resultMatch = html.match(/data-raw-result=['"](\{.*?\})['"]/i);
+    const fleetsMatch = html.match(/data-raw-fleets=['"](\[.*?\])['"]/i);
+
+    if (timeMatch && coordsMatch && resultMatch) {
+        try {
+            const result = JSON.parse(resultMatch[1].replace(/&quot;/g, '"'));
+            const coords = coordsMatch[1].replace(/[\[\]]/g, '');
+
+            const loot: any = { metal: 0, crystal: 0, deuterium: 0, food: 0 };
+            if (result.loot && Array.isArray(result.loot.resources)) {
+                result.loot.resources.forEach((r: any) => {
+                    if (loot.hasOwnProperty(r.resource)) {
+                        loot[r.resource] = r.amount;
+                    }
+                });
+            }
+
+            const debris: any = { metal: 0, crystal: 0, deuterium: 0 };
+            if (result.debris && Array.isArray(result.debris.resources)) {
+                result.debris.resources.forEach((r: any) => {
+                    if (debris.hasOwnProperty(r.resource)) {
+                        debris[r.resource] = r.total;
+                    }
+                });
+            }
+
+            let attackerLosses = 0;
+            let defenderLosses = 0;
+            if (Array.isArray(result.totalValueOfUnitsLost)) {
+                result.totalValueOfUnitsLost.forEach((l: any) => {
+                    if (l.side === 'attacker') attackerLosses = l.value;
+                    else if (l.side === 'defender') defenderLosses = l.value;
+                });
+            }
+
+            let parsedFleets: any[] = [];
+            if (fleetsMatch) {
+                try {
+                    parsedFleets = JSON.parse(fleetsMatch[1].replace(/&quot;/g, '"'));
+                } catch (e) {
+                    parsedFleets = [];
+                }
+            }
+
+            const isExpedition = coords.trim().endsWith(':16');
+            const attackers = Array.isArray(parsedFleets) ? parsedFleets.filter((p: any) => p.side === 'attacker' || p.isAttacker) : [];
+            const defenders = Array.isArray(parsedFleets) ? parsedFleets.filter((p: any) => p.side === 'defender' || p.isDefender) : [];
+
+            let attackerName = attackers[0]?.player?.name || attackers[0]?.name || attackers[0]?.playerName || (result.attackers && result.attackers[0]?.name) || 'Unknown';
+            let defenderName = defenders[0]?.player?.name || defenders[0]?.name || defenders[0]?.playerName || (result.defenders && result.defenders[0]?.name) || 'Unknown';
+
+            if (isExpedition && defenderName === 'Unknown') {
+                defenderName = 'Expedition Hostile';
+            }
+
+            return {
+                messageId,
+                timestamp: parseInt(timeMatch[1], 10),
+                coords,
+                winner: result.winner || 'none',
+                loot,
+                debris,
+                attackerLosses,
+                defenderLosses,
+                attackerName,
+                defenderName,
+                honor: result.honor?.attacker || 0,
+                moonChance: result.moonCreation?.chance || 0,
+                rawResult: result
+            };
+        } catch (e) {
+            console.warn('OGame Nexus: Failed to parse raw combat HTML', e);
+        }
+    }
+    return null;
+}
+
 export function scrapeRawCombatHTML(htmls: string[], removeOGLight: boolean = isRemoveOGLightDuplicatesEnabled()) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmls.join(''), 'text/html');
-    const combatMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="25"]');
     const results = [];
 
-    for (const msg of combatMessages) {
-        const item = parseCombatElement(msg);
+    const visibleDomMsgMap = new Map<string, HTMLElement>();
+    document.querySelectorAll('.msg[data-msg-id]').forEach(el => {
+        const id = el.getAttribute('data-msg-id');
+        if (id) visibleDomMsgMap.set(id, el as HTMLElement);
+    });
+
+    for (const html of htmls) {
+        if (!html.includes("data-raw-messagetype='25'") && !html.includes('data-raw-messagetype="25"') &&
+            !html.includes("data-raw-messageType='25'") && !html.includes('data-raw-messageType="25"')) {
+            continue;
+        }
+
+        const item = parseCombatFromHTMLString(html);
         if (item) {
-            const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="25"]`);
-            if (domMsg) {
-                domMsg.setAttribute('data-og-nexus-processed', 'true');
-                const domMsgElement = domMsg.closest('.msg') as HTMLElement;
-                if (domMsgElement) {
-                    updateCombatVisuals(domMsgElement, item, removeOGLight);
+            const domMsgElement = visibleDomMsgMap.get(item.messageId);
+            if (domMsgElement) {
+                const domMsg = domMsgElement.querySelector('div.rawMessageData[data-raw-messagetype="25"], div.rawMessageData[data-raw-messageType="25"]');
+                if (domMsg && domMsg.hasAttribute('data-og-nexus-processed')) {
+                    domMsg.removeAttribute('data-og-nexus-processed');
                 }
+                domMsgElement.setAttribute('data-og-nexus-processed', 'true');
+                updateCombatVisuals(domMsgElement, item, removeOGLight);
             }
 
             if (!processedCombatIds.has(item.messageId)) {
@@ -311,15 +411,22 @@ export async function trackRawCombatReports(playerId: string, htmls: string[]) {
 export function updateCombatVisuals(msgElement: HTMLElement, combat: any, removeOGLight: boolean = true) {
     if (!isExtensionStillValid()) return;
 
-    // 0. Remove OGLight duplicates if configured
+    // 0. Remove OGLight duplicates if configured AND on Combat Reports tab (subtab 21)
     if (removeOGLight) {
-        const duplicates = msgElement.querySelectorAll('.ogl_battle');
-        duplicates.forEach(el => el.remove());
-        const content = msgElement.querySelector('.msgContent');
-        if (content) {
-            content.classList.remove('ogl_hidden');
+        const isCombatTab = document.documentElement?.getAttribute('data-nexus-active-subtab') === '21' ||
+                            !!document.querySelector('div.innerTabItem.active[data-subtab-id="21"]');
+        if (isCombatTab) {
+            const duplicates = msgElement.querySelectorAll('.ogl_battle');
+            duplicates.forEach(el => el.remove());
+            const content = msgElement.querySelector('.msgContent');
+            if (content) {
+                content.classList.remove('ogl_hidden');
+            }
         }
     }
+
+    if (msgElement.hasAttribute('data-og-nexus-visuals-applied')) return;
+    msgElement.setAttribute('data-og-nexus-visuals-applied', 'true');
 
     // 1. Add tracked icon in footer
     const footerActions = msgElement.querySelector('message-footer-actions') || msgElement.querySelector('.msg_actions');

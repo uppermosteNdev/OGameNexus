@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { calculateEmpireProduction } from '../../utils/amortizationCalc';
+import { isSameUniverse } from '../../utils/universe';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, 
@@ -98,7 +99,16 @@ const SignatureMaker: React.FC<SignatureMakerProps> = ({ onBack }) => {
     ) ?? 0;
 
     const harvestCount = useLiveQuery(
-        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).count() : 0,
+        async () => {
+            if (!activeAccount) return await db.debrisHarvests.count();
+            const strPid = String(activeAccount.playerId || '').trim();
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) pidVariants.push(numPid);
+            const userHarvests = await db.debrisHarvests.where('playerId').anyOf(pidVariants).toArray();
+            const activeUni = activeAccount.universe;
+            return userHarvests.filter(d => isSameUniverse(d.universe, activeUni)).length;
+        },
         [activeAccount]
     ) ?? 0;
 

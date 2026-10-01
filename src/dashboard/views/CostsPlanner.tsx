@@ -13,6 +13,7 @@ import { calculateTotalEmpireDailyYield, formatGatherTime } from '../../utils/em
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA, BUILDING_DATA, RESEARCH_DATA, DEFENCE_DATA, LIFEFORM_BUILDING_DATA } from '../../db/staticData';
 import { ThemeIcon } from '../components/ThemeIcon';
+import { isSameUniverse } from '../../utils/universe';
 import './CostsPlanner.css';
 
 // ----------------------------------------------------
@@ -147,6 +148,18 @@ const DEFENCES_BASE_COSTS: Record<number, ResourceCost> = {
 // ----------------------------------------------------
 // UTILITIES FOR MATHEMATICAL SCALING
 // ----------------------------------------------------
+
+const formatNumber = (num: number): string => {
+    if (num >= 1000000000000) return (num / 1000000000000).toFixed(2) + 'T';
+    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+    return Math.floor(num).toLocaleString();
+};
+
+const formatFullNumber = (num: number): string => {
+    return Math.floor(num).toLocaleString();
+};
 
 const calculateMSU = (cost: ResourceCost, rates: { metal: number; crystal: number; deuterium: number }): number => {
     const mMultiplier = 1;
@@ -402,26 +415,81 @@ const getEmpireResearchDiscount = (
 
 const CostsPlanner: React.FC = () => {
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const strPid = activeAccount?.playerId ? String(activeAccount.playerId).trim() : '';
+
     const planets = useLiveQuery(
-        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).filter(p => p.type === 'planet').toArray() : [],
-        [activeAccount]
+        async () => {
+            if (!strPid) return [];
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) pidVariants.push(numPid);
+            const userPlanets = await db.planets.where('playerId').anyOf(pidVariants).filter(p => p.type === 'planet').toArray();
+            if (userPlanets.length > 0) return userPlanets;
+            const all = await db.planets.toArray();
+            return all.filter(p => String(p.playerId) === strPid && p.type === 'planet');
+        },
+        [strPid]
     ) || [];
+
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
 
     const expeditions = useLiveQuery(
-        () => activeAccount ? db.expeditions.where('playerId').equals(activeAccount.playerId).toArray() : [],
-        [activeAccount]
+        async () => {
+            if (!strPid) return [];
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) pidVariants.push(numPid);
+            const userExp = await db.expeditions.where('playerId').anyOf(pidVariants).toArray();
+            if (userExp.length > 0) return userExp;
+            const all = await db.expeditions.toArray();
+            return all.filter(e => String(e.playerId) === strPid);
+        },
+        [strPid]
     ) || [];
 
     const combatReports = useLiveQuery(
-        () => activeAccount ? db.combatReports.where('playerId').equals(activeAccount.playerId).toArray() : [],
-        [activeAccount]
+        async () => {
+            if (!strPid) return [];
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) pidVariants.push(numPid);
+            const userCR = await db.combatReports.where('playerId').anyOf(pidVariants).toArray();
+            if (userCR.length > 0) return userCR;
+            const all = await db.combatReports.toArray();
+            return all.filter(c => String(c.playerId) === strPid);
+        },
+        [strPid]
     ) || [];
 
+    const activeUniverse = activeAccount?.universe;
     const debrisHarvests = useLiveQuery(
-        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray() : [],
-        [activeAccount]
+        async () => {
+            if (!strPid) return await db.debrisHarvests.toArray();
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) pidVariants.push(numPid);
+            const userHarvests = await db.debrisHarvests.where('playerId').anyOf(pidVariants).toArray();
+            return userHarvests.filter(d => isSameUniverse(d.universe, activeUniverse));
+        },
+        [strPid, activeUniverse]
     ) || [];
+
+    // Cached stable references so asynchronous query re-evaluations never momentarily flash empty data
+    const stablePlanetsRef = useRef<any[]>([]);
+    if (planets.length > 0) stablePlanetsRef.current = planets;
+    const effectivePlanets = planets.length > 0 ? planets : stablePlanetsRef.current;
+
+    const stableExpeditionsRef = useRef<any[]>([]);
+    if (expeditions.length > 0) stableExpeditionsRef.current = expeditions;
+    const effectiveExpeditions = expeditions.length > 0 ? expeditions : stableExpeditionsRef.current;
+
+    const stableCombatReportsRef = useRef<any[]>([]);
+    if (combatReports.length > 0) stableCombatReportsRef.current = combatReports;
+    const effectiveCombatReports = combatReports.length > 0 ? combatReports : stableCombatReportsRef.current;
+
+    const stableDebrisHarvestsRef = useRef<any[]>([]);
+    if (debrisHarvests.length > 0) stableDebrisHarvestsRef.current = debrisHarvests;
+    const effectiveDebrisHarvests = debrisHarvests.length > 0 ? debrisHarvests : stableDebrisHarvestsRef.current;
 
     const rates = useMemo(() => {
         return settings || { metal: 3, crystal: 2, deuterium: 1 };
@@ -429,9 +497,9 @@ const CostsPlanner: React.FC = () => {
 
     // Calculate dynamic production on-the-fly using standard engine
     const calcResults = useMemo(() => {
-        if (!activeAccount || planets.length === 0) return null;
-        return calculateEmpireProduction({ account: activeAccount, planets });
-    }, [activeAccount, planets]);
+        if (!activeAccount || effectivePlanets.length === 0) return null;
+        return calculateEmpireProduction({ account: activeAccount, planets: effectivePlanets });
+    }, [activeAccount, effectivePlanets]);
 
     // Daily Production Summarizer
     const dailyProduction = useMemo(() => {
@@ -440,7 +508,7 @@ const CostsPlanner: React.FC = () => {
         let deuterium = 0;
         
         if (calcResults) {
-            planets.forEach(p => {
+            effectivePlanets.forEach(p => {
                 const prod = calcResults.planets[p.id]?.total;
                 if (prod) {
                     metal += (prod.metal || 0) * 24;
@@ -451,7 +519,7 @@ const CostsPlanner: React.FC = () => {
         }
         
         return { metal, crystal, deuterium };
-    }, [planets, calcResults]);
+    }, [effectivePlanets, calcResults]);
 
     // UI Workspace States
     const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -481,18 +549,20 @@ const CostsPlanner: React.FC = () => {
     // Cart DB Persistence & Realtime Auto-Synchronization
     const [cartInitialized, setCartInitialized] = useState<boolean>(false);
     const isFirstLoad = useRef(true);
+    const lastSavedCartJson = useRef<string>('');
 
     useEffect(() => {
         setCartInitialized(false);
         isFirstLoad.current = true;
-    }, [activeAccount?.playerId]);
+        lastSavedCartJson.current = '';
+    }, [strPid]);
 
     useEffect(() => {
-        if (!activeAccount || !planets || planets.length === 0 || cartInitialized) return;
+        if (!strPid || !planets || planets.length === 0 || cartInitialized) return;
 
         let active = true;
 
-        db.settings.get("costs_planner_cart_" + activeAccount.playerId).then(data => {
+        db.settings.get("costs_planner_cart_" + strPid).then(data => {
             if (!active) return;
 
             const initialCart: CartItem[] = (data as any)?.cartItems || [];
@@ -512,7 +582,7 @@ const CostsPlanner: React.FC = () => {
                     if (item.itemName === 'Shipyard') realCurrent = realPlanet.shipyard || 0;
                     if (item.itemName === 'Research Lab') realCurrent = realPlanet.researchLab || 0;
                     if (item.itemName === 'Nanite Factory') realCurrent = realPlanet.naniteFactory || 0;
-                } else if (item.category === 'Research' && activeAccount.researches) {
+                } else if (item.category === 'Research' && activeAccount?.researches) {
                     const found = activeAccount.researches.find(r => r.id === item.itemId);
                     realCurrent = found ? found.level : 0;
                 } else if (item.category === 'LF Building' && realPlanet?.lifeformBuildings) {
@@ -599,11 +669,12 @@ const CostsPlanner: React.FC = () => {
             }).filter((item): item is CartItem => item !== null);
 
             setCart(syncedCart);
+            lastSavedCartJson.current = JSON.stringify(syncedCart);
             setCartInitialized(true);
 
-            if (needsSave && activeAccount) {
+            if (needsSave && strPid) {
                 db.settings.put({
-                    id: "costs_planner_cart_" + activeAccount.playerId,
+                    id: "costs_planner_cart_" + strPid,
                     cartItems: syncedCart
                 } as any).catch(e => console.error("Failed to sync cart to DB:", e));
             }
@@ -612,19 +683,24 @@ const CostsPlanner: React.FC = () => {
         return () => {
             active = false;
         };
-    }, [activeAccount, planets, cartInitialized]);
+    }, [strPid, planets.length, cartInitialized]);
 
     useEffect(() => {
-        if (!activeAccount || !cartInitialized) return;
+        if (!strPid || !cartInitialized) return;
         if (isFirstLoad.current) {
             isFirstLoad.current = false;
+            lastSavedCartJson.current = JSON.stringify(cart);
             return;
         }
+        const cartJson = JSON.stringify(cart);
+        if (cartJson === lastSavedCartJson.current) return;
+        lastSavedCartJson.current = cartJson;
+
         db.settings.put({
-            id: "costs_planner_cart_" + activeAccount.playerId,
+            id: "costs_planner_cart_" + strPid,
             cartItems: cart
         } as any).catch(e => console.error("Failed to save cart to DB:", e));
-    }, [cart, activeAccount, cartInitialized]);
+    }, [cart, strPid, cartInitialized]);
 
     // Drilldown Targets/Quantities States
     const [targetLevels, setTargetLevels] = useState<Record<string, number>>({});
@@ -644,8 +720,8 @@ const CostsPlanner: React.FC = () => {
     };
 
     const activePlanet = useMemo(() => {
-        return planets.find(p => p.id === selectedPlanetId) || null;
-    }, [planets, selectedPlanetId]);
+        return effectivePlanets.find(p => p.id === selectedPlanetId) || null;
+    }, [effectivePlanets, selectedPlanetId]);
 
     // Pre-populate target level defaults for active item
     const getStoredCurrentLevel = (category: string, itemName: string, itemId?: number): number => {
@@ -666,7 +742,7 @@ const CostsPlanner: React.FC = () => {
             return found ? found.level : 0;
         }
         if (category === 'lifeformBuildings' && activePlanet?.lifeformBuildings) {
-            const found = activePlanet.lifeformBuildings.find(b => b.id === itemId);
+            const found = activePlanet.lifeformBuildings.find((b: any) => b.id === itemId);
             return found ? found.level : 0;
         }
         return 0;
@@ -1066,7 +1142,7 @@ const CostsPlanner: React.FC = () => {
             level: 0
         }));
 
-        rawSetup.forEach(s => {
+        rawSetup.forEach((s: any) => {
             let tid = s.selectedTechId;
             let slotNum = s.slotNumber;
 
@@ -1299,17 +1375,23 @@ const CostsPlanner: React.FC = () => {
         };
     }, [cart, rates]);
 
-    const packageMetrics = useMemo(() => {
-        const metalPacksNeeded = dailyProduction.metal > 0 ? (cartSummary.cost.metal / dailyProduction.metal) : 0;
-        const crystalPacksNeeded = dailyProduction.crystal > 0 ? (cartSummary.cost.crystal / dailyProduction.crystal) : 0;
-        const deuteriumPacksNeeded = dailyProduction.deuterium > 0 ? (cartSummary.cost.deuterium / dailyProduction.deuterium) : 0;
+    const allPlanetsAndMoons = useLiveQuery(
+        async () => {
+            if (!strPid) return [];
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) pidVariants.push(numPid);
+            const userPlanets = await db.planets.where('playerId').anyOf(pidVariants).toArray();
+            if (userPlanets.length > 0) return userPlanets;
+            const all = await db.planets.toArray();
+            return all.filter(p => String(p.playerId) === strPid);
+        },
+        [strPid]
+    ) || [];
 
-        return {
-            metalPacksNeeded,
-            crystalPacksNeeded,
-            deuteriumPacksNeeded
-        };
-    }, [dailyProduction, cartSummary.cost]);
+    const stableAllPlanetsRef = useRef<any[]>([]);
+    if (allPlanetsAndMoons.length > 0) stableAllPlanetsRef.current = allPlanetsAndMoons;
+    const effectiveAllPlanetsAndMoons = allPlanetsAndMoons.length > 0 ? allPlanetsAndMoons : stableAllPlanetsRef.current;
 
     // Dynamic multipliers for daily yield MSU calculation
     const mMultiplier = 1;
@@ -1319,67 +1401,115 @@ const CostsPlanner: React.FC = () => {
     const yieldBreakdown = useMemo(() => {
         return calculateTotalEmpireDailyYield({
             activeAccount,
-            planets,
-            expeditions,
-            combatReports,
-            debrisHarvests,
+            planets: effectivePlanets,
+            expeditions: effectiveExpeditions,
+            combatReports: effectiveCombatReports,
+            debrisHarvests: effectiveDebrisHarvests,
             rates
         });
-    }, [activeAccount, planets, expeditions, combatReports, debrisHarvests, rates]);
+    }, [activeAccount, effectivePlanets, effectiveExpeditions, effectiveCombatReports, effectiveDebrisHarvests, rates]);
 
     const totalEmpireDailyYieldMSU = yieldBreakdown.totalDailyYieldMSU;
 
+    // Available resources across all planets and moons
+    const currentEmpireResources = useMemo(() => {
+        let metal = 0;
+        let crystal = 0;
+        let deuterium = 0;
+
+        effectiveAllPlanetsAndMoons.forEach(p => {
+            const m = typeof p.metal === 'number' ? p.metal : (p.resources?.metal ?? 0);
+            const c = typeof p.crystal === 'number' ? p.crystal : (p.resources?.crystal ?? 0);
+            const d = typeof p.deuterium === 'number' ? p.deuterium : (p.resources?.deuterium ?? 0);
+            metal += m;
+            crystal += c;
+            deuterium += d;
+        });
+
+        // Only include flying resources if updated within the last 4 hours (to prevent ghost cargo)
+        const flying = activeAccount?.flyingResources;
+        const isRecentFlying = flying?.lastUpdated && (Date.now() - flying.lastUpdated < 4 * 3600 * 1000);
+        if (isRecentFlying) {
+            metal += flying.metal || 0;
+            crystal += flying.crystal || 0;
+            deuterium += flying.deuterium || 0;
+        }
+
+        const msu = (metal * mMultiplier) + (crystal * cMultiplier) + (deuterium * dMultiplier);
+
+        return {
+            metal,
+            crystal,
+            deuterium,
+            msu,
+            hasFlying: Boolean(isRecentFlying && ((flying?.metal || 0) + (flying?.crystal || 0) + (flying?.deuterium || 0) > 0))
+        };
+    }, [effectiveAllPlanetsAndMoons, activeAccount, mMultiplier, cMultiplier, dMultiplier]);
+
+
+    const packageMetrics = useMemo(() => {
+        const metalCost = cartSummary.cost.metal;
+        const crystalCost = cartSummary.cost.crystal;
+        const deuteriumCost = cartSummary.cost.deuterium;
+
+        const metalDeficit = Math.max(0, metalCost - currentEmpireResources.metal);
+        const crystalDeficit = Math.max(0, crystalCost - currentEmpireResources.crystal);
+        const deuteriumDeficit = Math.max(0, deuteriumCost - currentEmpireResources.deuterium);
+
+        const metalPacksNeeded = dailyProduction.metal > 0 ? (metalCost / dailyProduction.metal) : 0;
+        const crystalPacksNeeded = dailyProduction.crystal > 0 ? (crystalCost / dailyProduction.crystal) : 0;
+        const deuteriumPacksNeeded = dailyProduction.deuterium > 0 ? (deuteriumCost / dailyProduction.deuterium) : 0;
+
+        const metalPacksRemaining = dailyProduction.metal > 0 ? (metalDeficit / dailyProduction.metal) : 0;
+        const crystalPacksRemaining = dailyProduction.crystal > 0 ? (crystalDeficit / dailyProduction.crystal) : 0;
+        const deuteriumPacksRemaining = dailyProduction.deuterium > 0 ? (deuteriumDeficit / dailyProduction.deuterium) : 0;
+
+        return {
+            metalDeficit,
+            crystalDeficit,
+            deuteriumDeficit,
+            metalPacksNeeded,
+            crystalPacksNeeded,
+            deuteriumPacksNeeded,
+            metalPacksRemaining,
+            crystalPacksRemaining,
+            deuteriumPacksRemaining
+        };
+    }, [dailyProduction, cartSummary.cost, currentEmpireResources]);
+
+    // MSU is king: calculate remaining MSU and gather times based entirely on total MSU
+    const remainingMSU = useMemo(() => {
+        return Math.max(0, cartSummary.msu - currentEmpireResources.msu);
+    }, [cartSummary.msu, currentEmpireResources.msu]);
+
+    const remainingDaysToGather = useMemo(() => {
+        if (remainingMSU <= 0) return 0;
+        return totalEmpireDailyYieldMSU > 0 ? (remainingMSU / totalEmpireDailyYieldMSU) : 0;
+    }, [remainingMSU, totalEmpireDailyYieldMSU]);
+
+    const remainingGatherTimeText = useMemo(() => {
+        if (remainingMSU <= 0) return 'Instant';
+        return formatGatherTime(remainingDaysToGather);
+    }, [remainingMSU, remainingDaysToGather]);
+
     const daysToGather = useMemo(() => {
-        return cartSummary.msu / totalEmpireDailyYieldMSU;
+        return totalEmpireDailyYieldMSU > 0 ? (cartSummary.msu / totalEmpireDailyYieldMSU) : 0;
     }, [cartSummary.msu, totalEmpireDailyYieldMSU]);
 
     const gatherTimeText = useMemo(() => {
         return formatGatherTime(daysToGather);
     }, [daysToGather]);
 
-    const allPlanetsAndMoons = useLiveQuery(
-        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).toArray() : [],
-        [activeAccount]
-    ) || [];
-
-    const totalCurrentResourcesMSU = useMemo(() => {
-        let metal = 0;
-        let crystal = 0;
-        let deuterium = 0;
-        allPlanetsAndMoons.forEach(p => {
-            metal += p.metal || 0;
-            crystal += p.crystal || 0;
-            deuterium += p.deuterium || 0;
-        });
-
-        if (activeAccount?.flyingResources) {
-            metal += activeAccount.flyingResources.metal || 0;
-            crystal += activeAccount.flyingResources.crystal || 0;
-            deuterium += activeAccount.flyingResources.deuterium || 0;
-        }
-
-        return (metal * mMultiplier) + (crystal * cMultiplier) + (deuterium * dMultiplier);
-    }, [allPlanetsAndMoons, activeAccount, mMultiplier, cMultiplier, dMultiplier]);
-
-    const remainingDaysToGather = useMemo(() => {
-        const remainingMSU = Math.max(0, cartSummary.msu - totalCurrentResourcesMSU);
-        return remainingMSU / totalEmpireDailyYieldMSU;
-    }, [cartSummary.msu, totalCurrentResourcesMSU, totalEmpireDailyYieldMSU]);
-
-    const remainingGatherTimeText = useMemo(() => {
-        return formatGatherTime(remainingDaysToGather);
-    }, [remainingDaysToGather]);
-
     const remainingGatherDateText = useMemo(() => {
-        if (!remainingDaysToGather || remainingDaysToGather <= 0 || !isFinite(remainingDaysToGather)) {
+        if (remainingMSU <= 0 || !remainingDaysToGather || remainingDaysToGather <= 0 || !isFinite(remainingDaysToGather)) {
             return 'Resources ready now (all available in storage & flight)';
         }
         const target = new Date(Date.now() + remainingDaysToGather * 24 * 60 * 60 * 1000);
         const dayName = target.toLocaleDateString(undefined, { weekday: 'long' });
         const dateFormatted = target.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
         const timeFormatted = target.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
-        return `Est. Ready: ${dayName}, ${dateFormatted} at ${timeFormatted}`;
-    }, [remainingDaysToGather]);
+        return `Est. Ready: ${dayName}, ${dateFormatted} at ${timeFormatted} • Remaining: ${formatNumber(remainingMSU)} MSU`;
+    }, [remainingDaysToGather, remainingMSU]);
 
     const groupedCart = useMemo(() => {
         const groups: Record<string, { name: string; coords: string; isEmpire: boolean; planetImg?: string; items: CartItem[] }> = {};
@@ -1389,7 +1519,7 @@ const CostsPlanner: React.FC = () => {
             const groupKey = isEmpireItem ? 'empire' : item.planetId;
 
             if (!groups[groupKey]) {
-                const targetPlanet = planets.find(p => p.id === item.planetId);
+                const targetPlanet = effectivePlanets.find(p => p.id === item.planetId);
                 groups[groupKey] = {
                     name: isEmpireItem ? 'Global Empire' : item.planetName,
                     coords: isEmpireItem ? 'Global' : item.coords,
@@ -1407,19 +1537,7 @@ const CostsPlanner: React.FC = () => {
             if (bKey === 'empire') return 1;
             return aKey.localeCompare(bKey);
         });
-    }, [cart, planets]);
-
-    const formatNumber = (num: number) => {
-        if (num >= 1000000000000) return (num / 1000000000000).toFixed(2) + 'T';
-        if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-        if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-        if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
-        return Math.floor(num).toLocaleString();
-    };
-
-    const formatFullNumber = (num: number) => {
-        return Math.floor(num).toLocaleString();
-    };
+    }, [cart, effectivePlanets]);
 
     return (
         <div className="view-container costs-planner-view">
@@ -2126,7 +2244,7 @@ const CostsPlanner: React.FC = () => {
                                                     level: 0
                                                 }));
 
-                                                rawSetup.forEach(s => {
+                                                rawSetup.forEach((s: any) => {
                                                     let tid = s.selectedTechId;
                                                     let slotNum = s.slotNumber;
 
@@ -2555,55 +2673,238 @@ const CostsPlanner: React.FC = () => {
                             <div className="summary-title">ESTIMATED INVESTMENT REQUIRED</div>
 
                             <div className="summary-resources-grid">
-                                <div className="summary-res-pod" title={formatFullNumber(cartSummary.cost.metal)}>
+                                <div className="summary-res-pod">
                                     <div className="pod-header">
                                         <img src="icons/resources/metal-icon-medium.jpg" alt="" />
                                         <span>METAL</span>
                                     </div>
                                     <div className="pod-value" style={{ color: '#ff8d33' }}>{formatNumber(cartSummary.cost.metal)}</div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-left">
+                                        <div className="tooltip-title-row">
+                                            <img src="icons/resources/metal-icon-medium.jpg" className="tooltip-title-icon" alt="" />
+                                            <span className="tooltip-title-text" style={{ color: '#ff8d33' }}>METAL LOGISTICS</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Cart Required</span>
+                                                <span className="metric-value" style={{ color: '#ff8d33' }}>{formatFullNumber(cartSummary.cost.metal)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-value">{formatFullNumber(currentEmpireResources.metal)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">{packageMetrics.metalDeficit > 0 ? 'Remaining Deficit' : 'Surplus In Stock'}</span>
+                                                <span className="metric-value" style={{ color: packageMetrics.metalDeficit > 0 ? '#ff8d33' : '#22c55e' }}>
+                                                    {packageMetrics.metalDeficit > 0 
+                                                        ? formatFullNumber(packageMetrics.metalDeficit) 
+                                                        : `+${formatFullNumber(currentEmpireResources.metal - cartSummary.cost.metal)}`}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                {packageMetrics.metalDeficit > 0 
+                                                    ? `${((currentEmpireResources.metal / (cartSummary.cost.metal || 1)) * 100).toFixed(1)}% of required metal available`
+                                                    : '100% covered across empire storage & flight'}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="summary-res-pod" title={formatFullNumber(cartSummary.cost.crystal)}>
+                                <div className="summary-res-pod">
                                     <div className="pod-header">
                                         <img src="icons/resources/crystal-icon-medium.jpg" alt="" />
                                         <span>CRYSTAL</span>
                                     </div>
                                     <div className="pod-value" style={{ color: '#33b2ff' }}>{formatNumber(cartSummary.cost.crystal)}</div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-center">
+                                        <div className="tooltip-title-row">
+                                            <img src="icons/resources/crystal-icon-medium.jpg" className="tooltip-title-icon" alt="" />
+                                            <span className="tooltip-title-text" style={{ color: '#33b2ff' }}>CRYSTAL LOGISTICS</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Cart Required</span>
+                                                <span className="metric-value" style={{ color: '#33b2ff' }}>{formatFullNumber(cartSummary.cost.crystal)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-value">{formatFullNumber(currentEmpireResources.crystal)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">{packageMetrics.crystalDeficit > 0 ? 'Remaining Deficit' : 'Surplus In Stock'}</span>
+                                                <span className="metric-value" style={{ color: packageMetrics.crystalDeficit > 0 ? '#33b2ff' : '#22c55e' }}>
+                                                    {packageMetrics.crystalDeficit > 0 
+                                                        ? formatFullNumber(packageMetrics.crystalDeficit) 
+                                                        : `+${formatFullNumber(currentEmpireResources.crystal - cartSummary.cost.crystal)}`}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                {packageMetrics.crystalDeficit > 0 
+                                                    ? `${((currentEmpireResources.crystal / (cartSummary.cost.crystal || 1)) * 100).toFixed(1)}% of required crystal available`
+                                                    : '100% covered across empire storage & flight'}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="summary-res-pod" title={formatFullNumber(cartSummary.cost.deuterium)}>
+                                <div className="summary-res-pod">
                                     <div className="pod-header">
                                         <img src="icons/resources/deuterium-icon-medium.jpg" alt="" />
                                         <span>DEUTERIUM</span>
                                     </div>
                                     <div className="pod-value" style={{ color: '#33ff8d' }}>{formatNumber(cartSummary.cost.deuterium)}</div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-right">
+                                        <div className="tooltip-title-row">
+                                            <img src="icons/resources/deuterium-icon-medium.jpg" className="tooltip-title-icon" alt="" />
+                                            <span className="tooltip-title-text" style={{ color: '#33ff8d' }}>DEUTERIUM LOGISTICS</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Cart Required</span>
+                                                <span className="metric-value" style={{ color: '#33ff8d' }}>{formatFullNumber(cartSummary.cost.deuterium)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-value">{formatFullNumber(currentEmpireResources.deuterium)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">{packageMetrics.deuteriumDeficit > 0 ? 'Remaining Deficit' : 'Surplus In Stock'}</span>
+                                                <span className="metric-value" style={{ color: packageMetrics.deuteriumDeficit > 0 ? '#33ff8d' : '#22c55e' }}>
+                                                    {packageMetrics.deuteriumDeficit > 0 
+                                                        ? formatFullNumber(packageMetrics.deuteriumDeficit) 
+                                                        : `+${formatFullNumber(currentEmpireResources.deuterium - cartSummary.cost.deuterium)}`}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                {packageMetrics.deuteriumDeficit > 0 
+                                                    ? `${((currentEmpireResources.deuterium / (cartSummary.cost.deuterium || 1)) * 100).toFixed(1)}% of required deut available`
+                                                    : '100% covered across empire storage & flight'}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
                             <div className="summary-msu-container">
-                                <div className="summary-msu-pod" title={formatFullNumber(cartSummary.msu)}>
+                                <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Coins size={16} color="var(--primary)" />
                                         <span>TOTAL MSU</span>
                                     </div>
                                     <div className="msu-val-text">{formatNumber(cartSummary.msu)}</div>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                        {remainingMSU <= 0 ? 'Goal Reached' : `Remaining: ${formatNumber(remainingMSU)}`}
+                                    </div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-left">
+                                        <div className="tooltip-title-row">
+                                            <Coins size={14} color="var(--primary)" />
+                                            <span className="tooltip-title-text" style={{ color: 'var(--primary)' }}>TOTAL MSU METRICS</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Total Cart Cost</span>
+                                                <span className="metric-value" style={{ color: 'var(--primary)' }}>{formatFullNumber(cartSummary.msu)} MSU</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-value">{formatFullNumber(currentEmpireResources.msu)} MSU</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">{remainingMSU > 0 ? 'Deficit to Gather' : 'Status'}</span>
+                                                <span className="metric-value" style={{ color: remainingMSU > 0 ? '#38bdf8' : '#22c55e' }}>
+                                                    {remainingMSU > 0 ? `${formatFullNumber(remainingMSU)} MSU` : 'Goal Reached in MSU'}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                Standard Rates: M {rates.metal} : C {rates.crystal} : D {rates.deuterium}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
+
                                 <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#38bdf8" />
                                         <span>REMAINING GATHER TIME</span>
-                                        <span className="gather-info-icon" title={remainingGatherDateText}>
+                                        <span className="gather-info-icon">
                                             <Info size={12} />
                                         </span>
                                     </div>
                                     <div className="msu-val-text" style={{ color: '#38bdf8', textShadow: '0 0 10px rgba(56, 189, 248, 0.25)' }}>{remainingGatherTimeText}</div>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: remainingMSU <= 0 ? '#43D159' : 'rgba(56, 189, 248, 0.8)', marginTop: '2px' }}>
+                                        {remainingMSU <= 0 ? 'Ready in MSU' : `${formatNumber(remainingMSU)} MSU needed`}
+                                    </div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-center">
+                                        <div className="tooltip-title-row">
+                                            <Clock size={14} color="#38bdf8" />
+                                            <span className="tooltip-title-text" style={{ color: '#38bdf8' }}>REMAINING GATHER TIME</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Est. Time Needed</span>
+                                                <span className="metric-value" style={{ color: '#38bdf8' }}>{remainingGatherTimeText}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Empire Daily Yield</span>
+                                                <span className="metric-value">{formatFullNumber(totalEmpireDailyYieldMSU)} MSU/d</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Remaining Deficit</span>
+                                                <span className="metric-value" style={{ color: remainingMSU <= 0 ? '#22c55e' : '#38bdf8' }}>
+                                                    {remainingMSU <= 0 ? 'Ready in storage & flight' : `${formatFullNumber(remainingMSU)} MSU`}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                {remainingGatherDateText}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="summary-msu-pod" title="Calculated from 0 resources">
+
+                                <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#43D159" />
                                         <span>TOTAL GATHER TIME</span>
                                     </div>
                                     <div className="msu-val-text" style={{ color: '#43D159', textShadow: '0 0 10px rgba(67, 209, 89, 0.25)' }}>{gatherTimeText}</div>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                        From 0 MSU
+                                    </div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-right">
+                                        <div className="tooltip-title-row">
+                                            <Clock size={14} color="#43D159" />
+                                            <span className="tooltip-title-text" style={{ color: '#43D159' }}>TOTAL GATHER TIME</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">From 0 Resources</span>
+                                                <span className="metric-value" style={{ color: '#43D159' }}>{gatherTimeText}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Total Cart Cost</span>
+                                                <span className="metric-value">{formatFullNumber(cartSummary.msu)} MSU</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Empire Daily Yield</span>
+                                                <span className="metric-value">{formatFullNumber(totalEmpireDailyYieldMSU)} MSU/d</span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                Calculated from 0 resources at full daily empire production (mines, expeditions, combat & debris)
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2617,6 +2918,35 @@ const CostsPlanner: React.FC = () => {
                                             : '0.00 Packs'}
                                     </div>
                                     <div className="package-yield">Yield: {formatNumber(dailyProduction.metal)}</div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-left">
+                                        <div className="tooltip-title-row">
+                                            <img src="icons/misc/metal_package_large.png" className="tooltip-title-icon" alt="" />
+                                            <span className="tooltip-title-text" style={{ color: '#ff8d33' }}>METAL PACKAGES</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">1 Pack Yield</span>
+                                                <span className="metric-value" style={{ color: '#ff8d33' }}>{formatFullNumber(dailyProduction.metal)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Total Required</span>
+                                                <span className="metric-value">{formatFullNumber(cartSummary.cost.metal)} ({packageMetrics.metalPacksNeeded.toFixed(2)} packs)</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Deficit to Buy</span>
+                                                <span className="metric-value" style={{ color: packageMetrics.metalDeficit > 0 ? '#ff8d33' : '#22c55e' }}>
+                                                    {packageMetrics.metalDeficit > 0 
+                                                        ? `${formatFullNumber(packageMetrics.metalDeficit)} (${packageMetrics.metalPacksRemaining.toFixed(2)} packs)` 
+                                                        : '0 (Covered in storage)'}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                1 Pack = 24h Empire Mine Yield (Nexus Production tab total)
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="summary-package-pod">
@@ -2628,6 +2958,35 @@ const CostsPlanner: React.FC = () => {
                                             : '0.00 Packs'}
                                     </div>
                                     <div className="package-yield">Yield: {formatNumber(dailyProduction.crystal)}</div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-center">
+                                        <div className="tooltip-title-row">
+                                            <img src="icons/misc/crystal_package_large.png" className="tooltip-title-icon" alt="" />
+                                            <span className="tooltip-title-text" style={{ color: '#33b2ff' }}>CRYSTAL PACKAGES</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">1 Pack Yield</span>
+                                                <span className="metric-value" style={{ color: '#33b2ff' }}>{formatFullNumber(dailyProduction.crystal)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Total Required</span>
+                                                <span className="metric-value">{formatFullNumber(cartSummary.cost.crystal)} ({packageMetrics.crystalPacksNeeded.toFixed(2)} packs)</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Deficit to Buy</span>
+                                                <span className="metric-value" style={{ color: packageMetrics.crystalDeficit > 0 ? '#33b2ff' : '#22c55e' }}>
+                                                    {packageMetrics.crystalDeficit > 0 
+                                                        ? `${formatFullNumber(packageMetrics.crystalDeficit)} (${packageMetrics.crystalPacksRemaining.toFixed(2)} packs)` 
+                                                        : '0 (Covered in storage)'}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                1 Pack = 24h Empire Mine Yield (Nexus Production tab total)
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="summary-package-pod">
@@ -2639,6 +2998,35 @@ const CostsPlanner: React.FC = () => {
                                             : '0.00 Packs'}
                                     </div>
                                     <div className="package-yield">Yield: {formatNumber(dailyProduction.deuterium)}</div>
+
+                                    {/* Custom Nexus Glass Tooltip */}
+                                    <div className="nexus-pod-tooltip tooltip-align-right">
+                                        <div className="tooltip-title-row">
+                                            <img src="icons/misc/deuterium_package_large.png" className="tooltip-title-icon" alt="" />
+                                            <span className="tooltip-title-text" style={{ color: '#33ff8d' }}>DEUTERIUM PACKAGES</span>
+                                        </div>
+                                        <div className="tooltip-metrics-list">
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">1 Pack Yield</span>
+                                                <span className="metric-value" style={{ color: '#33ff8d' }}>{formatFullNumber(dailyProduction.deuterium)}</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Total Required</span>
+                                                <span className="metric-value">{formatFullNumber(cartSummary.cost.deuterium)} ({packageMetrics.deuteriumPacksNeeded.toFixed(2)} packs)</span>
+                                            </div>
+                                            <div className="tooltip-metric-item">
+                                                <span className="metric-label">Deficit to Buy</span>
+                                                <span className="metric-value" style={{ color: packageMetrics.deuteriumDeficit > 0 ? '#33ff8d' : '#22c55e' }}>
+                                                    {packageMetrics.deuteriumDeficit > 0 
+                                                        ? `${formatFullNumber(packageMetrics.deuteriumDeficit)} (${packageMetrics.deuteriumPacksRemaining.toFixed(2)} packs)` 
+                                                        : '0 (Covered in storage)'}
+                                                </span>
+                                            </div>
+                                            <div className="tooltip-metric-sub">
+                                                1 Pack = 24h Empire Mine Yield (Nexus Production tab total)
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

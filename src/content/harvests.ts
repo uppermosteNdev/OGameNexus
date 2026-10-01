@@ -17,13 +17,22 @@ export function formatNumber(num: number, decimals: number = 2): string {
 
 export function scrapeDebrisHarvestMessages() {
     // Message type 32 = Harvesting report from DF
-    const harvestMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="32"]:not([data-og-nexus-processed="true"])');
+    const harvestMessages = document.querySelectorAll('div.rawMessageData[data-raw-messagetype="32"]');
     const results: any[] = [];
 
     for (const msg of harvestMessages) {
-        const parentMsg = msg.closest('.msg');
+        // Strip legacy attribute from rawMessageData if present
+        if (msg.hasAttribute('data-og-nexus-processed')) {
+            msg.removeAttribute('data-og-nexus-processed');
+        }
+
+        const parentMsg = msg.closest('.msg') as HTMLElement | null;
         const messageId = parentMsg?.getAttribute('data-msg-id');
         if (!messageId || isSharedMessage(parentMsg || msg)) continue;
+
+        if (parentMsg && parentMsg.hasAttribute('data-og-nexus-processed')) {
+            continue;
+        }
 
         const timestamp = msg.getAttribute('data-raw-timestamp');
         const coords = msg.getAttribute('data-raw-targetcoordinates');
@@ -48,8 +57,10 @@ export function scrapeDebrisHarvestMessages() {
                 recycledResources
             });
 
-            // Mark as processed immediately
-            msg.setAttribute('data-og-nexus-processed', 'true');
+            // Mark as processed immediately on parent .msg
+            if (parentMsg) {
+                parentMsg.setAttribute('data-og-nexus-processed', 'true');
+            }
         }
     }
 

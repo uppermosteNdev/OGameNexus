@@ -20,6 +20,55 @@ window.addEventListener('ogame-nexus-settings-updated', (e: any) => {
     } catch (err) {}
 });
 
+function getActiveSubtabId(msgMgr?: any): string {
+    const activeSubtabEl = document.querySelector('div.innerTabItem.active[data-subtab-id]');
+    if (activeSubtabEl) {
+        const id = activeSubtabEl.getAttribute('data-subtab-id');
+        if (id) return id;
+    }
+    const container = document.querySelector('#messagescomponent, #messagecontainercomponent') as HTMLElement | null;
+    if (container && container.dataset.tab) {
+        return container.dataset.tab;
+    }
+    if (msgMgr && msgMgr.tabID) {
+        return String(msgMgr.tabID);
+    }
+    const htmlSubtab = document.documentElement?.getAttribute('data-nexus-active-subtab');
+    if (htmlSubtab) {
+        return htmlSubtab;
+    }
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tab = urlParams.get('tab');
+        if (tab) return tab;
+    } catch (e) {}
+    return '';
+}
+
+function updateActiveSubtabAttr(subtab?: string | null) {
+    try {
+        if (!document.documentElement) return;
+        const target = subtab || getActiveSubtabId();
+        if (target) {
+            document.documentElement.setAttribute('data-nexus-active-subtab', target);
+        }
+    } catch (e) {}
+}
+
+// Initial active subtab detection
+updateActiveSubtabAttr();
+
+// Sync active subtab when switching tabs via user click
+document.addEventListener('click', (e) => {
+    const tabEl = (e.target as HTMLElement)?.closest('div.innerTabItem, div.singleTab');
+    if (tabEl) {
+        const subtabId = tabEl.getAttribute('data-subtab-id') || tabEl.getAttribute('data-category-id');
+        if (subtabId) {
+            updateActiveSubtabAttr(subtabId);
+        }
+    }
+}, true);
+
 function shouldSuppressOGLightCards(): boolean {
     try {
         return document.documentElement.getAttribute('data-nexus-clean-oglight') !== 'false';
@@ -36,17 +85,26 @@ function patchMessageManager(msgMgr: any) {
     if (typeof origSummarize === 'function') {
         msgMgr.summarize = function(message: any) {
             if (shouldSuppressOGLightCards()) {
-                const type = Number(message?.globalTypeID);
-                // Suppress duplicate visual cards for:
-                // 41 (Expeditions), 61 (Lifeform Discoveries), 25, 48, 54 (Combats / Raids)
-                if (type === 41 || type === 61 || type === 25 || type === 48 || type === 54) {
-                    const dom = document.querySelector(`[data-msg-id="${message?.id}"]`);
-                    if (dom) {
-                        const content = dom.querySelector('.msgContent');
-                        if (content) content.classList.remove('ogl_hidden');
-                        dom.querySelectorAll('.ogl_battle').forEach(el => el.remove());
+                const activeSubtab = getActiveSubtabId(msgMgr);
+                const isCombatTab = activeSubtab === '21';
+                const isExpeditionTab = activeSubtab === '22';
+
+                // Strictly enforce suppression ONLY for Combat Reports (21) and Expeditions (22) tabs!
+                // All other tabs (Unions/Transport 23, Other 24, Espionage 20, etc.) must NEVER be suppressed!
+                if (isCombatTab || isExpeditionTab) {
+                    const type = Number(message?.globalTypeID);
+                    const shouldSuppress = (isCombatTab && (type === 25 || type === 48 || type === 54)) ||
+                                           (isExpeditionTab && (type === 41 || type === 61));
+
+                    if (shouldSuppress) {
+                        const dom = document.querySelector(`[data-msg-id="${message?.id}"]`);
+                        if (dom) {
+                            const content = dom.querySelector('.msgContent');
+                            if (content) content.classList.remove('ogl_hidden');
+                            dom.querySelectorAll('.ogl_battle').forEach(el => el.remove());
+                        }
+                        return; // Skip OGLight visual creation entirely on Combat & Expedition tabs
                     }
-                    return; // Skip OGLight visual creation entirely, statify() will still run!
                 }
             }
             return origSummarize.apply(this, arguments);
@@ -101,13 +159,17 @@ const oglPatchInterval = setInterval(() => {
 }, 50);
 setTimeout(() => clearInterval(oglPatchInterval), 15000);
 
+let overlaysTimeout: any = null;
 window.addEventListener('ogame-nexus-trigger-tooltips', () => {
     try {
-        // @ts-ignore
-        if (typeof initOverlays === 'function') {
+        if (overlaysTimeout) clearTimeout(overlaysTimeout);
+        overlaysTimeout = setTimeout(() => {
             // @ts-ignore
-            initOverlays();
-        }
+            if (typeof initOverlays === 'function') {
+                // @ts-ignore
+                initOverlays();
+            }
+        }, 50);
     } catch (e) {
         console.warn('OGame Nexus: Error triggering tooltips in page context', e);
     }
@@ -115,6 +177,21 @@ window.addEventListener('ogame-nexus-trigger-tooltips', () => {
 
 window.addEventListener('ogame-nexus-request-raw-messages', () => {
     try {
+        // Double-check we are on Page 1 before interrogating window.ogame.messages.content.
+        // window.ogame.messages.content contains all messages for the section, so on page 2+
+        // it must never be read or re-processed.
+        const currentSpan = document.querySelector('.messagePaginator .currentPage .current, .messagePaginator .current, .currentPage .current');
+        if (currentSpan) {
+            const pageText = currentSpan.textContent?.trim();
+            if (pageText && pageText !== '1') {
+                return;
+            }
+        }
+        const prevBtn = document.querySelector('.messagePaginator .previousPage button, .messagePaginator button.previous, .messagePaginator .firstPage button, .messagePaginator button.first') as HTMLButtonElement | null;
+        if (prevBtn && !prevBtn.hasAttribute('disabled') && !prevBtn.disabled && !prevBtn.classList.contains('disabled')) {
+            return;
+        }
+
         // @ts-ignore
         const messages = window.ogame?.messages?.content;
         if (Array.isArray(messages)) {
@@ -185,9 +262,28 @@ function hookJQueryAjax() {
                     }
                 }
                 if (url.includes('action=getMessagesList') || data.includes('action=getMessagesList')) {
+                    let subtab: string | null = null;
+                    try {
+                        const params = new URLSearchParams(typeof data === 'string' && data ? data : (typeof url === 'string' && url.includes('?') ? url.split('?')[1] : ''));
+                        subtab = params.get('tab') || params.get('subtabId');
+                    } catch (e) {}
+                    if (subtab) {
+                        updateActiveSubtabAttr(subtab);
+                    } else {
+                        setTimeout(updateActiveSubtabAttr, 10);
+                    }
+
                     // If it's not a trash tab / delete operation
                     if (!data.includes('showTrash=true') && !url.includes('showTrash=true')) {
-                        window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-messages-loaded'));
+                        let page: number | undefined = undefined;
+                        try {
+                            const params = new URLSearchParams(typeof data === 'string' && data ? data : (typeof url === 'string' && url.includes('?') ? url.split('?')[1] : ''));
+                            const p = params.get('pagination') || params.get('page') || params.get('curPage');
+                            if (p) page = parseInt(p, 10);
+                        } catch (e) {}
+                        window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-messages-loaded', {
+                            detail: { page }
+                        }));
                     }
                 }
 

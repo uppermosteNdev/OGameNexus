@@ -248,7 +248,8 @@ function scrapePlanetList() {
       return;
     }
 
-    const planetImg = node.querySelector(".planetPic")?.getAttribute("src") || "";
+    const planetImgEl = node.querySelector(".planetPic") as HTMLImageElement | null;
+    const planetImg = planetImgEl?.src || planetImgEl?.getAttribute("src") || "";
 
     planets.push({
       id: planetId,
@@ -272,7 +273,8 @@ function scrapePlanetList() {
           if (nameMatch) moonName = nameMatch[1].trim();
         }
 
-        const moonImg = moonLink.querySelector(".icon-moon")?.getAttribute("src") || "";
+        const moonImgEl = moonLink.querySelector(".icon-moon") as HTMLImageElement | null;
+        const moonImg = moonImgEl?.src || moonImgEl?.getAttribute("src") || "";
 
         planets.push({
           id: moonId,
@@ -2477,12 +2479,25 @@ function applyFleetOverlayStyling(ownFlying: number, total: number, missionCount
 }
 
 function updateFleetProgressOverlay() {
+  const isOverviewPage = window.location.href.includes('component=overview');
+  const playerId = getMetaContent("ogame-player-id");
+
+  const eventBoxBlank = document.getElementById('eventboxBlank');
+  if (isOverviewPage && eventBoxBlank && playerId) {
+    if (!lastParsedFlyingResources || lastParsedFlyingResources.metal > 0 || lastParsedFlyingResources.crystal > 0 || lastParsedFlyingResources.deuterium > 0) {
+      lastParsedFlyingResources = { metal: 0, crystal: 0, deuterium: 0, food: 0 };
+      safeSendMessage({
+        type: "UPDATE_FLYING_RESOURCES",
+        playerId,
+        flyingResources: { metal: 0, crystal: 0, deuterium: 0, food: 0, lastUpdated: Date.now() }
+      });
+    }
+  }
+
   const messagesCollapsed = document.getElementById('messages_collapsed');
   const eventBox = document.getElementById('eventboxFilled');
 
   if (!messagesCollapsed && !eventBox) return;
-
-  const playerId = getMetaContent("ogame-player-id");
   if (!playerId) return;
 
   const eventContent = document.getElementById('eventContent');
@@ -2495,13 +2510,21 @@ function updateFleetProgressOverlay() {
     let totalMissions = 0;
     const missionCounts: Record<string, number> = {};
 
-    const isOverviewPage = window.location.href.includes('component=overview');
     let flyingMetal = 0;
     let flyingCrystal = 0;
     let flyingDeuterium = 0;
     let flyingFood = 0;
+    const seenFleetIds = new Set<string>();
 
     rows.forEach(row => {
+      const rowId = row.id || '';
+      const fleetIdMatch = rowId.match(/\d+/);
+      const fleetId = fleetIdMatch ? fleetIdMatch[0] : '';
+      if (fleetId && seenFleetIds.has(fleetId)) {
+        return; // Skip duplicate leg of the same fleet
+      }
+      if (fleetId) seenFleetIds.add(fleetId);
+
       const missionFleetImg = row.querySelector('td.missionFleet img');
       if (missionFleetImg) {
         const tooltipTitle = missionFleetImg.getAttribute('data-tooltip-title') || '';
@@ -2550,10 +2573,10 @@ function updateFleetProgressOverlay() {
                       const valText = valueTd.textContent?.replace(/[,.]/g, '').trim() || '0';
                       const val = parseInt(valText, 10) || 0;
 
-                      const isMetal = label.includes('metal') || label.includes('metall') || label.includes('métal') || label.includes('металл') || resourceIndex === 0;
-                      const isCrystal = label.includes('crystal') || label.includes('kristall') || label.includes('cristal') || label.includes('кристалл') || label.includes('krysz') || resourceIndex === 1;
-                      const isDeuterium = label.includes('deuter') || label.includes('дейтерий') || resourceIndex === 2;
-                      const isFood = label.includes('food') || label.includes('nahr') || label.includes('nourr') || label.includes('comid') || label.includes('пища') || label.includes('żyw') || label.includes('zyw') || label.includes('popul') || resourceIndex === 3;
+                      const isMetal = label.includes('metal') || label.includes('metall') || label.includes('métal') || label.includes('металл');
+                      const isCrystal = label.includes('crystal') || label.includes('kristall') || label.includes('cristal') || label.includes('кристалл') || label.includes('krysz');
+                      const isDeuterium = label.includes('deuter') || label.includes('дейтерий');
+                      const isFood = label.includes('food') || label.includes('nahr') || label.includes('nourr') || label.includes('comid') || label.includes('пища') || label.includes('żyw') || label.includes('zyw') || label.includes('popul');
 
                       if (isMetal) {
                         flyingMetal += val;
@@ -2562,6 +2585,14 @@ function updateFleetProgressOverlay() {
                       } else if (isDeuterium) {
                         flyingDeuterium += val;
                       } else if (isFood) {
+                        flyingFood += val;
+                      } else if (resourceIndex === 0 && val > 0) {
+                        flyingMetal += val;
+                      } else if (resourceIndex === 1 && val > 0) {
+                        flyingCrystal += val;
+                      } else if (resourceIndex === 2 && val > 0) {
+                        flyingDeuterium += val;
+                      } else if (resourceIndex === 3 && val > 0) {
                         flyingFood += val;
                       }
 
@@ -2722,7 +2753,7 @@ const throttledObserverLogic = throttle(() => {
 
   // Fallback: If we're on the messages page and there are unprocessed raw messages or un-beautified cards, process them
   if (window.location.href.includes('page=ingame&component=messages')) {
-    const hasUnprocessed = !!document.querySelector('div.rawMessageData:not([data-og-nexus-processed="true"]), .msg:not([data-og-nexus-visuals-applied="true"]) div.rawMessageData');
+    const hasUnprocessed = !!document.querySelector('.msg:not([data-og-nexus-processed="true"]) div.rawMessageData, .msg:not([data-og-nexus-visuals-applied="true"]) div.rawMessageData');
     if (hasUnprocessed) {
       processActiveMessages();
     }
@@ -2827,7 +2858,93 @@ function isFleetMessageTabActive(): boolean {
   return false;
 }
 
-function processActiveMessages() {
+export function isMessagePageOne(knownPage?: number): boolean {
+  if (typeof knownPage === 'number') {
+    return knownPage === 1;
+  }
+
+  // 1. Check current page span in OGame's message paginator
+  const currentSpan = document.querySelector('.messagePaginator .currentPage .current, .messagePaginator .current, .currentPage .current');
+  if (currentSpan) {
+    const text = currentSpan.textContent?.trim();
+    if (text) {
+      return text === '1';
+    }
+  }
+
+  // 2. Check if previous / first buttons are disabled (indicating page 1)
+  const prevBtn = document.querySelector('.messagePaginator .previousPage button, .messagePaginator button.previous, .messagePaginator .firstPage button, .messagePaginator button.first');
+  if (prevBtn) {
+    if (prevBtn.hasAttribute('disabled') || (prevBtn as HTMLButtonElement).disabled || prevBtn.classList.contains('disabled')) {
+      return true;
+    }
+    // If previous button exists and is active/clickable, we are on page 2+
+    return false;
+  }
+
+  // 3. If there is no .messagePaginator element at all:
+  // If there are messages present in the DOM, they all fit on a single page (Page 1)
+  const paginator = document.querySelector('.messagePaginator');
+  if (!paginator) {
+    const hasMessages = !!document.querySelector('.msg, div.rawMessageData');
+    return hasMessages;
+  }
+
+  return false;
+}
+
+export function getActiveMessageSubtabId(): string {
+  let subtab = 'unknown';
+  const activeSubtab = document.querySelector('div.innerTabItem.active[data-subtab-id]');
+  if (activeSubtab) {
+    subtab = activeSubtab.getAttribute('data-subtab-id') || 'unknown';
+  } else {
+    const markedTab = document.querySelector('div.singleTab.marker[data-category-id], div.singleTab.active[data-category-id]');
+    if (markedTab) {
+      subtab = `cat_${markedTab.getAttribute('data-category-id')}`;
+    }
+  }
+  if (subtab !== 'unknown' && document.documentElement) {
+    document.documentElement.setAttribute('data-nexus-active-subtab', subtab);
+  }
+  return subtab;
+}
+
+const rawMessagesFetchedSubtabs = new Set<string>();
+
+// Reset fetched tracking when user explicitly clicks an OGame subtab or category tab header
+document.addEventListener('click', (e) => {
+  const tab = (e.target as HTMLElement)?.closest('div.innerTabItem, div.singleTab');
+  if (tab) {
+    const subtabId = tab.getAttribute('data-subtab-id');
+    if (subtabId) {
+      if (document.documentElement) {
+        document.documentElement.setAttribute('data-nexus-active-subtab', subtabId);
+      }
+      rawMessagesFetchedSubtabs.delete(subtabId);
+    } else {
+      rawMessagesFetchedSubtabs.clear();
+    }
+  }
+});
+
+let rawMessagesRequestTimeout: any = null;
+
+function scheduleRawMessagesRequest(subtabId: string) {
+  if (rawMessagesRequestTimeout) clearTimeout(rawMessagesRequestTimeout);
+  rawMessagesRequestTimeout = setTimeout(() => {
+    if (!isMessagePageOne()) return;
+    const currentSubtab = getActiveMessageSubtabId();
+    if (currentSubtab !== subtabId || rawMessagesFetchedSubtabs.has(currentSubtab)) return;
+
+    rawMessagesFetchedSubtabs.add(currentSubtab);
+    window.dispatchEvent(new CustomEvent('ogame-nexus-request-raw-messages', {
+      detail: { subtabId: currentSubtab }
+    }));
+  }, 600);
+}
+
+function processActiveMessages(knownPage?: number) {
   if (!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id)) return;
 
   if (window.location.href.includes('page=ingame&component=messages')) {
@@ -2855,11 +2972,14 @@ function processActiveMessages() {
         updateExpeditionViewDisplay();
       }
 
-      // Trigger a request to the page context to get all raw messages from window.ogame.messages.content
-      const now = Date.now();
-      if (!(window as any)._lastRawMessagesRequestTime || now - (window as any)._lastRawMessagesRequestTime > 1000) {
-        (window as any)._lastRawMessagesRequestTime = now;
-        window.dispatchEvent(new CustomEvent('ogame-nexus-request-raw-messages'));
+      // CRITICAL: Do NOT block or freeze tab opening with raw background message ingestion!
+      // Visible messages on Page 1 are already rendered instantly by scrapeExpeditionMessages() / scrapeCombatMessages().
+      // Defer raw message scanning to run in the background (600ms after tab switch) so the tab displays with 0ms delay.
+      const isPageOne = isMessagePageOne(knownPage);
+      const currentSubtab = getActiveMessageSubtabId();
+
+      if (isPageOne && !rawMessagesFetchedSubtabs.has(currentSubtab)) {
+        scheduleRawMessagesRequest(currentSubtab);
       }
 
       // Espionage reports tracking (runs on any tab except Communication)
@@ -2871,7 +2991,7 @@ function processActiveMessages() {
                               !!document.querySelector('div.innerTabItem.active[data-subtab-id="14"]');
 
       if (!isCommTabActive) {
-        const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]:not([data-og-nexus-processed="true"])');
+        const espionageMessages = document.querySelectorAll('.msg:not([data-og-nexus-processed="true"]) div.rawMessageData[data-raw-hashcode^="sr-"]');
         if (espionageMessages.length > 0) {
           trackEspionageReports(playerId);
         }
@@ -2912,15 +3032,16 @@ function processActiveMessages() {
 }
 
 let messagesBackupTimeout: any = null;
-window.addEventListener('ogame-nexus-ajax-messages-loaded', () => {
+window.addEventListener('ogame-nexus-ajax-messages-loaded', (event: any) => {
+  const ajaxPage = event?.detail?.page;
   // 1. Immediately and synchronously process messages (0ms delay) to prevent any flicker/delay
-  processActiveMessages();
+  processActiveMessages(ajaxPage);
   injectChangelogTab();
 
   // 2. Backup trigger in case of delayed or split DOM insertions by game client
   if (messagesBackupTimeout) clearTimeout(messagesBackupTimeout);
   messagesBackupTimeout = setTimeout(() => {
-    processActiveMessages();
+    processActiveMessages(ajaxPage);
     injectChangelogTab();
   }, 200);
 });
@@ -3324,10 +3445,20 @@ initLowAnimationMode();
 
 // Listen for raw messages response from MAIN world pageContext.ts
 window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
+  // CRITICAL: NEVER process raw messages if user is not on page 1 of the section
+  if (!isMessagePageOne()) {
+    return;
+  }
+
   const content = event.detail?.content;
   if (Array.isArray(content) && content.length > 0) {
     const playerId = getMetaContent("ogame-player-id");
     if (playerId) {
+      const activeSubtab = getActiveMessageSubtabId();
+      const isExpeditionsTabActive = activeSubtab === '22';
+      const isCombatsTabActive = activeSubtab === '21';
+      const isAllFleetsTabActive = activeSubtab === '20';
+
       const isCommTab = !!document.querySelector('div.singleTab.marker[data-category-id="1"]') ||
                         !!document.querySelector('div.innerTabItem.active[data-subtab-id="10"]') ||
                         !!document.querySelector('div.innerTabItem.active[data-subtab-id="11"]') ||
@@ -3335,14 +3466,22 @@ window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
                         !!document.querySelector('div.innerTabItem.active[data-subtab-id="13"]') ||
                         !!document.querySelector('div.innerTabItem.active[data-subtab-id="14"]');
 
-      if (!isCommTab) {
+      // Only run raw espionage tracking if we are NOT on a fleet-specific tab (Expeditions/Combats) and not Comm
+      if (!isCommTab && !isExpeditionsTabActive && !isCombatsTabActive) {
         trackRawEspionageReports(playerId, content);
       }
 
       if (isFleetMessageTabActive()) {
-        trackRawExpeditions(playerId, content);
-        trackRawLifeformDiscoveries(playerId, content);
-        trackRawCombatReports(playerId, content);
+        // Only run expeditions tracker if on Expeditions tab or All Fleets tab
+        if (isExpeditionsTabActive || isAllFleetsTabActive) {
+          trackRawExpeditions(playerId, content);
+          trackRawLifeformDiscoveries(playerId, content);
+        }
+
+        // Only run combat tracker if on Combats tab or All Fleets tab
+        if (isCombatsTabActive || isAllFleetsTabActive) {
+          trackRawCombatReports(playerId, content);
+        }
       }
     }
   }

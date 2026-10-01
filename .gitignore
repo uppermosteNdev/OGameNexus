@@ -111,3 +111,22 @@ skills/
 SKILL.md
 skills.json
 
+# Cloudflare Worker, Miniflare & Local D1 State
+.wrangler/
+**/.wrangler/
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+.dev.vars
+.dev.vars.*
+
+# D1 & Database Snapshots / Sensitive In-Game Dumps
+*-dump.json
+*dump*.json
+d1-*.json
+
+# Local Test Runners & Inspection Scripts
+nexus-sync-worker/dump-*.cjs
+nexus-sync-worker/test-*.cjs
+
+

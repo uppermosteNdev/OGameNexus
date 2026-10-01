@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie';
+import { cleanUniverseId } from '../utils/universe';
 import { SHIP_DATA, LIFEFORM_SPECIES_DATA, RESEARCH_DATA, DEFENCE_DATA, BUILDING_DATA, LIFEFORM_RESEARCH_DATA, LIFEFORM_BUILDING_DATA } from './staticData';
 import { LIFEFORM_TECH_DATA } from './lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from './lifeformBonusData';
@@ -67,6 +68,8 @@ export interface Account {
     systems?: number;
     bonusFields?: number;
     cargoHyperspaceTechMultiplier?: number;
+    researchDurationDivisor?: number;
+    explorerBonusIncreasedResearchSpeed?: number;
 
     lastApiUpdate?: number;
     researches?: { id: number, level: number }[];
@@ -714,6 +717,8 @@ export class OGNexusDB extends Dexie {
         try {
             const planets = await this.spiedPlanets.toArray();
             const updates: any[] = [];
+            const keysToDelete: string[] = [];
+
             for (const p of planets) {
                 const hasTraderClass = p.hasTraderClass ?? false;
                 const metalStorageLevel = p.metalStorageLevel ?? 0;
@@ -724,14 +729,25 @@ export class OGNexusDB extends Dexie {
                 const correctCrystalCapacity = this.calculateStorageCapacity(crystalStorageLevel, hasTraderClass);
                 const correctDeuteriumCapacity = this.calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass);
 
-                if (
+                const cleanUni = cleanUniverseId(p.universe || '');
+                const targetKey = p.planetId ? `${cleanUni}_${p.planetId}` : (p.planetKey || `${cleanUni}_${p.coords}`);
+                const needsKeyUpdate = p.planetKey && p.planetKey !== targetKey;
+                const needsUniUpdate = p.universe !== cleanUni;
+
+                const needsCapacityUpdate =
                     p.metalCapacity !== correctMetalCapacity ||
                     p.crystalCapacity !== correctCrystalCapacity ||
                     p.deuteriumCapacity !== correctDeuteriumCapacity ||
-                    p.metalStorageLevel === undefined
-                ) {
+                    p.metalStorageLevel === undefined;
+
+                if (needsKeyUpdate || needsUniUpdate || needsCapacityUpdate) {
+                    if (needsKeyUpdate && p.planetKey) {
+                        keysToDelete.push(p.planetKey);
+                    }
                     updates.push({
                         ...p,
+                        planetKey: targetKey,
+                        universe: cleanUni,
                         metalStorageLevel,
                         crystalStorageLevel,
                         deuteriumStorageLevel,
@@ -742,8 +758,12 @@ export class OGNexusDB extends Dexie {
                     });
                 }
             }
+
+            if (keysToDelete.length > 0) {
+                await this.spiedPlanets.bulkDelete(keysToDelete);
+            }
             if (updates.length > 0) {
-                console.log(`OGame Nexus: Correcting and migrating capacities for ${updates.length} spied planets.`);
+                console.log(`OGame Nexus: Correcting and migrating ${updates.length} spied planets.`);
                 await this.spiedPlanets.bulkPut(updates);
             }
         } catch (error) {

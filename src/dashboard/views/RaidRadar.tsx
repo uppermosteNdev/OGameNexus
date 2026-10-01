@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { ThemeIcon } from '../components/ThemeIcon';
+import { isSameUniverse } from '../../utils/universe';
 
 const THEME_CYAN = '#0062ff';
 const RESOURCE_COLORS = {
@@ -41,13 +42,13 @@ const parseCoords = (coordsStr: string) => {
 
 const RaidRadar: React.FC = () => {
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
-    const spiedPlanets = useLiveQuery<SpiedPlanet[]>(() => {
+    const spiedPlanets = useLiveQuery<SpiedPlanet[]>(async () => {
         if (!activeAccount) return [];
-        return db.spiedPlanets
-            .where('universe')
-            .equals(activeAccount.universe)
-            .filter(p => p.userPlayerId === activeAccount.playerId)
-            .toArray();
+        const all = await db.spiedPlanets.toArray();
+        return all.filter(p =>
+            isSameUniverse(p.universe, activeAccount.universe) &&
+            (!p.userPlayerId || p.userPlayerId === activeAccount.playerId)
+        );
     }, [activeAccount]) || [];
     const ownPlanets = useLiveQuery<Planet[]>(() => {
         if (!activeAccount) return [];
@@ -1152,7 +1153,7 @@ const RaidRadar: React.FC = () => {
                                                 {/* Coordinates */}
                                                 <td style={{ padding: '16px 12px', textAlign: 'center' }}>
                                                     <a
-                                                        href={`https://s267-en.ogame.gameforge.com/game/index.php?page=ingame&component=galaxy&galaxy=${planet.coords.split(':')[0]}&system=${planet.coords.split(':')[1]}&position=${planet.coords.split(':')[2]}`}
+                                                        href={`https://${activeAccount?.universe || 's267-en.ogame.gameforge.com'}/game/index.php?page=ingame&component=galaxy&galaxy=${planet.coords.split(':')[0]}&system=${planet.coords.split(':')[1]}&position=${planet.coords.split(':')[2]}`}
                                                         target="_blank"
                                                         rel="noreferrer"
                                                         style={{

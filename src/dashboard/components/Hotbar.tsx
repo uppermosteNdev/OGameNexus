@@ -98,8 +98,8 @@ const SHORTCUT_CATEGORIES: CategoryGroup[] = [
         glowColor: 'rgba(0, 242, 255, 0.4)',
         shortcuts: [
             { id: 'overwatch-intel', label: 'Alliance Intel', icon: <ThemeIcon name="radar" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'overwatch', tab: 'intel' },
-            { id: 'overwatch-spy-vault', label: 'Spy Vault', icon: <ThemeIcon name="sniper-crosshair" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'overwatch', tab: 'spy-vault' },
-            { id: 'overwatch-heatmap', label: 'Sleep Heatmap', icon: <ThemeIcon name="stopwatch" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'overwatch', tab: 'heatmap' },
+            // { id: 'overwatch-spy-vault', label: 'Spy Vault', icon: <ThemeIcon name="sniper-crosshair" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'overwatch', tab: 'spy-vault' },
+            { id: 'overwatch-heatmap', label: 'Activity Heatmap', icon: <ThemeIcon name="stopwatch" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'overwatch', tab: 'heatmap' },
             { id: 'overwatch-settings', label: 'Alliance Settings', icon: <ThemeIcon name="settings" size={18} />, color: '#00f2ff', glowColor: 'rgba(0, 242, 255, 0.3)', view: 'overwatch', tab: 'settings' },
         ]
     },

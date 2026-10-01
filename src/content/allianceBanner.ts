@@ -30,16 +30,16 @@ export function initAllianceOverwatchBanner() {
         <div class="og-nexus-banner-text">
           <div class="og-nexus-banner-title">
             <span>NEXUS OVERWATCH</span>
-            <span class="og-nexus-banner-badge">TACTICAL ALLIANCE RADAR</span>
+            <span class="og-nexus-banner-badge">ALLIANCE OVERWATCH</span>
           </div>
           <p class="og-nexus-banner-subtitle">
-            Equip your alliance with shared live espionage, universe change tracking, and 24/7 enemy sleep heatmaps.
+            Equip your alliance with shared spy reports, live universe tracking, and player activity heatmaps.
           </p>
         </div>
       </div>
       <div class="og-nexus-banner-actions">
         <button id="og-nexus-open-overwatch-btn" class="og-nexus-banner-btn primary">
-          <span>Open Overwatch Deck</span>
+          <span>Open Overwatch</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 12h14"></path>
             <path d="m12 5 7 7-7 7"></path>

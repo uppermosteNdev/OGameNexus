@@ -1,0 +1,634 @@
+/* ============================================================================
+   NEXUS OVERWATCH — MY EMPIRE DATA SHARING DECK
+   Archetype: Ethereal Glass / Double-Bezel Avionics (High-End Agency Tier)
+   Grid: 2 Rows x 4 Columns with Watermark Depth & Kinetic Pill Switches
+   ============================================================================ */
+
+.ow-my-empire-root {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ----------------------------------------------------------------------------
+   HEADER & META BANNER
+   ---------------------------------------------------------------------------- */
+.ow-my-empire-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ow-my-empire-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ow-my-empire-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ow-my-empire-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  text-shadow: 0 0 20px rgba(0, 242, 255, 0.15);
+}
+
+.ow-my-empire-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
+  max-width: 720px;
+}
+
+.ow-my-empire-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(13, 22, 38, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  font-size: 12px;
+  color: #cbd5e1;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+.ow-my-empire-stat-pill.active {
+  border-color: rgba(0, 242, 255, 0.35);
+  background: rgba(0, 242, 255, 0.07);
+  color: #00f2ff;
+  box-shadow: 0 0 15px rgba(0, 242, 255, 0.15);
+}
+
+.ow-my-empire-stat-pill.paused {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.07);
+  color: #f87171;
+}
+
+/* ----------------------------------------------------------------------------
+   4x2 CATEGORY GRID (DOUBLE-BEZEL / DOPPELRAND NESTED ARCHITECTURE)
+   ---------------------------------------------------------------------------- */
+.ow-my-empire-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, auto);
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1350px) {
+  .ow-my-empire-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .ow-my-empire-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Double-Bezel Outer Shell */
+.ow-my-empire-card-shell {
+  position: relative;
+  background: radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 20px;
+  padding: 6px;
+  box-shadow: 
+    0 12px 24px -6px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  transition: 
+    border-color 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.ow-my-empire-card-shell:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 18px 36px -8px rgba(0, 0, 0, 0.65),
+    inset 0 1px 1px rgba(255, 255, 255, 0.12);
+}
+
+.ow-my-empire-card-shell.active {
+  border-color: rgba(0, 242, 255, 0.28);
+  box-shadow: 
+    0 12px 28px -6px rgba(0, 242, 255, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(0, 242, 255, 0.2);
+}
+
+.ow-my-empire-card-shell.disabled {
+  opacity: 0.6;
+  filter: grayscale(0.2);
+}
+
+/* Double-Bezel Inner Core */
+.ow-my-empire-card-inner {
+  position: relative;
+  background: radial-gradient(130% 120% at 50% 0%, #0c1424 0%, #060a14 100%);
+  border-radius: 14px;
+  padding: 18px 20px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.4);
+}
+
+/* Full-Card Thematic Game Icon Background (Reacts to Active Pill State) */
+.ow-my-empire-card-bg-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  border-radius: 14px;
+  transition: 
+    opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.4s ease;
+}
+
+/* When pill is inactive / disabled */
+.ow-my-empire-card-bg-art.inactive {
+  opacity: 0.10;
+  filter: grayscale(0.8) brightness(0.6) contrast(0.9);
+  transform: scale(1);
+}
+
+/* When pill is active (35% lower standing opacity: calibrated balance) */
+.ow-my-empire-card-bg-art.active {
+  opacity: 0.42;
+  filter: grayscale(0) brightness(1.12) contrast(1.12);
+  transform: scale(1.02);
+}
+
+/* Subtle Interactive Lift on Shell Hover */
+.ow-my-empire-card-shell:hover .ow-my-empire-card-bg-art.active {
+  opacity: 0.52;
+  transform: scale(1.05);
+  filter: grayscale(0) brightness(1.18) contrast(1.18);
+}
+
+.ow-my-empire-card-shell:hover .ow-my-empire-card-bg-art.inactive {
+  opacity: 0.16;
+  transform: scale(1.02);
+}
+
+/* Dark gradient overlay on top of bg image to preserve pristine typography contrast */
+.ow-my-empire-card-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(135% 120% at 50% 10%, rgba(10, 16, 30, 0.48) 0%, rgba(4, 7, 16, 0.78) 100%);
+  pointer-events: none;
+  border-radius: 14px;
+  z-index: 1;
+}
+
+/* Card Top Row */
+.ow-my-empire-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+  z-index: 2;
+}
+
+.ow-my-empire-card-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ow-my-empire-card-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.ow-my-empire-card-shell.active .ow-my-empire-card-icon-box {
+  background: rgba(0, 242, 255, 0.08);
+  border-color: rgba(0, 242, 255, 0.3);
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.2);
+}
+
+.ow-my-empire-card-headings {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ow-my-empire-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.ow-my-empire-card-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ow-my-empire-card-shell.active .ow-my-empire-card-tag {
+  color: #00f2ff;
+}
+
+/* Card Body & Description */
+.ow-my-empire-card-body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ow-my-empire-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.45;
+  min-height: 35px;
+}
+
+
+
+/* Card Footer */
+.ow-my-empire-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  z-index: 2;
+}
+
+.ow-my-empire-status-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ow-my-empire-status-label.shared {
+  color: #10b981;
+}
+
+.ow-my-empire-status-label.withheld {
+  color: #64748b;
+}
+
+/* ----------------------------------------------------------------------------
+   TACTILE PILL SWITCH (PHYSICAL HARDWARE FEEL)
+   ---------------------------------------------------------------------------- */
+.ow-pill-switch-btn {
+  position: relative;
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  padding: 2px;
+  outline: none;
+  transition: all 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.ow-pill-switch-btn:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ow-pill-switch-btn.active {
+  background: linear-gradient(135deg, #00f2ff 0%, #00b4d8 100%);
+  border-color: #00f2ff;
+  box-shadow: 
+    0 0 14px rgba(0, 242, 255, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.ow-pill-switch-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ow-pill-switch-thumb {
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  max-height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), background-color 0.2s ease;
+}
+
+.ow-pill-switch-btn.active .ow-pill-switch-thumb {
+  transform: translateX(20px);
+  background: #ffffff;
+  box-shadow: 
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+/* ----------------------------------------------------------------------------
+   CENTERED ACKNOWLEDGEMENT SECTION (DOUBLE-BEZEL MASTER CONSENT DECK)
+   ---------------------------------------------------------------------------- */
+.ow-acknowledgement-wrapper {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.ow-acknowledgement-shell {
+  position: relative;
+  max-width: 880px;
+  width: 100%;
+  background: radial-gradient(100% 120% at 50% 0%, rgba(0, 242, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(0, 242, 255, 0.22);
+  border-radius: 24px;
+  padding: 8px;
+  box-shadow: 
+    0 24px 48px -12px rgba(0, 0, 0, 0.8),
+    0 0 30px rgba(0, 242, 255, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  box-sizing: border-box;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-acknowledgement-shell.withdrawn {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: radial-gradient(100% 120% at 50% 0%, rgba(239, 68, 68, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  box-shadow: 
+    0 24px 48px -12px rgba(0, 0, 0, 0.8),
+    0 0 25px rgba(239, 68, 68, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.ow-acknowledgement-inner {
+  position: relative;
+  background: radial-gradient(130% 100% at 50% 0%, #0b1424 0%, #050812 100%);
+  border-radius: 18px;
+  padding: 28px 32px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 20px;
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.12),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+}
+
+.ow-acknowledgement-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  background: rgba(0, 242, 255, 0.08);
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #00f2ff;
+}
+
+.ow-acknowledgement-shell.withdrawn .ow-acknowledgement-badge {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.ow-acknowledgement-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Master Pill Switch Large */
+.ow-master-switch-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+  margin: 4px 0;
+}
+
+.ow-master-switch-btn {
+  position: relative;
+  width: 58px;
+  height: 30px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  padding: 3px;
+  outline: none;
+  transition: all 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.ow-master-switch-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.ow-master-switch-btn.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: #34d399;
+  box-shadow: 
+    0 0 20px rgba(16, 185, 129, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.ow-master-switch-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  transform: translateX(0);
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.ow-master-switch-btn.active .ow-master-switch-thumb {
+  transform: translateX(28px);
+}
+
+.ow-master-switch-label {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  font-family: 'Space Grotesk', sans-serif;
+  text-transform: uppercase;
+}
+
+.ow-master-switch-label.active {
+  color: #34d399;
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.3);
+}
+
+.ow-master-switch-label.paused {
+  color: #94a3b8;
+}
+
+/* Legal Consent & Guarantee Text */
+.ow-acknowledgement-legal-box {
+  max-width: 740px;
+  line-height: 1.55;
+  padding: 16px 28px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.ow-acknowledgement-legal-main {
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.ow-acknowledgement-legal-main strong {
+  color: #ffffff;
+}
+
+.ow-acknowledgement-legal-sub {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 1px 0 5px 0;
+  letter-spacing: 0.01em;
+}
+
+.ow-acknowledgement-legal-withdraw {
+  font-size: 12.5px;
+}
+
+.ow-acknowledgement-legal-withdraw em {
+  color: #00f2ff;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.ow-acknowledgement-shell.withdrawn .ow-acknowledgement-legal-withdraw em {
+  color: #f87171;
+}
+
+/* Status Indicator Strip (Live auto-sync activity) */
+.ow-acknowledgement-status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  margin-top: 2px;
+}
+
+.ow-sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #38bdf8;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.ow-sync-feedback {
+  font-size: 12px;
+  font-weight: 600;
+  animation: fadeIn 0.3s ease;
+}
+
+.ow-sync-feedback.success {
+  color: #34d399;
+}
+
+.ow-sync-feedback.error {
+  color: #f87171;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

@@ -167,6 +167,11 @@ export function scrapeExpeditionMessages() {
     const removeOGLight = isRemoveOGLightDuplicatesEnabled();
 
     for (const rawEl of expeditionMessages) {
+        // Strip legacy attribute from rawMessageData if present to avoid polluting raw message API
+        if (rawEl.hasAttribute('data-og-nexus-processed')) {
+            rawEl.removeAttribute('data-og-nexus-processed');
+        }
+
         const item = parseExpeditionElement(rawEl);
         if (!item) continue;
 
@@ -177,33 +182,111 @@ export function scrapeExpeditionMessages() {
         }
 
         // 2. Queue for background tracking if not already processed in this session
-        if (!rawEl.hasAttribute('data-og-nexus-processed')) {
-            rawEl.setAttribute('data-og-nexus-processed', 'true');
-            if (!processedExpeditionIds.has(item.messageId)) {
-                processedExpeditionIds.add(item.messageId);
-                newItemsToTrack.push(item);
+        const isProcessed = (parentMsg && parentMsg.hasAttribute('data-og-nexus-processed')) || processedExpeditionIds.has(item.messageId);
+        if (!isProcessed) {
+            if (parentMsg) {
+                parentMsg.setAttribute('data-og-nexus-processed', 'true');
             }
+            processedExpeditionIds.add(item.messageId);
+            newItemsToTrack.push(item);
+        } else if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-processed')) {
+            parentMsg.setAttribute('data-og-nexus-processed', 'true');
         }
     }
 
     return newItemsToTrack;
 }
 
+function parseExpeditionFromHTMLString(html: string): any | null {
+    const idMatch = html.match(/data-msg-id=['"](\d+)['"]/i);
+    if (!idMatch) return null;
+    const messageId = idMatch[1];
+
+    const timeMatch = html.match(/data-raw-timestamp=['"](\d+)['"]/i);
+    const coordsMatch = html.match(/data-raw-coords=['"]([^'"]+)['"]/i) || html.match(/data-raw-coordinates=['"]([^'"]+)['"]/i);
+    const deplMatch = html.match(/data-raw-depletion=['"](\d+)['"]/i);
+    const sizeMatch = html.match(/data-raw-size=['"](\d+)['"]/i);
+    const resMatch = html.match(/data-raw-expeditionResult=['"]([^'"]+)['"]/i);
+
+    if (!timeMatch || !coordsMatch || !deplMatch || !sizeMatch || !resMatch) {
+        return null;
+    }
+
+    const timestamp = parseInt(timeMatch[1], 10);
+    const coords = coordsMatch[1];
+    const depletion = parseInt(deplMatch[1], 10);
+    const size = parseInt(sizeMatch[1], 10);
+    const result = resMatch[1];
+    const resType = result.toLowerCase();
+
+    let resultDetails: any = null;
+    try {
+        if (resType === 'navigation' || resType === 'delay' || resType === 'speedup') {
+            const m = html.match(/data-raw-navigation=['"](\{.*?\})['"]/i);
+            if (m) resultDetails = JSON.parse(m[1].replace(/&quot;/g, '"'));
+        } else if (resType === 'ressources' || resType === 'resources' || resType === 'darkmatter') {
+            const m = html.match(/data-raw-resourcesGained=['"](\{.*?\})['"]/i);
+            if (m) resultDetails = JSON.parse(m[1].replace(/&quot;/g, '"'));
+        } else if (resType === 'shipwrecks') {
+            const m = html.match(/data-raw-technologiesGained=['"](\{.*?\})['"]/i);
+            if (m) resultDetails = JSON.parse(m[1].replace(/&quot;/g, '"'));
+        } else if (resType === 'item' || resType === 'items') {
+            const m = html.match(/data-raw-(?:itemsGained|items|technologiesGained)=['"](\[.*?\]|\{.*?\})['"]/i);
+            if (m) resultDetails = JSON.parse(m[1].replace(/&quot;/g, '"'));
+        } else if (resType === 'trader') {
+            const m = html.match(/data-raw-resources=['"](\{.*?\})['"]/i);
+            if (m) resultDetails = JSON.parse(m[1].replace(/&quot;/g, '"'));
+        } else if (resType === 'fleetloss' || resType === 'fleetlost') {
+            const m = html.match(/data-raw-(?:shipsLost|fleet)=['"](\{.*?\})['"]/i);
+            if (m) {
+                try {
+                    resultDetails = { shipsLost: JSON.parse(m[1].replace(/&quot;/g, '"')) };
+                } catch (e) {}
+            }
+        }
+    } catch (e) {
+        console.warn('OGame Nexus: Failed to parse expedition JSON details from raw HTML', e);
+    }
+
+    return {
+        messageId,
+        timestamp,
+        coords,
+        depletion,
+        size,
+        result,
+        resultDetails
+    };
+}
+
 export function scrapeRawExpeditionHTML(htmls: string[]) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmls.join(''), 'text/html');
-    const expeditionMessages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="41"]');
     const results: any[] = [];
     const removeOGLight = isRemoveOGLightDuplicatesEnabled();
 
-    for (const msg of expeditionMessages) {
-        const item = parseExpeditionElement(msg);
+    // Map existing live DOM message elements for O(1) lookup
+    const visibleDomMsgMap = new Map<string, HTMLElement>();
+    document.querySelectorAll('.msg[data-msg-id]').forEach(el => {
+        const id = el.getAttribute('data-msg-id');
+        if (id) visibleDomMsgMap.set(id, el as HTMLElement);
+    });
+
+    for (const html of htmls) {
+        // Fast pre-filter: must be expedition message type 41
+        if (!html.includes("data-raw-messagetype='41'") && !html.includes('data-raw-messagetype="41"') &&
+            !html.includes("data-raw-messageType='41'") && !html.includes('data-raw-messageType="41"')) {
+            continue;
+        }
+
+        const item = parseExpeditionFromHTMLString(html);
         if (item) {
-            const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="41"]`);
-            if (domMsg) {
-                domMsg.setAttribute('data-og-nexus-processed', 'true');
-                const parentMsg = domMsg.closest('.msg') as HTMLElement;
-                if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
+            const parentMsg = visibleDomMsgMap.get(item.messageId);
+            if (parentMsg) {
+                const domMsg = parentMsg.querySelector('div.rawMessageData[data-raw-messagetype="41"], div.rawMessageData[data-raw-messageType="41"]');
+                if (domMsg && domMsg.hasAttribute('data-og-nexus-processed')) {
+                    domMsg.removeAttribute('data-og-nexus-processed');
+                }
+                parentMsg.setAttribute('data-og-nexus-processed', 'true');
+                if (!parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
                     updateExpeditionVisuals(parentMsg, item, removeOGLight);
                 }
             }
@@ -1287,7 +1370,11 @@ function updateExpeditionVisuals(msgElement: HTMLElement, exp: any, removeOGLigh
     if (!isExtensionStillValid()) return;
 
     if (removeOGLight) {
-        cleanOGLightDOM(msgElement);
+        const isExpeditionsTab = document.documentElement?.getAttribute('data-nexus-active-subtab') === '22' ||
+                                 !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]');
+        if (isExpeditionsTab) {
+            cleanOGLightDOM(msgElement);
+        }
     }
 
     // Check if we've already applied visuals to this message element

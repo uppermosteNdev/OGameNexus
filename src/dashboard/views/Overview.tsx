@@ -30,6 +30,7 @@ import { renderAnalyticsTab } from '../../content/analytics';
 import { calculateEmpireProduction, safeArray } from '../../utils/amortizationCalc';
 import { calculateTotalEmpireDailyYield } from '../../utils/empireYield';
 import { ThemeIcon } from '../components/ThemeIcon';
+import { isSameUniverse } from '../../utils/universe';
 
 import {
     ResponsiveContainer,
@@ -313,7 +314,30 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
 
     // Debris Harvests Data
     const debrisHarvests = useLiveQuery(
-        () => activeAccount ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray() : [],
+        async () => {
+            if (!activeAccount) {
+                return await db.debrisHarvests.toArray();
+            }
+            const strPid = String(activeAccount.playerId || '').trim();
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) {
+                pidVariants.push(numPid);
+            }
+
+            let userHarvests = await db.debrisHarvests
+                .where('playerId')
+                .anyOf(pidVariants)
+                .toArray();
+
+            if (userHarvests.length === 0) {
+                const all = await db.debrisHarvests.toArray();
+                userHarvests = all.filter(d => !d.playerId || String(d.playerId).trim() === strPid);
+            }
+
+            const activeUni = activeAccount.universe;
+            return userHarvests.filter(d => isSameUniverse(d.universe, activeUni));
+        },
         [activeAccount]
     ) || [];
 

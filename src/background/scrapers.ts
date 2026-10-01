@@ -568,6 +568,8 @@ export interface ScrapedServerData {
     systems: number;
     bonusFields: number;
     cargoHyperspaceTechMultiplier: number;
+    researchDurationDivisor?: number;
+    explorerBonusIncreasedResearchSpeed?: number;
 }
 
 export function parseServerDataXml(xml: string): ScrapedServerData {
@@ -588,6 +590,9 @@ export function parseServerDataXml(xml: string): ScrapedServerData {
         galaxies: getVal('galaxies'),
         systems: getVal('systems'),
         bonusFields: getVal('bonusFields'),
-        cargoHyperspaceTechMultiplier: getVal('cargoHyperspaceTechMultiplier')
+        cargoHyperspaceTechMultiplier: getVal('cargoHyperspaceTechMultiplier'),
+        researchDurationDivisor: getVal('researchDurationDivisor') || 1,
+        explorerBonusIncreasedResearchSpeed: getVal('explorerBonusIncreasedResearchSpeed') || 0.25
     };
 }
+

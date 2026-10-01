@@ -8,6 +8,7 @@ import ExpeditionCalculator from './tools/ExpeditionCalculator';
 import AcsSplitter from './tools/AcsSplitter';
 import PlasmaTechOptimizer from './tools/PlasmaTechOptimizer';
 import DiscovererOptimizer from './tools/DiscovererOptimizer';
+import ResearchTimeOptimizer from './tools/ResearchTimeOptimizer';
 
 interface Tool {
     id: string;
@@ -24,6 +25,13 @@ interface Tool {
 
 const Tools: React.FC = () => {
     const tools: Tool[] = [
+        {
+            id: 'research-time-optimizer',
+            name: 'Research Time Optimizer',
+            description: 'Optimize Research Labs, IRN & Lifeforms to minimize research times',
+            icon: <ThemeIcon name="stopwatch" size={22} />,
+            component: <ResearchTimeOptimizer />
+        },
         {
             id: 'empire-amortization',
             name: 'Empire Amortization',
@@ -80,7 +88,7 @@ const Tools: React.FC = () => {
         }
     ];
 
-    const [activeToolId, setActiveToolId] = useState('scrap-optimizer');
+    const [activeToolId, setActiveToolId] = useState('research-time-optimizer');
     const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
     // Support deep-linking from Hotbar

@@ -14,6 +14,20 @@ export interface ChangelogVersion {
 
 export const NEXUS_CHANGELOGS: ChangelogVersion[] = [
   {
+    version: 'v1.2.5',
+    items: [
+      { type: 'Feature', text: 'Nexus Overwatch [Closed Beta]: Alliance intelligence sharing, live universe activity, and multi-device cloud backup. Currently in Closed Beta for pilot testing and will be made available to all commanders at a later date.' },
+      { type: 'Feature', text: 'Multi-Device Personal Vault: Secure cloud backup and cross-device sync for expeditions, combats, debris harvests, and costs planner via your private Vault Key.' },
+      { type: 'Feature', text: 'Raid Radar Inactive Target Scout: Scan the universe for prime unmonitored inactive farming targets sorted by rank and distance from your colonies.' },
+      { type: 'Feature', text: 'Research Time Optimizer: Dedicated tool to calculate exact research durations, optimal lab levels, and IRN breakpoints.' },
+      { type: 'Bugfix', text: 'Raid Radar Live Status: Target inactive/active statuses now immediately update from live galaxy scans so you never raid targets that became active.' },
+      { type: 'Bugfix', text: 'Raid Radar Non-Destructive Sync: Guaranteed safe target resolution during multi-device synchronization to prevent any target deletion.' },
+      { type: 'Bugfix', text: 'Flying Ships in Scrap Tool: Fleets currently on missions are now fully accounted for in Scraptool and fleet capacity breakdowns.' },
+      { type: 'Bugfix', text: 'Costs Planner Resource Packs: Fixed resource pack calculations and cart import behavior when planning large empire goals.' },
+      { type: 'Polishing', text: 'Message Processing Pipeline: Cleaner message metadata processing and extended in-game UI box enhancements.' }
+    ]
+  },
+  {
     version: 'v1.2.4',
     items: [
       { type: 'Feature', text: 'Raid Helper Min MSU Filter: Exponential 0–1B slider with editable value to filter and dim inactive planets below your desired Resource MSU in Raid Helper & Galaxy view.' },

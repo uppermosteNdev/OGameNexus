@@ -8,11 +8,16 @@
     {
       "binding": "DB",
       "database_name": "nexus-overwatch-db",
-      "database_id": "nexus-overwatch-db-local"
+      "database_id": "18ae658e-4c06-4391-aff2-a8ae99d41b1e"
     }
   ],
   "vars": {
-    "ENVIRONMENT": "development",
-    "SERVER_PEPPER": "nexus_overwatch_secret_pepper_2026"
+    "ENVIRONMENT": "production",
+    "SERVER_PEPPER": "CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS",
+    "EXTENSION_SECRET": "CHANGE_ME_EXTENSION_SECRET",
+    "MASTER_ADMIN_SECRET": "CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS"
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
   }
 }

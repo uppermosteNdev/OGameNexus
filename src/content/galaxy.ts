@@ -344,7 +344,7 @@ function updateTooltipContent(planetOrCoords: SpiedPlanet | string) {
         </span>
       </div>
       <div class="og-nexus-galaxy-tooltip-prompt" style="color: #cbd5e1; font-size: 11px; line-height: 1.5; padding: 10px; font-weight: 500; text-align: center; background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 8px; margin-top: 4px;">
-        Spy this planet 2 times in an interval of at least 10 seconds in order to estimate production. More spies will increase confidence.
+        Spy this planet 2 times in an interval of at least 2 seconds in order to estimate production. More spies will increase confidence.
       </div>
     `;
     return;
@@ -731,6 +731,16 @@ function buildSidebarLayout(sidebar: HTMLElement) {
         const parts = coordsAttr.split(':').map(Number);
         if (parts.length === 3) {
           navigateToSystem(parts[0], parts[1]);
+          // If already viewing this galaxy and system, execute applyGalaxyRings immediately
+          const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
+          const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
+          if (gInput && sInput) {
+            const curG = parseInt(gInput.value, 10);
+            const curS = parseInt(sInput.value, 10);
+            if (curG === parts[0] && curS === parts[1]) {
+              applyGalaxyRings();
+            }
+          }
         }
       }
     }
@@ -1125,16 +1135,6 @@ export function applyGalaxyRings() {
   if (loadingEl) {
     const isLoaded = window.getComputedStyle(loadingEl).display === "none" || loadingEl.style.display === "none";
     if (!isLoaded) return;
-
-    const currentPos = loadingEl.getAttribute("data-currentposition");
-    if (currentPos) {
-      const parts = currentPos.split(":");
-      if (parts.length === 2) {
-        const posGalaxy = parseInt(parts[0], 10);
-        const posSystem = parseInt(parts[1], 10);
-        if (posGalaxy !== galaxy || posSystem !== system) return;
-      }
-    }
   }
 
   // If system or galaxy changed, hide any active tooltip
@@ -1160,12 +1160,22 @@ export function applyGalaxyRings() {
   const rows = document.querySelectorAll('.galaxyRow.ctContentRow');
   if (rows.length < 15) return; // Precaution: Ensure system table is fully loaded with all 15 coordinate slots + deep space
 
+  // Precaution: Ensure the rendered DOM rows genuinely belong to the active galaxy & system
+  if (!isGalaxyDOMFullySettled(galaxy, system, rows)) {
+    return;
+  }
+
   // Scan and persist galaxy debris field opportunities (including Slot 16 Deep Space)
   const allDebrisRows = document.querySelectorAll('.galaxyRow.ctContentRow, .expeditionDebrisSlotBoxRow, #galaxyRow16');
   scanGalaxyDebrisFields(galaxy, system, allDebrisRows);
 
   // Sync scanned system to Nexus Overwatch (debounced + verified DOM settlement to prevent stale data on fast scrolling)
   scheduleGalaxySyncToOverwatch(galaxy, system);
+
+  const ownCoordsList = getOwnCoordinatesList();
+  const keysToDelete: string[] = [];
+  const coordsToDelete: string[] = [];
+  const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
 
   rows.forEach(row => {
     const posCell = row.querySelector('.cellPosition');
@@ -1189,34 +1199,92 @@ export function applyGalaxyRings() {
       (playerCell as any)._ogNexusMouseEnter = null;
     }
 
-    // Soft-delete/remove inactive planets that are now empty slots in galaxy view
+    const targetCoords = `${galaxy}:${system}:${position}`;
+    const isOwn = ownCoordsList.includes(targetCoords);
+
+    // Look for any cached spied planets at this slot
+    const cachedPlanets = spiedPlanetsCache.filter(p => p.coords === targetCoords);
+
     const playerText = playerCell?.textContent?.trim() || "";
-    if (row.classList.contains('empty_filter') && !playerText) {
-      const targetCoords = `${galaxy}:${system}:${position}`;
-      const cachedPlanet = spiedPlanetsCache.find(p => p.coords === targetCoords);
-      if (cachedPlanet) {
-        chrome.runtime.sendMessage({
-          type: "DELETE_SPIED_PLANET",
-          data: { planetKey: cachedPlanet.planetKey }
-        }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.warn("OGame Nexus: Extension context invalidated during DELETE_SPIED_PLANET sendMessage.");
-            return;
-          }
-          if (response && response.success) {
-            // Update local cache to prevent redundant deletion calls
-            spiedPlanetsCache = spiedPlanetsCache.filter(p => p.planetKey !== cachedPlanet.planetKey);
-            // Refresh sidebar if it is currently open
-            const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
-            if (sidebar && sidebar.classList.contains('open')) {
-              updateSidebarData(true);
-            }
-          } else {
-            console.error(`OGame Nexus: Failed to delete spied planet at ${targetCoords}:`, response?.error);
-          }
-        });
+    const isEmptyFilter = row.classList.contains('empty_filter');
+    const hasMicroplanet = !!row.querySelector('.microplanet');
+    const planetNameCell = row.querySelector('.cellPlanetName');
+    const planetNameText = planetNameCell?.textContent?.trim() || "";
+
+    // Check for destroyed planet indicators
+    const hasDestroyedText = !!(
+      (planetNameText && /^(destroy|zerstör|destru|détruit|distrutt)/i.test(planetNameText)) ||
+      (playerText && /^(destroy|zerstör|destru|détruit|distrutt)/i.test(playerText))
+    );
+    const hasDestroyedIcon = !!(
+      row.querySelector('.cellPlanet img[src*="destroy"], .cellPlanet img[src*="zerstoert"], .microplanet[class*="destroy"]') ||
+      row.querySelector('.cellMoon .moon-destroyed, .cellMoon [class*="destroy"], .cellMoon img[src*="destroy"], .cellMoon img[src*="zerstoert"]')
+    );
+    const isDestroyed = hasDestroyedText || hasDestroyedIcon;
+
+    // Check if slot is empty (OGame's empty_filter, or completely blank player/planet cells)
+    const isSlotEmpty = (isEmptyFilter && !playerText) || (!playerText && !hasMicroplanet && !planetNameText);
+
+    // If occupied, check if a DIFFERENT player colonized this slot (old occupant replaced)
+    let isDifferentPlayer = false;
+    if (!isSlotEmpty && !isDestroyed && playerText && cachedPlanets.length > 0) {
+      const rowPlayerId = playerCell.querySelector('[data-playerid]')?.getAttribute('data-playerid') ||
+                          playerCell.querySelector('[data-uid]')?.getAttribute('data-uid');
+      const pNameEl = playerCell.querySelector('.playerName, .playername, span[rel^="player"]');
+      let rowPlayerName = pNameEl ? extractDirectText(pNameEl) : playerText;
+      rowPlayerName = rowPlayerName.replace(/\s*\([viInob, ]+\)\s*/gi, '').replace(/#\d+/g, '').trim();
+
+      // Check if none of the cached records belong to this new occupant
+      let matchedAny = false;
+      for (const cp of cachedPlanets) {
+        const cpPlayerId = cp.playerId ? String(cp.playerId).trim() : null;
+        const cpPlayerName = cp.playerName ? cp.playerName.toLowerCase().trim() : null;
+        const idMatches = !!(cpPlayerId && rowPlayerId && cpPlayerId === String(rowPlayerId).trim());
+        const nameMatches = !!(cpPlayerName && rowPlayerName && cpPlayerName === rowPlayerName.toLowerCase());
+        if (idMatches || nameMatches) {
+          matchedAny = true;
+          break;
+        }
       }
+      if (!matchedAny) {
+        isDifferentPlayer = true;
+      }
+    }
+
+    // PURGE CONDITION: If slot was spied before, but is now empty, destroyed, or replaced by another player
+    if (!isOwn && cachedPlanets.length > 0 && (isSlotEmpty || isDestroyed || isDifferentPlayer)) {
+      console.log(`OGame Nexus: Detected obsolete target at ${targetCoords} (empty=${isSlotEmpty}, destroyed=${isDestroyed}, replaced=${isDifferentPlayer}). Purging from Raid Radar/Helper.`);
+      cachedPlanets.forEach(cp => {
+        if (cp.planetKey && !keysToDelete.includes(cp.planetKey)) {
+          keysToDelete.push(cp.planetKey);
+        }
+      });
+      if (!coordsToDelete.includes(targetCoords)) {
+        coordsToDelete.push(targetCoords);
+      }
+      // Remove immediately from memory cache to avoid laggy UI
+      spiedPlanetsCache = spiedPlanetsCache.filter(p => p.coords !== targetCoords);
+    }
+
+    // If slot is empty or destroyed, do not process inactive styling
+    if (isSlotEmpty || isDestroyed) {
       return;
+    }
+
+    // If the same player is still here, synchronize playerStatus in cache if needed
+    if (!isOwn && cachedPlanets.length > 0 && !isDifferentPlayer) {
+      const isVacation = row.classList.contains('vacation_filter') || playerCell.textContent?.includes('(v)');
+      const isLongInactive = row.classList.contains('inactive_filter') && (playerCell.textContent?.includes('(I)') || !!playerCell.querySelector('.status_abbr_longinactive'));
+      const isInactive = row.classList.contains('inactive_filter');
+      const updatedStatus: string[] = [];
+      if (isVacation) updatedStatus.push('vacation');
+      if (isLongInactive) updatedStatus.push('longinactive');
+      else if (isInactive) updatedStatus.push('inactive');
+      if (updatedStatus.length === 0) updatedStatus.push('active');
+
+      cachedPlanets.forEach(cp => {
+        cp.playerStatus = updatedStatus;
+      });
     }
 
     // Check if the player cell actually has inactive markers and is not in vacation mode
@@ -1224,7 +1292,6 @@ export function applyGalaxyRings() {
     if (!isInactive) return;
 
     // Search spied planets in our in-memory cache
-    const targetCoords = `${galaxy}:${system}:${position}`;
     const planet = spiedPlanetsCache.find(p => p.coords === targetCoords);
 
     // Calculate MSU/h production (default to 0 if not spied yet, leading to gray lateral)
@@ -1280,13 +1347,36 @@ export function applyGalaxyRings() {
     playerCell.style.boxShadow = `inset 3px 0 0 ${ringColor}`;
 
     // Wire hover listener for all inactive players (spied or unspied)
-    const onMouseEnter = (e: MouseEvent) => handleMouseEnter(planet || targetCoords, e);
+    const onMouseEnter = (e: MouseEvent) => {
+      // Re-lookup dynamically from latest cache at hover time to avoid stale closure references
+      const currentPlanet = spiedPlanetsCache.find(p => p.coords === targetCoords);
+      handleMouseEnter(currentPlanet || targetCoords, e);
+    };
     playerCell.addEventListener('mouseenter', onMouseEnter);
     playerCell.addEventListener('mouseleave', handleMouseLeave);
 
     // Save reference on node for clean unbinding
     (playerCell as any)._ogNexusMouseEnter = onMouseEnter;
   });
+
+  // Dispatch batch deletion to background IndexedDB if any obsolete targets were detected
+  if (keysToDelete.length > 0 || coordsToDelete.length > 0) {
+    chrome.runtime.sendMessage({
+      type: "DELETE_SPIED_PLANETS",
+      data: { planetKeys: keysToDelete, coordsList: coordsToDelete, universe }
+    }, (response) => {
+      if (chrome.runtime.lastError) return;
+      if (response && response.success) {
+        console.log(`OGame Nexus: DB successfully deleted ${keysToDelete.length} obsolete target(s).`);
+      }
+    });
+
+    // Refresh Raid Helper sidebar immediately
+    const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+    if (sidebar && sidebar.classList.contains('open')) {
+      updateSidebarData(true);
+    }
+  }
 
   // Update UI counts
   const valG4 = document.getElementById('og-nexus-val-g4');
@@ -1301,9 +1391,69 @@ export function applyGalaxyRings() {
   if (valG0) valG0.textContent = String(countGroup0);
 }
 
+/**
+ * Reloads the spied planets cache directly from the background IndexedDB.
+ */
+export function reloadSpiedPlanetsCache(onDone?: () => void) {
+  if (isLoadingCache) return;
+  isLoadingCache = true;
+  const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+
+  if (!isContextValid()) {
+    isLoadingCache = false;
+    return;
+  }
+
+  chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe } }, (response) => {
+    isLoadingCache = false;
+    if (chrome.runtime.lastError) {
+      console.warn("OGame Nexus: Extension context invalidated during cache reload.");
+      return;
+    }
+    if (response && response.success) {
+      spiedPlanetsCache = response.planets || [];
+      isCacheLoaded = true;
+      applyGalaxyRings();
+      const sidebar = document.getElementById('og-nexus-galaxy-intel-sidebar');
+      if (sidebar && sidebar.classList.contains('open')) {
+        updateSidebarData();
+      }
+      onDone?.();
+    }
+  });
+}
+
+let hasRegisteredGalaxyGlobalListeners = false;
+function registerGalaxyGlobalListeners() {
+  if (hasRegisteredGalaxyGlobalListeners) return;
+  hasRegisteredGalaxyGlobalListeners = true;
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && document.querySelector('#galaxycomponent')) {
+      reloadSpiedPlanetsCache();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    if (document.querySelector('#galaxycomponent')) {
+      reloadSpiedPlanetsCache();
+    }
+  });
+
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg?.type === 'SPIED_PLANETS_UPDATED' && document.querySelector('#galaxycomponent')) {
+        reloadSpiedPlanetsCache();
+      }
+    });
+  }
+}
+
 export function initGalaxyView() {
   const galaxyComponent = document.querySelector('#galaxycomponent');
   if (!galaxyComponent) return;
+
+  registerGalaxyGlobalListeners();
 
   // Scan flying espionage missions and record them as recently spied
   const flyingCoords = getFlyingEspionageCoords();
@@ -1409,8 +1559,12 @@ export function initGalaxyView() {
       console.warn("OGame Nexus: Failed to register storage listener due to context invalidation.", e);
     }
   } else {
-    // Already initialized, just process DOM rows (idempotent and fast)
-    applyGalaxyRings();
+    // Already initialized: ensure cache is loaded, otherwise process DOM rows
+    if (!isCacheLoaded || spiedPlanetsCache.length === 0) {
+      reloadSpiedPlanetsCache();
+    } else {
+      applyGalaxyRings();
+    }
   }
 
   // Refresh live espionage/range tracking status if sidebar is currently open
@@ -1623,6 +1777,8 @@ export async function scanGalaxyDebrisFields(galaxy: number, system: number, row
 
 let lastOverwatchSyncCoords = '';
 let lastOverwatchSyncTime = 0;
+const recentlySyncedSystems = new Map<string, { timestamp: number; activitySignature: string }>();
+const RECENTLY_SYNCED_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 function extractDirectText(el: Element | null): string {
   if (!el) return '';
@@ -1643,7 +1799,7 @@ function extractDirectText(el: Element | null): string {
 function isGalaxyDOMFullySettled(targetGalaxy: number, targetSystem: number, rows: NodeListOf<Element>): boolean {
   if (!rows || rows.length < 15) return false;
 
-  // 1. Check if galaxyLoading indicator is active
+  // 1. Check if galaxyLoading indicator is active or displays old coordinates
   const loadingEl = document.getElementById('galaxyLoading');
   if (loadingEl) {
     const isVisible = window.getComputedStyle(loadingEl).display !== 'none' && loadingEl.style.display !== 'none';
@@ -1652,8 +1808,10 @@ function isGalaxyDOMFullySettled(targetGalaxy: number, targetSystem: number, row
     const currentPos = loadingEl.getAttribute('data-currentposition');
     if (currentPos) {
       const parts = currentPos.split(':').map(Number);
-      if (parts.length === 2 && (parts[0] !== targetGalaxy || parts[1] !== targetSystem)) {
-        return false; // Loading position doesn't match target
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        if (parts[0] !== targetGalaxy || parts[1] !== targetSystem) {
+          return false;
+        }
       }
     }
   }
@@ -1695,7 +1853,21 @@ function isGalaxyDOMFullySettled(targetGalaxy: number, targetSystem: number, row
     }
   }
 
-  return foundAnyCoords;
+  // If action links had coordinates, they must match target coordinates.
+  // If no action coordinate links were present (e.g. empty or restricted system), verify current input values.
+  if (!foundAnyCoords) {
+    const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
+    const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
+    if (gInput && sInput) {
+      const curG = parseInt(gInput.value, 10);
+      const curS = parseInt(sInput.value, 10);
+      if (curG !== targetGalaxy || curS !== targetSystem) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 let galaxySyncDebounceTimer: any = null;
@@ -1721,8 +1893,16 @@ export function scheduleGalaxySyncToOverwatch(galaxy: number, system: number) {
     const currentRows = document.querySelectorAll('.galaxyRow.ctContentRow');
     if (isGalaxyDOMFullySettled(targetGalaxy, targetSystem, currentRows)) {
       syncGalaxyToOverwatch(targetGalaxy, targetSystem, currentRows);
+    } else {
+      // Retry once after 300ms in case DOM was mid-settle
+      setTimeout(() => {
+        const retryRows = document.querySelectorAll('.galaxyRow.ctContentRow');
+        if (isGalaxyDOMFullySettled(targetGalaxy, targetSystem, retryRows)) {
+          syncGalaxyToOverwatch(targetGalaxy, targetSystem, retryRows);
+        }
+      }, 300);
     }
-  }, 350);
+  }, 600);
 }
 
 export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows: NodeListOf<Element>) {
@@ -1793,24 +1973,61 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
       const planetId = microplanet?.getAttribute('data-planet-id') || null;
 
       let planetName: string | null = null;
-      const planetNameSpan = row.querySelector('.cellPlanetName span:not([class*="ogl_"])');
-      if (planetNameSpan) {
-        planetName = planetNameSpan.textContent?.trim() || null;
-      } else if (microplanet) {
+      const planetNameCell = row.querySelector('.cellPlanetName');
+      if (planetNameCell) {
+        const planetNameSpan = planetNameCell.querySelector('span:not([class*="ogl_"])');
+        if (planetNameSpan) {
+          planetName = planetNameSpan.textContent?.trim() || null;
+        }
+        if (!planetName) {
+          const clone = planetNameCell.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('[class*="ogl_"], script, style').forEach(el => el.remove());
+          const directText = clone.textContent?.trim() || null;
+          if (directText && directText !== 'Name') {
+            planetName = directText;
+          }
+        }
+      }
+      if (!planetName && microplanet) {
         const nameInTooltip = row.querySelector('.cellPlanet .spaceObjectName')?.textContent?.trim();
         if (nameInTooltip) planetName = nameInTooltip;
       }
 
-      // If empty slot filter is on and no planet ID or name is found
-      if (isEmpty || (!planetId && !planetName && !isOwnPlanet)) {
+      // Check for destroyed planet or moon indicators
+      const hasDestroyedText = !!(
+        planetName && /^(destroy|zerstör|destru|détruit|distrutt)/i.test(planetName)
+      );
+      const hasDestroyedIcon = !!(
+        row.querySelector('.cellPlanet img[src*="destroy"], .cellPlanet img[src*="zerstoert"], .microplanet[class*="destroy"]') ||
+        row.querySelector('.cellMoon .moon-destroyed, .cellMoon [class*="destroy"], .cellMoon img[src*="destroy"], .cellMoon img[src*="zerstoert"]')
+      );
+      const isPlanetDestroyed = hasDestroyedText || hasDestroyedIcon;
+      if (isPlanetDestroyed && (!planetName || !planetName.toLowerCase().includes('destroy'))) {
+        planetName = 'Destroyed planet';
+      }
+
+      // If empty slot filter is on and no planet ID or name is found (and not destroyed)
+      if (!isPlanetDestroyed && (isEmpty || (!planetId && !planetName && !isOwnPlanet))) {
         planetName = null;
       }
 
       // 2. Moon Status & Size
       const micromoon = row.querySelector('.micromoon');
+      const moonCell = row.querySelector('.cellMoon');
       const hasMoon = (micromoon || row.querySelector('.cellMoon [data-moon-id]')) ? 1 : 0;
       const moonId = micromoon?.getAttribute('data-moon-id') || null;
       let moonSize: number | null = null;
+
+      const isMoonDestroyed = (
+        isPlanetDestroyed ||
+        (hasMoon === 1 && (
+          !!moonCell?.querySelector('.moon-destroyed, .destroyed, [class*="destroy"]') ||
+          !!micromoon?.classList.contains('moon-destroyed') ||
+          !!micromoon?.classList.contains('destroyed') ||
+          !!moonCell?.querySelector('img[src*="destroyed"], img[src*="zerstoert"]')
+        ))
+      );
+      const moonDestroyed = isMoonDestroyed ? 1 : 0;
 
       if (hasMoon) {
         const moonSizeEl = row.querySelector('#moonsize');
@@ -1833,7 +2050,7 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
       let playerStatus = 'active';
       let playerRank: number | null = null;
 
-      if (planetName || planetId || isOwnPlanet) {
+      if (!isPlanetDestroyed && (planetName || planetId || isOwnPlanet)) {
         const playerCell = row.querySelector('.cellPlayerName');
         if (playerCell) {
           // Player ID
@@ -1849,27 +2066,29 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
             }
           }
 
-          // Player Name (extract direct text before nested tooltip div, never take pure rank numbers)
-          const pNameEl = playerCell.querySelector('.playerName, .playername, span[class*="player"]');
+          // Player Name (support numeric names like "777", never take rank strings starting with #)
+          const pNameEl = playerCell.querySelector('.playerName, .playername, span[rel^="player"]');
           if (pNameEl) {
-            const directText = extractDirectText(pNameEl);
-            if (directText && !/^\d+$/.test(directText)) {
-              playerName = directText;
+            const rawDirect = extractDirectText(pNameEl);
+            const directClean = rawDirect.replace(/\s*\([viInob, ]+\)\s*/gi, '').trim();
+            if (directClean && !directClean.startsWith('#')) {
+              playerName = directClean;
             } else {
               const h1Name = pNameEl.querySelector('h1 .playerName, .htmlTooltip .playerName')?.textContent?.trim();
-              if (h1Name && !/^\d+$/.test(h1Name)) {
-                playerName = h1Name;
+              const h1Clean = (h1Name || '').replace(/\s*\([viInob, ]+\)\s*/gi, '').trim();
+              if (h1Clean && !h1Clean.startsWith('#')) {
+                playerName = h1Clean;
               }
             }
           }
 
-          // Fallback for player name if empty or number
-          if (!playerName || /^\d+$/.test(playerName)) {
+          // Fallback for player name if empty
+          if (!playerName) {
             const clone = playerCell.cloneNode(true) as HTMLElement;
             clone.querySelectorAll('.htmlTooltip, .ogl_ranking, .rank, .honorRank, .ogl_tagPicker, .ogl_flagPicker, pre, script, style').forEach(el => el.remove());
             const clean = clone.textContent?.trim().replace(/\s+/g, ' ') || '';
             const sanitized = clean.replace(/\([^)]*\)/g, '').replace(/#\d+/g, '').trim();
-            if (sanitized && !/^\d+$/.test(sanitized)) {
+            if (sanitized && !sanitized.startsWith('#')) {
               playerName = sanitized;
             }
           }
@@ -1919,7 +2138,7 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
       // 4. Alliance Tag & ID
       let allianceTag: string | null = null;
       let allianceId: string | null = null;
-      if (planetName || planetId || isOwnPlanet) {
+      if (!isPlanetDestroyed && (planetName || planetId || isOwnPlanet)) {
         const allyCell = row.querySelector('.cellAlliance');
         if (allyCell) {
           const allySpan = allyCell.querySelector('span');
@@ -1939,22 +2158,67 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
         }
       }
 
-      // 5. Activity Marker
-      let activityMarker: string | null = null;
-      const actEl = row.querySelector('.activity, .minute15, .minute');
-      if (actEl) {
-        activityMarker = actEl.textContent?.trim() || '*';
-      }
+      // 5. Activity Markers (Planet & Moon tracked separately for deep tactical analysis)
+      const parseActivityElement = (cellEl: Element | null): { marker: string; timestamp: number } | null => {
+        if (!cellEl) return null;
+        const actEl = cellEl.querySelector('.activity, .minute15, .minute, .show_activity');
+        if (!actEl) return null;
+        const rawText = (actEl.textContent || '').trim();
+        const numMatch = rawText.match(/\d+/);
+        if (numMatch) {
+          const mins = parseInt(numMatch[0], 10);
+          if (mins >= 15 && mins <= 59) {
+            return {
+              marker: `${mins}m`,
+              timestamp: now - (mins * 60 * 1000),
+            };
+          }
+        }
+        // If has class 'activity' or contains '*', it's recent activity (<15m)
+        return {
+          marker: '*',
+          timestamp: now,
+        };
+      };
+
+      const planetAct = parseActivityElement(row.querySelector('.cellPlanet'));
+      const moonAct = parseActivityElement(row.querySelector('.cellMoon'));
+
+      const planetActivityMarker = planetAct?.marker || null;
+      const planetActivityTimestamp = planetAct?.timestamp || null;
+      const moonActivityMarker = moonAct?.marker || null;
+      const moonActivityTimestamp = moonAct?.timestamp || null;
+
+      // Consolidated marker prioritizing moon if present (since moon activity signifies fleet movement)
+      const activityMarker = moonActivityMarker || planetActivityMarker || null;
+      const activityTimestamp = moonActivityTimestamp || planetActivityTimestamp || null;
+      const isIdle = !planetActivityMarker && !moonActivityMarker;
 
       // 6. Debris Field
       let debrisMetal = 0;
       let debrisCrystal = 0;
       const debrisCell = row.querySelector('.cellDebris');
       if (debrisCell) {
-        const t = debrisCell.textContent || '';
-        if (t.toLowerCase().includes('metal') || t.toLowerCase().includes('crystal')) {
-          const metalMatch = t.match(/metal[:\s]*([\d,\.]+)/i);
-          const crystalMatch = t.match(/crystal[:\s]*([\d,\.]+)/i);
+        // First check tooltip links or content within cell
+        const tooltipEl = debrisCell.querySelector('.galaxyTooltip, [id^="debris"]');
+        const searchRoot = tooltipEl || debrisCell;
+        const links = searchRoot.querySelectorAll('.ListLinks li, .debris-content, .debris-recyclers');
+        if (links && links.length > 0) {
+          links.forEach(li => {
+            const t = (li.textContent || '').toLowerCase();
+            if (t.includes('metal') || t.includes('metall') || t.includes('métal')) {
+              debrisMetal = parseDebrisAmount(t);
+            } else if (t.includes('crystal') || t.includes('kristall') || t.includes('cristal')) {
+              debrisCrystal = parseDebrisAmount(t);
+            }
+          });
+        }
+
+        // Fallback: match textContent with multilingual regex
+        if (debrisMetal === 0 && debrisCrystal === 0) {
+          const t = debrisCell.textContent || '';
+          const metalMatch = t.match(/(?:metal|metall|m[ée]tal)[:\s]*([\d,\.]+)/i);
+          const crystalMatch = t.match(/(?:crystal|kristall|cristal)[:\s]*([\d,\.]+)/i);
           if (metalMatch) debrisMetal = parseInt(metalMatch[1].replace(/[^\d]/g, ''), 10) || 0;
           if (crystalMatch) debrisCrystal = parseInt(crystalMatch[1].replace(/[^\d]/g, ''), 10) || 0;
         }
@@ -1973,31 +2237,60 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
         hasMoon,
         moonId,
         moonSize,
+        moonDestroyed,
         debrisMetal,
         debrisCrystal,
+        planetActivityMarker,
+        planetActivityTimestamp,
+        moonActivityMarker,
+        moonActivityTimestamp,
+        isIdle,
         activityMarker,
-        activityTimestamp: activityMarker ? Date.now() : null,
+        activityTimestamp,
       });
     });
 
     if (slots.length === 0) return;
 
-    // Send payload quietly in background to Edge API
-    const apiUrl = 'http://127.0.0.1:8787';
-    fetch(`${apiUrl}/api/v1/galaxy/sync`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.authToken}`,
-      },
-      body: JSON.stringify({
-        universeId: universe,
-        galaxy: targetGalaxy,
-        system: targetSystem,
-        scannedAt: Date.now(),
-        slots,
-      }),
-    }).catch(() => {});
+    // Compute activity signature to detect if anything changed
+    const activitySignature = slots
+      .map(s => `${s.slot}:${s.activityMarker || ''}:${s.debrisMetal > 0 || s.debrisCrystal > 0}`)
+      .join('|');
+
+    const cachedSync = recentlySyncedSystems.get(currentCoords);
+    if (cachedSync && (now - cachedSync.timestamp < RECENTLY_SYNCED_TTL_MS) && cachedSync.activitySignature === activitySignature) {
+      // System surveyed in last 3 minutes with zero activity changes: skip telemetry dispatch
+      return;
+    }
+
+    recentlySyncedSystems.set(currentCoords, { timestamp: now, activitySignature });
+
+    // Keep cache bounded
+    if (recentlySyncedSystems.size > 200) {
+      const cutoff = now - RECENTLY_SYNCED_TTL_MS;
+      for (const [key, val] of recentlySyncedSystems.entries()) {
+        if (val.timestamp < cutoff) recentlySyncedSystems.delete(key);
+      }
+    }
+
+    // Relay payload to background service worker (bypasses page CSP and Mixed Content blocks)
+    if (isContextValid()) {
+      chrome.runtime.sendMessage({
+        type: "OVERWATCH_SYNC_GALAXY",
+        action: "OVERWATCH_SYNC_GALAXY",
+        data: {
+          universeId: universe,
+          galaxy: targetGalaxy,
+          system: targetSystem,
+          scannedAt: Date.now(),
+          slots,
+        },
+      }, () => {
+        if (chrome.runtime.lastError) {
+          // Extension reloaded or context invalidated quietly
+        }
+      });
+    }
   } catch (e) {
     // Zero lag impact on OGame page
   }

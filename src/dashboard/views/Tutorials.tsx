@@ -259,7 +259,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ onNavigate }) => {
                 },
                 {
                     title: "Production Delta & Confidence",
-                    text: "In order to best estimate the inactive planet production, at least two different spies are needed 10 seconds or more apart. More spies will increase the confidence of that inactive player's production, making it a more accurate target. You can see this confidence meter inside both Raid Radar and in-game Galaxy View.",
+                    text: "In order to best estimate the inactive planet production, at least two different spies are needed 2 seconds or more apart. More spies will increase the confidence of that inactive player's production, making it a more accurate target. You can see this confidence meter inside both Raid Radar and in-game Galaxy View.",
                     images: ["icons/tutorials/T6/RaidRadar3.jpg", "icons/tutorials/T6/RaidRadar4.jpg"]
                 },
                 {

@@ -11,6 +11,22 @@ export interface EmpireDailyYieldBreakdown {
     totalDailyYieldMSU: number;
     daysTracked: number;
     rates: { metal: number; crystal: number; deuterium: number };
+    // Per-resource breakdown
+    mineDailyMetal: number;
+    mineDailyCrystal: number;
+    mineDailyDeut: number;
+    expDailyMetal: number;
+    expDailyCrystal: number;
+    expDailyDeut: number;
+    combatDailyMetal: number;
+    combatDailyCrystal: number;
+    combatDailyDeut: number;
+    debrisDailyMetal: number;
+    debrisDailyCrystal: number;
+    debrisDailyDeut: number;
+    dailyMetal: number;
+    dailyCrystal: number;
+    dailyDeuterium: number;
 }
 
 export function calculateTotalEmpireDailyYield(params: {
@@ -48,12 +64,18 @@ export function calculateTotalEmpireDailyYield(params: {
 
     const mineHourlyMSU = (totalMetalHourly * mMultiplier) + (totalCrystalHourly * cMultiplier) + (totalDeutHourly * dMultiplier);
     const mineDailyMSU = mineHourlyMSU * 24;
+    const mineDailyMetal = totalMetalHourly * 24;
+    const mineDailyCrystal = totalCrystalHourly * 24;
+    const mineDailyDeut = totalDeutHourly * 24;
 
     const nowSec = Date.now() / 1000;
     const last7Days = nowSec - (7 * 24 * 60 * 60);
 
     // 2. Expeditions (Last 7 Days)
     let expRes7dMSU = 0;
+    let expRes7dMetal = 0;
+    let expRes7dCrystal = 0;
+    let expRes7dDeut = 0;
     let expShip7dMSU = 0;
     let expDaysTracked = 7;
 
@@ -72,6 +94,9 @@ export function calculateTotalEmpireDailyYield(params: {
                 const m = Number(e.resultDetails.metal) || 0;
                 const c = Number(e.resultDetails.crystal) || 0;
                 const d = Number(e.resultDetails.deuterium) || 0;
+                expRes7dMetal += m;
+                expRes7dCrystal += c;
+                expRes7dDeut += d;
                 expRes7dMSU += (m * mMultiplier) + (c * cMultiplier) + (d * dMultiplier);
 
                 if (res.includes('ship') || res.includes('wreck')) {
@@ -94,9 +119,15 @@ export function calculateTotalEmpireDailyYield(params: {
 
     const expResDailyMSU = expRes7dMSU / expDaysTracked;
     const expShipDailyMSU = expShip7dMSU / expDaysTracked;
+    const expDailyMetal = expRes7dMetal / expDaysTracked;
+    const expDailyCrystal = expRes7dCrystal / expDaysTracked;
+    const expDailyDeut = expRes7dDeut / expDaysTracked;
 
     // 3. Combat Loot (Last 7 Days)
     let combat7dMSU = 0;
+    let combat7dMetal = 0;
+    let combat7dCrystal = 0;
+    let combat7dDeut = 0;
     let combatDaysTracked = 7;
     if (combatReports.length > 0) {
         const validTimestamps = combatReports.map(c => c.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
@@ -109,14 +140,23 @@ export function calculateTotalEmpireDailyYield(params: {
                 const m = c.loot.metal || 0;
                 const cr = c.loot.crystal || 0;
                 const d = c.loot.deuterium || 0;
+                combat7dMetal += m;
+                combat7dCrystal += cr;
+                combat7dDeut += d;
                 combat7dMSU += (m * mMultiplier) + (cr * cMultiplier) + (d * dMultiplier);
             }
         });
     }
     const combatDailyMSU = combat7dMSU / combatDaysTracked;
+    const combatDailyMetal = combat7dMetal / combatDaysTracked;
+    const combatDailyCrystal = combat7dCrystal / combatDaysTracked;
+    const combatDailyDeut = combat7dDeut / combatDaysTracked;
 
     // 4. Debris Harvests (Last 7 Days)
     let debris7dMSU = 0;
+    let debris7dMetal = 0;
+    let debris7dCrystal = 0;
+    let debris7dDeut = 0;
     let debrisDaysTracked = 7;
     if (debrisHarvests.length > 0) {
         const validTimestamps = debrisHarvests.map(d => d.timestamp).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
@@ -128,12 +168,21 @@ export function calculateTotalEmpireDailyYield(params: {
             const m = d.recycledResources?.metal || 0;
             const cr = d.recycledResources?.crystal || 0;
             const det = d.recycledResources?.deuterium || 0;
+            debris7dMetal += m;
+            debris7dCrystal += cr;
+            debris7dDeut += det;
             debris7dMSU += (m * mMultiplier) + (cr * cMultiplier) + (det * dMultiplier);
         });
     }
     const debrisDailyMSU = debris7dMSU / debrisDaysTracked;
+    const debrisDailyMetal = debris7dMetal / debrisDaysTracked;
+    const debrisDailyCrystal = debris7dCrystal / debrisDaysTracked;
+    const debrisDailyDeut = debris7dDeut / debrisDaysTracked;
 
     const totalDailyYieldMSU = mineDailyMSU + expResDailyMSU + expShipDailyMSU + combatDailyMSU + debrisDailyMSU || 1;
+    const dailyMetal = mineDailyMetal + expDailyMetal + combatDailyMetal + debrisDailyMetal;
+    const dailyCrystal = mineDailyCrystal + expDailyCrystal + combatDailyCrystal + debrisDailyCrystal;
+    const dailyDeuterium = mineDailyDeut + expDailyDeut + combatDailyDeut + debrisDailyDeut;
 
     return {
         mineHourlyMSU,
@@ -144,14 +193,31 @@ export function calculateTotalEmpireDailyYield(params: {
         debrisDailyMSU,
         totalDailyYieldMSU,
         daysTracked: expDaysTracked,
-        rates
+        rates,
+        mineDailyMetal,
+        mineDailyCrystal,
+        mineDailyDeut,
+        expDailyMetal,
+        expDailyCrystal,
+        expDailyDeut,
+        combatDailyMetal,
+        combatDailyCrystal,
+        combatDailyDeut,
+        debrisDailyMetal,
+        debrisDailyCrystal,
+        debrisDailyDeut,
+        dailyMetal,
+        dailyCrystal,
+        dailyDeuterium
     };
 }
 
 export function formatGatherTime(days: number): string {
-    if (days <= 0 || isNaN(days) || !isFinite(days)) return 'Instant';
+    if (days === null || days === undefined || isNaN(days) || !isFinite(days)) return 'N/A';
+    if (days <= 0) return 'Instant';
 
     let remainingMinutes = Math.round(days * 24 * 60);
+    if (remainingMinutes <= 0) return 'Instant';
 
     const minutesInYear = 365 * 24 * 60;
     const minutesInMonth = 30 * 24 * 60;

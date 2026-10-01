@@ -23,6 +23,7 @@ import {
     Search
 } from 'lucide-react';
 import { db } from '../../db';
+import { isSameUniverse } from '../../utils/universe';
 import { ThemeIcon } from '../components/ThemeIcon';
 
 interface Account {
@@ -59,12 +60,12 @@ const DataManagement: React.FC = () => {
             const p = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
             const pIds = p.map(x => x.id);
             const tCount = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).count();
-            const spiedCount = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(x => x.userPlayerId === activeAccount.playerId).count();
+            const spiedCount = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(x => !x.userPlayerId || x.userPlayerId === activeAccount.playerId).count();
             return {
                 planets: p.length,
                 expeditions: await db.expeditions.where('playerId').equals(activeAccount.playerId).count(),
                 lifeforms: await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).count(),
-                debris: await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).count(),
+                debris: (await db.debrisHarvests.where('playerId').anyOf([String(activeAccount.playerId), Number(activeAccount.playerId) as any]).toArray()).filter(d => isSameUniverse(d.universe, activeAccount.universe)).length,
                 combats: await db.combatReports.where('playerId').equals(activeAccount.playerId).count(),
                 todos: tCount,
                 spiedPlanets: spiedCount
@@ -165,12 +166,12 @@ const DataManagement: React.FC = () => {
             const planets = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
             const expeditions = await db.expeditions.where('playerId').equals(activeAccount.playerId).toArray();
             const lifeformDiscoveries = await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).toArray();
-            const debrisHarvests = await db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray();
+            const debrisHarvests = (await db.debrisHarvests.where('playerId').anyOf([String(activeAccount.playerId), Number(activeAccount.playerId) as any]).toArray()).filter(d => isSameUniverse(d.universe, activeAccount.universe));
             const combatReports = await db.combatReports.where('playerId').equals(activeAccount.playerId).toArray();
 
             const pIds = planets.map(p => p.id);
             const todoProjects = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).toArray();
-            const spiedPlanets = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(p => p.userPlayerId === activeAccount.playerId).toArray();
+            const spiedPlanets = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(p => !p.userPlayerId || p.userPlayerId === activeAccount.playerId).toArray();
 
             // Construct secure backup JSON payload
             const backupPayload = {

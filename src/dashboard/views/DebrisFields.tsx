@@ -26,6 +26,7 @@ import {
     ChevronRight,
 } from 'lucide-react';
 import { ThemeIcon } from '../components/ThemeIcon';
+import { isSameUniverse } from '../../utils/universe';
 
 const THEME_CYAN = '#0062ff';
 const RESOURCE_COLORS = {
@@ -196,11 +197,44 @@ const DebrisTable: React.FC<{
 };
 
 const DebrisFields: React.FC = () => {
-    const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const activeAccount = useLiveQuery(
+        async () => {
+            try {
+                return await db.accounts.orderBy('lastSeen').reverse().first() || await db.accounts.toCollection().last();
+            } catch (e) {
+                return await db.accounts.toCollection().last();
+            }
+        }
+    );
+
     const harvests = useLiveQuery(
-        () => activeAccount
-            ? db.debrisHarvests.where('playerId').equals(activeAccount.playerId).filter(d => d.universe === activeAccount.universe).toArray()
-            : [],
+        async () => {
+            if (!activeAccount) {
+                return await db.debrisHarvests.toArray();
+            }
+
+            const strPid = String(activeAccount.playerId || '').trim();
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) {
+                pidVariants.push(numPid);
+            }
+
+            // Query by playerId (both string and numeric variants)
+            let userHarvests = await db.debrisHarvests
+                .where('playerId')
+                .anyOf(pidVariants)
+                .toArray();
+
+            // If empty, check if unindexed or string variation
+            if (userHarvests.length === 0) {
+                const all = await db.debrisHarvests.toArray();
+                userHarvests = all.filter(d => !d.playerId || String(d.playerId).trim() === strPid);
+            }
+
+            const activeUni = activeAccount.universe;
+            return userHarvests.filter(d => isSameUniverse(d.universe, activeUni));
+        },
         [activeAccount]
     ) || [];
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
@@ -250,8 +284,8 @@ const DebrisFields: React.FC = () => {
 
     const filteredHarvests = useMemo(() => {
         if (activeTab === 'overview') return harvests;
-        if (activeTab === 'system') return harvests.filter(h => !h.coords.endsWith(':16'));
-        if (activeTab === 'expedition') return harvests.filter(h => h.coords.endsWith(':16'));
+        if (activeTab === 'system') return harvests.filter(h => !h.coords?.endsWith(':16'));
+        if (activeTab === 'expedition') return harvests.filter(h => h.coords?.endsWith(':16'));
         return harvests;
     }, [harvests, activeTab]);
 
@@ -278,7 +312,8 @@ const DebrisFields: React.FC = () => {
         const dataMap: Record<string, { metal: number, crystal: number, deuterium: number, msu: number }> = {};
         
         filteredHarvests.forEach(h => {
-            const date = new Date(h.timestamp * 1000);
+            const rawTs = h.timestamp || 0;
+            const date = new Date(rawTs > 10000000000 ? rawTs : rawTs * 1000);
             const dateKey = toLocaleDateKey(date);
             if (!dataMap[dateKey]) dataMap[dateKey] = { metal: 0, crystal: 0, deuterium: 0, msu: 0 };
             

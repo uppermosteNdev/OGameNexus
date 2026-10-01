@@ -42,6 +42,12 @@ export async function handleShareSpyReport(req: Request, env: Env) {
       return json({ error: 'Alliance subscription has expired.' }, { status: 403 });
     }
 
+    // Reject payloads exceeding 100KB
+    const contentLength = Number(req.headers.get('content-length') || 0);
+    if (contentLength > 100 * 1024) {
+      return json({ error: 'Payload Too Large: Spy report cannot exceed 100KB' }, { status: 413 });
+    }
+
     const body = await req.json();
     const parseResult = ShareSpyReportSchema.safeParse(body);
     if (!parseResult.success) {
@@ -68,13 +74,19 @@ export async function handleShareSpyReport(req: Request, env: Env) {
 
     // If existing report is newer than the incoming one, keep the newer one
     if (existing && existing.report_timestamp > report.reportTimestamp) {
+      const cleanExistingId = existing.report_id.startsWith(`${member.alliance_id}_`)
+        ? existing.report_id.slice(member.alliance_id.length + 1)
+        : existing.report_id;
       return json({
         success: true,
-        reportId: existing.report_id,
+        reportId: cleanExistingId,
         isNewer: false,
         message: 'A newer spy report for these coordinates is already shared with your alliance.',
       });
     }
+
+    // Phase 4.1: Strictly scope report_id by alliance_id to guarantee 100% multi-tenant isolation
+    const compositeReportId = `${member.alliance_id}_${report.reportId}`;
 
     // Insert or update the shared spy report
     await env.DB.prepare(
@@ -85,6 +97,7 @@ export async function handleShareSpyReport(req: Request, env: Env) {
         buildings_data_json, tech_data_json, spied_by, report_timestamp, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(report_id) DO UPDATE SET
+        alliance_id = excluded.alliance_id,
         resources_metal = excluded.resources_metal,
         resources_crystal = excluded.resources_crystal,
         resources_deuterium = excluded.resources_deuterium,
@@ -97,7 +110,7 @@ export async function handleShareSpyReport(req: Request, env: Env) {
         report_timestamp = excluded.report_timestamp`
     )
       .bind(
-        report.reportId,
+        compositeReportId,
         member.alliance_id,
         member.universe_id,
         report.coords,
@@ -179,9 +192,12 @@ export async function handleGetSpyReports(req: Request, env: Env) {
 
     const rows = await env.DB.prepare(query).bind(...params).all();
 
-    // Parse JSON fields
+    // Parse JSON fields and clean report_id for client
     const parsedReports = (rows?.results || []).map((r: any) => ({
       ...r,
+      report_id: r.report_id && r.report_id.startsWith(`${member.alliance_id}_`)
+        ? r.report_id.slice(member.alliance_id.length + 1)
+        : r.report_id,
       fleetData: r.fleet_data_json ? JSON.parse(r.fleet_data_json) : null,
       defenseData: r.defense_data_json ? JSON.parse(r.defense_data_json) : null,
       buildingsData: r.buildings_data_json ? JSON.parse(r.buildings_data_json) : null,

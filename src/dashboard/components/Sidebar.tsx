@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db';
+import { isOverwatchTester, syncOverwatchTesterStatusWithCloudflare } from '../../config/overwatchTestingConfig';
 import { ThemeIcon } from './ThemeIcon';
 
 interface SidebarProps {
@@ -10,6 +13,39 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     const isCollapsed = true;
     const [hoveredItem, setHoveredItem] = useState<{ label: string, top: number } | null>(null);
+
+    const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const [, setTesterSyncTick] = useState(0);
+    const [passkeyUnlocked, setPasskeyUnlocked] = useState<string | null>(() => {
+        try {
+            return localStorage.getItem('nexus_overwatch_tester_unlocked');
+        } catch {
+            return null;
+        }
+    });
+
+    useEffect(() => {
+        const handleUpdate = () => {
+            try {
+                setPasskeyUnlocked(localStorage.getItem('nexus_overwatch_tester_unlocked'));
+            } catch { }
+            setTesterSyncTick(t => t + 1);
+        };
+        window.addEventListener('nexus_overwatch_tester_updated', handleUpdate);
+        window.addEventListener('storage', handleUpdate);
+        return () => {
+            window.removeEventListener('nexus_overwatch_tester_updated', handleUpdate);
+            window.removeEventListener('storage', handleUpdate);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (activeAccount?.playerId) {
+            syncOverwatchTesterStatusWithCloudflare(activeAccount.playerId, activeAccount.universe);
+        }
+    }, [activeAccount?.playerId, activeAccount?.universe]);
+
+    const isTester = isOverwatchTester(activeAccount, passkeyUnlocked);
 
     const handleItemClick = (e: React.MouseEvent, itemId: string) => {
         onSelect(itemId);
@@ -162,6 +198,25 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                             }}>
                                 <ThemeIcon name={item.iconName} size={22} glow={isActive} />
                             </span>
+                            {item.id === 'overwatch' && !isTester && (
+                                <span style={{
+                                    position: 'absolute',
+                                    top: '5px',
+                                    right: '5px',
+                                    fontSize: '8px',
+                                    fontWeight: 800,
+                                    padding: '1px 3px',
+                                    borderRadius: '3px',
+                                    background: 'rgba(245, 158, 11, 0.22)',
+                                    border: '1px solid rgba(245, 158, 11, 0.5)',
+                                    color: '#fbbf24',
+                                    lineHeight: 1,
+                                    boxShadow: '0 0 6px rgba(245, 158, 11, 0.3)',
+                                    pointerEvents: 'none',
+                                }}>
+                                    TEST
+                                </span>
+                            )}
                         </motion.button>
                     );
                 })}
@@ -222,6 +277,21 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                     }}>
                         {hoveredItem.label}
                     </span>
+                    {hoveredItem.label === 'Nexus Overwatch' && !isTester && (
+                        <span style={{
+                            fontSize: '9.5px',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(245, 158, 11, 0.16)',
+                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                            color: '#fbbf24',
+                            letterSpacing: '0.06em',
+                            textTransform: 'uppercase',
+                        }}>
+                            In Testing
+                        </span>
+                    )}
                 </div>
             )}
 

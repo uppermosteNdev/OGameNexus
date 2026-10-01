@@ -45,6 +45,11 @@ export function scrapeLifeformMessages() {
     const newItemsToTrack: any[] = [];
 
     for (const msg of messages) {
+        // Strip legacy attribute from rawMessageData if present
+        if (msg.hasAttribute('data-og-nexus-processed')) {
+            msg.removeAttribute('data-og-nexus-processed');
+        }
+
         const item = parseLifeformElement(msg);
         if (!item) continue;
 
@@ -58,32 +63,74 @@ export function scrapeLifeformMessages() {
         }
 
         // 2. Queue for background tracking if not already processed in this session
-        if (!msg.hasAttribute('data-og-nexus-processed')) {
-            msg.setAttribute('data-og-nexus-processed', 'true');
-            if (!processedLifeformIds.has(item.messageId)) {
-                processedLifeformIds.add(item.messageId);
-                newItemsToTrack.push(item);
+        const isProcessed = (parentMsg && parentMsg.hasAttribute('data-og-nexus-processed')) || processedLifeformIds.has(item.messageId);
+        if (!isProcessed) {
+            if (parentMsg) {
+                parentMsg.setAttribute('data-og-nexus-processed', 'true');
             }
+            processedLifeformIds.add(item.messageId);
+            newItemsToTrack.push(item);
+        } else if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-processed')) {
+            parentMsg.setAttribute('data-og-nexus-processed', 'true');
         }
     }
     return newItemsToTrack;
 }
 
+function parseLifeformFromHTMLString(html: string): any | null {
+    const idMatch = html.match(/data-msg-id=['"](\d+)['"]/i);
+    if (!idMatch) return null;
+    const messageId = idMatch[1];
+
+    const timeMatch = html.match(/data-raw-timestamp=['"](\d+)['"]/i);
+    const coordsMatch = html.match(/data-raw-coords=['"]([^'"]+)['"]/i);
+    const lfMatch = html.match(/data-raw-lifeform=['"](\d+)['"]/i);
+    const discMatch = html.match(/data-raw-discoveryType=['"]([^'"]+)['"]/i);
+    const xpMatch = html.match(/data-raw-lifeformGainedExperience=['"](\d+)['"]/i);
+    const artMatch = html.match(/data-raw-artifactsFound=['"](\d+)['"]/i);
+    const artSizeMatch = html.match(/data-raw-artifactsSize=['"]([^'"]+)['"]/i);
+
+    if (timeMatch && coordsMatch) {
+        return {
+            messageId,
+            timestamp: parseInt(timeMatch[1], 10),
+            coords: coordsMatch[1],
+            lifeform: lfMatch ? parseInt(lfMatch[1], 10) : undefined,
+            discoveryType: discMatch ? discMatch[1] : 'nothing',
+            lifeformGainedExperience: xpMatch ? parseInt(xpMatch[1], 10) : undefined,
+            artifactsFound: artMatch ? parseInt(artMatch[1], 10) : undefined,
+            artifactSize: artSizeMatch ? artSizeMatch[1] : undefined
+        };
+    }
+    return null;
+}
+
 export function scrapeRawLifeformHTML(htmls: string[]) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmls.join(''), 'text/html');
-    const messages = doc.querySelectorAll('div.rawMessageData[data-raw-messagetype="61"]');
     const results: any[] = [];
     const removeOGLight = isRemoveOGLightDuplicatesEnabled();
 
-    for (const msg of messages) {
-        const item = parseLifeformElement(msg);
+    const visibleDomMsgMap = new Map<string, HTMLElement>();
+    document.querySelectorAll('.msg[data-msg-id]').forEach(el => {
+        const id = el.getAttribute('data-msg-id');
+        if (id) visibleDomMsgMap.set(id, el as HTMLElement);
+    });
+
+    for (const html of htmls) {
+        if (!html.includes("data-raw-messagetype='61'") && !html.includes('data-raw-messagetype="61"') &&
+            !html.includes("data-raw-messageType='61'") && !html.includes('data-raw-messageType="61"')) {
+            continue;
+        }
+
+        const item = parseLifeformFromHTMLString(html);
         if (item) {
-            const domMsg = document.querySelector(`.msg[data-msg-id="${item.messageId}"] div.rawMessageData[data-raw-messagetype="61"]`);
-            if (domMsg) {
-                domMsg.setAttribute('data-og-nexus-processed', 'true');
-                const parentMsg = domMsg.closest('.msg') as HTMLElement;
-                if (parentMsg && !parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
+            const parentMsg = visibleDomMsgMap.get(item.messageId);
+            if (parentMsg) {
+                const domMsg = parentMsg.querySelector('div.rawMessageData[data-raw-messagetype="61"], div.rawMessageData[data-raw-messageType="61"]');
+                if (domMsg && domMsg.hasAttribute('data-og-nexus-processed')) {
+                    domMsg.removeAttribute('data-og-nexus-processed');
+                }
+                parentMsg.setAttribute('data-og-nexus-processed', 'true');
+                if (!parentMsg.hasAttribute('data-og-nexus-visuals-applied')) {
                     parentMsg.classList.add('og-nexus-tracked');
                     updateLifeformDiscoveryVisuals(parentMsg, item, removeOGLight);
                 }
@@ -245,7 +292,11 @@ function updateLifeformDiscoveryVisuals(msgElement: HTMLElement, discovery: any,
     if (!isExtensionStillValid()) return;
 
     if (removeOGLight) {
-        cleanOGLightDOM(msgElement);
+        const isExpeditionsTab = document.documentElement?.getAttribute('data-nexus-active-subtab') === '22' ||
+                                 !!document.querySelector('div.innerTabItem.active[data-subtab-id="22"]');
+        if (isExpeditionsTab) {
+            cleanOGLightDOM(msgElement);
+        }
     }
 
     // Check if visuals already applied

@@ -12,29 +12,34 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <SlidersHorizontal size={22} color="#00f2ff" />,
-            title: "Raid Helper Minimum MSU Filter & Galaxy Dimming",
-            desc: "Configurable non-linear slider (0 to 1B) with direct text editing to filter and dim inactive planets below your predicted Resource MSU threshold in Raid Helper and Galaxy view."
+            icon: <Orbit size={22} color="#00f2ff" />,
+            title: "Nexus Overwatch [Closed Beta] & Cloud Sync",
+            desc: "Currently in Closed Beta for testing (will be made available to all commanders at a later date). Enables live alliance galaxy scouting, activity heatmaps, and multi-device cloud backup for your expeditions, combats, and farm targets."
         },
         {
-            icon: <Calculator size={22} color="#fbbf24" />,
-            title: "Collector Class, 50% Crawler Cap & Rock'tal T18",
-            desc: "Applied canonical OGame formulas for Collector class bonuses, 50% crawler mine caps, overload multipliers, geologist capacity (8.8x), and empire-wide Rock'tal T18 boosts."
+            icon: <Eye size={22} color="#10b981" />,
+            title: "Raid Radar Inactive Target Scout & Live Status",
+            desc: "Find prime unmonitored inactive farming targets across the universe sorted by player rank and distance. Live galaxy scanning now immediately updates inactive status so you never raid someone who became active."
         },
         {
-            icon: <Clock size={22} color="#10b981" />,
-            title: "Active Upgrades in Amortization & Overseer",
-            desc: "Ongoing planetary building and research upgrades now seamlessly appear with live countdowns in the Amortization To-Do list and the Overseer logistics bar."
+            icon: <Clock size={22} color="#fbbf24" />,
+            title: "Research Time Optimizer Tool",
+            desc: "New dedicated tool to calculate the exact research duration, optimal research laboratory upgrades, and Intergalactic Research Network breakpoints for high-tier techs."
         },
         {
-            icon: <Activity size={22} color="#38bdf8" />,
-            title: "Costs Planner Gather Time Calculations",
-            desc: "Accurately calculates Total Gather Time and Remaining Gather Time based on shopping cart MSU cost, available empire resources, and Empire Daily Yield."
+            icon: <Ship size={22} color="#38bdf8" />,
+            title: "Flying Fleets in Fleet & Scrap Tools",
+            desc: "Fleets currently flying on missions are now fully accounted for when calculating scrap merchant values, fleet assets, and total empire capacity."
         },
         {
-            icon: <ShieldCheck size={22} color="#a855f7" />,
-            title: "Bugfixes & Sync Performance",
-            desc: "Resolved ongoing queue scraping across all OGame languages, prevented shared alliance expedition tracking, and removed redundant background CP sync calls."
+            icon: <Calculator size={22} color="#a855f7" />,
+            title: "Costs Planner & Resource Packs Polish",
+            desc: "Fixed resource pack calculations for large building and technology goals, improved shopping cart imports, and perfected gather time estimates."
+        },
+        {
+            icon: <ShieldCheck size={22} color="#f43f5e" />,
+            title: "Radar Target Safety & UI Enhancements",
+            desc: "Guaranteed non-destructive target sync so radar entries are never lost, fixed dashboard radar visibility, cleaner message tracking, and extended in-game UI boxes."
         }
     ];
 
@@ -133,7 +138,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.2.4
+                                v1.2.5
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

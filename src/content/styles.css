@@ -1,14 +1,44 @@
 /* ==========================================================================
    OGLight Conflict Elimination Rules
    Instantly suppresses OGLight visual cards (.ogl_battle) with 0ms paint delay
+   ONLY on Combat Reports (subtab 21) and Expeditions (subtab 22) tabs
    when the 'Clean OGLight Duplicate Visuals' setting is active.
+   All other tabs (Unions/Transport, Other, Espionage, Communication, etc.)
+   remain 100% untouched and render OGLight visuals normally.
    ========================================================================== */
-html[data-nexus-clean-oglight="true"] .ogl_battle,
-body[data-nexus-clean-oglight="true"] .ogl_battle {
+html[data-nexus-clean-oglight="true"][data-nexus-active-subtab="21"] .ogl_battle,
+body[data-nexus-clean-oglight="true"][data-nexus-active-subtab="21"] .ogl_battle,
+html[data-nexus-clean-oglight="true"][data-nexus-active-subtab="22"] .ogl_battle,
+body[data-nexus-clean-oglight="true"][data-nexus-active-subtab="22"] .ogl_battle,
+html[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="21"]) .ogl_battle,
+body[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="21"]) .ogl_battle,
+html[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="22"]) .ogl_battle,
+body[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="22"]) .ogl_battle,
+html[data-nexus-clean-oglight="true"] #messagescomponent[data-tab="21"] .ogl_battle,
+html[data-nexus-clean-oglight="true"] #messagescomponent[data-tab="22"] .ogl_battle,
+html[data-nexus-clean-oglight="true"] #messagecontainercomponent[data-tab="21"] .ogl_battle,
+html[data-nexus-clean-oglight="true"] #messagecontainercomponent[data-tab="22"] .ogl_battle,
+html[data-nexus-clean-oglight="true"] .msg:has(.rawMessageData[data-raw-messagetype="41"]) .ogl_battle,
+html[data-nexus-clean-oglight="true"] .msg:has(.rawMessageData[data-raw-messagetype="61"]) .ogl_battle,
+html[data-nexus-clean-oglight="true"] .msg:has(.rawMessageData[data-raw-messagetype="25"]) .ogl_battle {
   display: none !important;
 }
 
-html[data-nexus-clean-oglight="true"] .msg .msgContent.ogl_hidden {
+html[data-nexus-clean-oglight="true"][data-nexus-active-subtab="21"] .msg .msgContent.ogl_hidden,
+body[data-nexus-clean-oglight="true"][data-nexus-active-subtab="21"] .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"][data-nexus-active-subtab="22"] .msg .msgContent.ogl_hidden,
+body[data-nexus-clean-oglight="true"][data-nexus-active-subtab="22"] .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="21"]) .msg .msgContent.ogl_hidden,
+body[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="21"]) .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="22"]) .msg .msgContent.ogl_hidden,
+body[data-nexus-clean-oglight="true"]:has(.innerTabItem.active[data-subtab-id="22"]) .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"] #messagescomponent[data-tab="21"] .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"] #messagescomponent[data-tab="22"] .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"] #messagecontainercomponent[data-tab="21"] .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"] #messagecontainercomponent[data-tab="22"] .msg .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"] .msg:has(.rawMessageData[data-raw-messagetype="41"]) .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"] .msg:has(.rawMessageData[data-raw-messagetype="61"]) .msgContent.ogl_hidden,
+html[data-nexus-clean-oglight="true"] .msg:has(.rawMessageData[data-raw-messagetype="25"]) .msgContent.ogl_hidden {
   display: block;
 }
 

@@ -72,18 +72,27 @@ function extractStorageAndAllianceDetails(msg: Element, msgContainer: Element | 
 
 export function scrapeEspionageMessages(): ScrapedEspionage[] {
     // Select all rawMessageData divs where the hashcode starts with "sr-" (Spy Report)
-    const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]:not([data-og-nexus-processed="true"])');
+    const espionageMessages = document.querySelectorAll('div.rawMessageData[data-raw-hashcode^="sr-"]');
     const results: ScrapedEspionage[] = [];
 
     for (const msg of espionageMessages) {
-        const msgContainer = msg.closest('.msg');
+        // Strip legacy attribute from rawMessageData if present
+        if (msg.hasAttribute('data-og-nexus-processed')) {
+            msg.removeAttribute('data-og-nexus-processed');
+        }
+
+        const msgContainer = msg.closest('.msg') as HTMLElement | null;
         const messageId = msgContainer?.getAttribute('data-msg-id');
         if (!messageId || isSharedMessage(msgContainer || msg)) continue;
+
+        if (msgContainer && msgContainer.hasAttribute('data-og-nexus-processed')) {
+            continue;
+        }
 
         // Only track planets (planet type 1), skip moons (planet type 3)
         const targetPlanetType = msg.getAttribute('data-raw-targetplanettype');
         if (targetPlanetType !== '1') {
-            msg.setAttribute('data-og-nexus-processed', 'true');
+            if (msgContainer) msgContainer.setAttribute('data-og-nexus-processed', 'true');
             continue;
         }
 
@@ -153,7 +162,7 @@ export function scrapeEspionageMessages(): ScrapedEspionage[] {
             }
 
             // Mark as processed so we don't scrape it again in subsequent observer cycles
-            msg.setAttribute('data-og-nexus-processed', 'true');
+            if (msgContainer) msgContainer.setAttribute('data-og-nexus-processed', 'true');
         }
     }
 

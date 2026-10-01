@@ -928,4 +928,9 @@
     justify-content: center;
 }
 
+/* Research Time Optimizer Styles */
+.interactive-table-row:hover {
+    background: rgba(0, 242, 255, 0.04) !important;
+}
+
 
