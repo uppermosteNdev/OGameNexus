@@ -404,11 +404,19 @@ function scrapeOverviewData() {
   const scoreText = getXPathText('//*[@id="scoreContentField"]');
   let score, rank, totalPlayers;
   if (scoreText) {
-    const sMatch = scoreText.match(/([\d,.]+)\s*\(Place\s*(\d+)\s*of\s*(\d+)\)/);
-    if (sMatch) {
-      score = parseInt(sMatch[1].replace(/[,.]/g, ''));
-      rank = parseInt(sMatch[2]);
-      totalPlayers = parseInt(sMatch[3]);
+    // Score is always before the opening parenthesis, language-independent (handles German, Spanish, French, etc.)
+    const beforeParen = scoreText.split('(')[0]?.trim();
+    if (beforeParen) {
+      const cleanDigits = beforeParen.replace(/[^\d]/g, '');
+      if (cleanDigits) {
+        score = parseInt(cleanDigits, 10);
+      }
+    }
+    // Rank & total players inside parentheses, e.g. (Place 5 of 320), (Platz 5 von 320), (Lugar 5 de 320)
+    const parenMatch = scoreText.match(/\((?:[^\d]*(\d+)[^\d]+(\d+)[^\d]*)\)/);
+    if (parenMatch) {
+      rank = parseInt(parenMatch[1], 10);
+      totalPlayers = parseInt(parenMatch[2], 10);
     }
   }
 

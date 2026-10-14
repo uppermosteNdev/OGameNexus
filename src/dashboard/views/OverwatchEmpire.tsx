@@ -4,7 +4,7 @@
 // Synchronizes and visualizes Mine Levels, Facilities, Lifeforms, Fleet, & Research
 // ============================================================================
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
@@ -38,10 +38,15 @@ import {
 } from 'lucide-react';
 import { ThemeIcon } from '../components/ThemeIcon';
 import { OverwatchOverviewTab } from './OverwatchOverviewTab';
+import { OverwatchEmpireComparisonDeck, ComparedPlayerSlot, SLOT_COLORS } from './OverwatchEmpireComparisonDeck';
+import { getLifeformBonusOverview, getBlankLifeformOverview } from '../../db/lfBonusOverviewEngine';
 import { getLfTech, LIFEFORM_TECH_DATA } from '../../db/lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from '../../db/lifeformBonusData';
 import { db } from '../../db';
 import { calculateEmpireProduction } from '../../utils/amortizationCalc';
+import { calculateAccountResearchScore } from '../../utils/researchTimeCalc';
+import { cleanUniverseId } from '../../utils/universe';
+import { fetchPlayerHighscores } from '../../utils/ogameHighscores';
 
 // ----------------------------------------------------------------------------
 // SHIP MSU MAPPING (Metal + 1.5*Crystal + 3*Deuterium)
@@ -428,7 +433,42 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
   const [roster, setRoster] = useState<AllianceEmpireSummary[]>([]);
   const [totals, setTotals] = useState<AllianceTotals | null>(null);
   const [isLoadingRoster, setIsLoadingRoster] = useState(true);
+  const [isRefreshingRoster, setIsRefreshingRoster] = useState(false);
   const [rosterError, setRosterError] = useState<string | null>(null);
+
+  const rosterRef = useRef<AllianceEmpireSummary[]>([]);
+  rosterRef.current = roster;
+
+  const accountRef = useRef(effectiveAccount);
+  accountRef.current = effectiveAccount;
+
+  // Auto-resolve local account highscores (economy, military, total) against official Gameforge highscores
+  useEffect(() => {
+    const uni = cleanUniverseId(effectiveAccount?.universe || config?.universeId || 's267-en');
+    const pId = effectiveAccount?.playerId;
+    if (uni && pId) {
+      fetchPlayerHighscores(uni, String(pId), true).then(hs => {
+        const updates: any = {};
+        if (hs.totalScore && hs.totalScore > 0 && hs.totalScore !== effectiveAccount.score) {
+          updates.score = hs.totalScore;
+        }
+        if (hs.economyScore && hs.economyScore > 0 && hs.economyScore !== effectiveAccount.economyScore) {
+          updates.economyScore = hs.economyScore;
+          if (hs.economyRank) updates.economyRank = hs.economyRank;
+        }
+        if (hs.militaryScore && hs.militaryScore > 0 && hs.militaryScore !== effectiveAccount.militaryScore) {
+          updates.militaryScore = hs.militaryScore;
+          if (hs.militaryRank) updates.militaryRank = hs.militaryRank;
+        }
+        if (hs.ships && hs.ships > 0 && hs.ships !== effectiveAccount.shipCount) {
+          updates.shipCount = hs.ships;
+        }
+        if (Object.keys(updates).length > 0) {
+          db.accounts.update(pId, updates).catch(() => {});
+        }
+      }).catch(err => console.warn('[OverwatchEmpire] Background player highscore fetch failed:', err));
+    }
+  }, [effectiveAccount?.playerId, effectiveAccount?.universe, config.universeId]);
 
   // Selected Member Drilldown State
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -445,17 +485,163 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
   const [isSyncingLocal, setIsSyncingLocal] = useState(false);
   const [syncStatusNotice, setSyncStatusNotice] = useState<string | null>(null);
 
-  // --------------------------------------------------------------------------
-  // FETCH ALLIANCE EMPIRE ROSTER
-  // --------------------------------------------------------------------------
-  const fetchRoster = useCallback(async () => {
-    if (!config.authToken || !config.allianceId) {
-      setIsLoadingRoster(false);
+  // Comparison Mode State
+  const [isCompareMode, setIsCompareMode] = useState(false);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+  const [isComparing, setIsComparing] = useState(false);
+  const [isLoadingCompareData, setIsLoadingCompareData] = useState(false);
+  const [compareDetailsMap, setCompareDetailsMap] = useState<Record<string, MemberEmpireDetail>>({});
+  const [compareNotice, setCompareNotice] = useState<string | null>(null);
+
+  const handleTogglePlayerCompare = useCallback((playerId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const member = rosterRef.current.find(m => String(m.playerId) === String(playerId));
+    if (!member || !member.hasSyncedEmpire) {
+      setCompareNotice(`Commander ${member?.playerName || `#${playerId}`} has not synced empire data yet.`);
+      setTimeout(() => setCompareNotice(null), 3500);
       return;
     }
 
+    setSelectedCompareIds(prev => {
+      const pIdStr = String(playerId);
+      if (prev.includes(pIdStr)) {
+        return prev.filter(id => id !== pIdStr);
+      }
+      if (prev.length >= 4) {
+        setCompareNotice('Maximum 4 alliance members can be compared simultaneously.');
+        setTimeout(() => setCompareNotice(null), 3500);
+        return prev;
+      }
+      return [...prev, pIdStr];
+    });
+  }, []);
+
+  const handleStartComparison = useCallback(async () => {
+    if (selectedCompareIds.length < 2) return;
+    setIsLoadingCompareData(true);
+    setCompareNotice(null);
+
     try {
-      setIsLoadingRoster(true);
+      const currentAccount = accountRef.current;
+      const neededIds = selectedCompareIds.filter(id => !compareDetailsMap[id]);
+      if (neededIds.length > 0) {
+        const fetchedEntries = await Promise.all(
+          neededIds.map(async (pId) => {
+            // Check local Dexie first if it's the current player
+            if (currentAccount && String(currentAccount.playerId) === String(pId)) {
+              try {
+                const localPlanets = await db.planets.where('playerId').equals(pId).toArray();
+                if (localPlanets && localPlanets.length > 0) {
+                  let localFleetMsu = 0;
+                  localPlanets.forEach(p => {
+                    if (p.ships) {
+                      Object.entries(p.ships).forEach(([sId, c]: [string, any]) => {
+                        const count = Number(c) || 0;
+                        if (count > 0) {
+                          localFleetMsu += count * (SHIP_MSU_COSTS[Number(sId)] || 0);
+                        }
+                      });
+                    }
+                  });
+
+                  const localResearches = currentAccount.researches || [];
+                  const calculatedRScore = calculateAccountResearchScore(localResearches);
+                  const formattedLocal: MemberEmpireDetail = {
+                    playerId: currentAccount.playerId,
+                    playerName: currentAccount.playerName,
+                    playerClass: currentAccount.playerClass,
+                    allianceClass: currentAccount.allianceClass,
+                    avatarUrl: currentAccount.avatarUrl || null,
+                    totalScore: currentAccount.score,
+                    economyScore: (rosterRef.current.find(r => String(r.playerId) === String(pId))?.economyScore) || currentAccount.economyScore || 0,
+                    militaryScore: (rosterRef.current.find(r => String(r.playerId) === String(pId))?.militaryScore) || currentAccount.militaryScore || 0,
+                    researchScore: Math.max(currentAccount.researchScore || 0, calculatedRScore),
+                    totalFleetMsu: localFleetMsu,
+                    updatedAt: Date.now(),
+                    empire: {
+                      planets: localPlanets as any,
+                      researches: localResearches,
+                      lifeformExperience: currentAccount.lifeformExperience || [],
+                    },
+                  };
+                  return [pId, formattedLocal] as const;
+                }
+              } catch (e) {}
+            }
+
+            // Otherwise fetch from Cloudflare Worker
+            try {
+              const res = await fetch(`${apiUrl}/api/v1/overwatch/empire/member?playerId=${pId}`, {
+                method: 'GET',
+                headers: {
+                  Authorization: `Bearer ${config.authToken}`,
+                  Accept: 'application/json',
+                },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.success && data.member) {
+                  return [pId, data.member] as const;
+                }
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch empire detail for compare player ${pId}:`, err);
+            }
+            return [pId, null] as const;
+          })
+        );
+
+        setCompareDetailsMap(prev => {
+          const next = { ...prev };
+          fetchedEntries.forEach(([id, detail]) => {
+            if (detail) next[id] = detail;
+          });
+          return next;
+        });
+      }
+      setIsComparing(true);
+    } catch (e) {
+      console.warn('Comparison data initialization error:', e);
+      setIsComparing(true);
+    } finally {
+      setIsLoadingCompareData(false);
+    }
+  }, [selectedCompareIds, compareDetailsMap, apiUrl, config.authToken]);
+
+  const comparedPlayerSlots: ComparedPlayerSlot[] = useMemo(() => {
+    const slots: ComparedPlayerSlot[] = [];
+    selectedCompareIds.forEach(id => {
+      const summary = roster.find(r => String(r.playerId) === String(id));
+      if (summary) {
+        const detail = compareDetailsMap[id] || null;
+        const lfOverview = detail ? getLifeformBonusOverview(detail) : getBlankLifeformOverview();
+        slots.push({
+          summary,
+          detail,
+          lfOverview,
+        });
+      }
+    });
+    return slots;
+  }, [selectedCompareIds, roster, compareDetailsMap]);
+
+  // --------------------------------------------------------------------------
+  // FETCH ALLIANCE EMPIRE ROSTER
+  // --------------------------------------------------------------------------
+  const fetchRoster = useCallback(async (isSilent = false) => {
+    if (!config.authToken || !config.allianceId) {
+      setIsLoadingRoster(false);
+      setIsRefreshingRoster(false);
+      return;
+    }
+
+    const hasData = rosterRef.current.length > 0;
+    try {
+      if (!hasData && !isSilent) {
+        setIsLoadingRoster(true);
+      } else {
+        setIsRefreshingRoster(true);
+      }
       setRosterError(null);
 
       const res = await fetch(`${apiUrl}/api/v1/overwatch/empire/roster`, {
@@ -475,11 +661,14 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
         const rawRoster = data.roster || [];
         const rawTotals = data.allianceTotals || data.aggregates;
 
+        const currentAccount = accountRef.current;
+        const currentMyPlayerId = currentAccount?.playerId ? String(currentAccount.playerId) : '';
+
         // Flatten each roster member so root properties are always populated
         const flattenedRoster: AllianceEmpireSummary[] = await Promise.all(
           rawRoster.map(async (m: any) => {
             const emp = m.empire || {};
-            const isMe = effectiveAccount && String(effectiveAccount.playerId) === String(m.playerId);
+            const isMe = Boolean(currentMyPlayerId && currentMyPlayerId === String(m.playerId));
 
             let totalScore = Number(m.totalScore ?? emp.totalScore ?? emp.total_score ?? 0);
             let playerClass = m.playerClass ?? emp.playerClass ?? emp.player_class ?? null;
@@ -488,7 +677,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
             let totalMines = Number(m.totalMines ?? emp.totalMines ?? emp.total_mines ?? 0);
             let totalShips = Number(m.totalShips ?? emp.totalShips ?? emp.total_ships ?? 0);
             let totalFleetMsu = Number(m.totalFleetMsu ?? emp.totalFleetMsu ?? emp.total_fleet_msu ?? 0);
-            let avatarUrl = m.avatarUrl || emp.avatarUrl || emp.avatar_url || (isMe ? effectiveAccount?.avatarUrl : null);
+            let avatarUrl = m.avatarUrl || emp.avatarUrl || emp.avatar_url || (isMe ? currentAccount?.avatarUrl : null);
             let avgMetalMine = Number(m.avgMetalMine ?? emp.avgMetalMine ?? emp.avg_metal_mine ?? 0);
             let avgCrystalMine = Number(m.avgCrystalMine ?? emp.avgCrystalMine ?? emp.avg_crystal_mine ?? 0);
             let avgDeutMine = Number(m.avgDeutMine ?? emp.avgDeutMine ?? emp.avg_deut_mine ?? 0);
@@ -499,10 +688,10 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
             let lastEmpireSyncAt = m.lastEmpireSyncAt ?? emp.lastSyncedAt ?? emp.last_synced_at ?? m.lastSyncedAt ?? m.last_sync_at ?? null;
 
             // If this is the current player, ensure local Dexie ground-truth is always applied
-            if (isMe) {
-              avatarUrl = effectiveAccount?.avatarUrl || avatarUrl;
+            if (isMe && currentAccount) {
+              avatarUrl = currentAccount?.avatarUrl || avatarUrl;
               try {
-                const localPlanets = await db.planets.where('playerId').equals(effectiveAccount.playerId).toArray();
+                const localPlanets = await db.planets.where('playerId').equals(currentAccount.playerId).toArray();
                 if (localPlanets && localPlanets.length > 0) {
                   const pEnt = localPlanets.filter(p => p.type === 'planet');
                   const mEnt = localPlanets.filter(p => p.type === 'moon');
@@ -535,7 +724,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
                   // Always calculate comprehensive production via amortization engine
                   // (including full Lifeform tech tree setups, Crawlers, Plasma, Officers, and Boosters)
                   try {
-                    const calcResults = calculateEmpireProduction({ account: effectiveAccount, planets: localPlanets });
+                    const calcResults = calculateEmpireProduction({ account: currentAccount, planets: localPlanets });
                     if (calcResults?.planets) {
                       let calcM = 0;
                       let calcC = 0;
@@ -592,12 +781,21 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
                     totalDeutHourly = Math.max(totalDeutHourly, Math.floor(dH));
                   }
 
-                  totalScore = effectiveAccount.score || totalScore;
-                  playerClass = effectiveAccount.playerClass || playerClass;
+                  totalScore = currentAccount.score || totalScore;
+                  playerClass = currentAccount.playerClass || playerClass;
                   hasSyncedEmpire = true;
                   lastEmpireSyncAt = lastEmpireSyncAt || Date.now();
                 }
               } catch (e) {}
+            }
+
+            let resolvedResearchScore = Number(m.researchScore ?? emp.researchScore ?? emp.research_score ?? 0);
+            if (isMe && currentAccount?.researches) {
+              const localR = calculateAccountResearchScore(currentAccount.researches);
+              if (localR > 0) resolvedResearchScore = Math.max(resolvedResearchScore, localR);
+            } else if (emp?.researches || emp?.empire?.researches) {
+              const remoteR = calculateAccountResearchScore(emp.researches || emp.empire.researches);
+              if (remoteR > 0) resolvedResearchScore = Math.max(resolvedResearchScore, remoteR);
             }
 
             return {
@@ -610,9 +808,9 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
               playerClass,
               allianceClass: m.allianceClass ?? emp.allianceClass ?? emp.alliance_class ?? null,
               totalScore,
-              economyScore: Number(m.economyScore ?? emp.economyScore ?? emp.economy_score ?? 0),
-              militaryScore: Number(m.militaryScore ?? emp.militaryScore ?? emp.military_score ?? 0),
-              researchScore: Number(m.researchScore ?? emp.researchScore ?? emp.research_score ?? 0),
+              economyScore: Number(m.economyScore ?? emp.economyScore ?? emp.economy_score ?? (isMe ? currentAccount?.economyScore : 0) ?? 0),
+              militaryScore: Number(m.militaryScore ?? emp.militaryScore ?? emp.military_score ?? (isMe ? currentAccount?.militaryScore : 0) ?? 0),
+              researchScore: resolvedResearchScore,
               planetCount,
               moonCount,
               totalMines,
@@ -694,28 +892,32 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
       }
     } catch (err: any) {
       console.warn('Overwatch Empire roster load notice:', err.message);
-      setRosterError(err.message);
+      if (rosterRef.current.length === 0) {
+        setRosterError(err.message);
+      }
     } finally {
       setIsLoadingRoster(false);
+      setIsRefreshingRoster(false);
     }
-  }, [config.authToken, config.allianceId, apiUrl, effectiveAccount]);
+  }, [config.authToken, config.allianceId, apiUrl]);
 
   useEffect(() => {
     fetchRoster();
 
     // Proactively verify & trigger automatic background sync when the user opens the Overwatch Empire page
-    if (effectiveAccount?.playerId && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    const pId = accountRef.current?.playerId;
+    if (pId && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage({
         type: 'OVERWATCH_AUTO_SYNC_EMPIRE',
         action: 'OVERWATCH_AUTO_SYNC_EMPIRE',
-        playerId: effectiveAccount.playerId,
+        playerId: pId,
       }).then(res => {
         if (res?.success && !res.skipped) {
-          fetchRoster();
+          fetchRoster(true);
         }
       }).catch(() => {});
     }
-  }, [fetchRoster, effectiveAccount?.playerId]);
+  }, [fetchRoster]);
 
   // --------------------------------------------------------------------------
   // FETCH SPECIFIC MEMBER EMPIRE ON DRILLDOWN
@@ -750,8 +952,8 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
             allianceClass: effectiveAccount.allianceClass,
             avatarUrl: effectiveAccount.avatarUrl || null,
             totalScore: effectiveAccount.score,
-            economyScore: effectiveAccount.economyScore,
-            militaryScore: effectiveAccount.militaryScore,
+            economyScore: (rosterRef.current.find(r => String(r.playerId) === String(effectiveAccount.playerId))?.economyScore) || effectiveAccount.economyScore || 0,
+            militaryScore: (rosterRef.current.find(r => String(r.playerId) === String(effectiveAccount.playerId))?.militaryScore) || effectiveAccount.militaryScore || 0,
             researchScore: effectiveAccount.researchScore,
             totalFleetMsu: localFleetMsu,
             updatedAt: Date.now(),
@@ -869,11 +1071,28 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
     });
   }, [roster, searchQuery, classFilter]);
 
-  // Lifeform bonus computations for active inspected member
-  const memberLfBonuses = useMemo(() => {
-    if (!memberDetail) return {};
-    return calculateMemberLifeformBonuses(memberDetail);
-  }, [memberDetail]);
+  // ==========================================================================
+  // RENDER: EMPIRE COMPARISON DECK VIEW
+  // ==========================================================================
+  if (isComparing && comparedPlayerSlots.length >= 2) {
+    return (
+      <OverwatchEmpireComparisonDeck
+        players={comparedPlayerSlots}
+        universeId={cleanUniverseId(effectiveAccount?.universe || config?.universeId || 's267-en')}
+        onBack={() => setIsComparing(false)}
+        onRemovePlayer={(pId) => {
+          setSelectedCompareIds(prev => {
+            const next = prev.filter(id => id !== pId);
+            if (next.length < 2) {
+              setIsComparing(false);
+            }
+            return next;
+          });
+        }}
+        onReorderPlayers={(newOrderIds) => setSelectedCompareIds(newOrderIds)}
+      />
+    );
+  }
 
   // ==========================================================================
   // RENDER: MEMBER DRILLDOWN VIEW
@@ -902,7 +1121,9 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
     });
 
     const isMeDrilldown = effectiveAccount && String(effectiveAccount.playerId) === String(selectedPlayerId);
-    const drilldownAvatarSrc = memberDetail?.avatarUrl || (isMeDrilldown ? effectiveAccount?.avatarUrl : null);
+    const selectedRosterMember = roster.find(m => String(m.playerId) === String(selectedPlayerId));
+    const displayedPlayerName = selectedRosterMember?.playerName || memberDetail?.playerName || 'Commander';
+    const drilldownAvatarSrc = memberDetail?.avatarUrl || selectedRosterMember?.avatarUrl || (isMeDrilldown ? effectiveAccount?.avatarUrl : null);
 
     return (
       <div className="ow-empire-drilldown-root">
@@ -931,7 +1152,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
                 {drilldownAvatarSrc ? (
                   <img
                     src={drilldownAvatarSrc}
-                    alt={memberDetail?.playerName || 'Commander'}
+                    alt={displayedPlayerName}
                     className="ow-drilldown-avatar-img"
                   />
                 ) : (
@@ -941,7 +1162,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
               <div className="ow-drilldown-titles">
                 <div className="ow-drilldown-name-row">
                   <h2 className="ow-drilldown-player-name">
-                    {memberDetail?.playerName || 'Commander'}
+                    {displayedPlayerName}
                   </h2>
                   <span
                     className="ow-class-badge"
@@ -977,7 +1198,14 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
               </div>
               <div className="ow-score-cell">
                 <span className="ow-score-label">Research</span>
-                <span className="ow-score-val violet">{formatCompact(memberDetail?.researchScore)}</span>
+                <span className="ow-score-val violet">
+                  {formatCompact(
+                    Math.max(
+                      memberDetail?.researchScore || 0,
+                      calculateAccountResearchScore(memberDetail?.empire?.researches || [])
+                    )
+                  )}
+                </span>
               </div>
             </div>
           </div>
@@ -1054,7 +1282,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
             {/* MATRIX 0: ALL LIFEFORM OVERVIEW */}
             {drilldownTab === 'overview' && (
               <OverwatchOverviewTab
-                memberDetail={memberDetail}
+                memberDetail={{ ...memberDetail, playerName: displayedPlayerName }}
                 effectiveAccount={effectiveAccount}
               />
             )}
@@ -1395,93 +1623,6 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
             {/* MATRIX 3: LIFEFORM MATRIX */}
             {drilldownTab === 'lifeforms' && (
               <div className="ow-matrix-section">
-                {/* Aggregate Lifeform Bonuses Bento */}
-                <div className="ow-lf-bento-grid">
-                  <div className="ow-lf-bento-card">
-                    <div className="ow-lf-card-header">
-                      <Swords size={16} className="ow-icon-glow cyan" />
-                      <span>Combat Bonuses</span>
-                    </div>
-                    <div className="ow-lf-bonus-list">
-                      <div className="ow-lf-bonus-row">
-                        <span>Ship Weapons Increase:</span>
-                        <strong className="cyan">+{((memberLfBonuses['Ship Weapons Increase'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Ship Shields Increase:</span>
-                        <strong className="cyan">+{((memberLfBonuses['Ship Shields Increase'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Ship Armour Increase:</span>
-                        <strong className="cyan">+{((memberLfBonuses['Ship Armor Increase'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="ow-lf-bento-card">
-                    <div className="ow-lf-card-header">
-                      <Rocket size={16} className="ow-icon-glow amber" />
-                      <span>Fleet & Logistics</span>
-                    </div>
-                    <div className="ow-lf-bonus-list">
-                      <div className="ow-lf-bonus-row">
-                        <span>Ship Speed Boost:</span>
-                        <strong className="amber">+{((memberLfBonuses['Ship Speed Increase'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Fuel Cost Reduction:</span>
-                        <strong className="amber">-{((memberLfBonuses['Ship Fuel Cost Reduction'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Cargo Capacity:</span>
-                        <strong className="amber">+{((memberLfBonuses['Ship Cargo Capacity Increase'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="ow-lf-bento-card">
-                    <div className="ow-lf-card-header">
-                      <TrendingUp size={16} className="ow-icon-glow emerald" />
-                      <span>Resource Production</span>
-                    </div>
-                    <div className="ow-lf-bonus-list">
-                      <div className="ow-lf-bonus-row">
-                        <span>Metal Output Boost:</span>
-                        <strong className="emerald">+{((memberLfBonuses['Resource Bonus Metal'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Crystal Output Boost:</span>
-                        <strong className="emerald">+{((memberLfBonuses['Resource Bonus Crystal'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Deuterium Boost:</span>
-                        <strong className="emerald">+{((memberLfBonuses['Resource Bonus Deuterium'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Crawler Production:</span>
-                        <strong className="emerald">+{((memberLfBonuses['Crawler Boost'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="ow-lf-bento-card">
-                    <div className="ow-lf-card-header">
-                      <FlaskConical size={16} className="ow-icon-glow violet" />
-                      <span>Research Accelerators</span>
-                    </div>
-                    <div className="ow-lf-bonus-list">
-                      <div className="ow-lf-bonus-row">
-                        <span>Research Speed Boost:</span>
-                        <strong className="violet">+{((memberLfBonuses['Research Speed Boost'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                      <div className="ow-lf-bonus-row">
-                        <span>Research Cost Reduction:</span>
-                        <strong className="violet">-{((memberLfBonuses['Research Costs Decrease'] || 0) * 100).toFixed(2)}%</strong>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Per-Colony 18-Slot Lifeform Tech Trees */}
                 <div className="ow-lf-colonies-list">
                   <div className="ow-matrix-heading-row">
@@ -1706,6 +1847,65 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
             </div>
           )}
 
+          {/* Comparison Mode Toggle */}
+          <div className="ow-compare-toggle-wrap">
+            <button
+              type="button"
+              className={`ow-compare-toggle-btn ${isCompareMode ? 'active' : ''}`}
+              onClick={() => {
+                setIsCompareMode(prev => {
+                  const next = !prev;
+                  if (!next) setSelectedCompareIds([]);
+                  return next;
+                });
+              }}
+              title={isCompareMode ? "Exit comparison mode" : "Compare up to 4 alliance members"}
+            >
+              <span className="ow-compare-toggle-track">
+                <span className="ow-compare-toggle-thumb" />
+              </span>
+              <span>Compare Empires</span>
+              {isCompareMode && selectedCompareIds.length > 0 && (
+                <span className="ow-compare-count-pill">{selectedCompareIds.length}/4</span>
+              )}
+            </button>
+          </div>
+
+          {/* Dynamic Compare Launch Button */}
+          {isCompareMode && (
+            <div className="ow-compare-launch-wrap">
+              <button
+                type="button"
+                className={`ow-btn-compare-launch ${selectedCompareIds.length >= 2 ? 'ready' : 'disabled'}`}
+                onClick={handleStartComparison}
+                disabled={selectedCompareIds.length < 2 || isLoadingCompareData}
+                title={selectedCompareIds.length < 2 ? "Select at least 2 members to compare" : `Compare ${selectedCompareIds.length} members`}
+              >
+                <ThemeIcon name="radar" size={14} />
+                <span>
+                  {isLoadingCompareData
+                    ? 'Loading...'
+                    : selectedCompareIds.length < 2
+                      ? `Select 2–4 (${selectedCompareIds.length}/4)`
+                      : `Compare (${selectedCompareIds.length})`}
+                </span>
+                {selectedCompareIds.length >= 2 && !isLoadingCompareData && (
+                  <ArrowRight size={13} />
+                )}
+              </button>
+              {selectedCompareIds.length > 0 && (
+                <button
+                  type="button"
+                  className="ow-btn-compare-clear"
+                  onClick={() => setSelectedCompareIds([])}
+                  title="Clear selected members"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             className={`ow-btn-force-sync ${isSyncingLocal ? 'loading' : ''}`}
@@ -1853,18 +2053,25 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
           >
             Discoverer
           </button>
+
+          {isRefreshingRoster && (
+            <div className="ow-refreshing-inline" title="Syncing alliance empire data in background...">
+              <RefreshCw size={11} className="ow-spin" />
+              <span>Updating...</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Roster Cards Grid */}
-      {isLoadingRoster && (
+      {isLoadingRoster && roster.length === 0 && (
         <div className="ow-loading-state">
           <RefreshCw size={24} className="ow-spin" />
           <span>Loading alliance members...</span>
         </div>
       )}
 
-      {rosterError && (
+      {rosterError && roster.length === 0 && (
         <div className="ow-notice-box error">
           <AlertTriangle size={18} />
           <span>{rosterError}</span>
@@ -1882,17 +2089,73 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
         </div>
       )}
 
+      {isCompareMode && (
+        <div className="ow-compare-instruction-bar">
+          <div className="ow-compare-instruction-left">
+            <Sparkles size={15} />
+            <span>
+              Select <strong>2 to 4 alliance members</strong> to compare their empires.
+            </span>
+          </div>
+          <div>
+            <strong>{selectedCompareIds.length}</strong> of 4 selected
+          </div>
+        </div>
+      )}
+
+      {compareNotice && (
+        <div className="ow-compare-instruction-bar" style={{ borderColor: 'rgba(251, 191, 36, 0.45)', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24' }}>
+          <div className="ow-compare-instruction-left">
+            <AlertTriangle size={15} />
+            <span>{compareNotice}</span>
+          </div>
+        </div>
+      )}
+
       <div className="ow-roster-cards-grid">
         {filteredRoster.map(member => {
           const pClass = resolvePlayerClass(member.playerClass);
           const hasData = member.hasSyncedEmpire;
           const isMe = effectiveAccount && String(effectiveAccount.playerId) === String(member.playerId);
           const avatarSrc = member.avatarUrl || (isMe && effectiveAccount?.avatarUrl ? effectiveAccount.avatarUrl : null);
+          const isSelectedCompare = selectedCompareIds.includes(String(member.playerId));
+          const slotIndex = selectedCompareIds.indexOf(String(member.playerId));
 
           return (
             <div
               key={member.playerId}
-              className={`ow-roster-bezel-card ${!hasData ? 'unsynced' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                if (isCompareMode) {
+                  handleTogglePlayerCompare(member.playerId);
+                } else {
+                  handleSelectMember(member.playerId);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (isCompareMode) {
+                    handleTogglePlayerCompare(member.playerId);
+                  } else {
+                    handleSelectMember(member.playerId);
+                  }
+                }
+              }}
+              className={`ow-roster-bezel-card ${!hasData ? 'unsynced' : ''} ${isCompareMode ? 'compare-active' : ''} ${isSelectedCompare ? 'compare-selected' : ''}`}
+              title={
+                isCompareMode
+                  ? isSelectedCompare
+                    ? `Click to deselect ${member.playerName} (Slot ${slotIndex + 1})`
+                    : `Click to select ${member.playerName} for comparison`
+                  : `Click to view empire details for ${member.playerName}`
+              }
+              aria-label={`View Empire details for ${member.playerName}`}
+              style={isSelectedCompare && slotIndex >= 0 ? {
+                '--slot-border': SLOT_COLORS[slotIndex].color,
+                '--slot-glow': SLOT_COLORS[slotIndex].glow,
+              } as React.CSSProperties : undefined}
             >
               <div className="ow-roster-card-inner">
                 {/* Top Identity Line */}
@@ -1958,9 +2221,35 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
                     </div>
                   </div>
 
-                  <div className="ow-roster-score-capsule">
-                    <span className="score-num">{formatCompact(member.totalScore)}</span>
-                    <span className="score-label">Points</span>
+                  <div className="ow-roster-card-top-right">
+                    {isCompareMode && hasData && (
+                      <div
+                        className={`ow-compare-select-badge ${isSelectedCompare ? 'selected' : ''}`}
+                        onClick={(e) => handleTogglePlayerCompare(member.playerId, e)}
+                        style={isSelectedCompare && slotIndex >= 0 ? {
+                          '--slot-color': SLOT_COLORS[slotIndex].color,
+                          '--slot-bg': SLOT_COLORS[slotIndex].bg,
+                          '--slot-glow': SLOT_COLORS[slotIndex].glow,
+                        } as React.CSSProperties : undefined}
+                      >
+                        {isSelectedCompare ? (
+                          <>
+                            <span>✓</span>
+                            <span>Slot {slotIndex + 1}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ opacity: 0.6 }}>○</span>
+                            <span>Select</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="ow-roster-score-capsule">
+                      <span className="score-num">{formatCompact(member.totalScore)}</span>
+                      <span className="score-label">Points</span>
+                    </div>
                   </div>
                 </div>
 
@@ -2000,18 +2289,6 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
                     <span>Awaiting first sync from player</span>
                   </div>
                 )}
-
-                {/* Bottom CTA Button-in-Button */}
-                <div className="ow-roster-card-footer">
-                  <button
-                    type="button"
-                    className="ow-btn-inspect"
-                    onClick={() => handleSelectMember(member.playerId)}
-                  >
-                    <span>View Empire Details</span>
-                    <ArrowRight size={14} className="ow-btn-arrow" />
-                  </button>
-                </div>
               </div>
             </div>
           );

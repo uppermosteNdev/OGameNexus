@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, TodoProject, ProductionQueueItem, EmpireProductionQueueData } from '../../db';
-import { AmortizationItem, AmortizationType, rankAmortizationItems, DEFAULT_RATES, formatROI, Cost, calculateMSU, getItemIcon, getAmortizationTechId, findMatchingQueueItem, AMORTIZATION_TABLE as STATIC_TABLE } from '../../utils/amortizationCalc';
+import { AmortizationItem, AmortizationType, AmortizationResourceTarget, rankAmortizationItems, DEFAULT_RATES, formatROI, Cost, calculateMSU, getItemIcon, getAmortizationTechId, findMatchingQueueItem, AMORTIZATION_TABLE as STATIC_TABLE } from '../../utils/amortizationCalc';
 import { getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA } from '../../db/staticData';
 
@@ -21,6 +21,13 @@ interface AmortizationViewProps {
 
 const THEME_CYAN = '#00f2ff';
 const THEME_PURPLE = '#a855f7';
+
+export const TARGET_THEMES: Record<AmortizationResourceTarget, { color: string; label: string; unit: string; badge: string; icon: string }> = {
+    all: { color: '#00f2ff', label: 'All Resources', unit: 'MSU', badge: 'All Resources', icon: 'icons/resources/metal-icon-medium.jpg' },
+    metal: { color: '#ff8d33', label: 'Metal', unit: 'Metal', badge: 'Metal', icon: 'icons/resources/metal-icon-medium.jpg' },
+    crystal: { color: '#33b2ff', label: 'Crystal', unit: 'Crystal', badge: 'Crystal', icon: 'icons/resources/crystal-icon-medium.jpg' },
+    deuterium: { color: '#33ff8d', label: 'Deuterium', unit: 'Deuterium', badge: 'Deuterium', icon: 'icons/resources/deuterium-icon-medium.jpg' },
+};
 
 const formatRemainingTime = (ms: number) => {
     if (ms <= 0) return '0s';
@@ -56,6 +63,8 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
         [AmortizationType.PlasmaTechnology]: true,
     });
     const [limit, setLimit] = useState<number>(25);
+    const [resourceTarget, setResourceTarget] = useState<AmortizationResourceTarget>('all');
+    const activeTheme = TARGET_THEMES[resourceTarget];
     const [results, setResults] = useState<AmortizationItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [animatedRow, setAnimatedRow] = useState<string | null>(null);
@@ -232,12 +241,12 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     useEffect(() => {
         const calculate = async () => {
             setLoading(true);
-            const items = await rankAmortizationItems(onlyPlanets, account, filters, settings || DEFAULT_RATES, limit, expoAverages, selectedPlanets);
+            const items = await rankAmortizationItems(onlyPlanets, account, filters, settings || DEFAULT_RATES, limit, expoAverages, selectedPlanets, resourceTarget);
             setResults(items);
             setLoading(false);
         };
         calculate();
-    }, [selectedPlanets, filters, limit, onlyPlanets, account, settings, expoAverages]);
+    }, [selectedPlanets, filters, limit, onlyPlanets, account, settings, expoAverages, resourceTarget]);
 
     // Update existing todos with new calculated values
     useEffect(() => {
@@ -334,9 +343,24 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     const formatCost = (cost: any, isProd: boolean = false, align: 'left' | 'right' = 'left') => {
         const iconStyle = { width: '16px', height: '16px', borderRadius: '4px', filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.5))' };
 
-        const metalVal = cost.metal;
-        const crystalVal = cost.crystal;
-        const deutVal = cost.deuterium;
+        const metalVal = cost?.metal || 0;
+        const crystalVal = cost?.crystal || 0;
+        const deutVal = cost?.deuterium || 0;
+
+        const getOpacity = (res: 'metal' | 'crystal' | 'deuterium') => {
+            if (!isProd || resourceTarget === 'all') return 1;
+            return resourceTarget === res ? 1 : 0.3;
+        };
+
+        const getHighlight = (res: 'metal' | 'crystal' | 'deuterium') => {
+            if (!isProd || resourceTarget === 'all') return 'transparent';
+            return resourceTarget === res ? `${TARGET_THEMES[res].color}18` : 'transparent';
+        };
+
+        const getBorder = (res: 'metal' | 'crystal' | 'deuterium') => {
+            if (!isProd || resourceTarget === 'all') return '1px solid transparent';
+            return resourceTarget === res ? `1px solid ${TARGET_THEMES[res].color}44` : '1px solid transparent';
+        };
 
         return (
             <div style={{
@@ -348,19 +372,52 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                 alignItems: align === 'right' ? 'flex-end' : 'flex-start'
             }}>
                 {metalVal > 0.01 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexDirection: align === 'right' ? 'row-reverse' : 'row' }}>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexDirection: align === 'right' ? 'row-reverse' : 'row',
+                        opacity: getOpacity('metal'),
+                        padding: isProd ? '2px 6px' : '0',
+                        borderRadius: '6px',
+                        background: getHighlight('metal'),
+                        border: getBorder('metal'),
+                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                    }}>
                         <img src="icons/resources/metal-icon-medium.jpg" style={iconStyle} alt="M" />
                         <span style={{ color: '#ff8d33' }}>{isProd ? '+' : ''}{formatAbbreviated(metalVal)}</span>
                     </div>
                 )}
                 {crystalVal > 0.01 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexDirection: align === 'right' ? 'row-reverse' : 'row' }}>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexDirection: align === 'right' ? 'row-reverse' : 'row',
+                        opacity: getOpacity('crystal'),
+                        padding: isProd ? '2px 6px' : '0',
+                        borderRadius: '6px',
+                        background: getHighlight('crystal'),
+                        border: getBorder('crystal'),
+                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                    }}>
                         <img src="icons/resources/crystal-icon-medium.jpg" style={iconStyle} alt="C" />
                         <span style={{ color: '#33b2ff' }}>{isProd ? '+' : ''}{formatAbbreviated(crystalVal)}</span>
                     </div>
                 )}
                 {deutVal > 0.01 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexDirection: align === 'right' ? 'row-reverse' : 'row' }}>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexDirection: align === 'right' ? 'row-reverse' : 'row',
+                        opacity: getOpacity('deuterium'),
+                        padding: isProd ? '2px 6px' : '0',
+                        borderRadius: '6px',
+                        background: getHighlight('deuterium'),
+                        border: getBorder('deuterium'),
+                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                    }}>
                         <img src="icons/resources/deuterium-icon-medium.jpg" style={iconStyle} alt="D" />
                         <span style={{ color: '#33ff8d' }}>{isProd ? '+' : ''}{formatAbbreviated(deutVal)}</span>
                     </div>
@@ -370,23 +427,174 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', padding: '0 0 60px 0' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', padding: '0 0 60px 0' }}>
+            {/* HIGH-END AMORTIZATION VECTOR DECK (Machined Double-Bezel Hardware Architecture) */}
+            <div style={{
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.07)',
+                padding: '6px',
+                borderRadius: '26px',
+                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45)'
+            }}>
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                    style={{
+                        background: 'rgba(8, 14, 26, 0.85)',
+                        backdropFilter: 'blur(24px)',
+                        WebkitBackdropFilter: 'blur(24px)',
+                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                        borderRadius: '20px',
+                        padding: '12px 18px',
+                        boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.12)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '16px'
+                    }}
+                >
+                {/* Left: Tactical Vector Identification */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '12px',
+                        background: `linear-gradient(135deg, ${activeTheme.color}25 0%, rgba(255,255,255,0.02) 100%)`,
+                        border: `1px solid ${activeTheme.color}40`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: `0 0 18px ${activeTheme.color}22`
+                    }}>
+                        <Calculator size={20} color={activeTheme.color} />
+                    </div>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                                fontSize: '10px',
+                                fontWeight: 900,
+                                letterSpacing: '0.16em',
+                                color: activeTheme.color,
+                                background: `${activeTheme.color}15`,
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                border: `1px solid ${activeTheme.color}30`
+                            }}>
+                                RESOURCE FOCUS
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>•</span>
+                            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                                {resourceTarget === 'all' ? 'All Resources Combined' : `${activeTheme.label} Payback`}
+                            </span>
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff', marginTop: '3px' }}>
+                            {resourceTarget === 'all'
+                                ? 'Empire-Wide Amortization (Metal, Crystal, and Deuterium combined)'
+                                : `Targeted ${activeTheme.label} Amortization (Payback calculated purely from ${activeTheme.label} production)`}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right: Tactile 4-Pill Segmented Switcher */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(0, 0, 0, 0.45)',
+                    padding: '5px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255, 255, 255, 0.06)'
+                }}>
+                    {[
+                        { id: 'all' as AmortizationResourceTarget, label: 'All Resources', sub: 'Total Output', icon: <Globe size={15} />, color: '#00f2ff' },
+                        { id: 'metal' as AmortizationResourceTarget, label: 'Metal', sub: 'Metal Output', img: 'icons/resources/metal-icon-medium.jpg', color: '#ff8d33' },
+                        { id: 'crystal' as AmortizationResourceTarget, label: 'Crystal', sub: 'Crystal Output', img: 'icons/resources/crystal-icon-medium.jpg', color: '#33b2ff' },
+                        { id: 'deuterium' as AmortizationResourceTarget, label: 'Deuterium', sub: 'Deuterium Output', img: 'icons/resources/deuterium-icon-medium.jpg', color: '#33ff8d' },
+                    ].map(tab => {
+                        const isSelected = resourceTarget === tab.id;
+                        return (
+                            <motion.button
+                                key={tab.id}
+                                type="button"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setResourceTarget(tab.id)}
+                                style={{
+                                    position: 'relative',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    padding: '7px 14px',
+                                    borderRadius: '12px',
+                                    border: isSelected ? `1px solid ${tab.color}88` : '1px solid transparent',
+                                    background: isSelected 
+                                        ? `linear-gradient(135deg, ${tab.color}25 0%, ${tab.color}08 100%)`
+                                        : 'transparent',
+                                    color: isSelected ? '#fff' : 'rgba(255, 255, 255, 0.45)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                                    boxShadow: isSelected ? `0 0 18px ${tab.color}25, inset 0 1px 1px rgba(255, 255, 255, 0.15)` : 'none'
+                                }}
+                            >
+                                <div style={{
+                                    width: '22px',
+                                    height: '22px',
+                                    borderRadius: '6px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: isSelected ? `${tab.color}30` : 'rgba(255, 255, 255, 0.05)',
+                                    border: `1px solid ${isSelected ? tab.color + '60' : 'rgba(255, 255, 255, 0.08)'}`,
+                                    overflow: 'hidden'
+                                }}>
+                                    {tab.img ? (
+                                        <img src={tab.img} alt={tab.label} style={{ width: '15px', height: '15px', objectFit: 'contain' }} />
+                                    ) : (
+                                        tab.icon
+                                    )}
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 900, color: isSelected ? '#fff' : 'inherit', letterSpacing: '0.02em' }}>
+                                        {tab.label}
+                                    </div>
+                                    <div style={{ fontSize: '9px', fontWeight: 700, color: isSelected ? tab.color : 'rgba(255, 255, 255, 0.3)' }}>
+                                        {tab.sub}
+                                    </div>
+                                </div>
+                            </motion.button>
+                        );
+                    })}
+                </div>
+            </motion.div>
+            </div>
+
             {/* Control Header Panes */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '24px' }}>
 
                 {/* ADVANCED PLANET SELECTOR */}
-                <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="glass"
-                    style={{
-                        background: 'rgba(0,0,0,0.4)',
-                        padding: '24px',
-                        borderRadius: '28px',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
-                    }}
-                >
+                <div style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    padding: '6px',
+                    borderRadius: '28px',
+                    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.4)'
+                }}>
+                    <motion.div
+                        initial={{ opacity: 0, x: -16 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                        style={{
+                            background: 'rgba(6, 11, 20, 0.75)',
+                            backdropFilter: 'blur(24px)',
+                            WebkitBackdropFilter: 'blur(24px)',
+                            padding: '22px',
+                            borderRadius: '22px',
+                            border: '1px solid rgba(255, 255, 255, 0.06)',
+                            boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.1)'
+                        }}
+                    >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{ padding: '8px', borderRadius: '12px', background: 'rgba(0, 242, 255, 0.1)' }}>
@@ -461,23 +669,33 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                         })}
                     </div>
                 </motion.div>
+                </div>
 
                 {/* FILTERING MATRIX */}
-                <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="glass"
-                    style={{
-                        background: 'rgba(0,0,0,0.4)',
-                        padding: '24px',
-                        borderRadius: '28px',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '24px',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
-                    }}
-                >
+                <div style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    padding: '6px',
+                    borderRadius: '28px',
+                    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.4)'
+                }}>
+                    <motion.div
+                        initial={{ opacity: 0, x: 16 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                        style={{
+                            background: 'rgba(6, 11, 20, 0.75)',
+                            backdropFilter: 'blur(24px)',
+                            WebkitBackdropFilter: 'blur(24px)',
+                            padding: '22px',
+                            borderRadius: '22px',
+                            border: '1px solid rgba(255, 255, 255, 0.06)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '24px',
+                            boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.1)'
+                        }}
+                    >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{ padding: '8px', borderRadius: '12px', background: 'rgba(168, 85, 247, 0.1)' }}>
@@ -552,10 +770,26 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                         ))}
                     </div>
                 </motion.div>
+                </div>
             </div>
 
-            {/* HIGH-PRECISION AMORTIZATION ENGINE RESULTS */}
-            <div className="glass" style={{ background: 'rgba(6, 11, 20, 0.6)', borderRadius: '32px', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}>
+            {/* HIGH-PRECISION AMORTIZATION ENGINE RESULTS (Double-Bezel Enclosure) */}
+            <div style={{
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.07)',
+                padding: '6px',
+                borderRadius: '32px',
+                boxShadow: '0 32px 64px rgba(0, 0, 0, 0.6)'
+            }}>
+                <div style={{
+                    background: 'rgba(6, 11, 20, 0.85)',
+                    backdropFilter: 'blur(24px)',
+                    WebkitBackdropFilter: 'blur(24px)',
+                    borderRadius: '26px',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.12)',
+                    overflow: 'hidden'
+                }}>
                 <div style={{
                     padding: '28px 40px',
                     borderBottom: '1px solid rgba(255,255,255,0.1)',
@@ -569,10 +803,14 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                     <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.15em' }}>TO-DO</span>
                     <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em' }}>ORDER</span>
                     <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em' }}>PROJECT NAME</span>
-                    <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em' }}>INVESTMENT REQ.</span>
-                    <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', textAlign: 'right' }}>NET GAIN (H)</span>
-                    <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', textAlign: 'right' }}>ROI (MSU/H)</span>
-                    <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', textAlign: 'right' }}>PAYBACK PERIOD</span>
+                    <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em' }}>
+                        {resourceTarget === 'all' ? 'INVESTMENT (MSU)' : `INVESTMENT (${activeTheme.unit.toUpperCase()})`}
+                    </span>
+                    <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', textAlign: 'right' }}>HOURLY GAIN</span>
+                    <span style={{ fontSize: '12px', fontWeight: 1000, color: activeTheme.color, letterSpacing: '0.2em', textAlign: 'right' }}>
+                        {resourceTarget === 'all' ? 'GAIN (MSU/H)' : `GAIN (${activeTheme.unit.toUpperCase()}/H)`}
+                    </span>
+                    <span style={{ fontSize: '12px', fontWeight: 1000, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', textAlign: 'right' }}>PAYBACK TIME</span>
                 </div>
 
                 <div style={{ maxHeight: '800px', overflowY: 'auto' }} className="intelligence-track">
@@ -786,9 +1024,20 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
 
                                     <div>
                                         {formatCost(item.cost)}
-                                        <div style={{ marginTop: '8px', padding: '4px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', display: 'inline-block' }}>
-                                            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: 1000 }}>{formatPrecise(item.msuCost)} </span>
-                                            <span style={{ fontSize: '9px', fontWeight: 900, color: 'rgba(255,255,255,0.2)' }}>MSU</span>
+                                        <div style={{
+                                            marginTop: '8px',
+                                            padding: '4px 8px',
+                                            background: 'rgba(255,255,255,0.03)',
+                                            border: `1px solid ${resourceTarget === 'all' ? 'rgba(255,255,255,0.08)' : activeTheme.color + '44'}`,
+                                            borderRadius: '6px',
+                                            display: 'inline-block'
+                                        }}>
+                                            <span style={{ color: resourceTarget === 'all' ? 'rgba(255,255,255,0.7)' : activeTheme.color, fontSize: '11px', fontWeight: 1000 }}>
+                                                {formatPrecise(item.targetCost ?? item.msuCost)}{' '}
+                                            </span>
+                                            <span style={{ fontSize: '9px', fontWeight: 900, color: resourceTarget === 'all' ? 'rgba(255,255,255,0.3)' : activeTheme.color }}>
+                                                {activeTheme.unit}
+                                            </span>
                                         </div>
                                     </div>
 
@@ -797,22 +1046,26 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                     </div>
 
                                     <div style={{ textAlign: 'right' }}>
-                                        <div style={{ color: THEME_CYAN, fontSize: '18px', fontWeight: 1000, letterSpacing: '-0.5px' }}>
+                                        <div style={{ color: activeTheme.color, fontSize: '18px', fontWeight: 1000, letterSpacing: '-0.5px', textShadow: `0 0 16px ${activeTheme.color}33` }}>
                                             +{formatPrecise(item.productionIncrease)}
                                         </div>
-                                        <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 1000, marginTop: '4px' }}>MSU / HOUR</div>
+                                        <div style={{ fontSize: '10px', color: activeTheme.color, fontWeight: 1000, marginTop: '4px', letterSpacing: '0.05em' }}>
+                                            {resourceTarget === 'all' ? 'MSU / HOUR' : `${activeTheme.label.toUpperCase()} / HOUR`}
+                                        </div>
                                     </div>
 
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{
-                                            color: item.roiHours < 24 * 7 ? '#22c55e' : (item.roiHours < 24 * 30 ? THEME_CYAN : '#fff'),
+                                            color: item.roiHours < 24 * 7 ? '#22c55e' : (item.roiHours < 24 * 30 ? activeTheme.color : '#fff'),
                                             fontSize: '18px',
                                             fontWeight: 1000,
-                                            textShadow: item.roiHours < 24 * 7 ? '0 0 20px rgba(34, 197, 94, 0.4)' : (item.roiHours < 24 * 30 ? `0 0 20px ${THEME_CYAN}44` : 'none')
+                                            textShadow: item.roiHours < 24 * 7 ? '0 0 20px rgba(34, 197, 94, 0.4)' : (item.roiHours < 24 * 30 ? `0 0 20px ${activeTheme.color}44` : 'none')
                                         }}>
                                             {formatROI(item.roiHours)}
                                         </div>
-                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)', fontWeight: 900, marginTop: '4px' }}>PAYBACK TIME</div>
+                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.25)', fontWeight: 900, marginTop: '4px' }}>
+                                            {resourceTarget === 'all' ? 'PAYBACK TIME' : `${activeTheme.label.toUpperCase()} PAYBACK`}
+                                        </div>
                                     </div>
                                 </motion.div>
                             );
@@ -824,13 +1077,19 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                             <div style={{ padding: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.02)', marginBottom: '24px' }}>
                                 <Filter size={48} color="rgba(255,255,255,0.05)" />
                             </div>
-                            <div style={{ fontWeight: 1000, fontSize: '22px', color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.02em' }}>NO UPGRADES DETECTED</div>
-                            <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.2)', maxWidth: '300px', marginTop: '8px', lineHeight: 1.6 }}>
-                                Your current filters combined with selected planets yielded zero amortization results. Adjust filters to continue.
+                            <div style={{ fontWeight: 1000, fontSize: '22px', color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.02em' }}>
+                                NO {activeTheme.label.toUpperCase()} UPGRADES DETECTED
+                            </div>
+                            <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.2)', maxWidth: '360px', marginTop: '8px', lineHeight: 1.6 }}>
+                                {resourceTarget === 'all'
+                                    ? 'Your current filters combined with selected planets yielded zero amortization results. Adjust filters to continue.'
+                                    : `No active buildings or research in your selected filters produce ${activeTheme.label.toLowerCase()}. Adjust your planet or infrastructure filters to view available options.`
+                                }
                             </div>
                         </motion.div>
                     )}
                 </div>
+            </div>
             </div>
 
             <style>{`

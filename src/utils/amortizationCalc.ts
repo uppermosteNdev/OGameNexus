@@ -18,6 +18,8 @@ export function getAmortizationEntry(t: any) {
     return null;
 }
 
+export type AmortizationResourceTarget = 'all' | 'metal' | 'crystal' | 'deuterium';
+
 export interface Cost {
     metal: number;
     crystal: number;
@@ -31,7 +33,9 @@ export interface AmortizationItem {
     type: AmortizationType;
     cost: Cost;
     msuCost: number;
-    productionIncrease: number; // MSU value
+    targetCost?: number;
+    productionIncrease: number; // Value in active denomination (MSU or specific resource/h)
+    targetResource?: AmortizationResourceTarget;
     prodDelta: Cost; // Raw resource values
     roiHours: number;
     planetId?: string;
@@ -293,6 +297,24 @@ export function calculateMSU(cost: Cost, rates: any = DEFAULT_RATES): number {
     return (cost.metal * mMultiplier) +
         (cost.crystal * cMultiplier) +
         (cost.deuterium * dMultiplier);
+}
+
+export function calculateDenominatedCost(cost: Cost, target: AmortizationResourceTarget = 'all', rates: any = DEFAULT_RATES): number {
+    const msu = calculateMSU(cost, rates);
+    if (target === 'all' || target === 'metal') {
+        return msu;
+    }
+    const rM = rates?.metal || DEFAULT_RATES.metal;
+    const rC = rates?.crystal || DEFAULT_RATES.crystal;
+    const rD = rates?.deuterium || DEFAULT_RATES.deuterium;
+
+    if (target === 'crystal') {
+        return msu * (rC / rM);
+    }
+    if (target === 'deuterium') {
+        return msu * (rD / rM);
+    }
+    return msu;
 }
 
 export function formatROI(hours: number): string {
@@ -593,7 +615,7 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
     return results;
 }
 
-export function rankAmortizationItems(planets: any[], account: any, filters: { [key in AmortizationType]: boolean }, rates: any = DEFAULT_RATES, limit: number = 25, expoAverages?: { resources: Cost, ships: Cost, totals: { resources: Cost, ships: Cost } }, selectedPlanetIds?: string[]): AmortizationItem[] {
+export function rankAmortizationItems(planets: any[], account: any, filters: { [key in AmortizationType]: boolean }, rates: any = DEFAULT_RATES, limit: number = 25, expoAverages?: { resources: Cost, ships: Cost, totals: { resources: Cost, ships: Cost } }, selectedPlanetIds?: string[], targetResource: AmortizationResourceTarget = 'all'): AmortizationItem[] {
     // Deep clone only valid planets (moons have no mines or amortization production)
     const cleanPlanets = (planets || []).filter((p: any) => p && p.type !== 'moon');
     const state: EmpireState = JSON.parse(JSON.stringify({ planets: cleanPlanets, account }));
@@ -1011,9 +1033,25 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                     }
                 }
 
-                if (prodIncrease > 0) {
+                let effectiveIncrease = 0;
+                let targetCost = 0;
+                if (targetResource === 'all') {
+                    effectiveIncrease = calculateMSU(prodDelta, rates);
+                    targetCost = calculateMSU(cost, rates);
+                } else if (targetResource === 'metal') {
+                    effectiveIncrease = prodDelta.metal;
+                    targetCost = calculateDenominatedCost(cost, 'metal', rates);
+                } else if (targetResource === 'crystal') {
+                    effectiveIncrease = prodDelta.crystal;
+                    targetCost = calculateDenominatedCost(cost, 'crystal', rates);
+                } else if (targetResource === 'deuterium') {
+                    effectiveIncrease = prodDelta.deuterium;
+                    targetCost = calculateDenominatedCost(cost, 'deuterium', rates);
+                }
+
+                if (effectiveIncrease > 0.0001) {
                     const msuCost = calculateMSU(cost, rates);
-                    const roiHours = msuCost / prodIncrease;
+                    const roiHours = targetCost / effectiveIncrease;
 
                     if (i === 0) {
                         let breakdownStr = "";
@@ -1226,14 +1264,16 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                         type: entry.type,
                         cost: cost,
                         msuCost: msuCost,
-                        productionIncrease: prodIncrease,
+                        targetCost: targetCost,
+                        productionIncrease: effectiveIncrease,
+                        targetResource: targetResource,
                         prodDelta: prodDelta,
                         roiHours: roiHours,
                         planetId: (entry.type === AmortizationType.PlasmaTechnology) ? undefined : p.id,
                         currentLevel: currentLevel
                     });
                 } else if (i === 0 && filters[entry.type]) {
-                    // console.log(`[Amortization Debug] Skipped ${entry.name} (${p.coords}) - Prod Increase: ${prodIncrease}`);
+                    // console.log(`[Amortization Debug] Skipped ${entry.name} (${p.coords}) - Prod Increase: ${effectiveIncrease}`);
                 }
             });
             if (DEBUG_AMORTIZATION && i === 0) console.groupEnd();
@@ -1248,6 +1288,7 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
         if (uniqueCandidates.length === 0) break;
         uniqueCandidates.sort((a, b) => a.roiHours - b.roiHours);
         const best = uniqueCandidates[0];
+        if (!best || !isFinite(best.roiHours) || best.roiHours <= 0) break;
 
         if (DEBUG_AMORTIZATION && i === 0) {
             console.log(`[Amortization Debug] STEP 1 WINNER: ${best.name} (ROI: ${best.roiHours.toFixed(2)}h) at ${best.planetId ? planets.find(p => p.id === best.planetId)?.coords : 'GLOBAL'}`);

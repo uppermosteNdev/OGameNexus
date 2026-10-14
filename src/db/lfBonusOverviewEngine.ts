@@ -1,4 +1,3 @@
-import lfBonusesParsedData from './lfBonusesParsedData.json';
 import { LIFEFORM_TECH_DATA, getLfTech } from './lifeformTechData';
 import { MemberEmpireDetail } from '../dashboard/views/OverwatchEmpire';
 
@@ -166,7 +165,7 @@ export function calculateDynamicLifeformOverview(memberDetail: MemberEmpireDetai
   ];
   const experienceLevels: LifeformExperienceItem[] = speciesMeta.map(s => {
     const live = expList.find(e => e.lifeformId === s.lifeformId);
-    const lvl = typeof live?.level === 'number' ? live.level : 100;
+    const lvl = typeof live?.level === 'number' ? live.level : 0;
     const bonus = Number((lvl * 0.1).toFixed(2));
     return { lifeformId: s.lifeformId, name: s.name, level: lvl, bonus };
   });
@@ -247,7 +246,7 @@ export function calculateDynamicLifeformOverview(memberDetail: MemberEmpireDetai
     }
 
     const expData = expList.find(e => e.lifeformId === lfId);
-    const expLvl = expData?.level ?? 100;
+    const expLvl = expData?.level ?? 0;
     const totalMultiplier = 1 + expLvl * 0.001 + buildingBonus;
 
     const setup = p.lifeformSetup || [];
@@ -403,8 +402,7 @@ export function calculateDynamicLifeformOverview(memberDetail: MemberEmpireDetai
     }));
   };
 
-  // Canonical base reference for fallback perks / formatting
-  const baseData = lfBonusesParsedData as unknown as LifeformBonusOverviewData;
+
 
   // Build Final Output
   const resources: ResourceBonusItem[] = [
@@ -495,6 +493,27 @@ export function calculateDynamicLifeformOverview(memberDetail: MemberEmpireDetai
   });
 
   // Calculate amplified character class perks based on live class bonus
+  const colTotal = classAcc.Collector.total;
+  const collectorPerks: CharacterClassPerk[] = [
+    { name: 'Increased Production', baseBonus: '25%', incBonus: `${(25 * (1 + colTotal / 100)).toFixed(2)}%` },
+    { name: 'Increased Energy Production', baseBonus: '10%', incBonus: `${(10 * (1 + colTotal / 100)).toFixed(2)}%` },
+    { name: 'Increased Crawler Bonus', baseBonus: '50%', incBonus: `${(50 * (1 + colTotal / 100)).toFixed(2)}%` },
+    { name: 'Rapid Transporters', baseBonus: '100%', incBonus: `${(100 * (1 + colTotal / 100)).toFixed(2)}%` },
+    { name: 'Expanded Cargo Bays', baseBonus: '25%', incBonus: `${(25 * (1 + colTotal / 100)).toFixed(2)}%` },
+    { name: 'Increased Maximum Number of Crawlers', baseBonus: '10%', incBonus: `${(10 * (1 + colTotal / 100)).toFixed(2)}%` },
+  ];
+
+  const genTotal = classAcc.General.total;
+  const generalPerks: CharacterClassPerk[] = [
+    { name: 'Faster Combat Ships', baseBonus: '100%', incBonus: `${(100 * (1 + genTotal / 100)).toFixed(2)}%` },
+    { name: 'Rapid Recyclers', baseBonus: '100%', incBonus: `${(100 * (1 + genTotal / 100)).toFixed(2)}%` },
+    { name: 'Expanded Cargo Bays', baseBonus: '20%', incBonus: `${(20 * (1 + genTotal / 100)).toFixed(2)}%` },
+    { name: 'Economical Ships', baseBonus: '50%', incBonus: `${(50 * (1 + genTotal / 100)).toFixed(2)}%` },
+    { name: 'More Combat Research Levels', baseBonus: '2', incBonus: `${Math.round(2 * (1 + genTotal / 100))}` },
+    { name: 'Additional Fleet Slots', baseBonus: '2', incBonus: `${Math.round(2 * (1 + genTotal / 100))}` },
+    { name: 'Additional Moon Fields', baseBonus: '5', incBonus: `${Math.round(5 * (1 + genTotal / 100))}` },
+  ];
+
   const discTotal = classAcc.Discoverer.total;
   const discovererPerks: CharacterClassPerk[] = [
     { name: 'Research Bonus', baseBonus: '25%', incBonus: `${(25 * (1 + discTotal / 100)).toFixed(2)}%` },
@@ -510,13 +529,13 @@ export function calculateDynamicLifeformOverview(memberDetail: MemberEmpireDetai
     {
       name: 'Collector',
       total: `${classAcc.Collector.total.toFixed(2)}%`,
-      perks: baseData.characterClasses[0]?.perks || [],
+      perks: collectorPerks,
       breakdown: formatBreakdown(classAcc.Collector.planets),
     },
     {
       name: 'General',
       total: `${classAcc.General.total.toFixed(2)}%`,
-      perks: baseData.characterClasses[1]?.perks || [],
+      perks: generalPerks,
       breakdown: formatBreakdown(classAcc.General.planets),
     },
     {
@@ -548,22 +567,125 @@ export function calculateDynamicLifeformOverview(memberDetail: MemberEmpireDetai
 }
 
 /**
+ * Builds a clean baseline lifeform overview dataset with 0.00% / - defaults.
+ * Used when member telemetry has not synced or has no active lifeforms.
+ */
+export function getBlankLifeformOverview(): LifeformBonusOverviewData {
+  const speciesMeta = [
+    { lifeformId: 1, name: 'Humans' },
+    { lifeformId: 2, name: "Rock'tal" },
+    { lifeformId: 3, name: 'Mechas' },
+    { lifeformId: 4, name: 'Kaelesh' },
+  ];
+  const experienceLevels: LifeformExperienceItem[] = speciesMeta.map(s => ({
+    lifeformId: s.lifeformId,
+    name: s.name,
+    level: 0,
+    bonus: 0,
+  }));
+
+  const resources: ResourceBonusItem[] = [
+    { key: 'metal', name: 'Metal', total: '0.00%', breakdown: [] },
+    { key: 'crystal', name: 'Crystal', total: '0.00%', breakdown: [] },
+    { key: 'deuterium', name: 'Deuterium', total: '0.00%', breakdown: [] },
+    { key: 'storage', name: 'Storage capacity', total: '0.00%', breakdown: [] },
+  ];
+
+  const expedition: ExpeditionBonusItem[] = [
+    { key: 'DMBooster', name: 'Dark Matter Discovery Bonus', total: '0.00%', breakdown: [] },
+    { key: 'ResultBooster', name: 'Resource Discovery Bonus', total: '0.00%', breakdown: [] },
+    { key: 'ShipResultBooster', name: 'Ship Wreck Amount Bonus', total: '0.00%', breakdown: [] },
+  ];
+
+  const ships: ShipBonusItem[] = SHIPS_LIST.map(s => ({
+    name: s.name,
+    weapons: '-',
+    shield: '-',
+    armour: '-',
+    speed: '-',
+    cargo: '-',
+    fuel: '- (Max. 0%)',
+    breakdown: [],
+  }));
+
+  const defenses: DefenseBonusItem[] = DEFENSES_LIST.map(d => ({
+    name: d.name,
+    weapons: '-',
+    shield: '-',
+    armour: '-',
+    breakdown: [],
+  }));
+
+  const costAndTime: CostAndTimeBonusItem[] = RESEARCH_TECH_LIST.map(t => ({
+    name: t.name,
+    costReduction: '-',
+    timeReduction: '-',
+    breakdown: [],
+  }));
+
+  const collectorPerks: CharacterClassPerk[] = [
+    { name: 'Increased Production', baseBonus: '25%', incBonus: '25.00%' },
+    { name: 'Increased Energy Production', baseBonus: '10%', incBonus: '10.00%' },
+    { name: 'Increased Crawler Bonus', baseBonus: '50%', incBonus: '50.00%' },
+    { name: 'Rapid Transporters', baseBonus: '100%', incBonus: '100.00%' },
+    { name: 'Expanded Cargo Bays', baseBonus: '25%', incBonus: '25.00%' },
+    { name: 'Increased Maximum Number of Crawlers', baseBonus: '10%', incBonus: '10.00%' },
+  ];
+
+  const generalPerks: CharacterClassPerk[] = [
+    { name: 'Faster Combat Ships', baseBonus: '100%', incBonus: '100.00%' },
+    { name: 'Rapid Recyclers', baseBonus: '100%', incBonus: '100.00%' },
+    { name: 'Expanded Cargo Bays', baseBonus: '20%', incBonus: '20.00%' },
+    { name: 'Economical Ships', baseBonus: '50%', incBonus: '50.00%' },
+    { name: 'More Combat Research Levels', baseBonus: '2', incBonus: '2' },
+    { name: 'Additional Fleet Slots', baseBonus: '2', incBonus: '2' },
+    { name: 'Additional Moon Fields', baseBonus: '5', incBonus: '5' },
+  ];
+
+  const discovererPerks: CharacterClassPerk[] = [
+    { name: 'Research Bonus', baseBonus: '25%', incBonus: '25.00%' },
+    { name: 'Expedition Bonus', baseBonus: '1,200%', incBonus: '1,200%' },
+    { name: 'Planet Size', baseBonus: '10%', incBonus: '10.00%' },
+    { name: 'More Expeditions', baseBonus: '2', incBonus: '2' },
+    { name: 'Fewer Expedition Enemies', baseBonus: '50%', incBonus: '50.00%' },
+    { name: 'Increased Phalanx Range', baseBonus: '20%', incBonus: '20.00%' },
+    { name: 'Increased Inactive Plunder', baseBonus: '75%', incBonus: '75%' },
+  ];
+
+  const characterClasses: CharacterClassBonusItem[] = [
+    { name: 'Collector', total: '0.00%', perks: collectorPerks, breakdown: [] },
+    { name: 'General', total: '0.00%', perks: generalPerks, breakdown: [] },
+    { name: 'Discoverer', total: '0.00%', perks: discovererPerks, breakdown: [] },
+  ];
+
+  const misc: MiscBonusItem[] = [
+    { name: 'Exploration Flight Fleet Speed Bonus', total: '0.00%', breakdown: [] },
+  ];
+
+  return {
+    experienceLevels,
+    resources,
+    expedition,
+    ships,
+    defenses,
+    costAndTime,
+    characterClasses,
+    misc,
+  };
+}
+
+/**
  * Returns the comprehensive lifeform bonus overview dataset.
- * Prioritizes dynamic computation from the player's synced empire.
- * If empire data is not yet synced, falls back to the canonical dataset.
+ * Dynamically computes from the member's synced empire data.
+ * If empire data is not yet synced or member is null, returns a clean 0% baseline.
+ * NEVER returns mock datasets.
  */
 export function getLifeformBonusOverview(memberDetail?: MemberEmpireDetail | null): LifeformBonusOverviewData {
   if (memberDetail && Array.isArray(memberDetail.empire?.planets)) {
-    const planetsWithLf = memberDetail.empire.planets.filter(
-      p => p.type === 'planet' && Array.isArray(p.lifeformSetup) && p.lifeformSetup.length > 0
-    );
-    if (planetsWithLf.length > 0) {
-      return calculateDynamicLifeformOverview(memberDetail);
-    }
+    return calculateDynamicLifeformOverview(memberDetail);
   }
 
-  // Fallback to canonical reference
-  return lfBonusesParsedData as unknown as LifeformBonusOverviewData;
+  return getBlankLifeformOverview();
 }
 
 export function getSpeciesIcon(speciesIdOrName: number | string): string {

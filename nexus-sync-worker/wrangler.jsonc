@@ -11,10 +11,16 @@
       "database_id": "18ae658e-4c06-4391-aff2-a8ae99d41b1e"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "VAULT_BUCKET",
+      "bucket_name": "nexus-personal-vault"
+    }
+  ],
   "vars": {
     "ENVIRONMENT": "production",
-    "SERVER_PEPPER": "CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS",
-    "EXTENSION_SECRET": "CHANGE_ME_EXTENSION_SECRET",
+    "SERVER_PEPPER": "nexus_overwatch_secret_pepper_2026",
+    "EXTENSION_SECRET": "nx_sec_9a7b4c2e8f103d5ae8b4f1a2c9d7e5b3",
     "MASTER_ADMIN_SECRET": "CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS"
   },
   "triggers": {

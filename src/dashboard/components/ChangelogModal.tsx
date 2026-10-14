@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity, Eye, Zap, LayoutGrid, Orbit, Calculator, Clock, SlidersHorizontal } from 'lucide-react';
+import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity, Eye, Zap, LayoutGrid, Orbit, Calculator, Clock, SlidersHorizontal, Radio, Users, Bell, TrendingUp } from 'lucide-react';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -12,34 +12,29 @@ interface ChangelogModalProps {
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
     const changes = [
         {
-            icon: <Orbit size={22} color="#00f2ff" />,
-            title: "Nexus Overwatch [Closed Beta] & Cloud Sync",
-            desc: "Currently in Closed Beta for testing (will be made available to all commanders at a later date). Enables live alliance galaxy scouting, activity heatmaps, and multi-device cloud backup for your expeditions, combats, and farm targets."
+            icon: <Radio size={22} color="#00f2ff" />,
+            title: "Overwatch Sensor Phalanx Coverage [Closed Beta]",
+            desc: "Currently in Closed Beta for testing (will be made available to all commanders at a later date). Tactical alliance sensor grid visualizing the reach of all alliance moons with full wrap-around range mapping."
         },
         {
-            icon: <Eye size={22} color="#10b981" />,
-            title: "Raid Radar Inactive Target Scout & Live Status",
-            desc: "Find prime unmonitored inactive farming targets across the universe sorted by player rank and distance. Live galaxy scanning now immediately updates inactive status so you never raid someone who became active."
+            icon: <TrendingUp size={22} color="#10b981" />,
+            title: "Per-Resource Amortization Engine",
+            desc: "Switch payback speed calculations between All Resources (MSU), Metal Only, Crystal Only, and Deuterium Only with custom goal filters and instant ROI updates."
         },
         {
-            icon: <Clock size={22} color="#fbbf24" />,
-            title: "Research Time Optimizer Tool",
-            desc: "New dedicated tool to calculate the exact research duration, optimal research laboratory upgrades, and Intergalactic Research Network breakpoints for high-tier techs."
+            icon: <Users size={22} color="#38bdf8" />,
+            title: "Multi-Account Switcher",
+            desc: "Seamlessly switch between multiple universe accounts from the bottom-left command dock. Deep-linked via universe and player ID to ensure zero multi-account state bleed."
         },
         {
-            icon: <Ship size={22} color="#38bdf8" />,
-            title: "Flying Fleets in Fleet & Scrap Tools",
-            desc: "Fleets currently flying on missions are now fully accounted for when calculating scrap merchant values, fleet assets, and total empire capacity."
-        },
-        {
-            icon: <Calculator size={22} color="#a855f7" />,
-            title: "Costs Planner & Resource Packs Polish",
-            desc: "Fixed resource pack calculations for large building and technology goals, improved shopping cart imports, and perfected gather time estimates."
+            icon: <Bell size={22} color="#fbbf24" />,
+            title: "Live Universe Feed Unseen Counter [Closed Beta]",
+            desc: "Real-time badge counter on the Overwatch Universe Intel feed navigation alerts you immediately when new galaxy events, status changes, or player movements occur."
         },
         {
             icon: <ShieldCheck size={22} color="#f43f5e" />,
-            title: "Radar Target Safety & UI Enhancements",
-            desc: "Guaranteed non-destructive target sync so radar entries are never lost, fixed dashboard radar visibility, cleaner message tracking, and extended in-game UI boxes."
+            title: "Overwatch Resilience & Bugfixes [Closed Beta]",
+            desc: "Independent tab crash isolation via compact error boundaries, safe 1v1 duel arena empty states, refreshed live highscores, and hardened galaxy event synchronization."
         }
     ];
 
@@ -138,7 +133,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                 letterSpacing: '1px',
                                 display: 'inline-block'
                             }}>
-                                v1.2.5
+                                v1.2.6
                             </span>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

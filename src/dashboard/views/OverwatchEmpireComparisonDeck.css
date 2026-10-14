@@ -1,0 +1,2032 @@
+/* ============================================================================
+   OVERWATCH EMPIRE — COMPARISON DECK (HIGH-END VISUAL DESIGN)
+   Archetype: Double-Bezel Hardware Avionics / Ethereal Glass
+   ============================================================================ */
+
+.ow-compare-deck-root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  animation: ow-compare-fadein 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ow-compare-fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ----------------------------------------------------------------------------
+   NAV & CONTROLS BAR
+   ---------------------------------------------------------------------------- */
+.ow-compare-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ow-compare-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-compare-back-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  transform: translateX(-2px);
+}
+
+.ow-compare-title-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ow-compare-badge {
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(0, 242, 255, 0.12);
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  color: #00f2ff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ow-compare-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+/* ----------------------------------------------------------------------------
+   STICKY HEADS-UP DECK: PLAYER IDENTITY COLUMNS
+   ---------------------------------------------------------------------------- */
+.ow-compare-hud-deck {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ow-compare-hud-deck.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ow-compare-hud-deck.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ow-compare-hud-deck.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Outer Double-Bezel */
+.ow-compare-player-shell {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 6px;
+  border-radius: 18px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+}
+
+.ow-compare-player-shell:active {
+  cursor: grabbing;
+}
+
+.ow-compare-player-shell.is-dragging {
+  opacity: 0.35;
+  transform: scale(0.96);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.ow-compare-player-shell.is-drag-over {
+  border-color: #00f2ff !important;
+  box-shadow: 0 0 24px rgba(0, 242, 255, 0.45) !important;
+  transform: translateY(-3px) scale(1.02);
+}
+
+.ow-compare-player-shell.is-benched {
+  opacity: 0.32;
+  filter: grayscale(0.85);
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(8, 12, 22, 0.45) !important;
+}
+
+.ow-compare-player-shell.is-benched::before {
+  opacity: 0.25;
+  box-shadow: none;
+}
+
+.ow-compare-player-shell.is-benched:hover {
+  opacity: 0.75;
+  filter: grayscale(0.2);
+  border-color: rgba(0, 242, 255, 0.25) !important;
+}
+
+.ow-compare-player-shell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--slot-color, #00f2ff);
+  opacity: 0.85;
+  box-shadow: 0 0 12px var(--slot-color, #00f2ff);
+}
+
+.ow-compare-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  cursor: grab;
+  padding: 4px 1px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.ow-compare-player-shell:hover .ow-compare-drag-handle {
+  color: #94a3b8;
+}
+
+.ow-compare-drag-handle:hover {
+  color: #00f2ff;
+  background: rgba(0, 242, 255, 0.1);
+}
+
+.ow-compare-drag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Inner Core */
+.ow-compare-player-inner {
+  background: radial-gradient(circle at 50% 0%, rgba(13, 20, 38, 0.8) 0%, rgba(5, 7, 12, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08);
+}
+
+.ow-compare-player-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ow-compare-player-avatar-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.ow-compare-player-ring {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.ow-compare-player-avatar-core {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ow-compare-player-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ow-compare-player-avatar-char {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.ow-compare-player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ow-compare-player-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.ow-compare-player-name {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ow-compare-slot-tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ow-compare-score-strip {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ow-compare-score-strip strong {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ow-compare-player-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ow-compare-remove-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #64748b;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.ow-compare-remove-btn:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #f87171;
+  transform: scale(1.1);
+}
+
+.ow-compare-leader-crown {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.ow-compare-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.ow-compare-standby-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------------------
+   CATEGORY MATRIX SUB-TABS
+   ---------------------------------------------------------------------------- */
+.ow-compare-cat-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+  overflow-x: auto;
+}
+
+.ow-compare-cat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ow-compare-cat-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.ow-compare-cat-btn.active {
+  background: rgba(0, 242, 255, 0.12);
+  border-color: rgba(0, 242, 255, 0.4);
+  color: #00f2ff;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.15);
+}
+
+/* ----------------------------------------------------------------------------
+   COMPARATIVE DATA MATRIX TABLE & ROWS
+   ---------------------------------------------------------------------------- */
+.ow-compare-matrix-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.ow-compare-matrix-header {
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ow-compare-matrix-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.ow-compare-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ow-compare-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background-color 0.2s ease;
+}
+
+.ow-compare-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ow-compare-row:last-child {
+  border-bottom: none;
+}
+
+.ow-compare-metric-col {
+  padding: 12px 16px;
+  width: 220px;
+  min-width: 180px;
+  vertical-align: middle;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ow-compare-metric-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ow-compare-metric-name {
+  color: #cbd5e1;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ow-compare-metric-sub {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.ow-compare-player-cell {
+  padding: 10px 16px;
+  vertical-align: middle;
+  border-right: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.ow-compare-player-cell:last-child {
+  border-right: none;
+}
+
+.ow-compare-val-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ow-compare-val-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ow-compare-number {
+  font-family: 'Space Grotesk', monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+}
+
+.ow-compare-number.is-leader {
+  color: #fff;
+  text-shadow: 0 0 10px var(--slot-color, #00f2ff);
+}
+
+.ow-compare-lead-tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(251, 191, 36, 0.16);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fbbf24;
+}
+
+/* Normalized Proportional Micro-Bar */
+.ow-compare-bar-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.ow-compare-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--slot-color, #00f2ff);
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 8px var(--slot-color, #00f2ff);
+}
+
+/* ----------------------------------------------------------------------------
+   ROSTER CARD SELECTION OVERLAYS (WHEN COMPARE MODE IS ON)
+   ---------------------------------------------------------------------------- */
+.ow-roster-bezel-card.compare-active {
+  cursor: pointer;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-roster-bezel-card.compare-active:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.ow-roster-bezel-card.compare-selected {
+  border-color: var(--slot-border, #00f2ff) !important;
+  box-shadow: 0 0 20px var(--slot-glow, rgba(0, 242, 255, 0.25)) !important;
+}
+
+.ow-roster-card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ow-compare-select-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ow-roster-bezel-card.compare-active:hover .ow-compare-select-badge:not(.selected) {
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ow-compare-select-badge.selected {
+  background: var(--slot-bg, rgba(0, 242, 255, 0.2));
+  border-color: var(--slot-color, #00f2ff);
+  color: var(--slot-color, #00f2ff);
+  box-shadow: 0 0 10px var(--slot-glow, rgba(0, 242, 255, 0.3));
+}
+
+/* Compare Mode Toggle Switch */
+.ow-compare-toggle-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.ow-compare-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-compare-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.ow-compare-toggle-btn.active {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fbbf24;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.15);
+}
+
+.ow-compare-toggle-track {
+  width: 28px;
+  height: 16px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  position: relative;
+  transition: background 0.25s ease;
+  display: inline-block;
+}
+
+.ow-compare-toggle-btn.active .ow-compare-toggle-track {
+  background: #fbbf24;
+}
+
+.ow-compare-toggle-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-compare-toggle-btn.active .ow-compare-toggle-thumb {
+  transform: translateX(12px);
+  background: #000;
+}
+
+.ow-compare-count-pill {
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: rgba(251, 191, 36, 0.25);
+  color: #fbbf24;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* Compare Launch Button (Next to Toggle) */
+.ow-compare-launch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ow-btn-compare-launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid transparent;
+}
+
+.ow-btn-compare-launch.disabled {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.ow-btn-compare-launch.ready {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.25) 0%, rgba(245, 158, 11, 0.12) 100%);
+  border-color: rgba(251, 191, 36, 0.55);
+  color: #fbbf24;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+.ow-btn-compare-launch.ready:hover {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.35) 0%, rgba(245, 158, 11, 0.2) 100%);
+  border-color: rgba(251, 191, 36, 0.85);
+  color: #fef08a;
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+}
+
+.ow-btn-compare-clear {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ow-btn-compare-clear:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+/* Compare Mode Floating Instruction Strip */
+.ow-compare-instruction-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 10% 50%, rgba(251, 191, 36, 0.08) 0%, rgba(13, 20, 38, 0.6) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: #fbbf24;
+  font-size: 12.5px;
+  font-weight: 600;
+  animation: ow-compare-fadein 0.25s ease;
+}
+
+.ow-compare-instruction-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================================================
+   1v1 HEAD-TO-HEAD DUEL ARENA (HIGH-END VISUAL DESIGN)
+   ============================================================================ */
+
+.ow-duel-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: ow-compare-fadein 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Duel Tab Button Special Styling */
+.ow-compare-cat-btn.duel-tab {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%);
+  border-color: rgba(244, 63, 94, 0.25);
+  position: relative;
+}
+
+.ow-compare-cat-btn.duel-tab:hover {
+  border-color: rgba(244, 63, 94, 0.5);
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
+}
+
+.ow-compare-cat-btn.duel-tab.active {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.22) 0%, rgba(168, 85, 247, 0.22) 100%);
+  border-color: #f43f5e;
+  color: #fff;
+  box-shadow: 0 0 20px rgba(244, 63, 94, 0.3);
+}
+
+.duel-tab-icon {
+  color: #f43f5e;
+}
+
+.ow-duel-badge-pulse {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  background: rgba(244, 63, 94, 0.3);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.5);
+}
+
+/* 1. Contender Selector Bar (When >2 players) */
+.ow-duel-selector-bezel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ow-duel-selector-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ow-duel-selector-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.ow-duel-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-duel-player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-duel-player-chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: all 0.2s ease;
+}
+
+.ow-duel-player-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.ow-duel-player-chip.active-left {
+  background: rgba(0, 242, 255, 0.12);
+  border-color: rgba(0, 242, 255, 0.5);
+  color: #00f2ff;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.2);
+}
+
+.ow-duel-player-chip.active-left .dot {
+  background: #00f2ff;
+  box-shadow: 0 0 6px #00f2ff;
+}
+
+.ow-duel-player-chip.active-right {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.5);
+  color: #f43f5e;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.2);
+}
+
+.ow-duel-player-chip.active-right .dot {
+  background: #f43f5e;
+  box-shadow: 0 0 6px #f43f5e;
+}
+
+.ow-duel-vs-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #94a3b8;
+}
+
+/* 2. The Faceoff Arena (Double-Bezel) */
+.ow-duel-arena-shell {
+  padding: 4px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(0, 242, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 50%, rgba(244, 63, 94, 0.12) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.ow-duel-arena-core {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 28px;
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 50%, rgba(13, 20, 38, 0.95) 0%, #060913 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.ow-duel-contender {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ow-duel-contender.right {
+  justify-content: flex-end;
+}
+
+.ow-duel-avatar-bezel {
+  width: 58px;
+  height: 58px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ow-duel-ring-svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: ow-duel-spin 20s linear infinite;
+}
+
+@keyframes ow-duel-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ow-duel-avatar-inner {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  border-radius: 50%;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.ow-duel-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ow-duel-avatar-letter {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.ow-duel-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ow-duel-meta.right {
+  align-items: flex-end;
+}
+
+.ow-duel-name-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ow-duel-name-strip.right {
+  flex-direction: row-reverse;
+}
+
+.ow-duel-name {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.ow-duel-trophy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(0, 242, 255, 0.15);
+  border: 1px solid rgba(0, 242, 255, 0.4);
+  color: #00f2ff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.ow-duel-trophy-badge.rose {
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #f43f5e;
+}
+
+.ow-duel-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-duel-sub-row.right {
+  flex-direction: row-reverse;
+}
+
+.ow-duel-pid {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ow-duel-pts-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.ow-duel-pts-val .unit {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.ow-duel-tally-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ow-duel-tally-box.left {
+  background: rgba(0, 242, 255, 0.06);
+  border-color: rgba(0, 242, 255, 0.25);
+}
+
+.ow-duel-tally-box.right {
+  background: rgba(244, 63, 94, 0.06);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.ow-duel-tally-num {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ow-duel-tally-box.left .ow-duel-tally-num {
+  color: #00f2ff;
+  text-shadow: 0 0 12px rgba(0, 242, 255, 0.4);
+}
+
+.ow-duel-tally-box.right .ow-duel-tally-num {
+  color: #f43f5e;
+  text-shadow: 0 0 12px rgba(244, 63, 94, 0.4);
+}
+
+.ow-duel-tally-sub {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Center Bridge */
+.ow-duel-center-bridge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 240px;
+}
+
+.ow-duel-vs-bezel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ow-duel-vs-glow {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(244, 63, 94, 0.4) 0%, rgba(0, 242, 255, 0.2) 60%, transparent 80%);
+  filter: blur(8px);
+}
+
+.ow-duel-vs-text {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.ow-duel-swords-icon {
+  color: #fbbf24;
+}
+
+/* Tug-of-War Track */
+.ow-duel-tug-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ow-duel-tug-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ow-duel-tug-score-row .score-left {
+  color: #00f2ff;
+}
+
+.ow-duel-tug-score-row .score-right {
+  color: #f43f5e;
+}
+
+.ow-duel-tug-score-row .score-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.ow-duel-tug-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: visible;
+  display: flex;
+}
+
+.ow-duel-tug-fill-left {
+  height: 100%;
+  border-top-left-radius: 9999px;
+  border-bottom-left-radius: 9999px;
+  background: linear-gradient(90deg, #00f2ff 0%, #38bdf8 100%);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.4);
+}
+
+.ow-duel-tug-fill-right {
+  height: 100%;
+  border-top-right-radius: 9999px;
+  border-bottom-right-radius: 9999px;
+  background: linear-gradient(90deg, #fb7185 0%, #f43f5e 100%);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
+}
+
+.ow-duel-tug-center-pin {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: #fff;
+  transform: translateX(-50%);
+  box-shadow: 0 0 8px #fff;
+  transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-duel-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-duel-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* 3. Sector Tabs Filter */
+.ow-duel-sectors-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.ow-duel-sectors-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ow-duel-sec-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-duel-sec-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.ow-duel-sec-tab.active {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.ow-duel-sec-tab .pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+/* 4. Bi-Directional Clash Matrix */
+.ow-duel-matrix-shell {
+  padding: 3px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ow-duel-matrix-core {
+  border-radius: 15px;
+  background: #080d1a;
+  overflow: hidden;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.06);
+}
+
+.ow-duel-rows-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.ow-duel-row {
+  display: grid;
+  grid-template-columns: 1fr 280px 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s ease;
+}
+
+.ow-duel-row:last-child {
+  border-bottom: none;
+}
+
+.ow-duel-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ow-duel-row.p1-lead {
+  border-left: 2px solid rgba(0, 242, 255, 0.4);
+}
+
+.ow-duel-row.p2-lead {
+  border-right: 2px solid rgba(244, 63, 94, 0.4);
+}
+
+/* Left & Right Value Cells */
+.ow-duel-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ow-duel-cell.left {
+  justify-content: flex-end;
+}
+
+.ow-duel-cell.right {
+  justify-content: flex-start;
+}
+
+.ow-duel-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.ow-duel-val.winner {
+  color: #fff;
+  font-weight: 800;
+}
+
+.ow-duel-val.dim {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.crown-icon.cyan {
+  color: #00f2ff;
+}
+
+.crown-icon.rose {
+  color: #f43f5e;
+}
+
+.ow-duel-bar-track {
+  flex: 1;
+  max-width: 140px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  position: relative;
+}
+
+.ow-duel-bar-track.left {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ow-duel-bar-fill.left {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #00f2ff, #38bdf8);
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.3);
+  transition: width 0.3s ease;
+}
+
+.ow-duel-bar-fill.right {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #f43f5e, #fb7185);
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.3);
+  transition: width 0.3s ease;
+}
+
+/* Center Metric Cell */
+.ow-duel-cell-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 5px;
+  min-width: 250px;
+}
+
+.ow-duel-metric-id-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.ow-duel-metric-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.ow-duel-metric-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
+}
+
+.ow-duel-metric-text-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ow-duel-metric-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+}
+
+.ow-duel-delta-wrap {
+  margin-top: 1px;
+}
+
+.ow-duel-delta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.ow-duel-delta-pill.left {
+  background: rgba(0, 242, 255, 0.16);
+  border: 1px solid rgba(0, 242, 255, 0.4);
+  color: #00f2ff;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.2);
+}
+
+.ow-duel-delta-pill.right {
+  background: rgba(244, 63, 94, 0.16);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  color: #f43f5e;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.2);
+}
+
+.ow-duel-delta-pill.tie {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #94a3b8;
+}
+
+/* 5. Tactical Briefing Bento */
+.ow-duel-dossier-shell {
+  padding: 4px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ow-duel-dossier-core {
+  padding: 24px;
+  border-radius: 16px;
+  background: #080d1a;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.06);
+}
+
+.ow-duel-dossier-header {
+  margin-bottom: 20px;
+}
+
+.ow-duel-dossier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.ow-duel-dossier-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 4px 0;
+}
+
+.ow-duel-dossier-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.ow-duel-verdict-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.ow-duel-verdict-card {
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ow-duel-verdict-card.left {
+  border-top: 2px solid #00f2ff;
+}
+
+.ow-duel-verdict-card.right {
+  border-top: 2px solid #f43f5e;
+}
+
+.ow-duel-verdict-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ow-duel-verdict-card-header .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.ow-duel-verdict-card-header .dot.cyan {
+  background: #00f2ff;
+  box-shadow: 0 0 8px #00f2ff;
+}
+
+.ow-duel-verdict-card-header .dot.rose {
+  background: #f43f5e;
+  box-shadow: 0 0 8px #f43f5e;
+}
+
+.ow-duel-verdict-card-header h5 {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.ow-duel-advantage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ow-duel-advantage-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.ow-duel-advantage-list li.dim {
+  color: #64748b;
+  font-style: italic;
+}
+
+.check-bullet {
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.check-bullet.cyan {
+  color: #00f2ff;
+}
+
+.check-bullet.rose {
+  color: #f43f5e;
+}
+
+.ow-duel-advantage-list .desc {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+/* ============================================================================
+   TACTICAL FLEET SELECTOR DECK & SHIP SWITCHER (HIGH-END VISUAL DESIGN)
+   Double-Bezel Hardware Architecture / OLED Glass / Kinetic Micro-Interactions
+   ============================================================================ */
+
+.ow-ship-selector-deck {
+  background: linear-gradient(180deg, rgba(10, 16, 30, 0.75) 0%, rgba(5, 8, 16, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 18px;
+  margin: 14px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.08);
+}
+
+.ow-ship-selector-deck::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 242, 255, 0.35), transparent);
+  pointer-events: none;
+}
+
+.ow-ship-deck-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ow-ship-deck-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ow-ship-deck-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(0, 242, 255, 0.08);
+  border: 1px solid rgba(0, 242, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00f2ff;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
+.ow-ship-deck-heading {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ow-ship-deck-subheading {
+  font-size: 11px;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+/* Segmented Filter Pills */
+.ow-ship-filter-segments {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.ow-ship-filter-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  outline: none;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-ship-filter-btn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ow-ship-filter-btn.active {
+  background: rgba(0, 242, 255, 0.12);
+  color: #00f2ff;
+  border: 1px solid rgba(0, 242, 255, 0.28);
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.15);
+}
+
+.ow-ship-filter-btn .count-badge {
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+.ow-ship-filter-btn.active .count-badge {
+  background: rgba(0, 242, 255, 0.22);
+  color: #00f2ff;
+}
+
+/* Carousel Track & Controls */
+.ow-ship-carousel-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ow-ship-carousel-nav-btn {
+  width: 32px;
+  height: 58px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+}
+
+.ow-ship-carousel-nav-btn:hover {
+  color: #00f2ff;
+  border-color: rgba(0, 242, 255, 0.35);
+  background: rgba(0, 242, 255, 0.1);
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.ow-ship-carousel-nav-btn:active {
+  transform: scale(0.95);
+}
+
+.ow-ship-carousel-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 4px 2px 8px 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex: 1;
+  mask-image: linear-gradient(to right, transparent 0px, black 16px, black calc(100% - 16px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0px, black 16px, black calc(100% - 16px), transparent 100%);
+}
+
+.ow-ship-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* Double-Bezel Ship Chip */
+.ow-ship-chip {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 3px;
+  cursor: pointer;
+  transition: all 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+  outline: none;
+  position: relative;
+}
+
+.ow-ship-chip:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.ow-ship-chip:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.ow-ship-chip.active {
+  border-color: rgba(0, 242, 255, 0.5);
+  background: rgba(0, 242, 255, 0.06);
+  box-shadow: 0 0 20px rgba(0, 242, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.ow-ship-chip-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(10, 16, 28, 0.85);
+  border-radius: 11px;
+  padding: 6px 14px 6px 7px;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  min-width: 146px;
+}
+
+.ow-ship-chip.active .ow-ship-chip-inner {
+  background: linear-gradient(135deg, rgba(8, 28, 48, 0.95) 0%, rgba(5, 16, 30, 0.95) 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 242, 255, 0.25);
+}
+
+/* Ship Hologram Thumbnail */
+.ow-ship-chip-thumb {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  overflow: hidden;
+  position: relative;
+  background: #020408;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.ow-ship-chip.active .ow-ship-chip-thumb {
+  border-color: rgba(0, 242, 255, 0.6);
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+}
+
+.ow-ship-chip-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), filter 0.3s ease;
+  filter: saturate(0.85) brightness(0.9);
+}
+
+.ow-ship-chip:hover .ow-ship-chip-thumb img,
+.ow-ship-chip.active .ow-ship-chip-thumb img {
+  transform: scale(1.1);
+  filter: saturate(1.15) brightness(1.05);
+}
+
+/* Ship Meta Stack */
+.ow-ship-chip-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ow-ship-chip-role {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  transition: color 0.2s ease;
+}
+
+.ow-ship-chip.active .ow-ship-chip-role {
+  color: #38bdf8;
+}
+
+.ow-ship-chip-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbd5e1;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  transition: color 0.2s ease;
+}
+
+.ow-ship-chip.active .ow-ship-chip-name {
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(0, 242, 255, 0.3);
+}
+
+/* Active Indicator Beacon Pip */
+.ow-ship-chip-beacon {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00f2ff;
+  box-shadow: 0 0 6px #00f2ff;
+  margin-left: auto;
+  opacity: 0;
+  transform: scale(0.4);
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-ship-chip.active .ow-ship-chip-beacon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Active Ship Spotlight Banner */
+.ow-ship-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(90deg, rgba(0, 242, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ow-ship-active-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ow-ship-active-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1.5px solid rgba(0, 242, 255, 0.45);
+  background: #020610;
+  box-shadow: 0 0 16px rgba(0, 242, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.ow-ship-active-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ow-ship-active-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ow-ship-active-eyebrow {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #00f2ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-ship-active-title {
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  margin: 0;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+.ow-ship-active-desc {
+  font-size: 11.5px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.ow-ship-active-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: rgba(0, 242, 255, 0.1);
+  border: 1px solid rgba(0, 242, 255, 0.28);
+  color: #00f2ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.12);
+}
+
+

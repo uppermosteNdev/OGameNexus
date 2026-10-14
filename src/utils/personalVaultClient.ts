@@ -99,7 +99,38 @@ export interface VaultSummaryResponse {
   lastFullResyncAt?: number | null;
   canFullResync?: boolean;
   fullResyncCooldownMs?: number;
+  canSend?: boolean;
+  canFetch?: boolean;
+  sendCooldownMs?: number;
+  fetchCooldownMs?: number;
+  cooldownSeconds?: number;
+  storageBackend?: string;
   error?: string;
+}
+
+/**
+ * Native Web Streams gzip compression for browser client.
+ */
+export async function compressPayload(obj: any): Promise<Uint8Array> {
+  const jsonStr = JSON.stringify(obj);
+  const stream = new Response(jsonStr).body;
+  if (!stream) throw new Error('Compression stream unavailable');
+  const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
+  const res = new Response(compressedStream);
+  const buf = await res.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+/**
+ * Native Web Streams gzip decompression for browser client.
+ */
+export async function decompressPayload(buf: ArrayBuffer | Uint8Array): Promise<any> {
+  const stream = new Response(buf as BodyInit).body;
+  if (!stream) throw new Error('Decompression stream unavailable');
+  const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
+  const res = new Response(decompressedStream);
+  const text = await res.text();
+  return JSON.parse(text);
 }
 
 /**
@@ -454,168 +485,55 @@ export async function sendLocalDataToVault(
       plannerToSend.length +
       radarToSend.length;
 
-    let itemsProcessed = 0;
-    const syncSessionId = `sync_${playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // High-Speed Cloud Sync:
+    onProgress?.({
+      stage: 'Preparing cloud backup...',
+      current: 40,
+      total: 100,
+      percent: 40,
+    });
 
-    // Helper to send a single batch payload
-    const sendBatch = async (batchPayload: any) => {
-      const res = await fetchOverwatch(`${baseUrl}/api/v1/vault/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Nexus-Vault-Key': vaultKey,
-        },
-        body: JSON.stringify({
-          universeId: cleanUni,
-          playerId,
-          vaultKey,
-          deviceLabel,
-          syncSessionId,
-          isFullResync: Boolean(options?.forceFullResync),
-          ...batchPayload,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).error || `HTTP ${res.status}: ${res.statusText}`);
-      }
-      return res.json();
+    const fullPayload = {
+      universeId: cleanUni,
+      playerId,
+      vaultKey,
+      deviceLabel,
+      isDelta: isDeltaSyncActive,
+      isFullResync: Boolean(options?.forceFullResync),
+      expeditions: expeditionsToSend,
+      combats: combatsToSend,
+      harvests: harvestsToSend,
+      discoveries: discoveriesToSend,
+      plannerProjects: plannerToSend,
+      radarTargets: radarToSend,
     };
 
-    // 1. Send Expeditions in chunks of 500 (strictly within Cloudflare worker limits)
-    const EXP_CHUNK_SIZE = 500;
-    if (expeditionsToSend.length > 0) {
-      for (let i = 0; i < expeditionsToSend.length; i += EXP_CHUNK_SIZE) {
-        const chunk = expeditionsToSend.slice(i, i + EXP_CHUNK_SIZE);
-        await sendBatch({ expeditions: chunk });
-        itemsProcessed += chunk.length;
-        onProgress?.({
-          stage: `Uploading Expeditions (${itemsProcessed.toLocaleString()} / ${expeditionsToSend.length.toLocaleString()})...`,
-          current: itemsProcessed,
-          total: Math.max(1, totalItemsToSend),
-          percent: Math.min(99, Math.round((itemsProcessed / Math.max(1, totalItemsToSend)) * 100)),
-        });
-      }
-    } else if (compactedExpeditions.length > 0) {
-      onProgress?.({
-        stage: `Expeditions in sync (${compactedExpeditions.length.toLocaleString()} verified)`,
-        current: itemsProcessed,
-        total: Math.max(1, totalItemsToSend),
-        percent: 25,
-      });
+    const compressed = await compressPayload(fullPayload);
+    const sizeKb = (compressed.byteLength / 1024).toFixed(1);
+
+    onProgress?.({
+      stage: `Uploading backup (${sizeKb} KB) to cloud...`,
+      current: 80,
+      total: 100,
+      percent: 80,
+    });
+
+    const res = await fetchOverwatch(`${baseUrl}/api/v1/vault/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Vault-Compression': 'gzip',
+        'X-Nexus-Vault-Key': vaultKey,
+      },
+      body: compressed.buffer as ArrayBuffer,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || `HTTP ${res.status}: ${res.statusText}`);
     }
 
-    // 2. Send Combats in chunks of 500
-    const COM_CHUNK_SIZE = 500;
-    if (combatsToSend.length > 0) {
-      for (let i = 0; i < combatsToSend.length; i += COM_CHUNK_SIZE) {
-        const chunk = combatsToSend.slice(i, i + COM_CHUNK_SIZE);
-        await sendBatch({ combats: chunk });
-        itemsProcessed += chunk.length;
-        onProgress?.({
-          stage: `Uploading Combats (${(i + chunk.length).toLocaleString()} / ${combatsToSend.length.toLocaleString()})...`,
-          current: itemsProcessed,
-          total: Math.max(1, totalItemsToSend),
-          percent: Math.min(99, Math.round((itemsProcessed / Math.max(1, totalItemsToSend)) * 100)),
-        });
-      }
-    } else if (compactedCombats.length > 0) {
-      onProgress?.({
-        stage: `Combats in sync (${compactedCombats.length.toLocaleString()} verified)`,
-        current: itemsProcessed,
-        total: Math.max(1, totalItemsToSend),
-        percent: 45,
-      });
-    }
-
-    // 3. Send Lifeform Discoveries in chunks of 500
-    const DISC_CHUNK_SIZE = 500;
-    if (discoveriesToSend.length > 0) {
-      for (let i = 0; i < discoveriesToSend.length; i += DISC_CHUNK_SIZE) {
-        const chunk = discoveriesToSend.slice(i, i + DISC_CHUNK_SIZE);
-        await sendBatch({ discoveries: chunk });
-        itemsProcessed += chunk.length;
-        onProgress?.({
-          stage: `Uploading Lifeform Discoveries (${(i + chunk.length).toLocaleString()} / ${discoveriesToSend.length.toLocaleString()})...`,
-          current: itemsProcessed,
-          total: Math.max(1, totalItemsToSend),
-          percent: Math.min(99, Math.round((itemsProcessed / Math.max(1, totalItemsToSend)) * 100)),
-        });
-      }
-    } else if (compactedDiscoveries.length > 0) {
-      onProgress?.({
-        stage: `Discoveries in sync (${compactedDiscoveries.length.toLocaleString()} verified)`,
-        current: itemsProcessed,
-        total: Math.max(1, totalItemsToSend),
-        percent: 65,
-      });
-    }
-
-    // 4. Send Debris Harvests in chunks of 500
-    const HARV_CHUNK_SIZE = 500;
-    if (harvestsToSend.length > 0) {
-      for (let i = 0; i < harvestsToSend.length; i += HARV_CHUNK_SIZE) {
-        const chunk = harvestsToSend.slice(i, i + HARV_CHUNK_SIZE);
-        await sendBatch({ harvests: chunk });
-        itemsProcessed += chunk.length;
-        onProgress?.({
-          stage: `Uploading Debris Harvests (${(i + chunk.length).toLocaleString()} / ${harvestsToSend.length.toLocaleString()})...`,
-          current: itemsProcessed,
-          total: Math.max(1, totalItemsToSend),
-          percent: Math.min(99, Math.round((itemsProcessed / Math.max(1, totalItemsToSend)) * 100)),
-        });
-      }
-    } else if (compactedHarvests.length > 0) {
-      onProgress?.({
-        stage: `Debris Harvests in sync (${compactedHarvests.length.toLocaleString()} verified)`,
-        current: itemsProcessed,
-        total: Math.max(1, totalItemsToSend),
-        percent: 80,
-      });
-    }
-
-    // 5. Send Radar Targets (in chunks of 250) and Planner Queues
-    const RADAR_CHUNK_SIZE = 250;
-    if (radarToSend.length > 0) {
-      for (let i = 0; i < radarToSend.length; i += RADAR_CHUNK_SIZE) {
-        const radarChunk = radarToSend.slice(i, i + RADAR_CHUNK_SIZE);
-        await sendBatch({
-          radarTargets: radarChunk,
-          plannerProjects: i === 0 ? plannerToSend : [],
-        });
-        itemsProcessed += radarChunk.length + (i === 0 ? plannerToSend.length : 0);
-        onProgress?.({
-          stage: `Merging Radar Targets (${(i + radarChunk.length).toLocaleString()} / ${radarToSend.length.toLocaleString()})...`,
-          current: itemsProcessed,
-          total: Math.max(1, totalItemsToSend),
-          percent: Math.min(99, Math.round((itemsProcessed / Math.max(1, totalItemsToSend)) * 100)),
-        });
-      }
-    } else if (plannerToSend.length > 0) {
-      await sendBatch({
-        plannerProjects: plannerToSend,
-      });
-      itemsProcessed += plannerToSend.length;
-      onProgress?.({
-        stage: 'Costs Planner Queues in sync',
-        current: itemsProcessed,
-        total: Math.max(1, totalItemsToSend),
-        percent: 95,
-      });
-    } else if (compactedRadar.length > 0) {
-      onProgress?.({
-        stage: `Radar Targets in sync (${compactedRadar.length.toLocaleString()} verified)`,
-        current: itemsProcessed,
-        total: Math.max(1, totalItemsToSend),
-        percent: 95,
-      });
-    }
-
-    if (totalItemsToSend === 0) {
-      // Empty sync handshake to update sync timestamp and credentials
-      await sendBatch({});
-    }
+    const resData = await res.json();
 
     onProgress?.({
       stage: 'Synchronization Complete',
@@ -673,7 +591,7 @@ export async function fetchVaultDataToLocal(
 ): Promise<VaultFetchResult> {
   const baseUrl = await getOverwatchApiUrl();
   try {
-    onProgress?.({ stage: 'Connecting to Cloudflare Personal Vault...', current: 0, total: 100, percent: 10 });
+    onProgress?.({ stage: 'Connecting to Cloud Vault...', current: 0, total: 100, percent: 10 });
     const url = new URL(`${baseUrl}/api/v1/vault/fetch`);
     url.searchParams.set('universeId', universe);
     url.searchParams.set('playerId', playerId);
@@ -724,6 +642,7 @@ export async function fetchVaultDataToLocal(
       headers: {
         'Accept': 'application/json',
         'X-Nexus-Vault-Key': vaultKey,
+        'X-Vault-Compression': 'gzip',
       },
     });
 
@@ -732,9 +651,23 @@ export async function fetchVaultDataToLocal(
       return { success: false, error: (err as any).error || `HTTP ${res.status}: ${res.statusText}` };
     }
 
-    onProgress?.({ stage: 'Parsing cloud archive payload...', current: 20, total: 100, percent: 25 });
-    const data = await res.json();
-    let expeditions: Expedition[] = data.expeditions || [];
+    onProgress?.({ stage: 'Processing cloud data...', current: 20, total: 100, percent: 25 });
+    let data: any;
+    const isCompressed = res.headers.get('x-vault-compression') === 'gzip' ||
+      res.headers.get('content-type') === 'application/octet-stream';
+
+    if (isCompressed) {
+      try {
+        const buf = await res.arrayBuffer();
+        data = await decompressPayload(buf);
+      } catch {
+        data = await res.json();
+      }
+    } else {
+      data = await res.json();
+    }
+
+    const expeditions: Expedition[] = data.expeditions || [];
     const combats: CombatReport[] = data.combats || [];
     const harvests: DebrisHarvest[] = data.harvests || [];
     const discoveries: LifeformDiscovery[] = data.discoveries || [];
@@ -751,47 +684,9 @@ export async function fetchVaultDataToLocal(
     };
 
     // Save standard append-only tables
-    let totalExpHydrated = expeditions.length;
     if (expeditions.length > 0) {
-      onProgress?.({ stage: `Downloading ${expeditions.length.toLocaleString()} Expeditions...`, current: 30, total: 100, percent: 40 });
+      onProgress?.({ stage: `Restoring ${expeditions.length.toLocaleString()} Expeditions...`, current: 30, total: 100, percent: 40 });
       await chunkedBulkPut(db.expeditions, expeditions, 1000, 'expeditions');
-    }
-
-    // Handle cursor pagination for large initial expedition downloads
-    let hasMoreExp = Boolean(data.hasMoreExpeditions);
-    let nextExpTimestamp = data.nextExpTimestamp;
-
-    while (hasMoreExp && nextExpTimestamp) {
-      onProgress?.({
-        stage: `Downloading additional Expeditions (${totalExpHydrated.toLocaleString()} archived)...`,
-        current: totalExpHydrated,
-        total: 100,
-        percent: 45,
-      });
-
-      const nextUrl = new URL(`${baseUrl}/api/v1/vault/fetch`);
-      nextUrl.searchParams.set('universeId', universe);
-      nextUrl.searchParams.set('playerId', playerId);
-      nextUrl.searchParams.set('vaultKey', vaultKey);
-      nextUrl.searchParams.set('sinceExpTimestamp', String(nextExpTimestamp));
-      nextUrl.searchParams.set('sinceComTimestamp', '9999999999999');
-      nextUrl.searchParams.set('sinceHarvTimestamp', '9999999999999');
-      nextUrl.searchParams.set('sinceDiscTimestamp', '9999999999999');
-
-      const nextRes = await fetchOverwatch(nextUrl.toString(), {
-        method: 'GET',
-        headers: { 'Accept': 'application/json', 'X-Nexus-Vault-Key': vaultKey },
-      });
-      if (!nextRes.ok) break;
-
-      const nextData = await nextRes.json();
-      const pageExp: Expedition[] = nextData.expeditions || [];
-      if (pageExp.length === 0) break;
-
-      await chunkedBulkPut(db.expeditions, pageExp, 1000, 'expeditions');
-      totalExpHydrated += pageExp.length;
-      hasMoreExp = Boolean(nextData.hasMoreExpeditions);
-      nextExpTimestamp = nextData.nextExpTimestamp;
     }
 
     if (combats.length > 0) {
@@ -1018,7 +913,7 @@ export async function fetchVaultDataToLocal(
     return {
       success: true,
       hydrated: {
-        expeditions: totalExpHydrated,
+        expeditions: expeditions.length,
         combats: combats.length,
         harvests: harvests.length,
         discoveries: discoveries.length,

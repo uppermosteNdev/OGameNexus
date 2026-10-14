@@ -23,6 +23,7 @@ import RaidRadar from './views/RaidRadar';
 import Overwatch from './views/Overwatch';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { cleanUniverseId, isSameUniverse } from '../utils/universe';
 import './index.css';
 import '../content/styles.css';
 
@@ -117,6 +118,118 @@ const App: React.FC = () => {
         };
     }, []);
 
+    // Automatic Account Selection: Switches based on universe ID and player ID (?universe=<uni>&player=<id>)
+    useEffect(() => {
+        const syncTargetAccount = async () => {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const queryUniverse = params.get('universe') || params.get('uni');
+                const queryPlayer = params.get('player') || params.get('playerId');
+                const queryAccount = params.get('account');
+                const savedPlayerId = localStorage.getItem('ognexus_active_player_id');
+                const savedUniverse = localStorage.getItem('ognexus_active_universe');
+
+                const accounts = await db.accounts.toArray();
+                if (!accounts || accounts.length === 0) return;
+
+                let target = null;
+
+                // 1. Highest priority: Exact match on both universe ID and player ID
+                if (queryUniverse && queryPlayer) {
+                    target = accounts.find(a =>
+                        String(a.playerId) === String(queryPlayer) &&
+                        isSameUniverse(a.universe, queryUniverse)
+                    );
+                }
+
+                // 2. Query player ID only
+                if (!target && queryPlayer) {
+                    target = accounts.find(a => String(a.playerId) === String(queryPlayer));
+                }
+
+                // 3. Query universe ID only
+                if (!target && queryUniverse) {
+                    target = accounts.find(a => isSameUniverse(a.universe, queryUniverse));
+                }
+
+                // 4. Legacy fallback for ?account=<name> (case-insensitive name match)
+                if (!target && queryAccount) {
+                    if (queryUniverse) {
+                        target = accounts.find(a =>
+                            a.playerName?.toLowerCase() === queryAccount.toLowerCase() &&
+                            isSameUniverse(a.universe, queryUniverse)
+                        );
+                    }
+                    if (!target) {
+                        target = accounts.find(a => a.playerName?.toLowerCase() === queryAccount.toLowerCase());
+                    }
+                }
+
+                // 5. Restore from localStorage (respecting saved player ID and universe)
+                if (!target && savedPlayerId) {
+                    if (savedUniverse) {
+                        target = accounts.find(a =>
+                            String(a.playerId) === String(savedPlayerId) &&
+                            isSameUniverse(a.universe, savedUniverse)
+                        );
+                    }
+                    if (!target) {
+                        target = accounts.find(a => String(a.playerId) === String(savedPlayerId));
+                    }
+                }
+
+                if (target) {
+                    localStorage.setItem('ognexus_active_player_id', String(target.playerId));
+                    if (target.universe) {
+                        localStorage.setItem('ognexus_active_universe', String(target.universe));
+                    }
+
+                    const highest = accounts.reduce((prev, curr) =>
+                        (curr.lastSeen || 0) > (prev.lastSeen || 0) ? curr : prev, accounts[0]
+                    );
+
+                    if (!highest || String(highest.playerId) !== String(target.playerId) || !isSameUniverse(highest.universe, target.universe)) {
+                        await db.accounts.update(target.playerId, { lastSeen: Date.now() });
+                    }
+                }
+            } catch (err) {
+                console.warn('OGame Nexus: Failed to auto-sync target account', err);
+            }
+        };
+
+        syncTargetAccount();
+
+        const handleSwitchAccount = async (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (detail?.playerId) {
+                try {
+                    localStorage.setItem('ognexus_active_player_id', String(detail.playerId));
+                    if (detail.universe) {
+                        localStorage.setItem('ognexus_active_universe', String(detail.universe));
+                    }
+                    await db.accounts.update(detail.playerId, { lastSeen: Date.now() });
+
+                    // Also sync URL params if present so bookmarking/refreshing is consistent
+                    try {
+                        const url = new URL(window.location.href);
+                        if (detail.universe) url.searchParams.set('universe', cleanUniverseId(detail.universe));
+                        url.searchParams.set('player', String(detail.playerId));
+                        url.searchParams.delete('account');
+                        url.searchParams.delete('playerId');
+                        window.history.replaceState({}, '', url.toString());
+                    } catch { }
+                } catch (err) {
+                    console.error('OGame Nexus: Failed to switch account', err);
+                }
+            }
+        };
+
+        window.addEventListener('ognexus_switch_account', handleSwitchAccount);
+        return () => {
+            window.removeEventListener('ognexus_switch_account', handleSwitchAccount);
+        };
+    }, []);
+
     const getCurrentVersion = (): string => {
         try {
             if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
@@ -125,7 +238,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to get manifest version", e);
         }
-        return "1.2.5";
+        return "1.2.6";
     };
 
     const autoDismissChangelogForNewInstall = (version: string) => {

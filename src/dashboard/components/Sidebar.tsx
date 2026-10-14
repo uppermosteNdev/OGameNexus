@@ -4,6 +4,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { isOverwatchTester, syncOverwatchTesterStatusWithCloudflare } from '../../config/overwatchTestingConfig';
 import { ThemeIcon } from './ThemeIcon';
+import { User, Check, Copy, X } from 'lucide-react';
+import { cleanUniverseId, isSameUniverse } from '../../utils/universe';
 
 interface SidebarProps {
     activeView: string;
@@ -13,7 +15,10 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     const isCollapsed = true;
     const [hoveredItem, setHoveredItem] = useState<{ label: string, top: number } | null>(null);
+    const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+    const [copiedLink, setCopiedLink] = useState(false);
 
+    const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const [, setTesterSyncTick] = useState(0);
     const [passkeyUnlocked, setPasskeyUnlocked] = useState<string | null>(() => {
@@ -221,6 +226,234 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                     );
                 })}
             </nav>
+
+            {/* Account Switcher Button */}
+            <div style={{ marginTop: 'auto', paddingTop: '12px', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                <motion.button
+                    type="button"
+                    onClick={() => setShowAccountSwitcher(prev => !prev)}
+                    onMouseEnter={(e) => handleMouseEnter(e, `Account: ${activeAccount?.playerName || 'Select'} (${cleanUniverseId(activeAccount?.universe)} #${activeAccount?.playerId || '?'})`)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.95 }}
+                    title={activeAccount ? `Active: ${activeAccount.playerName} (${cleanUniverseId(activeAccount.universe)} • #${activeAccount.playerId})` : 'Select Account'}
+                    style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '12px',
+                        border: showAccountSwitcher ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.12)',
+                        background: showAccountSwitcher ? 'rgba(0, 242, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                        color: showAccountSwitcher ? 'var(--primary)' : '#94a3b8',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        transition: 'all 0.25s ease',
+                    }}
+                >
+                    {activeAccount?.avatarUrl ? (
+                        <img
+                            src={activeAccount.avatarUrl}
+                            alt={activeAccount.playerName}
+                            style={{ width: '28px', height: '28px', borderRadius: '8px', objectFit: 'cover' }}
+                        />
+                    ) : (
+                        <div style={{
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '7px',
+                            background: 'rgba(0, 242, 255, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            color: '#00f2ff',
+                        }}>
+                            {activeAccount?.playerName?.[0]?.toUpperCase() || <User size={15} />}
+                        </div>
+                    )}
+                    <span
+                        style={{
+                            position: 'absolute',
+                            bottom: '2px',
+                            right: '2px',
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: '#10b981',
+                            boxShadow: '0 0 6px #10b981',
+                        }}
+                    />
+                </motion.button>
+            </div>
+
+            {/* Account Switcher Popover */}
+            {showAccountSwitcher && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: '88px',
+                        bottom: '24px',
+                        width: '320px',
+                        background: 'rgba(8, 14, 26, 0.96)',
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(0, 242, 255, 0.3)',
+                        borderRadius: '16px',
+                        padding: '16px',
+                        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.75), 0 0 24px rgba(0, 242, 255, 0.15)',
+                        zIndex: 10000,
+                        animation: 'nexus-tooltip-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                        <div>
+                            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#fff' }}>Switch Account</h4>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>Select empire to view in Nexus</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowAccountSwitcher(false)}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#94a3b8',
+                                cursor: 'pointer',
+                                padding: '4px',
+                            }}
+                        >
+                            <X size={15} />
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                        {accounts.length === 0 ? (
+                            <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '12px' }}>
+                                No accounts stored in local database yet.
+                            </div>
+                        ) : (
+                            accounts.map(acc => {
+                                const isCurrent = activeAccount?.playerId === acc.playerId && isSameUniverse(activeAccount?.universe, acc.universe);
+                                const cleanUni = cleanUniverseId(acc.universe);
+                                return (
+                                    <button
+                                        key={`${cleanUni}_${acc.playerId}`}
+                                        type="button"
+                                        onClick={() => {
+                                            window.dispatchEvent(new CustomEvent('ognexus_switch_account', {
+                                                detail: {
+                                                    playerId: acc.playerId,
+                                                    universe: acc.universe
+                                                }
+                                            }));
+                                            setShowAccountSwitcher(false);
+                                        }}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '10px 12px',
+                                            borderRadius: '10px',
+                                            border: isCurrent ? '1px solid rgba(0, 242, 255, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                            background: isCurrent ? 'rgba(0, 242, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                                            color: '#fff',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            width: '100%',
+                                            transition: 'all 0.2s ease',
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: '32px',
+                                            height: '32px',
+                                            borderRadius: '8px',
+                                            background: isCurrent ? 'rgba(0, 242, 255, 0.2)' : 'rgba(255, 255, 255, 0.06)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontWeight: 700,
+                                            fontSize: '13px',
+                                            color: isCurrent ? '#00f2ff' : '#94a3b8',
+                                            flexShrink: 0,
+                                        }}>
+                                            {acc.playerName?.[0]?.toUpperCase() || 'P'}
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span style={{ fontWeight: 600, fontSize: '13px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {acc.playerName}
+                                                </span>
+                                                {isCurrent && (
+                                                    <span style={{ fontSize: '9px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: 'rgba(0, 242, 255, 0.2)', color: '#00f2ff' }}>
+                                                        ACTIVE
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                                {acc.universeName && acc.universeName !== 'unknown' ? acc.universeName : cleanUni} ({cleanUni}) • #{acc.playerId}
+                                                {acc.score ? ` • ${Math.floor(acc.score).toLocaleString()} pts` : ''}
+                                            </div>
+                                        </div>
+                                        {isCurrent && <Check size={14} style={{ color: '#00f2ff', flexShrink: 0 }} />}
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    {/* Bookmark Link Helper */}
+                    <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const extId = (typeof chrome !== 'undefined' && chrome.runtime?.id) ? chrome.runtime.id : '';
+                                const uni = activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : '';
+                                const playerId = activeAccount?.playerId || '';
+                                const queryParams = (uni && playerId)
+                                    ? `?universe=${encodeURIComponent(uni)}&player=${encodeURIComponent(playerId)}`
+                                    : playerId
+                                        ? `?player=${encodeURIComponent(playerId)}`
+                                        : '';
+                                const url = extId 
+                                    ? `chrome-extension://${extId}/dashboard.html${queryParams}`
+                                    : `${window.location.origin}${window.location.pathname}${queryParams}`;
+                                navigator.clipboard.writeText(url);
+                                setCopiedLink(true);
+                                setTimeout(() => setCopiedLink(false), 2500);
+                            }}
+                            style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                color: copiedLink ? '#10b981' : '#38bdf8',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                            }}
+                        >
+                            {copiedLink ? <Check size={12} /> : <Copy size={12} />}
+                            <span>
+                                {copiedLink 
+                                    ? 'Copied Direct Bookmark URL!' 
+                                    : activeAccount 
+                                        ? `Copy URL (${cleanUniverseId(activeAccount.universe)} • #${activeAccount.playerId})`
+                                        : 'Copy Direct Bookmark URL'
+                                }
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Hover Tooltip Overlay */}
             {hoveredItem && (

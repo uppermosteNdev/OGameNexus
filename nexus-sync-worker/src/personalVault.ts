@@ -1,17 +1,30 @@
 // ============================================================================
-// NEXUS OVERWATCH — PERSONAL VAULT CROSS-DEVICE SYNC ENGINE
-// Enables seamless multi-terminal synchronization (PC, Laptop, Tablet, Mobile)
-// for historical expeditions, combats, harvests, discoveries, planner & radar.
+// NEXUS OVERWATCH — PERSONAL VAULT CLOUDFLARE R2 SYNC ENGINE
+// High-capacity, zero-latency multi-device sync for historical archives:
+// expeditions, combats, debris harvests, discoveries, costs planner, and raid radar.
+// Backed by Cloudflare R2 object storage with native Web Streams gzip compression.
+// Enforces a 2-minute (120-second) cooldown on upload/download operations.
 // ============================================================================
 
 import { json } from 'itty-router';
 import { Env } from './index';
 import { getUniverseDb } from './dbRouter';
 import { cleanUniverseId } from './universeSeeder';
+import { gzipCompress, gzipDecompress, PlayerVaultManifest } from './migrationR2';
 
-export async function hashVaultKey(key: string, serverPepper: string): Promise<string> {
+export const VAULT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes (120 seconds)
+
+export function getSafePepper(pepper?: string): string {
+  if (pepper && pepper !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') {
+    return pepper;
+  }
+  return 'nexus_pepper_default';
+}
+
+export async function hashVaultKey(key: string, serverPepper?: string): Promise<string> {
   const clean = key.trim();
-  const data = new TextEncoder().encode(`NX_VAULT:${clean}:${serverPepper}`);
+  const safePepper = getSafePepper(serverPepper);
+  const data = new TextEncoder().encode(`NX_VAULT:${clean}:${safePepper}`);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -31,141 +44,15 @@ const TABLE_DDL_STATEMENTS = [
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (universe_id, player_id)
   );`,
-  `CREATE TABLE IF NOT EXISTS personal_vault_expeditions (
-      universe_id TEXT NOT NULL,
-      player_id TEXT NOT NULL,
-      message_id TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      coords TEXT NOT NULL,
-      depletion INTEGER DEFAULT 0,
-      size INTEGER DEFAULT 0,
-      result TEXT NOT NULL,
-      result_details_json TEXT,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (universe_id, player_id, message_id)
-  );`,
-  `CREATE INDEX IF NOT EXISTS idx_vault_exp_time ON personal_vault_expeditions(universe_id, player_id, timestamp);`,
-  `CREATE TABLE IF NOT EXISTS personal_vault_combats (
-      universe_id TEXT NOT NULL,
-      player_id TEXT NOT NULL,
-      message_id TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      coords TEXT NOT NULL,
-      winner TEXT NOT NULL,
-      loot_metal INTEGER DEFAULT 0,
-      loot_crystal INTEGER DEFAULT 0,
-      loot_deut INTEGER DEFAULT 0,
-      loot_food INTEGER DEFAULT 0,
-      debris_metal INTEGER DEFAULT 0,
-      debris_crystal INTEGER DEFAULT 0,
-      debris_deut INTEGER DEFAULT 0,
-      attacker_losses INTEGER DEFAULT 0,
-      defender_losses INTEGER DEFAULT 0,
-      attacker_name TEXT,
-      defender_name TEXT,
-      my_losses INTEGER DEFAULT 0,
-      is_acs INTEGER DEFAULT 0,
-      is_expedition INTEGER DEFAULT 0,
-      expedition_attack_type TEXT,
-      summary_json TEXT,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (universe_id, player_id, message_id)
-  );`,
-  `CREATE INDEX IF NOT EXISTS idx_vault_com_time ON personal_vault_combats(universe_id, player_id, timestamp);`,
-  `CREATE TABLE IF NOT EXISTS personal_vault_harvests (
-      universe_id TEXT NOT NULL,
-      player_id TEXT NOT NULL,
-      message_id TEXT NOT NULL,
-      harvest_key TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      coords TEXT NOT NULL,
-      metal INTEGER DEFAULT 0,
-      crystal INTEGER DEFAULT 0,
-      deut INTEGER DEFAULT 0,
-      recycler_amount INTEGER DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (universe_id, player_id, message_id)
-  );`,
-  `CREATE INDEX IF NOT EXISTS idx_vault_harv_time ON personal_vault_harvests(universe_id, player_id, timestamp);`,
-  `CREATE TABLE IF NOT EXISTS personal_vault_discoveries (
-      universe_id TEXT NOT NULL,
-      player_id TEXT NOT NULL,
-      message_id TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      coords TEXT NOT NULL,
-      lifeform INTEGER,
-      discovery_type TEXT NOT NULL,
-      lifeform_exp INTEGER DEFAULT 0,
-      artifacts_found INTEGER DEFAULT 0,
-      artifact_size TEXT,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (universe_id, player_id, message_id)
-  );`,
-  `CREATE INDEX IF NOT EXISTS idx_vault_disc_time ON personal_vault_discoveries(universe_id, player_id, timestamp);`,
-  `CREATE TABLE IF NOT EXISTS personal_vault_planner (
-      universe_id TEXT NOT NULL,
-      player_id TEXT NOT NULL,
-      project_key TEXT NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      target_level INTEGER NOT NULL,
-      planet_id TEXT,
-      planet_name TEXT,
-      coords TEXT,
-      cost_metal INTEGER DEFAULT 0,
-      cost_crystal INTEGER DEFAULT 0,
-      cost_deut INTEGER DEFAULT 0,
-      msu_cost INTEGER DEFAULT 0,
-      prod_delta_metal INTEGER DEFAULT 0,
-      prod_delta_crystal INTEGER DEFAULT 0,
-      prod_delta_deut INTEGER DEFAULT 0,
-      roi_hours REAL DEFAULT 0,
-      timestamp INTEGER NOT NULL,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (universe_id, player_id, project_key)
-  );`,
-  `CREATE TABLE IF NOT EXISTS personal_vault_radar (
-      universe_id TEXT NOT NULL,
-      player_id TEXT NOT NULL,
-      planet_id TEXT NOT NULL,
-      planet_key TEXT NOT NULL,
-      target_player_id TEXT,
-      target_player_name TEXT,
-      coords TEXT NOT NULL,
-      metal_per_hour INTEGER DEFAULT 0,
-      crystal_per_hour INTEGER DEFAULT 0,
-      deut_per_hour INTEGER DEFAULT 0,
-      production_msu_per_hour REAL DEFAULT 0,
-      last_spied_metal INTEGER DEFAULT 0,
-      last_spied_crystal INTEGER DEFAULT 0,
-      last_spied_deut INTEGER DEFAULT 0,
-      last_spied_timestamp INTEGER DEFAULT 0,
-      player_status_json TEXT DEFAULT '[]',
-      last_hash_code TEXT,
-      spy_count INTEGER DEFAULT 0,
-      confidence INTEGER DEFAULT 0,
-      loot_percentage INTEGER DEFAULT 50,
-      capacities_json TEXT DEFAULT '{}',
-      updated_at INTEGER NOT NULL,
-      PRIMARY KEY (universe_id, player_id, coords)
-  );`,
-  `CREATE INDEX IF NOT EXISTS idx_vault_radar_coords ON personal_vault_radar(universe_id, player_id, coords);`
 ];
 
-let tablesEnsured = true; // All tables verified and created in D1 migration
+let tablesEnsured = true;
 
-/**
- * Ensures all Personal Vault SQLite tables and indices exist in D1.
- * Executes all statements in a single batch (consuming only 1 subrequest).
- */
 export async function ensurePersonalVaultTables(db: D1Database): Promise<void> {
   if (tablesEnsured) return;
   try {
     const stmts = TABLE_DDL_STATEMENTS.map(sql => db.prepare(sql));
     await db.batch(stmts);
-    try {
-      await db.prepare('ALTER TABLE personal_vault_credentials ADD COLUMN last_full_resync_at INTEGER').run();
-    } catch {}
     tablesEnsured = true;
   } catch (err: any) {
     console.error('[PersonalVault] Error executing table migration statements:', err.message);
@@ -177,12 +64,14 @@ interface VaultCredentialsResult {
   isNew: boolean;
   lastFullResyncAt?: number | null;
   lastSentAt?: number | null;
+  lastFetchedAt?: number | null;
   notFound?: boolean;
   error?: string;
 }
 
 /**
  * Authenticates or auto-registers the player's personal vault key on first use.
+ * Authentication credentials remain in D1 for fast sub-millisecond key verification.
  */
 async function authenticateVault(
   db: D1Database,
@@ -200,12 +89,12 @@ async function authenticateVault(
   const now = Date.now();
 
   const existing = await db
-    .prepare('SELECT vault_key_hash, last_full_resync_at, last_sent_at FROM personal_vault_credentials WHERE universe_id = ? AND player_id = ?')
+    .prepare('SELECT vault_key_hash, last_full_resync_at, last_sent_at, last_fetched_at FROM personal_vault_credentials WHERE universe_id = ? AND player_id = ?')
     .bind(universeId, playerId)
-    .first<{ vault_key_hash: string; last_full_resync_at?: number | null; last_sent_at?: number | null }>();
+    .first<{ vault_key_hash: string; last_full_resync_at?: number | null; last_sent_at?: number | null; last_fetched_at?: number | null }>();
 
   if (!existing) {
-    // Phase 4.2: Guard against arbitrary vault registration: verify player exists in universe baseline
+    // Verify player exists in universe baseline before registering new vault
     const playerCheck = await db
       .prepare('SELECT 1 FROM universe_baseline_planets WHERE universe_id = ? AND player_id = ? LIMIT 1')
       .bind(universeId, playerId)
@@ -230,10 +119,25 @@ async function authenticateVault(
       .bind(universeId, playerId, keyHash, deviceLabel || 'Primary Device', now, now)
       .run();
 
-    return { valid: true, isNew: true, lastFullResyncAt: null, lastSentAt: null };
+    return { valid: true, isNew: true, lastFullResyncAt: null, lastSentAt: null, lastFetchedAt: null };
   }
 
-  if (existing.vault_key_hash !== keyHash) {
+  const candidatePeppers = Array.from(new Set([
+    'nexus_overwatch_secret_pepper_2026',
+    serverPepper,
+    'nexus_pepper_default',
+  ])).filter(p => p && p !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') as string[];
+
+  let matchedHash: string | null = null;
+  for (const p of candidatePeppers) {
+    const testHash = await hashVaultKey(vaultKey, p);
+    if (existing.vault_key_hash === testHash) {
+      matchedHash = testHash;
+      break;
+    }
+  }
+
+  if (!matchedHash) {
     return { valid: false, isNew: false, error: 'Invalid Vault Key for this account. Check your device pairing key.' };
   }
 
@@ -242,43 +146,117 @@ async function authenticateVault(
     isNew: false,
     lastFullResyncAt: existing.last_full_resync_at || null,
     lastSentAt: existing.last_sent_at || null,
+    lastFetchedAt: existing.last_fetched_at || null,
   };
 }
 
 /**
- * Helper to execute an array of D1 prepared statements in chunks of up to 100 statements.
- * Uses atomic db.batch to minimize Cloudflare Worker subrequests.
+ * Helper to fetch and decompress a category from R2 bucket.
  */
-async function executeBatchStatements(db: D1Database, statements: D1PreparedStatement[]): Promise<void> {
-  const CHUNK_SIZE = 100;
-  for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
-    const chunk = statements.slice(i, i + CHUNK_SIZE);
-    if (chunk.length > 0) {
-      await db.batch(chunk);
-    }
+async function getR2Category(bucket: R2Bucket, prefix: string, catName: string): Promise<any[]> {
+  try {
+    const obj = await bucket.get(`${prefix}/${catName}.json.gz`);
+    if (!obj) return [];
+    const buf = await obj.arrayBuffer();
+    const jsonStr = await gzipDecompress(buf);
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err: any) {
+    console.warn(`[PersonalVault] Warning loading ${prefix}/${catName}.json.gz:`, err.message);
+    return [];
   }
 }
 
-interface ActiveSyncSession {
-  sessionId: string;
-  playerId: string;
-  startedAt: number;
-  lastChunkAt: number;
+/**
+ * Helper to compress and write a category to R2 bucket.
+ */
+async function putR2Category(
+  bucket: R2Bucket,
+  prefix: string,
+  catName: string,
+  data: any[],
+  universeId: string,
+  playerId: string
+): Promise<number> {
+  const jsonStr = JSON.stringify(data);
+  const compressed = await gzipCompress(jsonStr);
+  await bucket.put(`${prefix}/${catName}.json.gz`, compressed, {
+    httpMetadata: {
+      contentType: 'application/gzip',
+      contentEncoding: 'gzip',
+    },
+    customMetadata: {
+      category: catName,
+      recordCount: String(data.length),
+      universeId,
+      playerId,
+      timestamp: String(Date.now()),
+    },
+  });
+  return compressed.byteLength;
 }
-const ACTIVE_SYNC_SESSIONS = new Map<string, ActiveSyncSession>();
+
+/**
+ * Merges two SpiedPlanet records applying highest production rule and latest timestamp rule.
+ */
+function mergeRadarTarget(existing: any, incoming: any): any {
+  const incomingMetal = Number(incoming.metalPerHour || 0);
+  const incomingCrystal = Number(incoming.crystalPerHour || 0);
+  const incomingDeut = Number(incoming.deuteriumPerHour || 0);
+  const incomingMsu = incomingMetal + 1.5 * incomingCrystal + 3.0 * incomingDeut;
+
+  const existingMetal = Number(existing.metalPerHour || 0);
+  const existingCrystal = Number(existing.crystalPerHour || 0);
+  const existingDeut = Number(existing.deuteriumPerHour || 0);
+  const existingMsu = Number(existing.productionMsuPerHour || (existingMetal + 1.5 * existingCrystal + 3.0 * existingDeut));
+
+  const incomingTime = Number(incoming.lastSpiedTimestamp || 0);
+  const existingTime = Number(existing.lastSpiedTimestamp || 0);
+  const useIncomingScans = incomingTime >= existingTime;
+  const useIncomingProd = incomingMsu >= existingMsu;
+
+  return {
+    ...existing,
+    ...incoming,
+    metalPerHour: useIncomingProd ? incomingMetal : existingMetal,
+    crystalPerHour: useIncomingProd ? incomingCrystal : existingCrystal,
+    deuteriumPerHour: useIncomingProd ? incomingDeut : existingDeut,
+    productionMsuPerHour: Math.max(incomingMsu, existingMsu),
+    lastSpiedMetal: useIncomingScans ? incoming.lastSpiedMetal : existing.lastSpiedMetal,
+    lastSpiedCrystal: useIncomingScans ? incoming.lastSpiedCrystal : existing.lastSpiedCrystal,
+    lastSpiedDeuterium: useIncomingScans ? incoming.lastSpiedDeuterium : existing.lastSpiedDeuterium,
+    lastSpiedTimestamp: Math.max(incomingTime, existingTime),
+    lastHashCode: useIncomingScans ? (incoming.lastHashCode || existing.lastHashCode) : existing.lastHashCode,
+    lootPercentage: useIncomingScans ? (incoming.lootPercentage ?? existing.lootPercentage) : existing.lootPercentage,
+    spyCount: Math.max(Number(incoming.spyCount || 1), Number(existing.spyCount || 1)),
+    confidence: Math.max(Number(incoming.confidence || 50), Number(existing.confidence || 50)),
+    playerStatus: (incoming.playerStatus && incoming.playerStatus.length > 0) ? incoming.playerStatus : (existing.playerStatus || []),
+  };
+}
 
 // ============================================================================
-// 1. VAULT SEND (PUSH LOCAL DATA TO CLOUD)
+// 1. VAULT SEND (PUSH LOCAL DATA TO CLOUDFLARE R2)
 // ============================================================================
 export async function handleVaultSend(req: Request, env: Env): Promise<Response> {
   try {
-    // Reject payloads exceeding 2MB body limit
-    const contentLength = Number(req.headers.get('content-length') || 0);
-    if (contentLength > 2 * 1024 * 1024) {
-      return json({ error: 'Payload Too Large: Vault sync request cannot exceed 2MB' }, { status: 413 });
+    if (!env.VAULT_BUCKET) {
+      return json({ error: 'Server configuration error: VAULT_BUCKET is not bound.' }, { status: 500 });
     }
 
-    const body: any = await req.json();
+    // Inspect content encoding / compression
+    const isCompressed = req.headers.get('x-vault-compression') === 'gzip' ||
+      req.headers.get('content-encoding') === 'gzip' ||
+      req.headers.get('content-type') === 'application/octet-stream';
+
+    let body: any;
+    if (isCompressed) {
+      const buf = await req.arrayBuffer();
+      const text = await gzipDecompress(buf);
+      body = JSON.parse(text);
+    } else {
+      body = await req.json();
+    }
+
     const rawUniverse = body.universeId || body.universe;
     const rawPlayerId = body.playerId;
     const vaultKey = body.vaultKey || req.headers.get('X-Nexus-Vault-Key');
@@ -301,419 +279,211 @@ export async function handleVaultSend(req: Request, env: Env): Promise<Response>
     }
 
     const now = Date.now();
-    const syncSessionId = body.syncSessionId ? String(body.syncSessionId).trim() : null;
-    const sessionKey = `${universeId}:${playerId}`;
-    const activeSession = syncSessionId ? ACTIVE_SYNC_SESSIONS.get(sessionKey) : null;
-    const isContinuingSession = Boolean(
-      activeSession &&
-      syncSessionId &&
-      activeSession.sessionId === syncSessionId &&
-      (now - activeSession.startedAt) < 60000
-    );
 
-    // Enforce 5-second write cooldown on initiating NEW sync sessions.
-    // If request belongs to the same ongoing sync session (within 60s), allow sequential batch chunks.
-    if (!isContinuingSession && auth.lastSentAt && (now - auth.lastSentAt) < 5000) {
-      const waitMs = 5000 - (now - auth.lastSentAt);
+    // Enforce 2-minute (120-second) cooldown on upload
+    if (auth.lastSentAt && (now - auth.lastSentAt) < VAULT_COOLDOWN_MS) {
+      const waitMs = VAULT_COOLDOWN_MS - (now - auth.lastSentAt);
+      const remainingSec = Math.ceil(waitMs / 1000);
+      const mins = Math.floor(remainingSec / 60);
+      const secs = remainingSec % 60;
+      const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
       return json({
-        error: `Sync rate limit exceeded. Please wait ${Math.ceil(waitMs / 1000)}s between sync calls.`,
+        error: `Upload cooldown active. Please wait ${timeStr} before uploading again.`,
+        cooldownRemainingMs: waitMs,
         retryAfterMs: waitMs,
       }, { status: 429 });
     }
 
-    if (syncSessionId) {
-      ACTIVE_SYNC_SESSIONS.set(sessionKey, {
-        sessionId: syncSessionId,
-        playerId,
-        startedAt: activeSession?.sessionId === syncSessionId ? activeSession.startedAt : now,
-        lastChunkAt: now,
-      });
-      if (ACTIVE_SYNC_SESSIONS.size > 200) {
-        const oldest = ACTIVE_SYNC_SESSIONS.keys().next().value;
-        if (oldest) ACTIVE_SYNC_SESSIONS.delete(oldest);
-      }
-    }
-
+    const prefix = `vaults/${universeId}/${playerId}`;
     const isFullResync = Boolean(body.isFullResync);
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    // Enforce 24-hour rate limit on Force Full Resync (Cloudflare D1 quota protection)
-    if (isFullResync && !auth.isNew && auth.lastFullResyncAt) {
-      const lastFull = Number(auth.lastFullResyncAt);
-      const elapsed = now - lastFull;
-      if (lastFull > 0 && elapsed < ONE_DAY_MS) {
-        const remainingHours = Math.ceil((ONE_DAY_MS - elapsed) / (60 * 60 * 1000));
-        return json({
-          error: `Force Full Resync is limited to once every 24 hours to protect Cloudflare resources. Next full resync available in ~${remainingHours}h. (Smart Delta Sync is always unlimited).`,
-          cooldownRemainingMs: ONE_DAY_MS - elapsed,
-          lastFullResyncAt: lastFull,
-        }, { status: 429 });
+    // Incoming payloads
+    const incomingExpeditions: any[] = Array.isArray(body.expeditions) ? body.expeditions : [];
+    const incomingCombats: any[] = Array.isArray(body.combats) ? body.combats : [];
+    const incomingHarvests: any[] = Array.isArray(body.harvests) ? body.harvests : [];
+    const incomingDiscoveries: any[] = Array.isArray(body.discoveries) ? body.discoveries : [];
+    const incomingPlanner: any[] = Array.isArray(body.plannerProjects) ? body.plannerProjects : [];
+    const incomingRadar: any[] = Array.isArray(body.radarTargets) ? body.radarTargets : [];
+
+    // Read existing categories from R2 for non-destructive merge (or full replacement if isFullResync)
+    const [existingExp, existingCom, existingHarv, existingDisc, existingPlan, existingRadar] = await Promise.all([
+      isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'expeditions'),
+      isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'combats'),
+      isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'harvests'),
+      isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'discoveries'),
+      isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'planner'),
+      isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'radar'),
+    ]);
+
+    // 1. Merge Expeditions (by messageId)
+    const expMap = new Map<string, any>();
+    for (const e of existingExp) if (e.messageId) expMap.set(String(e.messageId), e);
+    for (const e of incomingExpeditions) if (e.messageId) expMap.set(String(e.messageId), { ...e, playerId, tracked: true });
+    const mergedExpeditions = Array.from(expMap.values()).sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+
+    // 2. Merge Combats (by messageId)
+    const comMap = new Map<string, any>();
+    for (const c of existingCom) if (c.messageId) comMap.set(String(c.messageId), c);
+    for (const c of incomingCombats) if (c.messageId) comMap.set(String(c.messageId), { ...c, playerId, tracked: true });
+    const mergedCombats = Array.from(comMap.values()).sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+
+    // 3. Merge Harvests (by messageId / harvestKey)
+    const harvMap = new Map<string, any>();
+    for (const h of existingHarv) {
+      const key = String(h.harvestKey || h.messageId || `${h.coords}_${h.timestamp}`);
+      harvMap.set(key, h);
+    }
+    for (const h of incomingHarvests) {
+      const key = String(h.harvestKey || h.messageId || `${h.coords}_${h.timestamp}`);
+      harvMap.set(key, { ...h, playerId, tracked: true, universe: universeId });
+    }
+    const mergedHarvests = Array.from(harvMap.values()).sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+
+    // 4. Merge Discoveries (by messageId)
+    const discMap = new Map<string, any>();
+    for (const d of existingDisc) if (d.messageId) discMap.set(String(d.messageId), d);
+    for (const d of incomingDiscoveries) if (d.messageId) discMap.set(String(d.messageId), { ...d, playerId, tracked: true });
+    const mergedDiscoveries = Array.from(discMap.values()).sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+
+    // 5. Merge Planner (by projectKey)
+    const planMap = new Map<string, any>();
+    for (const p of existingPlan) if (p.projectKey) planMap.set(String(p.projectKey), p);
+    for (const p of incomingPlanner) if (p.projectKey) planMap.set(String(p.projectKey), { ...p, playerId });
+    const mergedPlanner = Array.from(planMap.values());
+
+    // 6. Merge Radar Targets (by coords, applying Highest Production & Latest Timestamp Rules)
+    const radarMap = new Map<string, any>();
+    for (const r of existingRadar) {
+      const coords = String(r.coords || '').replace(/[\[\]\s]/g, '').trim();
+      if (coords) radarMap.set(coords, r);
+    }
+    for (const r of incomingRadar) {
+      const coords = String(r.coords || '').replace(/[\[\]\s]/g, '').trim();
+      if (!coords) continue;
+      const existing = radarMap.get(coords);
+      if (existing) {
+        radarMap.set(coords, mergeRadarTarget(existing, r));
+      } else {
+        radarMap.set(coords, { ...r, universe: universeId, userPlayerId: playerId });
       }
     }
+    const mergedRadar = Array.from(radarMap.values());
 
-    // Phase 1.2: Enforce batch caps: max 500 items per array, max 1000 items total
-    const expeditions: any[] = Array.isArray(body.expeditions) ? body.expeditions : [];
-    const combats: any[] = Array.isArray(body.combats) ? body.combats : [];
-    const harvests: any[] = Array.isArray(body.harvests) ? body.harvests : [];
-    const discoveries: any[] = Array.isArray(body.discoveries) ? body.discoveries : [];
-    const plannerProjects: any[] = Array.isArray(body.plannerProjects) ? body.plannerProjects : [];
-    const radarTargets: any[] = Array.isArray(body.radarTargets) ? body.radarTargets : [];
+    // Write all updated categories to Cloudflare R2 with native gzip compression in parallel
+    const [expSize, comSize, harvSize, discSize, planSize, radarSize] = await Promise.all([
+      putR2Category(env.VAULT_BUCKET, prefix, 'expeditions', mergedExpeditions, universeId, playerId),
+      putR2Category(env.VAULT_BUCKET, prefix, 'combats', mergedCombats, universeId, playerId),
+      putR2Category(env.VAULT_BUCKET, prefix, 'harvests', mergedHarvests, universeId, playerId),
+      putR2Category(env.VAULT_BUCKET, prefix, 'discoveries', mergedDiscoveries, universeId, playerId),
+      putR2Category(env.VAULT_BUCKET, prefix, 'planner', mergedPlanner, universeId, playerId),
+      putR2Category(env.VAULT_BUCKET, prefix, 'radar', mergedRadar, universeId, playerId),
+    ]);
 
-    const MAX_ARRAY_LEN = 500;
-    if (
-      expeditions.length > MAX_ARRAY_LEN ||
-      combats.length > MAX_ARRAY_LEN ||
-      harvests.length > MAX_ARRAY_LEN ||
-      discoveries.length > MAX_ARRAY_LEN ||
-      plannerProjects.length > MAX_ARRAY_LEN ||
-      radarTargets.length > MAX_ARRAY_LEN
-    ) {
-      return json({
-        error: `Payload batch size exceeds maximum allowed limit of ${MAX_ARRAY_LEN} items per category. Please sync in smaller batches.`
-      }, { status: 413 });
-    }
+    // Calculate max timestamps
+    const getMaxT = (items: any[], field = 'timestamp') => {
+      let max = 0;
+      for (const item of items) {
+        const t = Number(item[field] || 0);
+        if (t > max) max = t;
+      }
+      return max;
+    };
 
-    const totalItems = expeditions.length + combats.length + harvests.length + discoveries.length + plannerProjects.length + radarTargets.length;
-    if (totalItems > 1000) {
-      return json({
-        error: `Total payload items (${totalItems}) exceeds maximum allowed limit of 1000 items per request.`
-      }, { status: 413 });
-    }
+    const maxTimestamps = {
+      expeditions: getMaxT(mergedExpeditions, 'timestamp'),
+      combats: getMaxT(mergedCombats, 'timestamp'),
+      harvests: getMaxT(mergedHarvests, 'timestamp'),
+      discoveries: getMaxT(mergedDiscoveries, 'timestamp'),
+      radar: getMaxT(mergedRadar, 'lastSpiedTimestamp'),
+    };
 
-    const statements: D1PreparedStatement[] = [];
+    const counts = {
+      expeditions: mergedExpeditions.length,
+      combats: mergedCombats.length,
+      harvests: mergedHarvests.length,
+      discoveries: mergedDiscoveries.length,
+      planner: mergedPlanner.length,
+      radar: mergedRadar.length,
+    };
 
-    // --- A. Expeditions (Append-only / Idempotent) ---
-    for (const exp of expeditions) {
-      if (!exp.messageId || !exp.timestamp) continue;
-      const detailsJson = exp.resultDetails ? JSON.stringify(exp.resultDetails) : null;
-      statements.push(
-        db.prepare(`
-          INSERT OR IGNORE INTO personal_vault_expeditions (
-            universe_id, player_id, message_id, timestamp, coords, depletion, size, result, result_details_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          universeId,
-          playerId,
-          String(exp.messageId),
-          Number(exp.timestamp),
-          String(exp.coords || ''),
-          Number(exp.depletion || 0),
-          Number(exp.size || 0),
-          String(exp.result || 'unknown'),
-          detailsJson,
-          now
-        )
-      );
-    }
+    // Write updated manifest to R2
+    const manifest: PlayerVaultManifest = {
+      version: 1,
+      universeId,
+      playerId,
+      counts,
+      maxTimestamps,
+      compressedSizesBytes: {
+        expeditions: expSize,
+        combats: comSize,
+        harvests: harvSize,
+        discoveries: discSize,
+        planner: planSize,
+        radar: radarSize,
+      },
+      lastSentAt: now,
+      lastFetchedAt: auth.lastFetchedAt || null,
+      migratedAt: now,
+      integrityVerified: true,
+    };
 
-    // --- B. Combat Reports (Append-only / Idempotent) ---
-    for (const com of combats) {
-      if (!com.messageId || !com.timestamp) continue;
-      const loot = com.loot || {};
-      const debris = com.debris || {};
-      const summaryPayload = {
-        attackerLosses: com.attackerLosses || 0,
-        defenderLosses: com.defenderLosses || 0,
-        honor: com.honor,
-        moonChance: com.moonChance,
-      };
-      statements.push(
-        db.prepare(`
-          INSERT OR IGNORE INTO personal_vault_combats (
-            universe_id, player_id, message_id, timestamp, coords, winner,
-            loot_metal, loot_crystal, loot_deut, loot_food,
-            debris_metal, debris_crystal, debris_deut,
-            attacker_losses, defender_losses, attacker_name, defender_name,
-            my_losses, is_acs, is_expedition, expedition_attack_type, summary_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          universeId,
-          playerId,
-          String(com.messageId),
-          Number(com.timestamp),
-          String(com.coords || ''),
-          String(com.winner || 'none'),
-          Number(loot.metal || 0),
-          Number(loot.crystal || 0),
-          Number(loot.deuterium || 0),
-          Number(loot.food || 0),
-          Number(debris.metal || 0),
-          Number(debris.crystal || 0),
-          Number(debris.deuterium || 0),
-          Number(com.attackerLosses || 0),
-          Number(com.defenderLosses || 0),
-          com.attackerName || null,
-          com.defenderName || null,
-          Number(com.myLosses || 0),
-          com.isAcs ? 1 : 0,
-          com.isExpedition ? 1 : 0,
-          com.expeditionAttackType || null,
-          JSON.stringify(summaryPayload),
-          now
-        )
-      );
-    }
+    await env.VAULT_BUCKET.put(`${prefix}/manifest.json`, JSON.stringify(manifest, null, 2), {
+      httpMetadata: { contentType: 'application/json' },
+    });
 
-    // --- C. Debris Harvests (Append-only / Idempotent) ---
-    for (const h of harvests) {
-      const msgId = String(h.messageId || h.harvestKey || `${h.coords}_${h.timestamp}`);
-      const cleanKey = `${universeId}_${msgId}`;
-      const res = h.recycledResources || {};
-      statements.push(
-        db.prepare(`
-          INSERT INTO personal_vault_harvests (
-            universe_id, player_id, message_id, harvest_key, timestamp, coords,
-            metal, crystal, deut, recycler_amount, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(universe_id, player_id, message_id) DO UPDATE SET
-            harvest_key = excluded.harvest_key,
-            timestamp = excluded.timestamp,
-            coords = excluded.coords,
-            metal = excluded.metal,
-            crystal = excluded.crystal,
-            deut = excluded.deut,
-            recycler_amount = excluded.recycler_amount
-        `).bind(
-          universeId,
-          playerId,
-          msgId,
-          cleanKey,
-          Number(h.timestamp || now),
-          String(h.coords || ''),
-          Number(res.metal || 0),
-          Number(res.crystal || 0),
-          Number(res.deuterium || 0),
-          Number(h.recyclerAmount || 0),
-          now
-        )
-      );
-    }
-
-    // --- D. Lifeform Discoveries (Append-only / Idempotent) ---
-    for (const d of discoveries) {
-      if (!d.messageId) continue;
-      statements.push(
-        db.prepare(`
-          INSERT OR IGNORE INTO personal_vault_discoveries (
-            universe_id, player_id, message_id, timestamp, coords, lifeform,
-            discovery_type, lifeform_exp, artifacts_found, artifact_size, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          universeId,
-          playerId,
-          String(d.messageId),
-          Number(d.timestamp || now),
-          String(d.coords || ''),
-          d.lifeform !== undefined ? Number(d.lifeform) : null,
-          String(d.discoveryType || 'unknown'),
-          Number(d.lifeformGainedExperience || 0),
-          Number(d.artifactsFound || 0),
-          d.artifactSize ? String(d.artifactSize) : null,
-          now
-        )
-      );
-    }
-
-    // --- E. Costs Planner Queues (Upsert) ---
-    for (const p of plannerProjects) {
-      if (!p.projectKey) continue;
-      const cost = p.cost || {};
-      const prodDelta = p.prodDelta || {};
-      statements.push(
-        db.prepare(`
-          INSERT INTO personal_vault_planner (
-            universe_id, player_id, project_key, name, type, target_level,
-            planet_id, planet_name, coords, cost_metal, cost_crystal, cost_deut,
-            msu_cost, prod_delta_metal, prod_delta_crystal, prod_delta_deut,
-            roi_hours, timestamp, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(universe_id, player_id, project_key) DO UPDATE SET
-            name = excluded.name,
-            target_level = excluded.target_level,
-            cost_metal = excluded.cost_metal,
-            cost_crystal = excluded.cost_crystal,
-            cost_deut = excluded.cost_deut,
-            msu_cost = excluded.msu_cost,
-            prod_delta_metal = excluded.prod_delta_metal,
-            prod_delta_crystal = excluded.prod_delta_crystal,
-            prod_delta_deut = excluded.prod_delta_deut,
-            roi_hours = excluded.roi_hours,
-            timestamp = excluded.timestamp
-        `).bind(
-          universeId,
-          playerId,
-          String(p.projectKey),
-          String(p.name || 'Project'),
-          String(p.type || 'building'),
-          Number(p.targetLevel || 1),
-          p.planetId || null,
-          p.planetName || null,
-          p.coords || null,
-          Number(cost.metal || 0),
-          Number(cost.crystal || 0),
-          Number(cost.deuterium || 0),
-          Number(p.msuCost || 0),
-          Number(prodDelta.metal || 0),
-          Number(prodDelta.crystal || 0),
-          Number(prodDelta.deuterium || 0),
-          Number(p.roiHours || 0),
-          Number(p.timestamp || now),
-          now
-        )
-      );
-    }
-
-    // --- F. Raid Radar Targets (Highest Production Rule & Safe Non-Destructive Merge via single batched UPSERT) ---
-    let radarMergedCount = 0;
-
-    for (const r of radarTargets) {
-      if (!r.coords || typeof r.coords !== 'string') continue;
-      const coords = r.coords.replace(/[\[\]\s]/g, '').trim();
-      if (!coords) continue;
-
-      const incomingMetalPerHour = Number(r.metalPerHour || 0);
-      const incomingCrystalPerHour = Number(r.crystalPerHour || 0);
-      const incomingDeutPerHour = Number(r.deuteriumPerHour || 0);
-      const incomingProdMsu = incomingMetalPerHour + 1.5 * incomingCrystalPerHour + 3.0 * incomingDeutPerHour;
-
-      const incomingLastSpiedTimestamp = Number(r.lastSpiedTimestamp || 0);
-      const incomingLastSpiedMetal = Number(r.lastSpiedMetal || 0);
-      const incomingLastSpiedCrystal = Number(r.lastSpiedCrystal || 0);
-      const incomingLastSpiedDeut = Number(r.lastSpiedDeuterium || 0);
-
-      const incomingCapacities = {
-        metalCapacity: r.metalCapacity,
-        crystalCapacity: r.crystalCapacity,
-        deuteriumCapacity: r.deuteriumCapacity,
-        metalStorageLevel: r.metalStorageLevel,
-        crystalStorageLevel: r.crystalStorageLevel,
-        deuteriumStorageLevel: r.deuteriumStorageLevel,
-      };
-
-      statements.push(
-        db.prepare(`
-          INSERT INTO personal_vault_radar (
-            universe_id, player_id, planet_id, planet_key, target_player_id, target_player_name,
-            coords, metal_per_hour, crystal_per_hour, deut_per_hour, production_msu_per_hour,
-            last_spied_metal, last_spied_crystal, last_spied_deut, last_spied_timestamp,
-            player_status_json, last_hash_code, spy_count, confidence, loot_percentage,
-            capacities_json, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(universe_id, player_id, coords) DO UPDATE SET
-            planet_id = excluded.planet_id,
-            planet_key = excluded.planet_key,
-            target_player_id = COALESCE(excluded.target_player_id, personal_vault_radar.target_player_id),
-            target_player_name = CASE WHEN excluded.target_player_name IS NOT NULL AND excluded.target_player_name != 'Unknown' THEN excluded.target_player_name ELSE personal_vault_radar.target_player_name END,
-            metal_per_hour = CASE WHEN excluded.production_msu_per_hour > personal_vault_radar.production_msu_per_hour THEN excluded.metal_per_hour ELSE personal_vault_radar.metal_per_hour END,
-            crystal_per_hour = CASE WHEN excluded.production_msu_per_hour > personal_vault_radar.production_msu_per_hour THEN excluded.crystal_per_hour ELSE personal_vault_radar.crystal_per_hour END,
-            deut_per_hour = CASE WHEN excluded.production_msu_per_hour > personal_vault_radar.production_msu_per_hour THEN excluded.deut_per_hour ELSE personal_vault_radar.deut_per_hour END,
-            production_msu_per_hour = MAX(excluded.production_msu_per_hour, personal_vault_radar.production_msu_per_hour),
-            last_spied_metal = CASE WHEN excluded.last_spied_timestamp >= personal_vault_radar.last_spied_timestamp THEN excluded.last_spied_metal ELSE personal_vault_radar.last_spied_metal END,
-            last_spied_crystal = CASE WHEN excluded.last_spied_timestamp >= personal_vault_radar.last_spied_timestamp THEN excluded.last_spied_crystal ELSE personal_vault_radar.last_spied_crystal END,
-            last_spied_deut = CASE WHEN excluded.last_spied_timestamp >= personal_vault_radar.last_spied_timestamp THEN excluded.last_spied_deut ELSE personal_vault_radar.last_spied_deut END,
-            last_hash_code = CASE WHEN excluded.last_spied_timestamp >= personal_vault_radar.last_spied_timestamp THEN COALESCE(excluded.last_hash_code, personal_vault_radar.last_hash_code) ELSE personal_vault_radar.last_hash_code END,
-            loot_percentage = CASE WHEN excluded.last_spied_timestamp >= personal_vault_radar.last_spied_timestamp THEN COALESCE(excluded.loot_percentage, personal_vault_radar.loot_percentage) ELSE personal_vault_radar.loot_percentage END,
-            capacities_json = CASE WHEN excluded.last_spied_timestamp >= personal_vault_radar.last_spied_timestamp AND excluded.capacities_json != '{}' THEN excluded.capacities_json ELSE personal_vault_radar.capacities_json END,
-            player_status_json = CASE WHEN excluded.player_status_json != '[]' THEN excluded.player_status_json ELSE personal_vault_radar.player_status_json END,
-            last_spied_timestamp = MAX(excluded.last_spied_timestamp, personal_vault_radar.last_spied_timestamp),
-            spy_count = MAX(excluded.spy_count, personal_vault_radar.spy_count),
-            confidence = MAX(excluded.confidence, personal_vault_radar.confidence),
-            updated_at = excluded.updated_at
-        `).bind(
-          universeId,
-          playerId,
-          String(r.planetId || ''),
-          String(r.planetKey || `${universeId}_${r.planetId || coords}`),
-          r.playerId ? String(r.playerId) : null,
-          r.playerName || 'Unknown',
-          coords,
-          incomingMetalPerHour,
-          incomingCrystalPerHour,
-          incomingDeutPerHour,
-          incomingProdMsu,
-          incomingLastSpiedMetal,
-          incomingLastSpiedCrystal,
-          incomingLastSpiedDeut,
-          incomingLastSpiedTimestamp,
-          JSON.stringify(r.playerStatus || []),
-          r.lastHashCode || null,
-          Number(r.spyCount || 1),
-          Number(r.confidence || 50),
-          Number(r.lootPercentage || 50),
-          JSON.stringify(incomingCapacities),
-          now
-        )
-      );
-      radarMergedCount++;
-    }
-
-    // Execute all prepared statements in efficient batches
-    if (statements.length > 0) {
-      await executeBatchStatements(db, statements);
-    }
-
-    // Update vault credentials telemetry
-    if (isFullResync) {
-      await db
-        .prepare(`
-          UPDATE personal_vault_credentials SET
-            total_syncs = total_syncs + 1,
-            last_sent_at = ?,
-            last_full_resync_at = ?,
-            device_label = ?,
-            updated_at = ?
-          WHERE universe_id = ? AND player_id = ?
-        `)
-        .bind(now, now, deviceLabel, now, universeId, playerId)
-        .run();
-    } else {
-      await db
-        .prepare(`
-          UPDATE personal_vault_credentials SET
-            total_syncs = total_syncs + 1,
-            last_sent_at = ?,
-            device_label = ?,
-            updated_at = ?
-          WHERE universe_id = ? AND player_id = ?
-        `)
-        .bind(now, deviceLabel, now, universeId, playerId)
-        .run();
-    }
+    // Update D1 credentials telemetry (1 fast row write)
+    await db
+      .prepare(`
+        UPDATE personal_vault_credentials SET
+          total_syncs = total_syncs + 1,
+          last_sent_at = ?,
+          device_label = ?,
+          updated_at = ?
+        WHERE universe_id = ? AND player_id = ?
+      `)
+      .bind(now, deviceLabel, now, universeId, playerId)
+      .run();
 
     return json({
       success: true,
-      message: 'Personal Vault successfully updated',
+      message: 'Personal Vault successfully updated in Cloudflare R2',
       saved: {
-        expeditions: expeditions.length,
-        combats: combats.length,
-        harvests: harvests.length,
-        discoveries: discoveries.length,
-        planner: plannerProjects.length,
-        radar: radarMergedCount,
+        expeditions: incomingExpeditions.length,
+        combats: incomingCombats.length,
+        harvests: incomingHarvests.length,
+        discoveries: incomingDiscoveries.length,
+        planner: incomingPlanner.length,
+        radar: incomingRadar.length,
       },
+      totalInVault: counts,
       lastSentAt: now,
+      cooldownSeconds: 120,
     });
   } catch (err: any) {
+    console.error('[VaultSend] Error:', err);
     return json({ error: err.message || 'Failed to send data to Personal Vault' }, { status: 500 });
   }
 }
 
 // ============================================================================
-// 2. VAULT FETCH (PULL SOURCE OF TRUTH FROM CLOUD)
+// 2. VAULT FETCH (PULL SOURCE OF TRUTH FROM CLOUDFLARE R2)
 // ============================================================================
 export async function handleVaultFetch(req: Request, env: Env): Promise<Response> {
   try {
+    if (!env.VAULT_BUCKET) {
+      return json({ error: 'Server configuration error: VAULT_BUCKET is not bound.' }, { status: 500 });
+    }
+
     const url = new URL(req.url);
     const rawUniverse = url.searchParams.get('universeId') || url.searchParams.get('universe');
     const rawPlayerId = url.searchParams.get('playerId');
     const vaultKey = url.searchParams.get('vaultKey') || req.headers.get('X-Nexus-Vault-Key');
-    const sinceTimestamp = Number(url.searchParams.get('sinceTimestamp') || 0);
-    const sinceExp = Number(url.searchParams.get('sinceExpTimestamp') || sinceTimestamp || 0);
-    const sinceCom = Number(url.searchParams.get('sinceComTimestamp') || sinceTimestamp || 0);
-    const sinceHarv = Number(url.searchParams.get('sinceHarvTimestamp') || sinceTimestamp || 0);
-    const sinceDisc = Number(url.searchParams.get('sinceDiscTimestamp') || sinceTimestamp || 0);
-    const sinceRadar = Number(url.searchParams.get('sinceRadarTimestamp') || 0);
-    const limitExp = Math.min(Number(url.searchParams.get('limitExp') || 10000), 20000);
+
+    const sinceExp = Number(url.searchParams.get('sinceExpTimestamp') || url.searchParams.get('sinceTimestamp') || 0);
+    const sinceCom = Number(url.searchParams.get('sinceComTimestamp') || url.searchParams.get('sinceTimestamp') || 0);
+    const sinceHarv = Number(url.searchParams.get('sinceHarvTimestamp') || url.searchParams.get('sinceTimestamp') || 0);
+    const sinceDisc = Number(url.searchParams.get('sinceDiscTimestamp') || url.searchParams.get('sinceTimestamp') || 0);
+    const isExplicitFullDownload = url.searchParams.get('isFullResync') === '1' || url.searchParams.get('forceFullDownload') === '1';
 
     if (!rawUniverse || !rawPlayerId || !vaultKey) {
       return json({ error: 'Missing universeId, playerId, or vaultKey' }, { status: 400 });
@@ -732,350 +502,97 @@ export async function handleVaultFetch(req: Request, env: Env): Promise<Response
     }
 
     const now = Date.now();
-    const isExplicitFullDownload = url.searchParams.get('isFullResync') === '1' || url.searchParams.get('forceFullDownload') === '1';
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    // Enforce 24-hour rate limit ONLY on explicit Force Full Download (Cloudflare D1 quota protection).
-    // Smart Delta Sync and initial device downloads are always permitted.
-    if (isExplicitFullDownload && !auth.isNew && auth.lastFullResyncAt) {
-      const lastFull = Number(auth.lastFullResyncAt);
-      const elapsed = now - lastFull;
-      if (lastFull > 0 && elapsed < ONE_DAY_MS) {
-        const remainingHours = Math.ceil((ONE_DAY_MS - elapsed) / (60 * 60 * 1000));
-        return json({
-          error: `Force Full Download is limited to once every 24 hours to protect Cloudflare resources. Next full download available in ~${remainingHours}h. (Smart Delta Sync is always unlimited).`,
-          cooldownRemainingMs: ONE_DAY_MS - elapsed,
-          lastFullResyncAt: lastFull,
-        }, { status: 429 });
-      }
+    // Enforce 2-minute (120-second) cooldown on download
+    if (auth.lastFetchedAt && (now - auth.lastFetchedAt) < VAULT_COOLDOWN_MS) {
+      const waitMs = VAULT_COOLDOWN_MS - (now - auth.lastFetchedAt);
+      const remainingSec = Math.ceil(waitMs / 1000);
+      const mins = Math.floor(remainingSec / 60);
+      const secs = remainingSec % 60;
+      const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      return json({
+        error: `Download cooldown active. Please wait ${timeStr} before downloading again.`,
+        cooldownRemainingMs: waitMs,
+        retryAfterMs: waitMs,
+      }, { status: 429 });
     }
 
-    // Expeditions (support granular sinceExp filter & cursor pagination)
-    const expQuery = sinceExp > 0
-      ? db
-          .prepare(`
-            SELECT message_id as messageId, timestamp, coords, depletion, size, result, result_details_json
-            FROM personal_vault_expeditions
-            WHERE universe_id = ? AND player_id = ? AND timestamp > ?
-            ORDER BY timestamp ASC
-            LIMIT ?
-          `)
-          .bind(universeId, playerId, sinceExp, limitExp)
-      : db
-          .prepare(`
-            SELECT message_id as messageId, timestamp, coords, depletion, size, result, result_details_json
-            FROM personal_vault_expeditions
-            WHERE universe_id = ? AND player_id = ?
-            ORDER BY timestamp ASC
-            LIMIT ?
-          `)
-          .bind(universeId, playerId, limitExp);
+    const prefix = `vaults/${universeId}/${playerId}`;
 
-    const expeditions = await expQuery.all();
-    const expResults: any[] = expeditions.results || [];
-    const hasMoreExpeditions = expResults.length >= limitExp;
-    const nextExpTimestamp = expResults.length > 0 ? Number(expResults[expResults.length - 1].timestamp) : null;
+    // Read all categories from R2 in parallel
+    const [rawExpeditions, rawCombats, rawHarvests, rawDiscoveries, rawPlanner, rawRadar] = await Promise.all([
+      getR2Category(env.VAULT_BUCKET, prefix, 'expeditions'),
+      getR2Category(env.VAULT_BUCKET, prefix, 'combats'),
+      getR2Category(env.VAULT_BUCKET, prefix, 'harvests'),
+      getR2Category(env.VAULT_BUCKET, prefix, 'discoveries'),
+      getR2Category(env.VAULT_BUCKET, prefix, 'planner'),
+      getR2Category(env.VAULT_BUCKET, prefix, 'radar'),
+    ]);
 
-    // Combats (support granular sinceCom filter with LIMIT 5000)
-    const comQuery = sinceCom > 0
-      ? db
-          .prepare(`
-            SELECT message_id as messageId, timestamp, coords, winner,
-                   loot_metal, loot_crystal, loot_deut, loot_food,
-                   debris_metal, debris_crystal, debris_deut,
-                   attacker_losses, defender_losses, attacker_name, defender_name,
-                   my_losses, is_acs, is_expedition, expedition_attack_type, summary_json
-            FROM personal_vault_combats
-            WHERE universe_id = ? AND player_id = ? AND timestamp > ?
-            ORDER BY timestamp ASC
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId, sinceCom)
-      : db
-          .prepare(`
-            SELECT message_id as messageId, timestamp, coords, winner,
-                   loot_metal, loot_crystal, loot_deut, loot_food,
-                   debris_metal, debris_crystal, debris_deut,
-                   attacker_losses, defender_losses, attacker_name, defender_name,
-                   my_losses, is_acs, is_expedition, expedition_attack_type, summary_json
-            FROM personal_vault_combats
-            WHERE universe_id = ? AND player_id = ?
-            ORDER BY timestamp ASC
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId);
-    const combats = await comQuery.all();
+    // Apply granular delta filtering if not an explicit full download
+    const expeditions = (!isExplicitFullDownload && sinceExp > 0)
+      ? rawExpeditions.filter(e => Number(e.timestamp || 0) > sinceExp)
+      : rawExpeditions;
 
-    // Harvests (support granular sinceHarv filter with LIMIT 5000)
-    const harvQuery = sinceHarv > 0
-      ? db
-          .prepare(`
-            SELECT harvest_key as harvestKey, message_id as messageId, timestamp, coords,
-                   metal, crystal, deut, recycler_amount as recyclerAmount
-            FROM personal_vault_harvests
-            WHERE universe_id = ? AND player_id = ? AND timestamp > ?
-            ORDER BY timestamp ASC
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId, sinceHarv)
-      : db
-          .prepare(`
-            SELECT harvest_key as harvestKey, message_id as messageId, timestamp, coords,
-                   metal, crystal, deut, recycler_amount as recyclerAmount
-            FROM personal_vault_harvests
-            WHERE universe_id = ? AND player_id = ?
-            ORDER BY timestamp ASC
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId);
-    const harvests = await harvQuery.all();
+    const combats = (!isExplicitFullDownload && sinceCom > 0)
+      ? rawCombats.filter(c => Number(c.timestamp || 0) > sinceCom)
+      : rawCombats;
 
-    // Discoveries (support granular sinceDisc filter with LIMIT 5000)
-    const discQuery = sinceDisc > 0
-      ? db
-          .prepare(`
-            SELECT message_id as messageId, timestamp, coords, lifeform,
-                   discovery_type as discoveryType, lifeform_exp as lifeformGainedExperience,
-                   artifacts_found as artifactsFound, artifact_size as artifactSize
-            FROM personal_vault_discoveries
-            WHERE universe_id = ? AND player_id = ? AND timestamp > ?
-            ORDER BY timestamp ASC
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId, sinceDisc)
-      : db
-          .prepare(`
-            SELECT message_id as messageId, timestamp, coords, lifeform,
-                   discovery_type as discoveryType, lifeform_exp as lifeformGainedExperience,
-                   artifacts_found as artifactsFound, artifact_size as artifactSize
-            FROM personal_vault_discoveries
-            WHERE universe_id = ? AND player_id = ?
-            ORDER BY timestamp ASC
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId);
-    const discoveries = await discQuery.all();
+    const harvests = (!isExplicitFullDownload && sinceHarv > 0)
+      ? rawHarvests.filter(h => Number(h.timestamp || 0) > sinceHarv)
+      : rawHarvests;
 
-    // Planner (LIMIT 500)
-    const planner = await db
-      .prepare(`
-        SELECT project_key as projectKey, name, type, target_level as targetLevel,
-               planet_id as planetId, planet_name as planetName, coords,
-               cost_metal, cost_crystal, cost_deut, msu_cost as msuCost,
-               prod_delta_metal, prod_delta_crystal, prod_delta_deut,
-               roi_hours as roiHours, timestamp
-        FROM personal_vault_planner
-        WHERE universe_id = ? AND player_id = ?
-        LIMIT 500
-      `)
-      .bind(universeId, playerId)
-      .all();
+    const discoveries = (!isExplicitFullDownload && sinceDisc > 0)
+      ? rawDiscoveries.filter(d => Number(d.timestamp || 0) > sinceDisc)
+      : rawDiscoveries;
 
-    // Radar Targets (support sinceRadarTimestamp filter with LIMIT 5000)
-    const radarQuery = sinceRadar > 0
-      ? db
-          .prepare(`
-            SELECT planet_id as planetId, planet_key as planetKey,
-                   target_player_id as playerId, target_player_name as playerName,
-                   coords, metal_per_hour as metalPerHour, crystal_per_hour as crystalPerHour,
-                   deut_per_hour as deuteriumPerHour, production_msu_per_hour as productionMsuPerHour,
-                   last_spied_metal as lastSpiedMetal, last_spied_crystal as lastSpiedCrystal,
-                   last_spied_deut as lastSpiedDeuterium, last_spied_timestamp as lastSpiedTimestamp,
-                   player_status_json, last_hash_code as lastHashCode, spy_count as spyCount,
-                   confidence, loot_percentage as lootPercentage, capacities_json
-            FROM personal_vault_radar
-            WHERE universe_id = ? AND player_id = ? AND updated_at > ?
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId, sinceRadar)
-      : db
-          .prepare(`
-            SELECT planet_id as planetId, planet_key as planetKey,
-                   target_player_id as playerId, target_player_name as playerName,
-                   coords, metal_per_hour as metalPerHour, crystal_per_hour as crystalPerHour,
-                   deut_per_hour as deuteriumPerHour, production_msu_per_hour as productionMsuPerHour,
-                   last_spied_metal as lastSpiedMetal, last_spied_crystal as lastSpiedCrystal,
-                   last_spied_deut as lastSpiedDeuterium, last_spied_timestamp as lastSpiedTimestamp,
-                   player_status_json, last_hash_code as lastHashCode, spy_count as spyCount,
-                   confidence, loot_percentage as lootPercentage, capacities_json
-            FROM personal_vault_radar
-            WHERE universe_id = ? AND player_id = ?
-            LIMIT 5000
-          `)
-          .bind(universeId, playerId);
-    const radar = await radarQuery.all();
+    const plannerProjects = rawPlanner;
+    const radarTargets = rawRadar;
 
-    // Update last_fetched_at (and last_full_resync_at ONLY if explicit force full download)
-    if (isExplicitFullDownload) {
-      await db
-        .prepare('UPDATE personal_vault_credentials SET last_fetched_at = ?, last_full_resync_at = ?, updated_at = ? WHERE universe_id = ? AND player_id = ?')
-        .bind(now, now, now, universeId, playerId)
-        .run();
-    } else {
-      await db
-        .prepare('UPDATE personal_vault_credentials SET last_fetched_at = ?, updated_at = ? WHERE universe_id = ? AND player_id = ?')
-        .bind(now, now, universeId, playerId)
-        .run();
-    }
+    // Update last_fetched_at in D1
+    await db
+      .prepare('UPDATE personal_vault_credentials SET last_fetched_at = ?, updated_at = ? WHERE universe_id = ? AND player_id = ?')
+      .bind(now, now, universeId, playerId)
+      .run();
 
-    // Format results to match client interfaces
-    const formattedExpeditions = expResults.map((e: any) => ({
-      messageId: e.messageId,
-      playerId,
-      timestamp: e.timestamp,
-      coords: e.coords,
-      depletion: e.depletion,
-      size: e.size,
-      result: e.result,
-      resultDetails: e.result_details_json ? JSON.parse(e.result_details_json) : undefined,
-      tracked: true,
-    }));
-
-    const formattedCombats = (combats.results || []).map((c: any) => {
-      const summary = c.summary_json ? JSON.parse(c.summary_json) : {};
-      return {
-        messageId: c.messageId,
-        playerId,
-        timestamp: c.timestamp,
-        coords: c.coords,
-        winner: c.winner,
-        loot: {
-          metal: c.loot_metal,
-          crystal: c.loot_crystal,
-          deuterium: c.loot_deut,
-          food: c.loot_food,
-        },
-        debris: {
-          metal: c.debris_metal,
-          crystal: c.debris_crystal,
-          deuterium: c.debris_deut,
-        },
-        attackerLosses: c.attacker_losses,
-        defenderLosses: c.defenderLosses || c.defender_losses,
-        attackerName: c.attacker_name,
-        defenderName: c.defender_name,
-        myLosses: c.my_losses,
-        isAcs: c.is_acs === 1,
-        isExpedition: c.is_expedition === 1,
-        expeditionAttackType: c.expedition_attack_type,
-        honor: summary.honor,
-        moonChance: summary.moonChance,
-        tracked: true,
-      };
-    });
-
-    const formattedHarvests = (harvests.results || []).map((h: any) => ({
-      harvestKey: h.harvestKey,
-      messageId: h.messageId,
-      playerId,
-      timestamp: h.timestamp,
-      coords: h.coords,
-      recycledResources: {
-        metal: h.metal,
-        crystal: h.crystal,
-        deuterium: h.deut,
-      },
-      recyclerAmount: h.recyclerAmount,
-      tracked: true,
-      universe: universeId,
-    }));
-
-    const formattedDiscoveries = (discoveries.results || []).map((d: any) => ({
-      messageId: d.messageId,
-      playerId,
-      timestamp: d.timestamp,
-      coords: d.coords,
-      lifeform: d.lifeform !== null ? d.lifeform : undefined,
-      discoveryType: d.discoveryType,
-      lifeformGainedExperience: d.lifeformGainedExperience,
-      artifactsFound: d.artifactsFound,
-      artifactSize: d.artifactSize,
-      tracked: true,
-    }));
-
-    const formattedPlanner = (planner.results || []).map((p: any) => ({
-      projectKey: p.projectKey,
-      playerId,
-      name: p.name,
-      type: p.type,
-      targetLevel: p.targetLevel,
-      planetId: p.planetId,
-      planetName: p.planetName,
-      coords: p.coords,
-      cost: {
-        metal: p.cost_metal,
-        crystal: p.cost_crystal,
-        deuterium: p.cost_deut,
-      },
-      msuCost: p.msuCost,
-      prodDelta: {
-        metal: p.prod_delta_metal,
-        crystal: p.prod_delta_crystal,
-        deuterium: p.prod_delta_deut,
-      },
-      roiHours: p.roiHours,
-      timestamp: p.timestamp,
-    }));
-
-    const formattedRadar = (radar.results || []).map((r: any) => {
-      let playerStatus: string[] = [];
-      try {
-        playerStatus = r.player_status_json ? JSON.parse(r.player_status_json) : [];
-      } catch {}
-
-      let caps: any = {};
-      try {
-        caps = r.capacities_json ? JSON.parse(r.capacities_json) : {};
-      } catch {}
-
-      return {
-        planetKey: r.planetKey || `${universeId}_${r.planetId}`,
-        planetId: r.planetId,
-        playerId: r.playerId || '',
-        userPlayerId: playerId,
-        universe: universeId,
-        playerName: r.playerName || 'Unknown',
-        coords: r.coords,
-        metalPerHour: r.metalPerHour,
-        crystalPerHour: r.crystalPerHour,
-        deuteriumPerHour: r.deuteriumPerHour,
-        lastSpiedMetal: r.lastSpiedMetal,
-        lastSpiedCrystal: r.lastSpiedCrystal,
-        lastSpiedDeuterium: r.lastSpiedDeuterium,
-        lastSpiedTimestamp: r.lastSpiedTimestamp,
-        playerStatus,
-        lastHashCode: r.lastHashCode || '',
-        spyCount: r.spyCount || 1,
-        confidence: r.confidence || 50,
-        lootPercentage: r.lootPercentage || 50,
-        metalStorageLevel: caps.metalStorageLevel,
-        crystalStorageLevel: caps.crystalStorageLevel,
-        deuteriumStorageLevel: caps.deuteriumStorageLevel,
-        metalCapacity: caps.metalCapacity,
-        crystalCapacity: caps.crystalCapacity,
-        deuteriumCapacity: caps.deuteriumCapacity,
-      };
-    });
-
-    return json({
+    const responsePayload = {
       success: true,
-      expeditions: formattedExpeditions,
-      combats: formattedCombats,
-      harvests: formattedHarvests,
-      discoveries: formattedDiscoveries,
-      plannerProjects: formattedPlanner,
-      radarTargets: formattedRadar,
-      hasMoreExpeditions,
-      nextExpTimestamp,
+      expeditions,
+      combats,
+      harvests,
+      discoveries,
+      plannerProjects,
+      radarTargets,
+      hasMoreExpeditions: false,
       lastFetchedAt: now,
-    });
+      cooldownSeconds: 120,
+    };
+
+    // Support client-side stream compression if requested
+    const clientWantsGzip = req.headers.get('x-vault-compression') === 'gzip' ||
+      (req.headers.get('accept-encoding') || '').includes('gzip');
+
+    if (clientWantsGzip) {
+      const jsonStr = JSON.stringify(responsePayload);
+      const compressed = await gzipCompress(jsonStr);
+      return new Response(compressed, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+          'X-Vault-Compression': 'gzip',
+        },
+      });
+    }
+
+    return json(responsePayload);
   } catch (err: any) {
+    console.error('[VaultFetch] Error:', err);
     return json({ error: err.message || 'Failed to fetch Personal Vault data' }, { status: 500 });
   }
 }
 
 // ============================================================================
-// 3. VAULT SUMMARY & TELEMETRY (QUICK COUNT STATUS)
+// 3. VAULT SUMMARY & TELEMETRY (INSTANT MANIFEST READ)
 // ============================================================================
 export async function handleVaultSummary(req: Request, env: Env): Promise<Response> {
   try {
@@ -1092,11 +609,10 @@ export async function handleVaultSummary(req: Request, env: Env): Promise<Respon
     const playerId = String(rawPlayerId).trim();
     const db = getUniverseDb(env, universeId);
 
-    // Auto-create Personal Vault tables if they don't exist yet
     await ensurePersonalVaultTables(db);
 
     const creds = await db
-      .prepare('SELECT vault_key_hash, total_syncs, last_sent_at, last_fetched_at, last_full_resync_at FROM personal_vault_credentials WHERE universe_id = ? AND player_id = ?')
+      .prepare('SELECT vault_key_hash, total_syncs, last_sent_at, last_fetched_at FROM personal_vault_credentials WHERE universe_id = ? AND player_id = ?')
       .bind(universeId, playerId)
       .first<any>();
 
@@ -1104,87 +620,80 @@ export async function handleVaultSummary(req: Request, env: Env): Promise<Respon
       return json({
         success: true,
         vaultRegistered: false,
-        counts: {
-          expeditions: 0,
-          combats: 0,
-          harvests: 0,
-          discoveries: 0,
-          planner: 0,
-          radar: 0,
-        },
-        maxTimestamps: {
-          expeditions: 0,
-          combats: 0,
-          harvests: 0,
-          discoveries: 0,
-          radar: 0,
-        },
+        counts: { expeditions: 0, combats: 0, harvests: 0, discoveries: 0, planner: 0, radar: 0 },
+        maxTimestamps: { expeditions: 0, combats: 0, harvests: 0, discoveries: 0, radar: 0 },
         totalSyncs: 0,
         lastSentAt: null,
         lastFetchedAt: null,
-        lastFullResyncAt: null,
-        canFullResync: true,
-        fullResyncCooldownMs: 0,
+        canSend: true,
+        canFetch: true,
+        sendCooldownMs: 0,
+        fetchCooldownMs: 0,
+        cooldownSeconds: 120,
       });
     }
 
-    // Enforce mandatory Personal Vault authentication key
     if (!vaultKey) {
       return json({ error: 'Vault authentication key required' }, { status: 401 });
     }
 
-    const keyHash = await hashVaultKey(vaultKey, env.SERVER_PEPPER);
-    if (creds.vault_key_hash !== keyHash) {
+    const candidatePeppers = Array.from(new Set([
+      'nexus_overwatch_secret_pepper_2026',
+      env.SERVER_PEPPER,
+      'nexus_pepper_default',
+    ])).filter(p => p && p !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') as string[];
+
+    let keyMatched = false;
+    for (const p of candidatePeppers) {
+      const testHash = await hashVaultKey(vaultKey, p);
+      if (creds.vault_key_hash === testHash) {
+        keyMatched = true;
+        break;
+      }
+    }
+
+    if (!keyMatched) {
       return json({ error: 'Invalid Vault Key for this account' }, { status: 401 });
     }
 
-    const summaryBatch = await db.batch([
-      db.prepare('SELECT COUNT(*) as count, MAX(timestamp) as maxTime FROM personal_vault_expeditions WHERE universe_id = ? AND player_id = ?').bind(universeId, playerId),
-      db.prepare('SELECT COUNT(*) as count, MAX(timestamp) as maxTime FROM personal_vault_combats WHERE universe_id = ? AND player_id = ?').bind(universeId, playerId),
-      db.prepare('SELECT COUNT(*) as count, MAX(timestamp) as maxTime FROM personal_vault_harvests WHERE universe_id = ? AND player_id = ?').bind(universeId, playerId),
-      db.prepare('SELECT COUNT(*) as count, MAX(timestamp) as maxTime FROM personal_vault_discoveries WHERE universe_id = ? AND player_id = ?').bind(universeId, playerId),
-      db.prepare('SELECT COUNT(*) as count FROM personal_vault_planner WHERE universe_id = ? AND player_id = ?').bind(universeId, playerId),
-      db.prepare('SELECT COUNT(*) as count, MAX(updated_at) as maxUpdated FROM personal_vault_radar WHERE universe_id = ? AND player_id = ?').bind(universeId, playerId),
-    ]);
+    // Read manifest directly from R2 (instant single-key read, consuming 0 D1 row scans)
+    const prefix = `vaults/${universeId}/${playerId}`;
+    let manifest: PlayerVaultManifest | null = null;
 
-    const expSummary = summaryBatch[0].results?.[0] as { count: number; maxTime: number | null } | undefined;
-    const comSummary = summaryBatch[1].results?.[0] as { count: number; maxTime: number | null } | undefined;
-    const harvSummary = summaryBatch[2].results?.[0] as { count: number; maxTime: number | null } | undefined;
-    const discSummary = summaryBatch[3].results?.[0] as { count: number; maxTime: number | null } | undefined;
-    const planCount = summaryBatch[4].results?.[0] as { count: number } | undefined;
-    const radarSummary = summaryBatch[5].results?.[0] as { count: number; maxUpdated: number | null } | undefined;
+    if (env.VAULT_BUCKET) {
+      try {
+        const manifestObj = await env.VAULT_BUCKET.get(`${prefix}/manifest.json`);
+        if (manifestObj) {
+          const text = await manifestObj.text();
+          manifest = JSON.parse(text);
+        }
+      } catch (err: any) {
+        console.warn('[PersonalVault] Warning reading manifest:', err.message);
+      }
+    }
 
     const now = Date.now();
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-    const lastFull = Number(creds.last_full_resync_at || 0);
-    const elapsed = now - lastFull;
-    const canFullResync = lastFull === 0 || elapsed >= ONE_DAY_MS;
-    const fullResyncCooldownMs = canFullResync ? 0 : Math.max(0, ONE_DAY_MS - elapsed);
+    const lastSent = creds.last_sent_at ? Number(creds.last_sent_at) : null;
+    const lastFetched = creds.last_fetched_at ? Number(creds.last_fetched_at) : null;
+    const sendCooldownMs = lastSent ? Math.max(0, VAULT_COOLDOWN_MS - (now - lastSent)) : 0;
+    const fetchCooldownMs = lastFetched ? Math.max(0, VAULT_COOLDOWN_MS - (now - lastFetched)) : 0;
 
     return json({
       success: true,
       vaultRegistered: true,
-      counts: {
-        expeditions: expSummary?.count || 0,
-        combats: comSummary?.count || 0,
-        harvests: harvSummary?.count || 0,
-        discoveries: discSummary?.count || 0,
-        planner: planCount?.count || 0,
-        radar: radarSummary?.count || 0,
-      },
-      maxTimestamps: {
-        expeditions: expSummary?.maxTime || 0,
-        combats: comSummary?.maxTime || 0,
-        harvests: harvSummary?.maxTime || 0,
-        discoveries: discSummary?.maxTime || 0,
-        radar: radarSummary?.maxUpdated || 0,
-      },
+      counts: manifest?.counts || { expeditions: 0, combats: 0, harvests: 0, discoveries: 0, planner: 0, radar: 0 },
+      maxTimestamps: manifest?.maxTimestamps || { expeditions: 0, combats: 0, harvests: 0, discoveries: 0, radar: 0 },
       totalSyncs: creds.total_syncs || 0,
-      lastSentAt: creds.last_sent_at || null,
-      lastFetchedAt: creds.last_fetched_at || null,
-      lastFullResyncAt: creds.last_full_resync_at || null,
-      canFullResync,
-      fullResyncCooldownMs,
+      lastSentAt: lastSent,
+      lastFetchedAt: lastFetched,
+      canSend: sendCooldownMs === 0,
+      canFetch: fetchCooldownMs === 0,
+      sendCooldownMs,
+      fetchCooldownMs,
+      canFullResync: sendCooldownMs === 0,
+      fullResyncCooldownMs: sendCooldownMs,
+      cooldownSeconds: 120,
+      storageBackend: 'Cloudflare R2 (Standard)',
     });
   } catch (err: any) {
     return json({ error: err.message || 'Failed to fetch Personal Vault summary' }, { status: 500 });

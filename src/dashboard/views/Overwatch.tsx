@@ -18,6 +18,7 @@ import {
   Crosshair,
   Clock,
   Lock,
+  Bell,
   CheckCircle2,
   XCircle,
   Copy,
@@ -49,6 +50,8 @@ import OverwatchMyEmpire, { EmpireSharingSettings, DEFAULT_EMPIRE_SHARING_SETTIN
 import OverwatchPersonalVault from './OverwatchPersonalVault';
 import OverwatchInactiveScout from './OverwatchInactiveScout';
 import OverwatchActivityHeatmap from './OverwatchActivityHeatmap';
+import OverwatchPhalanxCoverage from './OverwatchPhalanxCoverage';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { getStoredVaultKey } from '../../utils/personalVaultClient';
 import { cleanUniverseId } from '../../utils/universe';
 import './Overwatch.css';
@@ -77,6 +80,7 @@ interface AllianceConfig {
   allianceName: string | null;
   allianceTag: string | null;
   universeId: string | null;
+  playerId?: string | null;
   role: 'admin' | 'member' | 'visitor' | null;
   subscriptionExpiresAt: number | null;
   customApiUrl?: string;
@@ -153,6 +157,7 @@ const DEFAULT_CONFIG: AllianceConfig = {
   allianceName: null,
   allianceTag: null,
   universeId: null,
+  playerId: null,
   role: null,
   subscriptionExpiresAt: null,
   permissions: {
@@ -645,7 +650,25 @@ const DiscordShareButton: React.FC<DiscordShareButtonProps> = ({ glyphCode, alli
 };
 
 const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
-  const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+  const [config, setConfig] = useState<AllianceConfig>(DEFAULT_CONFIG);
+  const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
+
+  // Strictly select the account corresponding to this Overwatch grid's universe and member playerId
+  const activeAccount = useMemo(() => {
+    if (config.playerId && config.universeId) {
+      const matched = accounts.find(a => 
+        String(a.playerId) === String(config.playerId) && 
+        cleanUniverseId(a.universe) === cleanUniverseId(config.universeId)
+      );
+      if (matched) return matched;
+    }
+    if (config.universeId) {
+      const matchedUni = accounts.find(a => cleanUniverseId(a.universe) === cleanUniverseId(config.universeId));
+      if (matchedUni) return matchedUni;
+    }
+    return [...accounts].sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0] || null;
+  }, [accounts, config.playerId, config.universeId]);
+
   const ownPlanets = useLiveQuery(() => db.planets.toArray()) || [];
 
   // Closed Testing Whitelist & Passkey State
@@ -701,16 +724,25 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     }
   };
 
-  const [config, setConfig] = useState<AllianceConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   type TacticalPillar = 'intel' | 'cartography' | 'empire' | 'command' | 'setup' | 'vault' | 'tools';
-  const [activeTab, setActiveTab] = useState<'intel' | 'map' | 'empire' | 'my-empire' | 'spy-vault' | 'heatmap' | 'access' | 'settings' | 'features' | 'personal-vault' | 'inactive-scout'>('intel');
+  const [activeTab, setActiveTab] = useState<'intel' | 'map' | 'empire' | 'my-empire' | 'spy-vault' | 'heatmap' | 'access' | 'settings' | 'features' | 'personal-vault' | 'inactive-scout' | 'phalanx-coverage'>('intel');
   const [activePillar, setActivePillar] = useState<TacticalPillar>('intel');
   const [resolvedApiUrl, setResolvedApiUrl] = useState<string>(DEFAULT_OVERWATCH_API_URL);
 
   useEffect(() => {
     getOverwatchApiUrl().then(url => setResolvedApiUrl(url));
   }, [config.customApiUrl]);
+
+  // Auto-migrate legacy stored config to associate current member playerId if missing
+  useEffect(() => {
+    if (config.allianceId && !config.playerId && activeAccount?.playerId) {
+      saveConfig({
+        ...config,
+        playerId: activeAccount.playerId,
+      });
+    }
+  }, [config.allianceId, config.playerId, activeAccount?.playerId]);
 
   // Fallback redirect if spy-vault is active while disabled
   useEffect(() => {
@@ -845,7 +877,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       setActivePillar('setup');
     } else if (activeTab === 'personal-vault') {
       setActivePillar('vault');
-    } else if (activeTab === 'intel' || activeTab === 'map' || activeTab === 'heatmap' || activeTab === 'spy-vault' || activeTab === 'inactive-scout') {
+    } else if (activeTab === 'intel' || activeTab === 'map' || activeTab === 'heatmap' || activeTab === 'spy-vault' || activeTab === 'inactive-scout' || activeTab === 'phalanx-coverage') {
       setActivePillar('intel');
     } else if (activeTab === 'empire' || activeTab === 'my-empire') {
       setActivePillar('empire');
@@ -926,6 +958,13 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
   const [eventsTotal, setEventsTotal] = useState<number>(0);
   const [eventsTotalPages, setEventsTotalPages] = useState<number>(1);
   const [eventsUnseenCount, setEventsUnseenCount] = useState<number>(0);
+  const [unreadFeedEventsCount, setUnreadFeedEventsCount] = useState<number>(0);
+
+  // Per-player last-checked timestamp key for Universe Feed
+  const feedLastCheckedKey = useMemo(() => {
+    const pId = effectiveAccount?.playerId ? String(effectiveAccount.playerId) : 'default';
+    return `nexus_feed_last_checked_${activeUniverse}_${pId}`;
+  }, [activeUniverse, effectiveAccount?.playerId]);
 
   const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>(() => {
     try {
@@ -980,8 +1019,23 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
   const filteredEvents = useMemo(() => {
     if (selectedEventTypes.length === 0) return [];
-    if (selectedEventTypes.length === ALL_EVENT_TYPE_IDS.length) return events;
-    return events.filter(e => selectedEventTypes.includes(e.event_type));
+    let base = events;
+    if (selectedEventTypes.length < ALL_EVENT_TYPE_IDS.length) {
+      base = events.filter(e => selectedEventTypes.includes(e.event_type));
+    }
+    // Deduplicate any historical duplicate player-level events within the same scan window (e.g. multi-planet scans)
+    const seen = new Set<string>();
+    return base.filter((evt) => {
+      if (evt.event_type === 'status_changed' || evt.event_type === 'player_renamed') {
+        const pId = evt.player_id || evt.player_name || 'unknown';
+        // 60-second time window bucket for deduplication of multi-slot events from the same scan
+        const timeBucket = Math.floor(Number(evt.detected_at || 0) / 60000);
+        const key = `${pId}_${evt.event_type}_${evt.new_state_json || ''}_${timeBucket}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+      }
+      return true;
+    });
   }, [events, selectedEventTypes]);
   const [universeStats, setUniverseStats] = useState<{
     totalPlanets: number;
@@ -1442,6 +1496,91 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     };
   }, [config.authToken, activeUniverse, activeTab, fetchLiveEvents, eventsPage, eventsPageSize, eventsTotal, selectedEventTypes]);
 
+  // Reset notification count and update last checked timestamp whenever entering Universe Feed
+  useEffect(() => {
+    if (activeTab === 'intel' && activePrimaryTab === 'overwatch') {
+      setUnreadFeedEventsCount(0);
+      const latestTime = events && events.length > 0 ? Number(events[0]?.detected_at || 0) : 0;
+      const markTime = Math.max(Date.now(), latestTime);
+      try {
+        localStorage.setItem(feedLastCheckedKey, String(markTime));
+      } catch (e) { }
+    }
+  }, [activeTab, activePrimaryTab, feedLastCheckedKey, events]);
+
+  // Background check for unread Universe Feed events since player last checked
+  const checkUnreadFeedEvents = useCallback(async () => {
+    if (!effectivePermissions.viewGalaxyScrapes) return;
+    if (activeTab === 'intel' && activePrimaryTab === 'overwatch') {
+      setUnreadFeedEventsCount(0);
+      return;
+    }
+
+    let lastChecked = 0;
+    try {
+      const stored = localStorage.getItem(feedLastCheckedKey);
+      if (stored) {
+        lastChecked = Number(stored);
+      }
+    } catch (e) { }
+
+    if (!lastChecked || isNaN(lastChecked)) {
+      const now = Date.now();
+      try {
+        localStorage.setItem(feedLastCheckedKey, String(now));
+      } catch (e) { }
+      lastChecked = now;
+    }
+
+    try {
+      const apiUrl = await getOverwatchApiUrl();
+      const headers: Record<string, string> = {};
+      if (config.authToken) headers['Authorization'] = `Bearer ${config.authToken}`;
+
+      const res = await fetch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&since=${lastChecked}&limit=100`, { headers });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.events)) {
+        if (data.events.length === 0) {
+          setUnreadFeedEventsCount(0);
+          return;
+        }
+
+        // Defensive check: if the newest event in the universe is older than or equal to lastChecked,
+        // then even if pagination total > 0 (e.g. from an older worker ignoring `since`), unread is 0.
+        const newestEventTime = Number(data.events[0]?.detected_at || 0);
+        if (newestEventTime <= lastChecked) {
+          setUnreadFeedEventsCount(0);
+          return;
+        }
+
+        // Count only events that are strictly newer than lastChecked
+        const trulyNew = data.events.filter((e: any) => Number(e.detected_at || 0) > lastChecked);
+        if (trulyNew.length === 0) {
+          setUnreadFeedEventsCount(0);
+          return;
+        }
+
+        let count = trulyNew.length;
+        if (data.events.length === trulyNew.length && data.pagination?.total && data.pagination.total > count) {
+          count = data.pagination.total;
+        }
+        setUnreadFeedEventsCount(count);
+      }
+    } catch (e) { }
+  }, [effectivePermissions.viewGalaxyScrapes, activeTab, activePrimaryTab, feedLastCheckedKey, activeUniverse, config.authToken]);
+
+  useEffect(() => {
+    checkUnreadFeedEvents();
+    const interval = setInterval(checkUnreadFeedEvents, 25000);
+    const onFocus = () => checkUnreadFeedEvents();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [checkUnreadFeedEvents]);
+
   // Fetch pending clearance requests, roster, and permissions
   useEffect(() => {
     if (!config.allianceId || !config.authToken) return;
@@ -1741,6 +1880,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
           allianceName: data.allianceName,
           allianceTag: data.allianceTag,
           universeId: data.universeId || activeUniverse,
+          playerId: pId,
           glyphCode: data.glyphCode,
           authToken: data.authToken,
           role: 'admin',
@@ -1828,6 +1968,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
         allianceName: data.allianceName,
         allianceTag: data.allianceTag,
         universeId: data.universeId || activeUniverse,
+        playerId: activeAccount?.playerId || null,
         glyphCode: cleanGlyph,
         authToken: data.authToken,
         role: assignedRole,
@@ -1885,6 +2026,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
           allianceName: createDisplayName,
           allianceTag: activeAllyTag || 'NEXUS',
           universeId: activeUniverse,
+          playerId: activeAccount?.playerId || null,
           glyphCode: data.glyphCode,
           authToken: data.authToken,
           role: 'admin',
@@ -2046,6 +2188,8 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
             allianceId: data.allianceId,
             allianceName: data.allianceName,
             allianceTag: data.allianceTag,
+            universeId: activeUniverse,
+            playerId: pId || null,
             role: data.role || 'member',
             authToken: data.authToken || config.authToken,
           };
@@ -2651,6 +2795,11 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           setPrimaryTab('overwatch');
                           setActiveTab('intel');
                           setActivePillar('intel');
+                          setUnreadFeedEventsCount(0);
+                          const latestTime = events && events.length > 0 ? Number(events[0]?.detected_at || 0) : 0;
+                          try {
+                            localStorage.setItem(feedLastCheckedKey, String(Math.max(Date.now(), latestTime)));
+                          } catch (e) { }
                         }}
                       >
                         {activeTab === 'intel' && activePrimaryTab === 'overwatch' && <span className="ow-dock-indicator-bar" />}
@@ -2659,7 +2808,17 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           <span className="ow-dock-item-label">Live Universe Feed</span>
                         </div>
                         {effectivePermissions.viewGalaxyScrapes ? (
-                          <span className="ow-dock-tag live">LIVE</span>
+                          <span
+                            className={`ow-dock-tag feed-notify ${unreadFeedEventsCount > 0 ? 'has-unread' : ''}`}
+                            title={
+                              unreadFeedEventsCount === 0
+                                ? 'No new events since last check'
+                                : `${unreadFeedEventsCount} new event${unreadFeedEventsCount === 1 ? '' : 's'} since last check`
+                            }
+                          >
+                            <Bell size={10} className={unreadFeedEventsCount > 0 ? 'ow-bell-ringing' : ''} />
+                            <span>{unreadFeedEventsCount > 99 ? '99+' : unreadFeedEventsCount}</span>
+                          </span>
                         ) : (
                           <Lock size={12} style={{ color: '#ef4444' }} />
                         )}
@@ -2719,6 +2878,25 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           <Crosshair size={13} style={{ color: '#eab308' }} />
                           <span className="ow-dock-item-label">Raid Radar Scout</span>
                         </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`ow-dock-nav-item ${activeTab === 'phalanx-coverage' && activePrimaryTab === 'overwatch' ? 'active' : ''}`}
+                        onClick={() => {
+                          setPrimaryTab('overwatch');
+                          setActiveTab('phalanx-coverage');
+                          setActivePillar('intel');
+                        }}
+                      >
+                        {activeTab === 'phalanx-coverage' && activePrimaryTab === 'overwatch' && <span className="ow-dock-indicator-bar" />}
+                        <div className="ow-dock-item-left">
+                          <Radio size={13} style={{ color: '#00f2ff' }} />
+                          <span className="ow-dock-item-label">Phalanx Coverage</span>
+                        </div>
+                        <span className="ow-dock-tag coords" style={{ background: 'rgba(0, 242, 255, 0.12)', color: '#00f2ff', border: '1px solid rgba(0, 242, 255, 0.25)' }}>
+                          499 SYS
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -3961,13 +4139,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                   </section>
                 ) : (
                   <section className="ow-module" style={{ padding: '24px 28px' }}>
-                    <OverwatchEmpire
-                      config={effectiveConfig}
-                      effectiveAccount={effectiveAccount}
-                      effectivePermissions={effectivePermissions}
-                      isAdmin={isAdmin}
-                      apiUrl={resolvedApiUrl}
-                    />
+                    <ErrorBoundary compact fallbackTitle="Alliance Empire Module Encountered an Error">
+                      <OverwatchEmpire
+                        config={effectiveConfig}
+                        effectiveAccount={effectiveAccount}
+                        effectivePermissions={effectivePermissions}
+                        isAdmin={isAdmin}
+                        apiUrl={resolvedApiUrl}
+                      />
+                    </ErrorBoundary>
                   </section>
                 )
               )}
@@ -3975,14 +4155,16 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
               {/* Tab: My Empire (Data Sharing Deck) */}
               {activeTab === 'my-empire' && (
                 <section className="ow-module" style={{ padding: '24px 28px' }}>
-                  <OverwatchMyEmpire
-                    config={effectiveConfig}
-                    saveConfig={saveConfig}
-                    effectiveAccount={effectiveAccount}
-                    effectivePermissions={effectivePermissions}
-                    isAdmin={isAdmin}
-                    apiUrl={resolvedApiUrl}
-                  />
+                  <ErrorBoundary compact fallbackTitle="My Empire Settings Encountered an Error">
+                    <OverwatchMyEmpire
+                      config={effectiveConfig}
+                      saveConfig={saveConfig}
+                      effectiveAccount={effectiveAccount}
+                      effectivePermissions={effectivePermissions}
+                      isAdmin={isAdmin}
+                      apiUrl={resolvedApiUrl}
+                    />
+                  </ErrorBoundary>
                 </section>
               )}
 
@@ -4780,13 +4962,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                     </p>
                   </section>
                 ) : (
-                  <OverwatchActivityHeatmap
-                    effectiveConfig={effectiveConfig}
-                    activeUniverse={activeUniverse}
-                    activeUniverseName={activeUniverseName}
-                    ownPlanets={ownPlanets}
-                    events={events}
-                  />
+                  <ErrorBoundary compact fallbackTitle="Activity Heatmap Encountered an Error">
+                    <OverwatchActivityHeatmap
+                      effectiveConfig={effectiveConfig}
+                      activeUniverse={activeUniverse}
+                      activeUniverseName={activeUniverseName}
+                      ownPlanets={ownPlanets}
+                      events={events}
+                    />
+                  </ErrorBoundary>
                 )
               )}
 
@@ -5361,34 +5545,65 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
               {/* Tab: Personal Vault */}
               {activeTab === 'personal-vault' && (
-                <OverwatchPersonalVault
-                  universeId={activeUniverse || activeAccount?.universe || 's267-en'}
-                  playerId={activeAccount?.playerId || ''}
-                  playerName={activeAccount?.playerName || 'Commander'}
-                  onNavigateTab={(tab) => {
-                    if (onSelect) onSelect(tab);
-                  }}
-                />
+                <ErrorBoundary compact fallbackTitle="Personal Vault Encountered an Error">
+                  <OverwatchPersonalVault
+                    universeId={activeUniverse || activeAccount?.universe || 's267-en'}
+                    playerId={activeAccount?.playerId || ''}
+                    playerName={activeAccount?.playerName || 'Commander'}
+                    onNavigateTab={(tab) => {
+                      if (onSelect) onSelect(tab);
+                    }}
+                  />
+                </ErrorBoundary>
               )}
 
               {/* Tab: Raid Radar Scout */}
               {activeTab === 'inactive-scout' && (
-                <OverwatchInactiveScout
-                  universeId={activeUniverse || activeAccount?.universe || 's267-en'}
-                  playerId={activeAccount?.playerId || ''}
-                  playerName={activeAccount?.playerName || 'Commander'}
-                  galaxiesCount={activeAccount?.galaxies || universeStats?.galaxies}
-                  onJumpToCoordinates={(g, s, slot) => {
-                    setSelectedGalaxy(Number(g));
-                    setSelectedSystem(Number(s));
-                    setSystemInputStr(String(s));
-                    setDebouncedSystem(Number(s));
-                    if (slot) setHighlightedSlot(Number(slot));
-                    setPrimaryTab('overwatch');
-                    setActiveTab('map');
-                    setActivePillar('intel');
-                  }}
-                />
+                <ErrorBoundary compact fallbackTitle="Inactive Scout Encountered an Error">
+                  <OverwatchInactiveScout
+                    universeId={activeUniverse || activeAccount?.universe || 's267-en'}
+                    playerId={activeAccount?.playerId || ''}
+                    playerName={activeAccount?.playerName || 'Commander'}
+                    galaxiesCount={activeAccount?.galaxies || universeStats?.galaxies}
+                    onJumpToCoordinates={(g, s, slot) => {
+                      setSelectedGalaxy(Number(g));
+                      setSelectedSystem(Number(s));
+                      setSystemInputStr(String(s));
+                      setDebouncedSystem(Number(s));
+                      if (slot) setHighlightedSlot(Number(slot));
+                      setPrimaryTab('overwatch');
+                      setActiveTab('map');
+                      setActivePillar('intel');
+                    }}
+                  />
+                </ErrorBoundary>
+              )}
+
+              {/* Tab: Phalanx Coverage */}
+              {activeTab === 'phalanx-coverage' && (
+                <ErrorBoundary compact fallbackTitle="Phalanx Coverage Encountered an Error">
+                  <OverwatchPhalanxCoverage
+                    config={effectiveConfig}
+                    effectiveAccount={effectiveAccount}
+                    effectivePermissions={effectivePermissions}
+                    isAdmin={isAdmin}
+                    apiUrl={resolvedApiUrl}
+                    universeId={activeUniverse || activeAccount?.universe || 's267-en'}
+                    playerId={activeAccount?.playerId || ''}
+                    playerName={activeAccount?.playerName || 'Commander'}
+                    galaxiesCount={activeAccount?.galaxies || universeStats?.galaxies || 9}
+                    onJumpToCoordinates={(g, s, slot) => {
+                      setSelectedGalaxy(Number(g));
+                      setSelectedSystem(Number(s));
+                      setSystemInputStr(String(s));
+                      setDebouncedSystem(Number(s));
+                      if (slot) setHighlightedSlot(Number(slot));
+                      setPrimaryTab('overwatch');
+                      setActiveTab('map');
+                      setActivePillar('intel');
+                    }}
+                  />
+                </ErrorBoundary>
               )}
             </>
           )}

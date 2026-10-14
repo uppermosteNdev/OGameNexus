@@ -69,6 +69,32 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
   const [syncProgress, setSyncProgress] = useState<VaultProgressUpdate | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
+  // Live 1-second tick for real-time 2-minute cooldown countdown
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const COOLDOWN_DURATION_MS = 120_000; // 2 minutes (120 seconds)
+
+  const lastSent = vaultSummary?.lastSentAt ? Number(vaultSummary.lastSentAt) : 0;
+  const sendElapsed = lastSent > 0 ? currentTime - lastSent : Infinity;
+  const sendCooldownRemainingMs = Math.max(0, COOLDOWN_DURATION_MS - sendElapsed);
+  const isSendOnCooldown = sendCooldownRemainingMs > 0;
+
+  const lastFetched = vaultSummary?.lastFetchedAt ? Number(vaultSummary.lastFetchedAt) : 0;
+  const fetchElapsed = lastFetched > 0 ? currentTime - lastFetched : Infinity;
+  const fetchCooldownRemainingMs = Math.max(0, COOLDOWN_DURATION_MS - fetchElapsed);
+  const isFetchOnCooldown = fetchCooldownRemainingMs > 0;
+
+  const formatCooldown = (ms: number) => {
+    const totalSecs = Math.ceil(ms / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return mins > 0 ? `${mins}m ${secs.toString().padStart(2, '0')}s` : `${secs}s`;
+  };
+
   // Live queries for local Dexie counts
   const localExpeditionsCount = useLiveQuery(
     () => db.expeditions.where('playerId').equals(playerId).count(),
@@ -213,9 +239,9 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
         if (res.isDelta) {
           const newExp = res.saved.expeditions;
           const totalExp = res.totalLocal?.expeditions || newExp;
-          msg = `Vault synchronized (Fast Delta): ${newExp === 0 ? `all ${totalExp.toLocaleString()} expeditions verified in sync` : `${newExp.toLocaleString()} new expeditions uploaded (${totalExp.toLocaleString()} total)`}, ${res.saved.combats.toLocaleString()} combats, ${res.saved.harvests.toLocaleString()} harvests, ${res.saved.discoveries.toLocaleString()} discoveries, and ${res.saved.radar.toLocaleString()} radar targets merged.`;
+          msg = `Vault synchronized (Smart Sync): ${newExp === 0 ? `all ${totalExp.toLocaleString()} expeditions verified in sync` : `${newExp.toLocaleString()} new expeditions uploaded (${totalExp.toLocaleString()} total)`}, ${res.saved.combats.toLocaleString()} combats, ${res.saved.harvests.toLocaleString()} harvests, ${res.saved.discoveries.toLocaleString()} discoveries, and ${res.saved.radar.toLocaleString()} radar targets merged.`;
         } else {
-          msg = `Successfully uploaded to Personal Vault: ${res.saved.expeditions.toLocaleString()} expeditions, ${res.saved.combats.toLocaleString()} combats, ${res.saved.harvests.toLocaleString()} harvests, ${res.saved.discoveries.toLocaleString()} discoveries, ${res.saved.planner.toLocaleString()} planner items, and ${res.saved.radar.toLocaleString()} radar targets.`;
+          msg = `Vault synchronized (Full Backup): ${res.saved.expeditions.toLocaleString()} expeditions, ${res.saved.combats.toLocaleString()} combats, ${res.saved.harvests.toLocaleString()} harvests, ${res.saved.discoveries.toLocaleString()} discoveries, ${res.saved.planner.toLocaleString()} planner items, and ${res.saved.radar.toLocaleString()} radar targets uploaded.`;
         }
         setNotification({
           type: 'success',
@@ -224,6 +250,7 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
         setTimeout(() => {
           setNotification(curr => (curr?.message === msg ? null : curr));
         }, 15000);
+        setVaultSummary(prev => prev ? { ...prev, lastSentAt: res.lastSentAt || Date.now() } : null);
         try {
           const summary = await fetchVaultSummary(universeId, playerId, vaultKey);
           setVaultSummary(summary);
@@ -258,9 +285,10 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
       );
       if (res.success && res.hydrated) {
         const totalItems = (res.hydrated.expeditions || 0) + (res.hydrated.combats || 0) + (res.hydrated.harvests || 0) + (res.hydrated.discoveries || 0) + (res.hydrated.planner || 0) + (res.hydrated.radar || 0);
+        const modeLabel = forceFullSync ? 'Full Sync' : 'Smart Sync';
         const fetchMsg = totalItems === 0
-          ? 'Personal Vault is already up to date. All local records are verified in sync with the cloud.'
-          : `Successfully downloaded from Personal Vault: ${res.hydrated.expeditions.toLocaleString()} expeditions, ${res.hydrated.combats.toLocaleString()} combats, ${res.hydrated.harvests.toLocaleString()} harvests, ${res.hydrated.discoveries.toLocaleString()} discoveries, ${res.hydrated.planner.toLocaleString()} planner items, and ${res.hydrated.radar.toLocaleString()} radar targets.`;
+          ? `Vault synchronized (${modeLabel}): All local records are verified in sync with the cloud.`
+          : `Vault synchronized (${modeLabel}): Successfully restored ${res.hydrated.expeditions.toLocaleString()} expeditions, ${res.hydrated.combats.toLocaleString()} combats, ${res.hydrated.harvests.toLocaleString()} harvests, ${res.hydrated.discoveries.toLocaleString()} discoveries, ${res.hydrated.planner.toLocaleString()} planner items, and ${res.hydrated.radar.toLocaleString()} radar targets.`;
         setNotification({
           type: 'success',
           message: fetchMsg,
@@ -268,6 +296,7 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
         setTimeout(() => {
           setNotification(curr => (curr?.message === fetchMsg ? null : curr));
         }, 15000);
+        setVaultSummary(prev => prev ? { ...prev, lastFetchedAt: res.lastFetchedAt || Date.now() } : null);
         try {
           const summary = await fetchVaultSummary(universeId, playerId, vaultKey);
           setVaultSummary(summary);
@@ -556,79 +585,74 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
         </div>
       </div>
 
-      {/* 3B. High-Speed Delta Sync & Edge Resource Optimization Banner */}
-      {(() => {
-        const canFullResync = vaultSummary?.canFullResync ?? true;
-        const cooldownRemainingHours = vaultSummary?.fullResyncCooldownMs
-          ? Math.max(1, Math.ceil(vaultSummary.fullResyncCooldownMs / (60 * 60 * 1000)))
-          : 0;
-
-        return (
-          <div className={`pv-delta-banner ${forceFullSync ? 'active-full' : 'active-delta'}`}>
-            <div className="pv-delta-info">
-              <div className={`pv-delta-orb ${forceFullSync ? 'amber' : 'cyan'}`}>
-                {forceFullSync ? <AlertTriangle size={18} /> : <Zap size={18} />}
-              </div>
-              <div className="pv-delta-titles">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <h4 style={{ color: forceFullSync ? '#f59e0b' : '#00f2ff' }}>
-                    {forceFullSync ? 'Full Archive Resync Mode' : 'Smart Delta Sync Active'}
-                  </h4>
-                  <span className={`pv-eyebrow ${forceFullSync ? 'amber' : ''}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
-                    {forceFullSync ? '1x / 24h Limit' : 'Ultra Fast'}
-                  </span>
-                  {!canFullResync && !forceFullSync && (
-                    <span className="pv-eyebrow amber" style={{ fontSize: '9px', padding: '1px 6px' }}>
-                      Cooldown (~{cooldownRemainingHours}h)
-                    </span>
-                  )}
-                </div>
-                <p>
-                  {forceFullSync
-                    ? 'Exhaustively re-evaluates all local records against Cloudflare D1. Limited to once every 24 hours to protect edge write quotas.'
-                    : !canFullResync
-                    ? `Transfers only newly scanned reports, expeditions, and radar changes. (Full resync is on 24-hour cooldown, next available in ~${cooldownRemainingHours}h).`
-                    : 'Transfers only newly scanned reports, expeditions, and radar changes. Cuts Cloudflare row writes by ~99% and finishes in < 1 second.'}
-                </p>
-              </div>
+      {/* 3B. Sync Mode Selection (Smart Sync vs Full Sync) & Cooldown Status */}
+      <div className={`pv-double-bezel ${forceFullSync ? 'amber-accent' : 'cyan-accent'}`}>
+        <div className="pv-inner-core pv-sync-mode-core">
+          <div className="pv-sync-mode-info">
+            <div className={`pv-sync-mode-orb ${forceFullSync ? 'amber' : 'cyan'}`}>
+              {forceFullSync ? <RefreshCw size={20} /> : <Zap size={20} />}
             </div>
-
-            <div
-              className={`pv-toggle-wrap ${!canFullResync && !forceFullSync ? 'disabled' : ''}`}
-              onClick={() => {
-                if (!canFullResync && !forceFullSync) {
-                  setNotification({
-                    type: 'info',
-                    message: `Force Full Resync is limited to once every 24 hours to prevent Cloudflare quota depletion. Next full resync available in ~${cooldownRemainingHours}h. (Smart Delta Sync is always unlimited).`,
-                  });
-                  return;
-                }
-                setForceFullSync(!forceFullSync);
-              }}
-              title={
-                !canFullResync
-                  ? `Daily limit active. Available again in ~${cooldownRemainingHours}h`
-                  : 'Toggle between fast incremental delta sync and full archive verification'
-              }
-            >
-              <span className="pv-toggle-label">
-                {forceFullSync
-                  ? 'Full Scan ON'
-                  : !canFullResync
-                  ? `Cooldown (~${cooldownRemainingHours}h)`
-                  : 'Force Full Resync'}
-              </span>
-              <div className={`pv-switch ${forceFullSync ? 'on' : ''} ${!canFullResync && !forceFullSync ? 'locked' : ''}`}>
-                <div className="pv-switch-thumb" />
+            <div className="pv-sync-mode-text">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span className="pv-mode-title" style={{ color: forceFullSync ? '#f59e0b' : '#00f2ff' }}>
+                  {forceFullSync ? 'Full Sync Mode' : 'Smart Sync Mode'}
+                </span>
+                <span className={`pv-eyebrow ${forceFullSync ? 'amber' : ''}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
+                  {forceFullSync ? 'All History' : 'New Data Only'}
+                </span>
+                {isSendOnCooldown && (
+                  <span className="pv-eyebrow amber" style={{ fontSize: '9px', padding: '1px 6px' }}>
+                    Upload Cooldown ({formatCooldown(sendCooldownRemainingMs)})
+                  </span>
+                )}
+                {isFetchOnCooldown && !isSendOnCooldown && (
+                  <span className="pv-eyebrow emerald" style={{ fontSize: '9px', padding: '1px 6px' }}>
+                    Download Cooldown ({formatCooldown(fetchCooldownRemainingMs)})
+                  </span>
+                )}
               </div>
+              <p>
+                {forceFullSync
+                  ? 'Complete sync: transfers and checks your entire historical database across devices. Ideal when setting up a new device or re-checking all records.'
+                  : 'Fast sync: transfers only newly recorded expeditions, combats, and discoveries since your last sync. Recommended for daily play.'}
+              </p>
             </div>
           </div>
-        );
-      })()}
+
+          {/* 2-Option Segmented Selector */}
+          <div className="pv-segmented-selector" role="radiogroup" aria-label="Sync Mode Selection">
+            <button
+              type="button"
+              className={`pv-segment-btn ${!forceFullSync ? 'active-smart' : ''}`}
+              onClick={() => setForceFullSync(false)}
+              title="Fast sync: only transfers new records added since your last sync"
+            >
+              <div className="pv-segment-btn-inner">
+                <Zap size={14} />
+                <span className="pv-segment-main">Smart Sync</span>
+              </div>
+              <span className="pv-segment-sub">New Data Only</span>
+            </button>
+
+            <button
+              type="button"
+              className={`pv-segment-btn ${forceFullSync ? 'active-full' : ''}`}
+              onClick={() => setForceFullSync(true)}
+              title="Complete sync: transfers all historical records"
+            >
+              <div className="pv-segment-btn-inner">
+                <RefreshCw size={14} />
+                <span className="pv-segment-main">Full Sync</span>
+              </div>
+              <span className="pv-segment-sub">All History</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* 4. Action Command Deck (Push vs Pull - Dual Chamber) */}
       <div className="pv-command-deck">
-        {/* Command Pod A: Send to Vault (Push) */}
+        {/* Command Pod A: Backup to Cloud (Push) */}
         <div className="pv-double-bezel cyan-accent">
           <div className="pv-inner-core pv-command-core">
             <div>
@@ -638,13 +662,13 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
                 </div>
                 <div className="pv-command-title-wrap">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span className="pv-eyebrow">Upload</span>
+                    <span className="pv-eyebrow">Cloud Backup</span>
                   </div>
-                  <h3>Send to Vault (Upload)</h3>
+                  <h3>Backup to Cloud</h3>
                   <p>
                     {forceFullSync
-                      ? 'Exhaustively re-evaluates all local records and updates your cloud vault archive.'
-                      : 'Uploads only new expeditions, combats, debris harvests, discoveries, and spied radar deltas.'}
+                      ? 'Uploads your complete local history to ensure your cloud vault has all past records.'
+                      : 'Uploads only new expeditions, combats, debris harvests, discoveries, and spied radar.'}
                   </p>
                 </div>
               </div>
@@ -660,23 +684,44 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
                 </span>
               </div>
 
-              {/* Button-in-Button Push CTA */}
+              {/* Button-in-Button Push CTA with Live 2-Minute Cooldown */}
               <button
                 type="button"
                 onClick={handleSendToVault}
-                disabled={isSending || isFetching}
-                className="pv-btn-pill primary-cyan"
+                disabled={isSending || isFetching || isSendOnCooldown}
+                className={`pv-btn-pill primary-cyan ${isSendOnCooldown ? 'disabled-cooldown' : ''}`}
+                title={
+                  isSendOnCooldown
+                    ? `Upload cooldown active. Ready in ${formatCooldown(sendCooldownRemainingMs)}`
+                    : forceFullSync
+                    ? 'Upload complete history to Cloud Vault'
+                    : 'Upload new records to Cloud Vault'
+                }
               >
                 <div className="pv-btn-icon-capsule">
-                  {isSending ? <RefreshCw size={15} className="pv-spin" /> : <UploadCloud size={16} />}
+                  {isSending ? (
+                    <RefreshCw size={15} className="pv-spin" />
+                  ) : isSendOnCooldown ? (
+                    <Clock size={15} />
+                  ) : (
+                    <UploadCloud size={16} />
+                  )}
                 </div>
-                <span>{isSending ? 'Uploading Data...' : (forceFullSync ? 'Full Upload' : 'Send to Vault')}</span>
+                <span>
+                  {isSending
+                    ? (forceFullSync ? 'Uploading All History...' : 'Uploading New Data...')
+                    : isSendOnCooldown
+                    ? `Cooldown (${formatCooldown(sendCooldownRemainingMs)})`
+                    : forceFullSync
+                    ? 'Backup All History'
+                    : 'Backup New Data'}
+                </span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Command Pod B: Fetch from Vault (Pull) */}
+        {/* Command Pod B: Restore from Cloud (Pull) */}
         <div className="pv-double-bezel emerald-accent">
           <div className="pv-inner-core pv-command-core">
             <div>
@@ -686,13 +731,13 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
                 </div>
                 <div className="pv-command-title-wrap">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span className="pv-eyebrow emerald">Download</span>
+                    <span className="pv-eyebrow emerald">Cloud Restore</span>
                   </div>
-                  <h3>Fetch from Vault (Download)</h3>
+                  <h3>Restore from Cloud</h3>
                   <p>
                     {forceFullSync
-                      ? 'Downloads and verifies your entire cloud archive, restoring any missing history.'
-                      : 'Downloads newly saved vault data to this device since your last sync without re-fetching existing history.'}
+                      ? 'Downloads and verifies your entire cloud history, restoring any missing past records.'
+                      : 'Downloads newly saved data from your other devices since your last sync without re-fetching existing history.'}
                   </p>
                 </div>
               </div>
@@ -708,17 +753,38 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
                 </span>
               </div>
 
-              {/* Button-in-Button Pull CTA */}
+              {/* Button-in-Button Pull CTA with Live 2-Minute Cooldown */}
               <button
                 type="button"
                 onClick={handleFetchFromVault}
-                disabled={isSending || isFetching}
-                className="pv-btn-pill primary-emerald"
+                disabled={isSending || isFetching || isFetchOnCooldown}
+                className={`pv-btn-pill primary-emerald ${isFetchOnCooldown ? 'disabled-cooldown' : ''}`}
+                title={
+                  isFetchOnCooldown
+                    ? `Download cooldown active. Ready in ${formatCooldown(fetchCooldownRemainingMs)}`
+                    : forceFullSync
+                    ? 'Restore complete history from Cloud Vault'
+                    : 'Restore new records from Cloud Vault'
+                }
               >
                 <div className="pv-btn-icon-capsule">
-                  {isFetching ? <RefreshCw size={15} className="pv-spin" /> : <DownloadCloud size={16} />}
+                  {isFetching ? (
+                    <RefreshCw size={15} className="pv-spin" />
+                  ) : isFetchOnCooldown ? (
+                    <Clock size={15} />
+                  ) : (
+                    <DownloadCloud size={16} />
+                  )}
                 </div>
-                <span>{isFetching ? 'Downloading...' : 'Fetch from Vault'}</span>
+                <span>
+                  {isFetching
+                    ? (forceFullSync ? 'Restoring All History...' : 'Restoring New Data...')
+                    : isFetchOnCooldown
+                    ? `Cooldown (${formatCooldown(fetchCooldownRemainingMs)})`
+                    : forceFullSync
+                    ? 'Restore All History'
+                    : 'Restore New Data'}
+                </span>
               </button>
             </div>
           </div>
@@ -867,12 +933,13 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
                 <Database size={16} />
               </div>
               <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#f8fafc', fontFamily: 'Space Grotesk, sans-serif' }}>
-                Storage &amp; Privacy
+                Cloud Vault &amp; Safety Cooldown
               </h4>
             </div>
             <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', lineHeight: 1.6 }}>
-              • <strong style={{ color: '#e2e8f0' }}>Lightweight Sync:</strong> Only essential event records and numbers are synced, keeping sync fast and compact.<br />
-              • <strong style={{ color: '#e2e8f0' }}>Device Settings:</strong> UI settings and custom sandbox setups stay on your local device.
+              • <strong style={{ color: '#e2e8f0' }}>Cloud Vault Storage:</strong> Your expeditions, combats, debris harvests, discoveries, planner items, and raid radar are safely synchronized to your private cloud storage.<br />
+              • <strong style={{ color: '#e2e8f0' }}>2-Minute Cooldown:</strong> Upload and download operations have a 120-second safety cooldown to ensure data consistency and prevent conflicts between devices.<br />
+              • <strong style={{ color: '#e2e8f0' }}>Device Privacy:</strong> UI settings, scout filters, and local preferences remain stored privately on each device.
             </p>
           </div>
         </div>

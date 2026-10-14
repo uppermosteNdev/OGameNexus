@@ -94,6 +94,14 @@
     inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
 }
 
+.pv-double-bezel.amber-accent:hover {
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: 
+    0 24px 48px -15px rgba(0, 0, 0, 0.8),
+    0 0 30px rgba(245, 158, 11, 0.08),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+}
+
 .pv-inner-core {
   position: relative;
   background: radial-gradient(120% 120% at 50% 0%, rgba(13, 21, 38, 0.9) 0%, rgba(5, 8, 16, 0.96) 100%);
@@ -125,6 +133,12 @@
   background: rgba(16, 185, 129, 0.08);
   border-color: rgba(16, 185, 129, 0.25);
   color: var(--pv-emerald);
+}
+
+.pv-eyebrow.amber {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #f59e0b;
 }
 
 /* ============================================================================
@@ -403,6 +417,20 @@
   cursor: not-allowed;
   transform: none !important;
   box-shadow: none !important;
+}
+
+.pv-btn-pill.disabled-cooldown {
+  opacity: 0.75 !important;
+  cursor: not-allowed !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.08) !important;
+}
+
+.pv-btn-pill.disabled-cooldown .pv-btn-icon-capsule {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #f59e0b !important;
 }
 
 /* Inner Icon Capsule for Button-in-Button */
@@ -736,148 +764,168 @@
 }
 
 /* ============================================================================
-   5B. HIGH-SPEED DELTA SYNC CONTROL BANNER & TOGGLE
+   5B. SYNC MODE CORE & SEGMENTED CONTROLS (SMART VS FULL)
    ============================================================================ */
-.pv-delta-banner {
+.pv-sync-mode-core {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 20px;
-  border-radius: 18px;
-  background: rgba(13, 21, 38, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(12px);
+  gap: 24px;
+  padding: 16px 24px;
   box-sizing: border-box;
-  transition: all 0.3s var(--pv-ease-spring);
 }
 
-.pv-delta-banner.active-delta {
-  border-color: rgba(0, 242, 255, 0.22);
-  background: linear-gradient(135deg, rgba(0, 242, 255, 0.05) 0%, rgba(13, 21, 38, 0.75) 100%);
-  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 242, 255, 0.05);
-}
-
-.pv-delta-banner.active-full {
-  border-color: rgba(245, 158, 11, 0.3);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(13, 21, 38, 0.75) 100%);
-  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.6), 0 0 20px rgba(245, 158, 11, 0.08);
-}
-
-.pv-delta-info {
+.pv-sync-mode-info {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
 }
 
-.pv-delta-orb {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+.pv-sync-mode-orb {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: all 0.3s var(--pv-ease-spring);
 }
 
-.pv-delta-orb.cyan {
+.pv-sync-mode-orb.cyan {
   background: rgba(0, 242, 255, 0.12);
   color: #00f2ff;
   border: 1px solid rgba(0, 242, 255, 0.3);
-  box-shadow: 0 0 16px rgba(0, 242, 255, 0.2);
+  box-shadow: 0 0 18px rgba(0, 242, 255, 0.2);
 }
 
-.pv-delta-orb.amber {
+.pv-sync-mode-orb.amber {
   background: rgba(245, 158, 11, 0.12);
   color: #f59e0b;
   border: 1px solid rgba(245, 158, 11, 0.3);
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.2);
 }
 
-.pv-delta-titles h4 {
-  margin: 0;
-  font-size: 13px;
+.pv-sync-mode-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pv-mode-title {
+  font-size: 13.5px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  font-family: 'Space Grotesk', var(--font-title, sans-serif);
 }
 
-.pv-delta-titles p {
-  margin: 3px 0 0 0;
+.pv-sync-mode-text p {
+  margin: 0;
   font-size: 12px;
   color: #94a3b8;
-  line-height: 1.4;
+  line-height: 1.45;
+  max-width: 640px;
 }
 
-.pv-toggle-wrap {
-  display: flex;
+/* 2-Option Segmented Selector */
+.pv-segmented-selector {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  user-select: none;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 8px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  transition: all 0.2s ease;
+  background: rgba(3, 7, 16, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 4px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
-.pv-toggle-wrap:hover {
+.pv-segment-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  padding: 8px 18px;
+  min-width: 120px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+  user-select: none;
+}
+
+.pv-segment-btn-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pv-segment-main {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pv-segment-sub {
+  font-size: 9.5px;
+  opacity: 0.75;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.pv-segment-btn:hover {
+  color: #f8fafc;
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
 }
 
-.pv-toggle-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #cbd5e1;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.pv-segment-btn.active-smart {
+  background: rgba(0, 242, 255, 0.15);
+  color: #00f2ff;
+  border-color: rgba(0, 242, 255, 0.35);
+  box-shadow: 0 0 16px rgba(0, 242, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
-.pv-toggle-wrap.disabled {
+.pv-segment-btn.active-full {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Tablet & Mobile responsive for sync mode deck */
+@media (max-width: 900px) {
+  .pv-sync-mode-core {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .pv-segmented-selector {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .pv-segment-btn {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* Cooldown Disabled Button Styling */
+.pv-btn-pill.disabled-cooldown {
   opacity: 0.65;
   cursor: not-allowed;
+  filter: grayscale(0.2);
+  border-color: rgba(245, 158, 11, 0.4) !important;
 }
 
-.pv-switch {
-  width: 40px;
-  height: 22px;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 9999px;
-  position: relative;
-  transition: all 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-}
-
-.pv-switch.locked {
-  opacity: 0.45;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.pv-switch.on {
-  background: #f59e0b;
-  border-color: #f59e0b;
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
-}
-
-.pv-switch-thumb {
-  width: 16px;
-  height: 16px;
-  background: #ffffff;
-  border-radius: 9999px;
-  position: absolute;
-  top: 2px;
-  left: 3px;
-  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-}
-
-.pv-switch.on .pv-switch-thumb {
-  transform: translateX(18px);
+.pv-btn-pill.disabled-cooldown:hover {
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 /* ============================================================================

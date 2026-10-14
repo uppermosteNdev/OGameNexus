@@ -139,8 +139,9 @@ export const OverwatchMyEmpire: React.FC<OverwatchMyEmpireProps> = ({
   apiUrl,
 }) => {
   // Read local Dexie account and colony data
-  const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
-  const activePlayerId = effectiveAccount?.playerId || activeAccount?.playerId;
+  const fallbackAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+  const currentAccount = effectiveAccount || fallbackAccount;
+  const activePlayerId = currentAccount?.playerId;
 
   // Sharing settings state initialized from config or defaults (default disabled until configured)
   const [sharingSettings, setSharingSettings] = useState<EmpireSharingSettings>(() => {

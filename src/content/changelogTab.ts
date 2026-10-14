@@ -14,6 +14,21 @@ export interface ChangelogVersion {
 
 export const NEXUS_CHANGELOGS: ChangelogVersion[] = [
   {
+    version: 'v1.2.6',
+    items: [
+      { type: 'Feature', text: 'Overwatch Phalanx Coverage [Closed Beta]: Tactical alliance sensor grid visualizing the reach of all alliance moons with full circular/donut galaxy boundary wrap-around range mapping.' },
+      { type: 'Feature', text: 'Per-Resource Amortization Engine: Dedicated payback speed calculations for Metal, Crystal, and Deuterium with high-end visual filter toggles and instant ROI updates.' },
+      { type: 'Feature', text: 'Multi-Account Switcher: Seamless universe/player account switcher at the bottom-left command dock with deep-linked URL synchronization.' },
+      { type: 'Feature', text: 'Live Universe Feed Unseen Counter [Closed Beta]: Real-time badge counter on the Universe Intel feed navigation alerting you immediately to newly detected galaxy events.' },
+      { type: 'Bugfix', text: 'Circular Universe Distance: Accurately models shortest flight paths and system distances across circular/donut galaxies in Raid Radar Inactive Scout and Phalanx coverage.' },
+      { type: 'Bugfix', text: 'Overwatch Resilience & Fault Isolation [Closed Beta]: Compact in-place error boundaries prevent child view exceptions from crashing the dashboard, with safe 1v1 duel arena empty states.' },
+      { type: 'Bugfix', text: 'Comparison Deck Live Highscores: Fixed stale hook dependencies so swapping compared players immediately re-fetches live highscore data.' },
+      { type: 'Bugfix', text: 'Live Universe Feed Hardening: Hardened galaxy delta synchronization against client parse anomalies and false planet abandonment or colonization flickers.' },
+      { type: 'Bugfix', text: 'Admin & Origin Protection: Permanently anchor origin system coordinates (1:1) and immutable admin accounts against false telemetry events.' },
+      { type: 'Bugfix', text: 'Vacation Mode & Moon Safeguards: Enforce game-mechanic laws preventing frozen vacation accounts or planets with active moons from being reported as abandoned.' }
+    ]
+  },
+  {
     version: 'v1.2.5',
     items: [
       { type: 'Feature', text: 'Nexus Overwatch [Closed Beta]: Alliance intelligence sharing, live universe activity, and multi-device cloud backup. Currently in Closed Beta for pilot testing and will be made available to all commanders at a later date.' },

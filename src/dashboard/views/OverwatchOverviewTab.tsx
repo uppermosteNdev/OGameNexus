@@ -198,6 +198,11 @@ export const OverwatchOverviewTab: React.FC<OverwatchOverviewTabProps> = ({
     );
   };
 
+  const hasAnyLifeforms = useMemo(() => {
+    const planets = memberDetail.empire?.planets || [];
+    return planets.some((p: any) => p.lifeformId || (Array.isArray(p.lifeformSetup) && p.lifeformSetup.length > 0));
+  }, [memberDetail]);
+
   return (
     <div className="ow-matrix-section ow-overview-matrix-section">
       {/* ==================================================================== */}
@@ -231,6 +236,26 @@ export const OverwatchOverviewTab: React.FC<OverwatchOverviewTabProps> = ({
           </div>
         </div>
       </div>
+
+      {!hasAnyLifeforms && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '12px 18px',
+          background: 'rgba(234, 179, 8, 0.08)',
+          border: '1px solid rgba(234, 179, 8, 0.25)',
+          borderRadius: '12px',
+          color: '#fef08a',
+          fontSize: '13px',
+          fontWeight: 500,
+        }}>
+          <Info size={16} style={{ color: '#facc15', flexShrink: 0 }} />
+          <span>
+            No active lifeform setups detected on colonies for <strong>{memberDetail.playerName}</strong>. Displaying standard baseline parameters.
+          </span>
+        </div>
+      )}
 
       {/* ==================================================================== */}
       {/* 2. LIFEFORM EXPERIENCE LEVEL BONUS (4 SPECIES PROGRESS RINGS)         */}

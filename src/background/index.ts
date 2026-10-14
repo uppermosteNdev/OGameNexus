@@ -6,6 +6,8 @@ import { AMORTIZATION_TABLE, calculateEmpireProduction, calculateMSU, DEFAULT_RA
 import { sanitizeActiveItem } from "../utils/items";
 import { getOverwatchApiUrl, fetchOverwatch } from "../utils/overwatchApi";
 import { cleanUniverseId, isSameUniverse } from "../utils/universe";
+import { calculateAccountResearchScore } from "../utils/researchTimeCalc";
+import { fetchPlayerHighscores } from "../utils/ogameHighscores";
 
 // Auto-heal / normalize any legacy or uncleaned debris harvests on extension launch
 async function normalizeDebrisHarvestsOnStartup() {
@@ -306,6 +308,17 @@ export async function autoSyncEmpireToOverwatch(playerId: string, force = false)
         const account = await db.accounts.get(playerId) || (typeof playerId === 'string' ? await db.accounts.get(Number(playerId)) : await db.accounts.get(String(playerId)));
         if (!account) return { success: false, reason: 'no_account' };
 
+        // STRICT MULTI-ACCOUNT & UNIVERSE ISOLATION:
+        // Never sync an account to an Overwatch grid belonging to a different universe or a different player!
+        if (config.universeId && account.universe && cleanUniverseId(config.universeId) !== cleanUniverseId(account.universe)) {
+            console.warn(`OGame Nexus: Skipping empire sync for ${account.playerName} (${account.playerId}) - universe mismatch with active Overwatch grid (${account.universe} vs ${config.universeId})`);
+            return { success: false, reason: 'universe_mismatch' };
+        }
+        if (config.playerId && String(account.playerId) !== String(config.playerId)) {
+            console.warn(`OGame Nexus: Skipping empire sync for ${account.playerName} (${account.playerId}) - player ID mismatch with active Overwatch grid member (${account.playerId} vs ${config.playerId})`);
+            return { success: false, reason: 'player_id_mismatch' };
+        }
+
         let planets = await db.planets.where('playerId').equals(playerId).toArray();
         if (!planets || planets.length === 0) {
             planets = await db.planets.where('playerId').equals(String(playerId)).toArray();
@@ -510,16 +523,57 @@ export async function autoSyncEmpireToOverwatch(playerId: string, force = false)
             }
         }
 
+        let resolvedTotalScore = account.score || 0;
+        let resolvedEconomyScore = account.economyScore || 0;
+        let resolvedMilitaryScore = account.militaryScore || 0;
+        let resolvedShipCount = account.shipCount || 0;
+
+        const uId = cleanUniverseId(account.universe || config.universeId);
+        if (uId) {
+            try {
+                const hs = await fetchPlayerHighscores(uId, playerId, true);
+                const updates: any = {};
+                if (hs.totalScore && hs.totalScore > 0 && hs.totalScore !== resolvedTotalScore) {
+                    resolvedTotalScore = hs.totalScore;
+                    updates.score = resolvedTotalScore;
+                    if (hs.totalRank) updates.rank = hs.totalRank;
+                }
+                if (hs.economyScore && hs.economyScore > 0 && hs.economyScore !== resolvedEconomyScore) {
+                    resolvedEconomyScore = hs.economyScore;
+                    updates.economyScore = resolvedEconomyScore;
+                    if (hs.economyRank) updates.economyRank = hs.economyRank;
+                }
+                if (hs.militaryScore && hs.militaryScore > 0 && hs.militaryScore !== resolvedMilitaryScore) {
+                    resolvedMilitaryScore = hs.militaryScore;
+                    updates.militaryScore = resolvedMilitaryScore;
+                    if (hs.militaryRank) updates.militaryRank = hs.militaryRank;
+                }
+                if (hs.ships && hs.ships > 0 && hs.ships !== resolvedShipCount) {
+                    resolvedShipCount = hs.ships;
+                    updates.shipCount = resolvedShipCount;
+                }
+                if (Object.keys(updates).length > 0) {
+                    await db.accounts.update(account.playerId, updates).catch(() => {});
+                }
+            } catch (e) {}
+        }
+
+        const calculatedResearchScore = calculateAccountResearchScore(account.researches || []);
+        const resolvedResearchScore = Math.max(account.researchScore || 0, calculatedResearchScore);
+        if (resolvedResearchScore > (account.researchScore || 0)) {
+            await db.accounts.update(account.playerId, { researchScore: resolvedResearchScore }).catch(() => {});
+        }
+
         const payload = {
             playerId: playerId,
             playerName: account.playerName || (account as any).name || 'Commander',
             avatarUrl: account.avatarUrl || null,
             playerClass: account.playerClass,
             allianceClass: account.allianceClass,
-            totalScore: account.score || 0,
-            economyScore: shareMines ? (account.economyScore || 0) : 0,
-            militaryScore: shareFleet ? (account.militaryScore || 0) : 0,
-            researchScore: shareResearch ? (account.researchScore || 0) : 0,
+            totalScore: resolvedTotalScore,
+            economyScore: shareMines ? resolvedEconomyScore : 0,
+            militaryScore: shareFleet ? resolvedMilitaryScore : 0,
+            researchScore: shareResearch ? resolvedResearchScore : 0,
             summary: {
                 planetCount: pCount,
                 moonCount: moonEntities.length,
@@ -2240,6 +2294,34 @@ chrome.action.onClicked.addListener(() => {
     chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
 });
 
+if (typeof chrome !== 'undefined' && chrome.commands) {
+    chrome.commands.onCommand.addListener((command) => {
+        if (command === "open_dashboard") {
+            chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+        }
+    });
+}
+
+if (typeof chrome !== 'undefined' && chrome.contextMenus) {
+    chrome.runtime.onInstalled.addListener(() => {
+        try {
+            chrome.contextMenus.create({
+                id: "open_nexus_dashboard",
+                title: "Open OGame Nexus Dashboard",
+                contexts: ["action", "page"]
+            });
+        } catch (e) {
+            // Context menu might already exist
+        }
+    });
+
+    chrome.contextMenus.onClicked.addListener((info) => {
+        if (info.menuItemId === "open_nexus_dashboard") {
+            chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+        }
+    });
+}
+
 // ----------------------------------------------------------------------------
 // PERIODIC OVERWATCH EMPIRE AUTO-SYNC (EVERY 2 HOURS)
 // ----------------------------------------------------------------------------
@@ -2249,9 +2331,15 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
         if (alarm.name === 'OVERWATCH_EMPIRE_PERIODIC_SYNC') {
             (async () => {
                 try {
+                    const store = await chrome.storage.local.get(['nexus_overwatch_config']);
+                    const config = store.nexus_overwatch_config;
+                    if (!config?.allianceId || !config?.authToken) return;
+
                     const accounts = await db.accounts.toArray();
                     for (const acc of accounts) {
                         if (acc.playerId) {
+                            if (config.universeId && acc.universe && cleanUniverseId(config.universeId) !== cleanUniverseId(acc.universe)) continue;
+                            if (config.playerId && String(acc.playerId) !== String(config.playerId)) continue;
                             await autoSyncEmpireToOverwatch(acc.playerId, false);
                         }
                     }
@@ -2268,9 +2356,15 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
 // ----------------------------------------------------------------------------
 (async () => {
     try {
+        const store = await chrome.storage.local.get(['nexus_overwatch_config']);
+        const config = store.nexus_overwatch_config;
+        if (!config?.allianceId || !config?.authToken) return;
+
         const accounts = await db.accounts.toArray();
         for (const acc of accounts) {
             if (acc.playerId) {
+                if (config.universeId && acc.universe && cleanUniverseId(config.universeId) !== cleanUniverseId(acc.universe)) continue;
+                if (config.playerId && String(acc.playerId) !== String(config.playerId)) continue;
                 autoSyncEmpireToOverwatch(acc.playerId, false).catch(() => {});
             }
         }

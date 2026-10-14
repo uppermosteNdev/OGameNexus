@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS alliance_galaxy_slots (
 );
 CREATE INDEX IF NOT EXISTS idx_ally_slots_coords ON alliance_galaxy_slots(alliance_id, universe_id, galaxy, system);
 CREATE INDEX IF NOT EXISTS idx_ally_slots_player ON alliance_galaxy_slots(alliance_id, universe_id, player_id);
+CREATE INDEX IF NOT EXISTS idx_ally_slots_uni_player ON alliance_galaxy_slots(universe_id, player_id);
 CREATE INDEX IF NOT EXISTS idx_ally_slots_status ON alliance_galaxy_slots(alliance_id, universe_id, player_status);
 
 -- HISTORICAL DELTA AUDIT TRAIL (Relocations, Moons, Colonizations)

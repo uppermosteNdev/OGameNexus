@@ -214,11 +214,21 @@ export function parseOverview(html: string): ScrapedOverview {
     }
 
     // 4. Score & Rank: <span id="scoreContentField">...>235,214,806 (Place 16 of 615)</a></span>
-    const scoreMatch = html.match(/id=["']scoreContentField["'][^>]*>[\s\S]*?>([\d,.]+)\s*\(Place\s*(\d+)\s*of\s*(\d+)\)[\s\S]*?<\/span>/i);
-    if (scoreMatch) {
-        data.score = parseInt(scoreMatch[1].replace(/[,.]/g, ''));
-        data.rank = parseInt(scoreMatch[2]);
-        data.totalPlayers = parseInt(scoreMatch[3]);
+    const scoreBlockMatch = html.match(/id=["']scoreContentField["'][^>]*>([\s\S]*?)<\/span>/i);
+    if (scoreBlockMatch) {
+        const textInside = scoreBlockMatch[1].replace(/<[^>]+>/g, '').trim();
+        const beforeParen = textInside.split('(')[0]?.trim();
+        if (beforeParen) {
+            const digits = beforeParen.replace(/[^\d]/g, '');
+            if (digits) {
+                data.score = parseInt(digits, 10);
+            }
+        }
+        const parenMatch = textInside.match(/\((?:[^\d]*(\d+)[^\d]+(\d+)[^\d]*)\)/);
+        if (parenMatch) {
+            data.rank = parseInt(parenMatch[1], 10);
+            data.totalPlayers = parseInt(parenMatch[2], 10);
+        }
     }
 
     // 5. Honour: <span id="honorContentField">135,551</span>

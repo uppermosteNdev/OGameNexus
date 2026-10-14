@@ -129,6 +129,41 @@ export function getResearchCost(tech: StandardResearchDef, level: number): Cost 
 }
 
 /**
+ * Calculates the cumulative resources spent on a research from level 1 up to the specified level.
+ */
+export function calculateCumulativeResearchCost(tech: StandardResearchDef, level: number): Cost {
+    if (level <= 0) return { metal: 0, crystal: 0, deuterium: 0 };
+    let metal = 0;
+    let crystal = 0;
+    let deuterium = 0;
+    for (let l = 1; l <= level; l++) {
+        const c = getResearchCost(tech, l);
+        metal += c.metal;
+        crystal += c.crystal;
+        deuterium += c.deuterium;
+    }
+    return { metal, crystal, deuterium };
+}
+
+/**
+ * Calculates the official OGame Research Score (1 point per 1,000 resources spent)
+ * derived directly from the player's reported empire technology levels.
+ */
+export function calculateAccountResearchScore(researches: Array<{ id: number; level: number }> | undefined | null): number {
+    if (!researches || !Array.isArray(researches) || researches.length === 0) return 0;
+    let totalResources = 0;
+    for (const item of researches) {
+        const level = Number(item.level) || 0;
+        if (level <= 0) continue;
+        const tech = STANDARD_RESEARCHES.find(t => t.id === Number(item.id));
+        if (!tech) continue;
+        const cum = calculateCumulativeResearchCost(tech, level);
+        totalResources += (cum.metal + cum.crystal + cum.deuterium);
+    }
+    return Math.floor(totalResources / 1000);
+}
+
+/**
  * Calculates the effective Research Lab level using IRN mechanics.
  */
 export function calculateEffectiveLabLevel(

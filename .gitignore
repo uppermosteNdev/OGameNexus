@@ -110,6 +110,12 @@ scratch/
 skills/
 SKILL.md
 skills.json
+AGENTS.md
+
+# Graphify Knowledge Graph & Cache
+graphify-out/
+**/graphify-out/
+.graphify*
 
 # Cloudflare Worker, Miniflare & Local D1 State
 .wrangler/

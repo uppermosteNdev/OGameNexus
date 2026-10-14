@@ -148,6 +148,19 @@ export const OverwatchInactiveScout: React.FC<OverwatchInactiveScoutProps> = ({
     handleScan();
   }, [handleScan]);
 
+  // Determine available galaxies dynamically from Universe Info, Account, Edge API, or Target coords
+  const maxGalaxyFromTargets = useMemo(() => {
+    return rawTargets.reduce((max, t) => Math.max(max, t.galaxy || 0), 0);
+  }, [rawTargets]);
+
+  const totalGalaxies = useMemo(() => {
+    if (accountGalaxies && accountGalaxies > 0) return accountGalaxies;
+    if (galaxiesCount && galaxiesCount > 0) return galaxiesCount;
+    if (serverGalaxies && serverGalaxies > 0) return serverGalaxies;
+    if (maxGalaxyFromTargets > 0) return maxGalaxyFromTargets;
+    return 5;
+  }, [accountGalaxies, galaxiesCount, serverGalaxies, maxGalaxyFromTargets]);
+
   // 4. Compute Distance & Proximity for each Target from User Colonies
   const enrichedTargets = useMemo(() => {
     return rawTargets
@@ -170,7 +183,12 @@ export const OverwatchInactiveScout: React.FC<OverwatchInactiveScoutProps> = ({
         if (userColonies && userColonies.length > 0) {
           for (const col of userColonies) {
             if (!col.coords) continue;
-            const { distance, systemsAway } = calculateOgameDistance(target.coords, col.coords);
+            const { distance, systemsAway } = calculateOgameDistance(target.coords, col.coords, {
+              isDonutSystem: true,
+              isDonutGalaxy: true,
+              totalGalaxies,
+              totalSystems: 499,
+            });
             if (distance < bestDistance) {
               bestDistance = distance;
               bestNearestColony = {
@@ -189,7 +207,7 @@ export const OverwatchInactiveScout: React.FC<OverwatchInactiveScoutProps> = ({
           nearestColony: bestNearestColony,
         };
       });
-  }, [rawTargets, localRadarCoordsSet, userColonies]);
+  }, [rawTargets, localRadarCoordsSet, userColonies, totalGalaxies]);
 
   // Recalculate live stats based on real-time enriched targets
   const liveStats = useMemo(() => {
@@ -204,19 +222,6 @@ export const OverwatchInactiveScout: React.FC<OverwatchInactiveScoutProps> = ({
       coverageRate: rate,
     };
   }, [enrichedTargets]);
-
-  // Determine available galaxies dynamically from Universe Info, Account, Edge API, or Target coords
-  const maxGalaxyFromTargets = useMemo(() => {
-    return rawTargets.reduce((max, t) => Math.max(max, t.galaxy || 0), 0);
-  }, [rawTargets]);
-
-  const totalGalaxies = useMemo(() => {
-    if (accountGalaxies && accountGalaxies > 0) return accountGalaxies;
-    if (galaxiesCount && galaxiesCount > 0) return galaxiesCount;
-    if (serverGalaxies && serverGalaxies > 0) return serverGalaxies;
-    if (maxGalaxyFromTargets > 0) return maxGalaxyFromTargets;
-    return 5;
-  }, [accountGalaxies, galaxiesCount, serverGalaxies, maxGalaxyFromTargets]);
 
   const availableGalaxies = useMemo(() => {
     return Array.from({ length: totalGalaxies }, (_, i) => i + 1);

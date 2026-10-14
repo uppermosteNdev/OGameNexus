@@ -57,21 +57,45 @@ export function parseCoordinates(coords: string): [number, number, number] {
   return [parts[0] || 1, parts[1] || 1, parts[2] || 1];
 }
 
+export interface DistanceTopologyOptions {
+  isDonutSystem?: boolean;
+  isDonutGalaxy?: boolean;
+  totalGalaxies?: number;
+  totalSystems?: number;
+}
+
 /**
- * Calculates standard OGame distance between two coordinates
+ * Calculates standard OGame distance between two coordinates with optional circular wrap-around.
  */
-export function calculateOgameDistance(coordsA: string, coordsB: string): { distance: number; systemsAway: number } {
+export function calculateOgameDistance(
+  coordsA: string,
+  coordsB: string,
+  options?: DistanceTopologyOptions
+): { distance: number; systemsAway: number } {
   const [g1, s1, p1] = parseCoordinates(coordsA);
   const [g2, s2, p2] = parseCoordinates(coordsB);
 
+  const totalGalaxies = options?.totalGalaxies || 5;
+  const totalSystems = options?.totalSystems || 499;
+
+  let deltaG = Math.abs(g1 - g2);
+  if (options?.isDonutGalaxy && deltaG > totalGalaxies / 2) {
+    deltaG = totalGalaxies - deltaG;
+  }
+
+  let deltaS = Math.abs(s1 - s2);
+  if (options?.isDonutSystem && deltaS > totalSystems / 2) {
+    deltaS = totalSystems - deltaS;
+  }
+
   let distance = 0;
-  let systemsAway = Math.abs(s1 - s2);
+  let systemsAway = deltaS;
 
   if (g1 !== g2) {
-    distance = 20000 * Math.abs(g1 - g2);
-    systemsAway = Math.abs(g1 - g2) * 499 + systemsAway;
+    distance = 20000 * deltaG;
+    systemsAway = deltaG * totalSystems + deltaS;
   } else if (s1 !== s2) {
-    distance = 2700 + 95 * Math.abs(s1 - s2);
+    distance = 2700 + 95 * deltaS;
   } else {
     distance = 1000 + 5 * Math.abs(p1 - p2);
   }

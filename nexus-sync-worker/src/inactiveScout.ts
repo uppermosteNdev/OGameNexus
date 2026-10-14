@@ -10,22 +10,23 @@ import { Env } from './index';
 import { cleanUniverseId } from './universeSeeder';
 import { getUniverseDb } from './dbRouter';
 
-interface HighscoreEntry {
+export interface HighscoreEntry {
   rank: number;
   score: number;
+  ships?: number;
 }
 
 // In-memory 1-hour cache for universe highscores (strictly bounded)
-const MAX_HIGHSCORE_CACHE_ENTRIES = 10;
+const MAX_HIGHSCORE_CACHE_ENTRIES = 30;
 const HIGHSCORE_CACHE = new Map<string, { timestamp: number; map: Map<string, HighscoreEntry> }>();
 const HIGHSCORE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-function setBoundedHighscoreCache(universeId: string, data: { timestamp: number; map: Map<string, HighscoreEntry> }) {
+function setBoundedHighscoreCache(key: string, data: { timestamp: number; map: Map<string, HighscoreEntry> }) {
   if (HIGHSCORE_CACHE.size >= MAX_HIGHSCORE_CACHE_ENTRIES) {
     const oldestKey = HIGHSCORE_CACHE.keys().next().value;
     if (oldestKey) HIGHSCORE_CACHE.delete(oldestKey);
   }
-  HIGHSCORE_CACHE.set(universeId, data);
+  HIGHSCORE_CACHE.set(key, data);
 }
 
 // In-memory 5-minute cache for baseline inactive targets (strictly bounded)
@@ -48,9 +49,11 @@ function setBoundedBaselineCache(key: string, data: CachedBaseline) {
 
 /**
  * Fetch and parse player highscores from official Gameforge API
+ * type 0 = Total, type 1 = Economy, type 2 = Research, type 3 = Military
  */
-async function getUniverseHighscores(universeId: string): Promise<Map<string, HighscoreEntry>> {
-  const cached = HIGHSCORE_CACHE.get(universeId);
+export async function getUniverseHighscores(universeId: string, type: number = 0): Promise<Map<string, HighscoreEntry>> {
+  const cacheKey = `${universeId}_type_${type}`;
+  const cached = HIGHSCORE_CACHE.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < HIGHSCORE_CACHE_TTL_MS) {
     return cached.map;
   }
@@ -58,7 +61,7 @@ async function getUniverseHighscores(universeId: string): Promise<Map<string, Hi
   const map = new Map<string, HighscoreEntry>();
 
   try {
-    const url = `https://${universeId}.ogame.gameforge.com/api/highscore.xml?category=1&type=0&toJson=1`;
+    const url = `https://${universeId}.ogame.gameforge.com/api/highscore.xml?category=1&type=${type}&toJson=1`;
     const res = await fetch(url, {
       headers: { 'User-Agent': 'OGameNexus-Sync/1.2.5' },
     });
@@ -71,20 +74,22 @@ async function getUniverseHighscores(universeId: string): Promise<Map<string, Hi
       for (const item of playerList) {
         const attr = item?.['@attributes'] || item;
         if (attr?.id) {
+          const shipsVal = attr.ships !== undefined ? parseInt(String(attr.ships || '0'), 10) : undefined;
           map.set(String(attr.id), {
             rank: parseInt(String(attr.position || '0'), 10),
             score: parseInt(String(attr.score || '0'), 10),
+            ships: shipsVal !== undefined && !isNaN(shipsVal) ? shipsVal : undefined,
           });
         }
       }
 
-      setBoundedHighscoreCache(universeId, {
+      setBoundedHighscoreCache(cacheKey, {
         timestamp: Date.now(),
         map,
       });
     }
   } catch (err) {
-    console.warn(`[InactiveScout] Failed to fetch highscores for ${universeId}:`, err);
+    console.warn(`[InactiveScout] Failed to fetch highscores (type ${type}) for ${universeId}:`, err);
   }
 
   return map;

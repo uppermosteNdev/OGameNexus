@@ -1211,14 +1211,12 @@ export function applyGalaxyRings() {
     const planetNameCell = row.querySelector('.cellPlanetName');
     const planetNameText = planetNameCell?.textContent?.trim() || "";
 
-    // Check for destroyed planet indicators
+    // Check for destroyed planet indicators (only if no active player text is present)
     const hasDestroyedText = !!(
-      (planetNameText && /^(destroy|zerstör|destru|détruit|distrutt)/i.test(planetNameText)) ||
-      (playerText && /^(destroy|zerstör|destru|détruit|distrutt)/i.test(playerText))
+      (planetNameText && /^(destroyed planet|zerstörter planet|planeta destruido|planète détruite|pianeta distrutto)/i.test(planetNameText))
     );
-    const hasDestroyedIcon = !!(
-      row.querySelector('.cellPlanet img[src*="destroy"], .cellPlanet img[src*="zerstoert"], .microplanet[class*="destroy"]') ||
-      row.querySelector('.cellMoon .moon-destroyed, .cellMoon [class*="destroy"], .cellMoon img[src*="destroy"], .cellMoon img[src*="zerstoert"]')
+    const hasDestroyedIcon = !playerText && !!(
+      row.querySelector('.cellPlanet img[src*="destroyed"], .cellPlanet img[src*="zerstoert"], .cellPlanet .planet-destroyed')
     );
     const isDestroyed = hasDestroyedText || hasDestroyedIcon;
 
@@ -1993,112 +1991,67 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
         if (nameInTooltip) planetName = nameInTooltip;
       }
 
-      // Check for destroyed planet or moon indicators
-      const hasDestroyedText = !!(
-        planetName && /^(destroy|zerstör|destru|détruit|distrutt)/i.test(planetName)
-      );
-      const hasDestroyedIcon = !!(
-        row.querySelector('.cellPlanet img[src*="destroy"], .cellPlanet img[src*="zerstoert"], .microplanet[class*="destroy"]') ||
-        row.querySelector('.cellMoon .moon-destroyed, .cellMoon [class*="destroy"], .cellMoon img[src*="destroy"], .cellMoon img[src*="zerstoert"]')
-      );
-      const isPlanetDestroyed = hasDestroyedText || hasDestroyedIcon;
-      if (isPlanetDestroyed && (!planetName || !planetName.toLowerCase().includes('destroy'))) {
-        planetName = 'Destroyed planet';
-      }
-
-      // If empty slot filter is on and no planet ID or name is found (and not destroyed)
-      if (!isPlanetDestroyed && (isEmpty || (!planetId && !planetName && !isOwnPlanet))) {
-        planetName = null;
-      }
-
-      // 2. Moon Status & Size
-      const micromoon = row.querySelector('.micromoon');
-      const moonCell = row.querySelector('.cellMoon');
-      const hasMoon = (micromoon || row.querySelector('.cellMoon [data-moon-id]')) ? 1 : 0;
-      const moonId = micromoon?.getAttribute('data-moon-id') || null;
-      let moonSize: number | null = null;
-
-      const isMoonDestroyed = (
-        isPlanetDestroyed ||
-        (hasMoon === 1 && (
-          !!moonCell?.querySelector('.moon-destroyed, .destroyed, [class*="destroy"]') ||
-          !!micromoon?.classList.contains('moon-destroyed') ||
-          !!micromoon?.classList.contains('destroyed') ||
-          !!moonCell?.querySelector('img[src*="destroyed"], img[src*="zerstoert"]')
-        ))
-      );
-      const moonDestroyed = isMoonDestroyed ? 1 : 0;
-
-      if (hasMoon) {
-        const moonSizeEl = row.querySelector('#moonsize');
-        if (moonSizeEl) {
-          const sizeParsed = parseInt(moonSizeEl.textContent?.replace(/\D/g, '') || '', 10);
-          if (!isNaN(sizeParsed)) moonSize = sizeParsed;
-        }
-        if (!moonSize) {
-          const moonTooltip = row.querySelector('.cellMoon')?.textContent || '';
-          const sizeMatch = moonTooltip.match(/(\d+[\.,]?\d*)\s*(?:km|км)/i);
-          if (sizeMatch) {
-            moonSize = parseInt(sizeMatch[1].replace(/[^\d]/g, ''), 10) || 8000;
-          }
-        }
-      }
-
-      // 3. Player ID, Name, Status & Rank
+      // 2. Player ID, Name, Status & Rank - ALWAYS extracted directly from cellPlayerName
       let playerId: string | null = null;
       let playerName: string | null = null;
       let playerStatus = 'active';
       let playerRank: number | null = null;
 
-      if (!isPlanetDestroyed && (planetName || planetId || isOwnPlanet)) {
-        const playerCell = row.querySelector('.cellPlayerName');
-        if (playerCell) {
-          // Player ID
-          const directPlayerId = playerCell.querySelector('[data-playerid]')?.getAttribute('data-playerid') ||
-                                 playerCell.querySelector('[data-uid]')?.getAttribute('data-uid');
-          if (directPlayerId) {
-            playerId = directPlayerId;
+      const playerCell = row.querySelector('.cellPlayerName');
+      if (playerCell) {
+        // Player ID (support native OGame, OGLight data-uid, and PTRE data-player-id)
+        const directPlayerId = playerCell.querySelector('[data-playerid]')?.getAttribute('data-playerid') ||
+                               playerCell.querySelector('[data-player-id]')?.getAttribute('data-player-id') ||
+                               playerCell.querySelector('[data-uid]')?.getAttribute('data-uid');
+        if (directPlayerId) {
+          playerId = directPlayerId;
+        } else {
+          const playerRel = playerCell.querySelector('.playerName[rel], span[rel^="player"]')?.getAttribute('rel');
+          if (playerRel) {
+            const match = playerRel.match(/player(\d+)/i);
+            if (match) playerId = match[1];
+          }
+        }
+
+        // Player Name (support numeric names like "777", never take rank strings starting with #)
+        const pNameEl = playerCell.querySelector('.playerName, .playername, span[rel^="player"]');
+        if (pNameEl) {
+          const rawDirect = extractDirectText(pNameEl);
+          const directClean = rawDirect.replace(/\s*\([viInob, ]+\)\s*/gi, '').trim();
+          if (directClean && !directClean.startsWith('#')) {
+            playerName = directClean;
           } else {
-            const playerRel = playerCell.querySelector('.playerName[rel], span[rel^="player"]')?.getAttribute('rel');
-            if (playerRel) {
-              const match = playerRel.match(/player(\d+)/i);
-              if (match) playerId = match[1];
+            const h1Name = pNameEl.querySelector('h1 .playerName, .htmlTooltip .playerName')?.textContent?.trim();
+            const h1Clean = (h1Name || '').replace(/\s*\([viInob, ]+\)\s*/gi, '').trim();
+            if (h1Clean && !h1Clean.startsWith('#')) {
+              playerName = h1Clean;
             }
           }
+        }
 
-          // Player Name (support numeric names like "777", never take rank strings starting with #)
-          const pNameEl = playerCell.querySelector('.playerName, .playername, span[rel^="player"]');
-          if (pNameEl) {
-            const rawDirect = extractDirectText(pNameEl);
-            const directClean = rawDirect.replace(/\s*\([viInob, ]+\)\s*/gi, '').trim();
-            if (directClean && !directClean.startsWith('#')) {
-              playerName = directClean;
-            } else {
-              const h1Name = pNameEl.querySelector('h1 .playerName, .htmlTooltip .playerName')?.textContent?.trim();
-              const h1Clean = (h1Name || '').replace(/\s*\([viInob, ]+\)\s*/gi, '').trim();
-              if (h1Clean && !h1Clean.startsWith('#')) {
-                playerName = h1Clean;
-              }
-            }
+        // Fallback for player name if empty
+        if (!playerName) {
+          const clone = playerCell.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('.htmlTooltip, .ogl_ranking, .rank, .honorRank, .ogl_tagPicker, .ogl_flagPicker, pre, script, style').forEach(el => el.remove());
+          const clean = clone.textContent?.trim().replace(/\s+/g, ' ') || '';
+          const sanitized = clean.replace(/\([^)]*\)/g, '').replace(/#\d+/g, '').trim();
+          if (sanitized && !sanitized.startsWith('#')) {
+            playerName = sanitized;
           }
+        }
 
-          // Fallback for player name if empty
-          if (!playerName) {
-            const clone = playerCell.cloneNode(true) as HTMLElement;
-            clone.querySelectorAll('.htmlTooltip, .ogl_ranking, .rank, .honorRank, .ogl_tagPicker, .ogl_flagPicker, pre, script, style').forEach(el => el.remove());
-            const clean = clone.textContent?.trim().replace(/\s+/g, ' ') || '';
-            const sanitized = clean.replace(/\([^)]*\)/g, '').replace(/#\d+/g, '').trim();
-            if (sanitized && !sanitized.startsWith('#')) {
-              playerName = sanitized;
-            }
+        // Fallback for permanent admin accounts (Legor, GameAdmin, comagf, OGameTeam) without numeric tooltips
+        if (!playerId && playerName) {
+          const lower = playerName.toLowerCase().trim();
+          if (['legor', 'gameadmin', 'ogameteam', 'comagf'].includes(lower)) {
+            playerId = lower;
           }
+        }
 
-          // Player Status (Primary source of truth: data-status-tag)
+        // If player found, parse status and rank
+        if (playerId || playerName) {
           const statusTagEl = playerCell.querySelector('[data-status-tag]');
           const directTag = statusTagEl?.getAttribute('data-status-tag')?.trim();
-
-          // We only track objective universal player statuses: v (vacation), I (long inactive), i (inactive), b (banned)
-          // Relative statuses like hp (honorable), bandit, outlaw depend on viewer score and are excluded
           const allowedStatus = new Set(['v', 'I', 'i', 'b']);
 
           if (directTag) {
@@ -2126,19 +2079,71 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
             if (!isNaN(rankNum)) playerRank = rankNum;
           }
         }
+      }
 
-        // If this coordinate is the user's own planet and no foreign player was extracted
-        if (isOwnPlanet && (!playerName || !playerId)) {
-          playerId = ownPlayerId || playerId;
-          playerName = ownPlayerName || playerName;
-          playerStatus = 'active';
+      if (isOwnPlanet && (!playerName || !playerId)) {
+        playerId = ownPlayerId || playerId;
+        playerName = ownPlayerName || playerName;
+        playerStatus = 'active';
+      }
+
+      // Check for destroyed planet indicators (ONLY valid if slot has NO real player)
+      const hasRealPlayer = !!(playerId || playerName);
+      const hasDestroyedText = !hasRealPlayer && !!(
+        planetName && /^(destroyed planet|zerstörter planet|planeta destruido|planète détruite|pianeta distrutto)/i.test(planetName)
+      );
+      const hasDestroyedIcon = !hasRealPlayer && !!(
+        row.querySelector('.cellPlanet img[src*="destroyed"], .cellPlanet img[src*="zerstoert"], .cellPlanet .planet-destroyed')
+      );
+      const isPlanetDestroyed = hasDestroyedText || hasDestroyedIcon;
+      if (isPlanetDestroyed) {
+        planetName = 'Destroyed planet';
+        playerId = null;
+        playerName = null;
+      } else if (!planetName && hasRealPlayer) {
+        // Fallback planet name if DOM span was momentarily omitted
+        planetName = 'Colony';
+      } else if (isEmpty || (!planetId && !planetName && !isOwnPlanet && !hasRealPlayer)) {
+        planetName = null;
+      }
+
+      // 3. Moon Status & Size
+      const moonCell = row.querySelector('.cellMoon');
+      const micromoon = row.querySelector('.micromoon');
+      const hasMoonElement = !!(
+        micromoon ||
+        moonCell?.querySelector('[data-moon-id]') ||
+        moonCell?.querySelector('a[rel*="moon"], .micro-moon, .icon_moon, #moonsize') ||
+        moonCell?.querySelector('img[src*="moon"]')
+      );
+      let moonSize: number | null = null;
+      const moonSizeEl = row.querySelector('#moonsize') || moonCell?.querySelector('.moon_size, .size');
+      if (moonSizeEl) {
+        const sizeParsed = parseInt(moonSizeEl.textContent?.replace(/\D/g, '') || '', 10);
+        if (!isNaN(sizeParsed) && sizeParsed > 0) moonSize = sizeParsed;
+      }
+      if (!moonSize && moonCell) {
+        const moonTooltip = moonCell.textContent || '';
+        const sizeMatch = moonTooltip.match(/(\d+[\.,]?\d*)\s*(?:km|км|k)/i);
+        if (sizeMatch) {
+          moonSize = parseInt(sizeMatch[1].replace(/[^\d]/g, ''), 10) || null;
+          if (moonSize && moonSize < 100) moonSize = moonSize * 1000;
         }
       }
+
+      const hasMoon = (hasMoonElement || (moonSize !== null && moonSize > 0)) ? 1 : 0;
+      const moonId = micromoon?.getAttribute('data-moon-id') || moonCell?.querySelector('[data-moon-id]')?.getAttribute('data-moon-id') || null;
+
+      // Moon is destroyed ONLY if there was a moon element and it specifically displays destroyed image/class (never match action buttons)
+      const isMoonDestroyed = hasMoon === 1 && !!(
+        moonCell?.querySelector('img[src*="destroyed"], img[src*="zerstoert"], .moon-destroyed')
+      );
+      const moonDestroyed = isMoonDestroyed ? 1 : 0;
 
       // 4. Alliance Tag & ID
       let allianceTag: string | null = null;
       let allianceId: string | null = null;
-      if (!isPlanetDestroyed && (planetName || planetId || isOwnPlanet)) {
+      if (!isPlanetDestroyed && (planetName || planetId || hasRealPlayer || isOwnPlanet)) {
         const allyCell = row.querySelector('.cellAlliance');
         if (allyCell) {
           const allySpan = allyCell.querySelector('span');

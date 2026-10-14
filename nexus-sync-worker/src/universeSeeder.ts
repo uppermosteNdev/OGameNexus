@@ -279,6 +279,8 @@ export async function seedUniverseFromOfficialAPI(rawUniverseId: string, env: En
   const now = Date.now();
   const detectedEvents: any[] = [];
   const statements: any[] = [];
+  const seenStatusChangedPlayers = new Set<string>();
+  const seenRenamedPlayers = new Set<string>();
 
   const insertQuery = `
     INSERT OR REPLACE INTO universe_baseline_planets (
@@ -380,16 +382,29 @@ export async function seedUniverseFromOfficialAPI(rawUniverseId: string, env: En
           !playerName.trim().startsWith('#')
         ) {
           hasChanged = true;
-          detectedEvents.push({
-            eventType: 'player_renamed',
-            galaxy: p.galaxy,
-            system: p.system,
-            slot: p.slot,
-            playerId: p.playerId,
-            playerName: playerName.trim(),
-            oldState: { playerName: oldSlot.player_name, playerStatus: oldSlot.player_status },
-            newState: { playerName: playerName.trim(), playerStatus: normalizePlayerStatus(playerStatus) },
-          });
+          const pId = String(p.playerId);
+          if (!seenRenamedPlayers.has(pId)) {
+            seenRenamedPlayers.add(pId);
+            detectedEvents.push({
+              eventType: 'player_renamed',
+              galaxy: p.galaxy,
+              system: p.system,
+              slot: p.slot,
+              playerId: p.playerId,
+              playerName: playerName.trim(),
+              oldState: { playerName: oldSlot.player_name, playerStatus: oldSlot.player_status },
+              newState: { playerName: playerName.trim(), playerStatus: normalizePlayerStatus(playerStatus) },
+            });
+
+            // Cascade renamed player to alliance intelligence
+            statements.push(
+              db.prepare(
+                `UPDATE alliance_galaxy_slots
+                 SET player_name = ?, last_changed_at = ?
+                 WHERE universe_id = ? AND player_id = ?`
+              ).bind(playerName.trim(), now, universeId, p.playerId)
+            );
+          }
         }
 
         // C. Player status changed in players.xml (e.g. active -> (i), (v), (b), or multiple tags like "v,I")
@@ -403,16 +418,29 @@ export async function seedUniverseFromOfficialAPI(rawUniverseId: string, env: En
           oldStatusNorm !== newStatusNorm
         ) {
           hasChanged = true;
-          detectedEvents.push({
-            eventType: 'status_changed',
-            galaxy: p.galaxy,
-            system: p.system,
-            slot: p.slot,
-            playerId: p.playerId,
-            playerName,
-            oldState: { playerStatus: oldStatusNorm },
-            newState: { playerStatus: newStatusNorm },
-          });
+          const pId = String(p.playerId);
+          if (!seenStatusChangedPlayers.has(pId)) {
+            seenStatusChangedPlayers.add(pId);
+            detectedEvents.push({
+              eventType: 'status_changed',
+              galaxy: p.galaxy,
+              system: p.system,
+              slot: p.slot,
+              playerId: p.playerId,
+              playerName,
+              oldState: { playerStatus: oldStatusNorm },
+              newState: { playerStatus: newStatusNorm },
+            });
+
+            // Cascade status change to alliance intelligence
+            statements.push(
+              db.prepare(
+                `UPDATE alliance_galaxy_slots
+                 SET player_status = ?, last_changed_at = ?
+                 WHERE universe_id = ? AND player_id = ?`
+              ).bind(newStatusNorm, now, universeId, p.playerId)
+            );
+          }
         }
 
         // D. Moon spawned in universe.xml
@@ -646,6 +674,8 @@ export async function syncDailyPlayersAndAlliances(rawUniverseId: string, env: E
   const now = Date.now();
   const statements: any[] = [];
   let statusEventsCount = 0;
+  const seenDailyStatusChangedPlayers = new Set<string>();
+  const seenDailyRenamedPlayers = new Set<string>();
 
   for (const slot of slots) {
     const player = playersMap.get(slot.player_id);
@@ -698,7 +728,10 @@ export async function syncDailyPlayersAndAlliances(rawUniverseId: string, env: E
         ).bind(newPlayerName, newPlayerStatus, newAllianceTag, now, now, universeId, slot.galaxy, slot.system, slot.slot)
       );
 
-      if (statusChanged) {
+      const pId = String(slot.player_id);
+
+      if (statusChanged && !seenDailyStatusChangedPlayers.has(pId)) {
+        seenDailyStatusChangedPlayers.add(pId);
         statusEventsCount++;
         statements.push(
           db.prepare(
@@ -715,6 +748,26 @@ export async function syncDailyPlayersAndAlliances(rawUniverseId: string, env: E
             JSON.stringify({ playerStatus: newPlayerStatus }),
             now
           )
+        );
+
+        // Keep alliance intel up to date across all slots of this player
+        statements.push(
+          db.prepare(
+            `UPDATE alliance_galaxy_slots
+             SET player_status = ?, last_changed_at = ?
+             WHERE universe_id = ? AND player_id = ?`
+          ).bind(newPlayerStatus, now, universeId, slot.player_id)
+        );
+      }
+
+      if (nameChanged && !seenDailyRenamedPlayers.has(pId)) {
+        seenDailyRenamedPlayers.add(pId);
+        statements.push(
+          db.prepare(
+            `UPDATE alliance_galaxy_slots
+             SET player_name = ?, last_changed_at = ?
+             WHERE universe_id = ? AND player_id = ?`
+          ).bind(newPlayerName, now, universeId, slot.player_id)
         );
       }
     }

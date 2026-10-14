@@ -1,0 +1,1124 @@
+/* ============================================================================
+   NEXUS OVERWATCH — PHALANX COVERAGE COMMAND DECK
+   High-End Agency Tier: Double-Bezel Hardware Architecture | Ethereal Glass
+   Palette: Deep OLED (#03060c) | Cyan Specular (#00f2ff) | Violet (#8b5cf6) | Emerald (#10b981)
+   ============================================================================ */
+
+.ow-phalanx-container {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
+  color: #f1f5f9;
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  box-sizing: border-box;
+  animation: owPhalanxFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes owPhalanxFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   DOUBLE-BEZEL (DOPPELRAND) CHASSIS
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-outer-shell {
+  position: relative;
+  background: radial-gradient(120% 120% at 50% 0%, rgba(13, 20, 38, 0.88) 0%, rgba(4, 7, 16, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  padding: 18px 22px;
+  box-shadow: 
+    0 24px 48px -12px rgba(0, 0, 0, 0.85),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(0, 242, 255, 0.03);
+  backdrop-filter: blur(20px);
+  box-sizing: border-box;
+}
+
+.ow-phalanx-inner-core {
+  background: rgba(2, 6, 18, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08);
+}
+
+/* ----------------------------------------------------------------------------
+   HERO & TELEMETRY HEADER
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+}
+
+.ow-phalanx-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ow-phalanx-avatar-radar {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(0, 242, 255, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: 1px solid rgba(0, 242, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 24px rgba(0, 242, 255, 0.22);
+  flex-shrink: 0;
+}
+
+.ow-phalanx-radar-sweep {
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 270deg, rgba(0, 242, 255, 0.45) 360deg);
+  border-radius: 50%;
+  animation: owRadarSweepAnim 3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes owRadarSweepAnim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ow-phalanx-hero-text h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ow-phalanx-hero-text p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+  max-width: 680px;
+  line-height: 1.45;
+}
+
+.ow-phalanx-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #00f2ff;
+  margin-bottom: 2px;
+}
+
+.ow-phalanx-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Island Pill Buttons */
+.ow-phalanx-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.ow-phalanx-pill-btn:hover {
+  background: rgba(0, 242, 255, 0.09);
+  border-color: rgba(0, 242, 255, 0.28);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(0, 242, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.ow-phalanx-pill-btn.active {
+  background: linear-gradient(135deg, rgba(0, 242, 255, 0.18) 0%, rgba(0, 242, 255, 0.06) 100%);
+  border-color: rgba(0, 242, 255, 0.45);
+  color: #00f2ff;
+  box-shadow: 0 0 16px rgba(0, 242, 255, 0.18);
+}
+
+/* ----------------------------------------------------------------------------
+   TELEMETRY METRIC STAT CARDS
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.ow-phalanx-stat-card {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.6) 0%, rgba(8, 12, 24, 0.8) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-phalanx-stat-card:hover {
+  border-color: rgba(0, 242, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.6);
+}
+
+.ow-phalanx-stat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.ow-phalanx-stat-card-val {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+}
+
+.ow-phalanx-stat-card-sub {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ow-phalanx-stat-card-sub.highlight {
+  color: #00f2ff;
+}
+
+.ow-phalanx-stat-card-sub.emerald {
+  color: #10b981;
+}
+
+.ow-phalanx-stat-card-sub.violet {
+  color: #c084fc;
+}
+
+/* ----------------------------------------------------------------------------
+   GALAXY TABS
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-galaxy-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 8px 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.ow-phalanx-galaxy-tab {
+  flex: 1;
+  min-width: 110px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  user-select: none;
+}
+
+.ow-phalanx-galaxy-tab:hover {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.ow-phalanx-galaxy-tab.active {
+  background: linear-gradient(180deg, rgba(0, 242, 255, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border-color: rgba(0, 242, 255, 0.4);
+  box-shadow: 
+    0 4px 20px -4px rgba(0, 242, 255, 0.25),
+    inset 0 1px 0 rgba(0, 242, 255, 0.3);
+}
+
+.ow-phalanx-tab-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ow-phalanx-tab-title span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.ow-phalanx-galaxy-tab.active .ow-phalanx-tab-title span {
+  color: #00f2ff;
+}
+
+.ow-phalanx-tab-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+}
+
+.ow-phalanx-tab-badge.high {
+  background: rgba(16, 185, 129, 0.16);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.ow-phalanx-tab-badge.mid {
+  background: rgba(0, 242, 255, 0.14);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 242, 255, 0.28);
+}
+
+.ow-phalanx-tab-badge.low {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.ow-phalanx-tab-bar {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.ow-phalanx-tab-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #00f2ff, #8b5cf6);
+  transition: width 0.4s ease;
+}
+
+/* ----------------------------------------------------------------------------
+   499-SYSTEM PANORAMIC RADAR STREAM
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-radar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ow-phalanx-radar-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ow-phalanx-radar-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ow-phalanx-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-phalanx-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.ow-phalanx-legend-dot.void {
+  background: #111524;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.ow-phalanx-legend-dot.single {
+  background: #00f2ff;
+  box-shadow: 0 0 6px rgba(0, 242, 255, 0.6);
+}
+
+.ow-phalanx-legend-dot.dual {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.ow-phalanx-legend-dot.multi {
+  background: #8b5cf6;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.7);
+}
+
+.ow-phalanx-legend-dot.moon {
+  background: #f59e0b;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+}
+
+/* 499 Systems Interactive Canvas / Strip Container */
+.ow-phalanx-stream-viewport {
+  position: relative;
+  width: 100%;
+  background: #050711;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 16px 12px 12px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.85);
+}
+
+/* Axis Ticks */
+.ow-phalanx-axis-ticks {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 4px 8px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  font-family: monospace;
+  box-sizing: border-box;
+}
+
+/* Moon Marker Overlay Strip */
+.ow-phalanx-moon-pins-track {
+  position: relative;
+  width: 100%;
+  height: 28px;
+  margin-bottom: 4px;
+}
+
+.ow-phalanx-moon-pin {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-phalanx-moon-pin:hover,
+.ow-phalanx-moon-pin.selected {
+  transform: translateX(-50%) scale(1.25);
+  z-index: 25;
+}
+
+.ow-phalanx-moon-pin-beacon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 10px #f59e0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ow-phalanx-moon-pin-stem {
+  width: 1.5px;
+  height: 12px;
+  background: linear-gradient(180deg, #f59e0b 0%, rgba(245, 158, 11, 0.2) 100%);
+}
+
+/* The 499 Columns Chart */
+.ow-phalanx-bars-container {
+  display: flex;
+  align-items: flex-end;
+  height: 80px;
+  width: 100%;
+  gap: 1px;
+  position: relative;
+  cursor: crosshair;
+}
+
+.ow-phalanx-system-bar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  border-radius: 1px;
+  transition: opacity 0.15s ease;
+  position: relative;
+}
+
+.ow-phalanx-system-bar-fill {
+  width: 100%;
+  border-radius: 1px 1px 0 0;
+  transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s ease;
+}
+
+.ow-phalanx-system-bar.void .ow-phalanx-system-bar-fill {
+  height: 10%;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ow-phalanx-system-bar.level-1 .ow-phalanx-system-bar-fill {
+  height: 48%;
+  background: linear-gradient(180deg, #00f2ff 0%, rgba(0, 242, 255, 0.35) 100%);
+  box-shadow: 0 0 4px rgba(0, 242, 255, 0.4);
+}
+
+.ow-phalanx-system-bar.level-2 .ow-phalanx-system-bar-fill {
+  height: 75%;
+  background: linear-gradient(180deg, #10b981 0%, rgba(16, 185, 129, 0.4) 100%);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.ow-phalanx-system-bar.level-3 .ow-phalanx-system-bar-fill {
+  height: 100%;
+  background: linear-gradient(180deg, #c084fc 0%, rgba(139, 92, 246, 0.5) 100%);
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.6);
+}
+
+.ow-phalanx-system-bar.is-moon-location::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+/* Highlighted Range Cones when Moon is focused */
+.ow-phalanx-system-bar.in-selected-range {
+  filter: brightness(1.4);
+}
+
+.ow-phalanx-system-bar.dimmed {
+  opacity: 0.18;
+}
+
+/* Interactive Cursor Reticle */
+.ow-phalanx-scrub-reticle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 10px #00f2ff, 0 0 4px #ffffff;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* ----------------------------------------------------------------------------
+   TACTICAL RETICLE HOVER DOSSIER (HUD TOOLTIP)
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-hover-hud {
+  position: absolute;
+  top: 10px;
+  background: rgba(8, 12, 24, 0.94);
+  border: 1px solid rgba(0, 242, 255, 0.4);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 255, 0.15);
+  backdrop-filter: blur(16px);
+  z-index: 30;
+  pointer-events: none;
+  min-width: 240px;
+  animation: owHudPop 0.15s ease-out;
+}
+
+@keyframes owHudPop {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.ow-phalanx-hud-coords {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.ow-phalanx-hud-sys {
+  font-size: 14px;
+  font-weight: 800;
+  color: #00f2ff;
+  font-family: 'Space Grotesk', monospace;
+}
+
+.ow-phalanx-hud-status-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ow-phalanx-hud-status-badge.secure {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.ow-phalanx-hud-status-badge.blind {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.ow-phalanx-hud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.ow-phalanx-hud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #cbd5e1;
+}
+
+/* ----------------------------------------------------------------------------
+   BLIND SPOTS TACTICAL TICKER
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-blindspots-deck {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ow-phalanx-blindspots-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ow-phalanx-blindspots-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f87171;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ow-phalanx-gaps-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.ow-phalanx-gap-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 8px;
+  font-size: 11px;
+  color: #fca5a5;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ow-phalanx-gap-pill:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.45);
+  transform: translateY(-1px);
+}
+
+/* ----------------------------------------------------------------------------
+   ALLIANCE MOONS & PHALANX SENSORS ROSTER
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-roster-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ow-phalanx-roster-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ow-phalanx-roster-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ow-phalanx-roster-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.ow-phalanx-roster-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ow-phalanx-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: #f1f5f9;
+}
+
+.ow-phalanx-search-input-wrap input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #f1f5f9;
+  font-size: 12px;
+  width: 140px;
+}
+
+.ow-phalanx-moons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.ow-phalanx-moon-card {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.7) 0%, rgba(6, 10, 20, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.ow-phalanx-moon-card:hover,
+.ow-phalanx-moon-card.highlighted {
+  border-color: rgba(0, 242, 255, 0.4);
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 242, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+.ow-phalanx-moon-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ow-phalanx-moon-owner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ow-phalanx-moon-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.ow-phalanx-moon-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ow-phalanx-owner-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.ow-phalanx-owner-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.ow-phalanx-moon-coords {
+  font-size: 11px;
+  color: #38bdf8;
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.ow-phalanx-badge-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(0, 242, 255, 0.12);
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  color: #00f2ff;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* Interplanetary Analysis Network Tech Banner inside Card */
+.ow-phalanx-ian-banner {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.14) 0%, rgba(88, 28, 135, 0.08) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ow-phalanx-ian-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ow-phalanx-ian-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.25);
+  border: 1px solid rgba(192, 132, 252, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c084fc;
+  flex-shrink: 0;
+}
+
+.ow-phalanx-ian-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.ow-phalanx-ian-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.ow-phalanx-ian-desc {
+  font-size: 10px;
+  color: #c084fc;
+}
+
+.ow-phalanx-ian-boost-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.15);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  font-family: 'Space Grotesk', monospace;
+}
+
+/* Range Breakdown metrics inside Card */
+.ow-phalanx-moon-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.ow-phalanx-metric-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.ow-phalanx-metric-lbl {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.ow-phalanx-metric-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.ow-phalanx-metric-val.cyan {
+  color: #00f2ff;
+}
+
+.ow-phalanx-metric-val.emerald {
+  color: #10b981;
+}
+
+.ow-phalanx-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.ow-phalanx-card-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.ow-phalanx-card-btn:hover {
+  background: rgba(0, 242, 255, 0.1);
+  border-color: rgba(0, 242, 255, 0.3);
+  color: #ffffff;
+}
+
+.ow-phalanx-card-btn.active {
+  background: rgba(0, 242, 255, 0.2);
+  border-color: #00f2ff;
+  color: #00f2ff;
+}
+
+/* ----------------------------------------------------------------------------
+   TACTICAL 499 MATRIX VIEW (50-SYSTEM BANKS)
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.ow-phalanx-matrix-bank {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ow-phalanx-matrix-bank-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.ow-phalanx-matrix-bank-cells {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+}
+
+.ow-phalanx-matrix-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ow-phalanx-matrix-cell.void {
+  background: rgba(255, 255, 255, 0.04);
+  color: #475569;
+}
+
+.ow-phalanx-matrix-cell.level-1 {
+  background: rgba(0, 242, 255, 0.25);
+  color: #00f2ff;
+  box-shadow: inset 0 0 4px rgba(0, 242, 255, 0.4);
+}
+
+.ow-phalanx-matrix-cell.level-2 {
+  background: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.ow-phalanx-matrix-cell.level-3 {
+  background: rgba(168, 85, 247, 0.35);
+  color: #c084fc;
+}
+
+.ow-phalanx-matrix-cell:hover {
+  transform: scale(1.3);
+  z-index: 10;
+  box-shadow: 0 0 10px #ffffff;
+}
+
+/* ----------------------------------------------------------------------------
+   SIMULATOR / WHAT-IF LAB
+   ---------------------------------------------------------------------------- */
+.ow-phalanx-sim-deck {
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: 16px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ow-phalanx-sim-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ow-phalanx-sim-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c084fc;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ow-phalanx-sim-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.ow-phalanx-sim-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ow-phalanx-sim-control-group label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ow-phalanx-sim-range-input {
+  width: 100%;
+  accent-color: #8b5cf6;
+}
+
+/* Responsive Collapse */
+@media (max-width: 900px) {
+  .ow-phalanx-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ow-phalanx-stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .ow-phalanx-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .ow-phalanx-moons-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,7 +1,10 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
-interface Props {
+export interface Props {
     children: ReactNode;
+    fallbackTitle?: string;
+    compact?: boolean;
+    onReset?: () => void;
 }
 
 interface State {
@@ -30,8 +33,99 @@ export class ErrorBoundary extends Component<Props, State> {
         window.location.reload();
     };
 
+    private handleReset = () => {
+        this.setState({ hasError: false, error: null, errorInfo: null });
+        if (this.props.onReset) {
+            this.props.onReset();
+        }
+    };
+
     render() {
         if (this.state.hasError) {
+            if (this.props.compact) {
+                return (
+                    <div style={{
+                        padding: '32px 24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        background: 'rgba(15, 23, 42, 0.65)',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        borderRadius: '16px',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                        margin: '16px 0',
+                        color: '#e2e8f0',
+                        backdropFilter: 'blur(12px)',
+                    }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
+                        <h3 style={{ color: '#f87171', fontSize: '1.15rem', marginBottom: '0.5rem', fontWeight: 700 }}>
+                            {this.props.fallbackTitle || 'Module Encountered an Error'}
+                        </h3>
+                        <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '1rem', maxWidth: '500px', lineHeight: 1.5 }}>
+                            This module encountered an issue while rendering telemetry. You can retry loading the module or switch to other tactical sections.
+                        </p>
+                        {this.state.error && (
+                            <div style={{
+                                background: 'rgba(0, 0, 0, 0.4)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '8px',
+                                padding: '8px 12px',
+                                fontSize: '0.75rem',
+                                fontFamily: 'monospace',
+                                color: '#fca5a5',
+                                maxWidth: '550px',
+                                maxHeight: '100px',
+                                overflowY: 'auto',
+                                wordBreak: 'break-word',
+                                textAlign: 'left',
+                                marginBottom: '1.25rem',
+                            }}>
+                                {this.state.error.toString()}
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                type="button"
+                                onClick={this.handleReset}
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(0, 242, 255, 0.2) 0%, rgba(0, 242, 255, 0.08) 100%)',
+                                    color: '#00f2ff',
+                                    border: '1px solid rgba(0, 242, 255, 0.4)',
+                                    borderRadius: '9999px',
+                                    padding: '8px 16px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                }}
+                            >
+                                <span>Retry Module</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={this.handleReload}
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.04)',
+                                    color: '#cbd5e1',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    borderRadius: '9999px',
+                                    padding: '8px 16px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 500,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                Reload Dashboard
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div style={{
                     display: 'flex',
