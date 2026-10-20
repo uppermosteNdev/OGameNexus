@@ -469,11 +469,12 @@ router.get('/api/v1/alliances/detect', async (req: Request, env: Env) => {
     // Priority 3: Fall back to existing alliance for this in-game squad (for squad discovery / join)
     if (!alliance && ogameAllianceId && ogameAllianceId !== '0') {
       alliance = await env.DB.prepare(
-        `SELECT alliance_id, ogame_alliance_id, glyph_code, alliance_name, alliance_tag,
-                universe_id, admin_player_id, subscription_status, subscription_expires_at
-         FROM alliances
-         WHERE universe_id = ? AND ogame_alliance_id = ?
-         ORDER BY created_at ASC LIMIT 1`
+        `SELECT a.alliance_id, a.ogame_alliance_id, a.glyph_code, a.alliance_name, a.alliance_tag,
+                a.universe_id, a.admin_player_id, a.subscription_status, a.subscription_expires_at
+         FROM alliances a
+         WHERE a.universe_id = ? AND a.ogame_alliance_id = ?
+         ORDER BY (SELECT COUNT(*) FROM alliance_members m WHERE m.alliance_id = a.alliance_id) DESC, a.created_at DESC
+         LIMIT 1`
       )
         .bind(universeId, ogameAllianceId)
         .first();
@@ -481,11 +482,12 @@ router.get('/api/v1/alliances/detect', async (req: Request, env: Env) => {
 
     if (!alliance && allianceTag) {
       alliance = await env.DB.prepare(
-        `SELECT alliance_id, ogame_alliance_id, glyph_code, alliance_name, alliance_tag,
-                universe_id, admin_player_id, subscription_status, subscription_expires_at
-         FROM alliances
-         WHERE universe_id = ? AND LOWER(alliance_tag) = LOWER(?)
-         ORDER BY created_at ASC LIMIT 1`
+        `SELECT a.alliance_id, a.ogame_alliance_id, a.glyph_code, a.alliance_name, a.alliance_tag,
+                a.universe_id, a.admin_player_id, a.subscription_status, a.subscription_expires_at
+         FROM alliances a
+         WHERE a.universe_id = ? AND LOWER(a.alliance_tag) = LOWER(?)
+         ORDER BY (SELECT COUNT(*) FROM alliance_members m WHERE m.alliance_id = a.alliance_id) DESC, a.created_at DESC
+         LIMIT 1`
       )
         .bind(universeId, allianceTag)
         .first();

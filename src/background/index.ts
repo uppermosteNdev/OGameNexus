@@ -4,7 +4,7 @@ import { LIFEFORM_BUILDING_DATA, SHIP_DATA } from "../db/staticData";
 import { LIFEFORM_TECH_DATA, getLfTech, isLifeformBuilding } from "../db/lifeformTechData";
 import { AMORTIZATION_TABLE, calculateEmpireProduction, calculateMSU, DEFAULT_RATES, Cost } from "../utils/amortizationCalc";
 import { sanitizeActiveItem } from "../utils/items";
-import { getOverwatchApiUrl, fetchOverwatch } from "../utils/overwatchApi";
+import { getOverwatchApiUrl, fetchOverwatch, getStoredOverwatchConfig } from "../utils/overwatchApi";
 import { cleanUniverseId, isSameUniverse } from "../utils/universe";
 import { calculateAccountResearchScore } from "../utils/researchTimeCalc";
 import { fetchPlayerHighscores } from "../utils/ogameHighscores";
@@ -287,9 +287,18 @@ async function computeFastHash(str: string): Promise<string> {
 
 export async function autoSyncEmpireToOverwatch(playerId: string, force = false) {
     try {
-        const store = await chrome.storage.local.get(['nexus_overwatch_config', 'last_overwatch_empire_sync', 'nexus_overwatch_empire_sharing']);
-        const config = store.nexus_overwatch_config;
-        const empireSharing = store.nexus_overwatch_empire_sharing || config?.empireSharing || {
+        const account = await db.accounts.get(playerId) || (typeof playerId === 'string' ? await db.accounts.get(Number(playerId)) : await db.accounts.get(String(playerId)));
+        if (!account) return { success: false, reason: 'no_account' };
+
+        const cleanUni = cleanUniverseId(account.universe);
+        const pId = String(account.playerId).trim();
+        const config = await getStoredOverwatchConfig(cleanUni, pId);
+
+        const syncKey = `last_overwatch_empire_sync_${cleanUni}_${pId}`;
+        const sharingKey = `nexus_overwatch_empire_sharing_${cleanUni}_${pId}`;
+        const store = await chrome.storage.local.get([syncKey, 'last_overwatch_empire_sync', sharingKey, 'nexus_overwatch_empire_sharing']);
+
+        const empireSharing = config?.empireSharing || store[sharingKey] || store.nexus_overwatch_empire_sharing || {
             acknowledged: false,
             mines: true,
             facilities: true,
@@ -304,9 +313,6 @@ export async function autoSyncEmpireToOverwatch(playerId: string, force = false)
         if (!config || !config.allianceId || !config.authToken || config.permissions?.shareEmpire === false || empireSharing.acknowledged !== true) {
             return { success: false, reason: 'unauthorized_or_disabled' };
         }
-
-        const account = await db.accounts.get(playerId) || (typeof playerId === 'string' ? await db.accounts.get(Number(playerId)) : await db.accounts.get(String(playerId)));
-        if (!account) return { success: false, reason: 'no_account' };
 
         // STRICT MULTI-ACCOUNT & UNIVERSE ISOLATION:
         // Never sync an account to an Overwatch grid belonging to a different universe or a different player!
@@ -501,7 +507,7 @@ export async function autoSyncEmpireToOverwatch(playerId: string, force = false)
             empireSharing
         }));
 
-        const lastSync = store.last_overwatch_empire_sync;
+        const lastSync = store[syncKey] || store.last_overwatch_empire_sync;
         const now = Date.now();
         const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2 hours minimum delay between automatic empire syncs when data is unchanged
         const MIN_CHANGE_INTERVAL_MS = 30 * 1000; // 30 seconds debounce between automatic empire syncs when data has changed
@@ -604,6 +610,7 @@ export async function autoSyncEmpireToOverwatch(playerId: string, force = false)
         const result = await res.json();
         if (res.ok && result.success) {
             await chrome.storage.local.set({
+                [syncKey]: { timestamp: now, hash: dataHash },
                 last_overwatch_empire_sync: { timestamp: now, hash: dataHash }
             });
         }
@@ -687,15 +694,63 @@ async function syncData(data: any) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "OPEN_DASHBOARD") {
-        const view = message.view ? `?view=${encodeURIComponent(message.view)}` : '';
-        chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${view}`) });
+        (async () => {
+            const playerId = message.playerId;
+            const universe = message.universe;
+            const cleanUni = universe ? cleanUniverseId(universe) : '';
+
+            // 1. Update lastSeen in database for this account so it immediately becomes the most recent
+            if (playerId) {
+                try {
+                    await db.accounts.update(playerId, { lastSeen: Date.now() });
+                } catch (e) {
+                    console.warn('OGame Nexus: Error updating account lastSeen on OPEN_DASHBOARD', e);
+                }
+            }
+
+            // 2. Prepare query string
+            const params = new URLSearchParams();
+            if (message.view) params.set('view', message.view);
+            if (cleanUni) params.set('universe', cleanUni);
+            if (playerId) params.set('player', String(playerId));
+            const queryString = params.toString() ? `?${params.toString()}` : '';
+            const targetUrl = chrome.runtime.getURL(`dashboard.html${queryString}`);
+
+            // 3. Find if any dashboard tab is already open
+            try {
+                const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL('dashboard.html*') });
+                if (tabs && tabs.length > 0) {
+                    const existingTab = tabs[0];
+                    if (existingTab.id) {
+                        // Switch tab to the requested account
+                        await chrome.tabs.update(existingTab.id, { url: targetUrl, active: true });
+                        if (existingTab.windowId) {
+                            await chrome.windows.update(existingTab.windowId, { focused: true });
+                        }
+                        // Send direct message so open dashboard switches account instantly even without reload
+                        try {
+                            chrome.tabs.sendMessage(existingTab.id, {
+                                type: 'SWITCH_ACCOUNT',
+                                playerId,
+                                universe
+                            });
+                        } catch {}
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('OGame Nexus: Error querying existing dashboard tabs:', err);
+            }
+
+            // Otherwise, open a new dashboard tab
+            chrome.tabs.create({ url: targetUrl });
+        })();
     }
 
     if (message.type === "OVERWATCH_SYNC_GALAXY" || message.action === "OVERWATCH_SYNC_GALAXY") {
         (async () => {
             try {
-                const store = await chrome.storage.local.get(['nexus_overwatch_config']);
-                const config = store.nexus_overwatch_config;
+                const config = await getStoredOverwatchConfig(message.data?.universeId, message.data?.ownPlayerId);
                 if (!config || !config.allianceId || !config.authToken || config.permissions?.shareGalaxy === false) {
                     sendResponse({ success: false, reason: "unauthorized_or_sharing_disabled" });
                     return;
@@ -1841,6 +1896,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     } else if (typeNum === 6) { // Plasma
                         const res = account?.researches?.find(r => r.id === 122);
                         currentLevel = res?.level || 0;
+                    } else if (typeNum === 7 || (todo.name && todo.name.toLowerCase().includes('astrophysics'))) { // Astrophysics
+                        const res = account?.researches?.find(r => r.id === 124);
+                        currentLevel = res?.level || 0;
                     }
 
                     if (currentLevel >= todo.targetLevel) {
@@ -2302,25 +2360,6 @@ if (typeof chrome !== 'undefined' && chrome.commands) {
     });
 }
 
-if (typeof chrome !== 'undefined' && chrome.contextMenus) {
-    chrome.runtime.onInstalled.addListener(() => {
-        try {
-            chrome.contextMenus.create({
-                id: "open_nexus_dashboard",
-                title: "Open OGame Nexus Dashboard",
-                contexts: ["action", "page"]
-            });
-        } catch (e) {
-            // Context menu might already exist
-        }
-    });
-
-    chrome.contextMenus.onClicked.addListener((info) => {
-        if (info.menuItemId === "open_nexus_dashboard") {
-            chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
-        }
-    });
-}
 
 // ----------------------------------------------------------------------------
 // PERIODIC OVERWATCH EMPIRE AUTO-SYNC (EVERY 2 HOURS)
@@ -2331,15 +2370,9 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
         if (alarm.name === 'OVERWATCH_EMPIRE_PERIODIC_SYNC') {
             (async () => {
                 try {
-                    const store = await chrome.storage.local.get(['nexus_overwatch_config']);
-                    const config = store.nexus_overwatch_config;
-                    if (!config?.allianceId || !config?.authToken) return;
-
                     const accounts = await db.accounts.toArray();
                     for (const acc of accounts) {
                         if (acc.playerId) {
-                            if (config.universeId && acc.universe && cleanUniverseId(config.universeId) !== cleanUniverseId(acc.universe)) continue;
-                            if (config.playerId && String(acc.playerId) !== String(config.playerId)) continue;
                             await autoSyncEmpireToOverwatch(acc.playerId, false);
                         }
                     }
@@ -2356,15 +2389,9 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
 // ----------------------------------------------------------------------------
 (async () => {
     try {
-        const store = await chrome.storage.local.get(['nexus_overwatch_config']);
-        const config = store.nexus_overwatch_config;
-        if (!config?.allianceId || !config?.authToken) return;
-
         const accounts = await db.accounts.toArray();
         for (const acc of accounts) {
             if (acc.playerId) {
-                if (config.universeId && acc.universe && cleanUniverseId(config.universeId) !== cleanUniverseId(acc.universe)) continue;
-                if (config.playerId && String(acc.playerId) !== String(config.playerId)) continue;
                 autoSyncEmpireToOverwatch(acc.playerId, false).catch(() => {});
             }
         }

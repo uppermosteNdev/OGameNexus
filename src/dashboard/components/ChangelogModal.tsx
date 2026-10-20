@@ -1,6 +1,7 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity, Eye, Zap, LayoutGrid, Orbit, Calculator, Clock, SlidersHorizontal, Radio, Users, Bell, TrendingUp } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, ShieldCheck, Database, ArrowRight, Ship, Dna, Activity, Eye, Zap, LayoutGrid, Orbit, Calculator, Clock, SlidersHorizontal, Radio, Users, Bell, TrendingUp, ChevronDown, Check, Globe, ShoppingCart, RefreshCw } from 'lucide-react';
+import { useTranslation, FlagIcon, SUPPORTED_LANGUAGES, SupportedLanguage } from '../../i18n';
 
 interface ChangelogModalProps {
     onAcknowledge: () => void;
@@ -10,31 +11,47 @@ interface ChangelogModalProps {
 }
 
 const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismissVersion, onNavigateToSettings, onOpenTutorials }) => {
+    const { language, setLanguage, t } = useTranslation();
+    const [isLangOpen, setIsLangOpen] = useState(false);
+    const langDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (langDropdownRef.current && !langDropdownRef.current.contains(e.target as Node)) {
+                setIsLangOpen(false);
+            }
+        };
+        if (isLangOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isLangOpen]);
+
     const changes = [
         {
-            icon: <Radio size={22} color="#00f2ff" />,
-            title: "Overwatch Sensor Phalanx Coverage [Closed Beta]",
-            desc: "Currently in Closed Beta for testing (will be made available to all commanders at a later date). Tactical alliance sensor grid visualizing the reach of all alliance moons with full wrap-around range mapping."
+            icon: <Globe size={22} color="#00f2ff" />,
+            title: t('changelog.features.multiLangTitle', "Multi-Language Support"),
+            desc: t('changelog.features.multiLangDesc', "Nexus is now available in 12 languages with an easy language selector in the dashboard header, settings, and in-game messages.")
         },
         {
-            icon: <TrendingUp size={22} color="#10b981" />,
-            title: "Per-Resource Amortization Engine",
-            desc: "Switch payback speed calculations between All Resources (MSU), Metal Only, Crystal Only, and Deuterium Only with custom goal filters and instant ROI updates."
+            icon: <ShoppingCart size={22} color="#10b981" />,
+            title: t('changelog.features.costsPlannerTitle', "Costs Planner: All Planets & Cart Editing"),
+            desc: t('changelog.features.costsPlannerDesc', "Add mine and facility upgrades across all planets with one click, and edit desired levels directly inside your shopping cart.")
         },
         {
-            icon: <Users size={22} color="#38bdf8" />,
-            title: "Multi-Account Switcher",
-            desc: "Seamlessly switch between multiple universe accounts from the bottom-left command dock. Deep-linked via universe and player ID to ensure zero multi-account state bleed."
+            icon: <Sparkles size={22} color="#fbbf24" />,
+            title: t('changelog.features.astroAmortizationTitle', "Astrophysics Payback Calculator"),
+            desc: t('changelog.features.astroAmortizationDesc', "Calculate payback times and payoff speed for unlocking new colony slots through Astrophysics in the Amortization tool.")
         },
         {
-            icon: <Bell size={22} color="#fbbf24" />,
-            title: "Live Universe Feed Unseen Counter [Closed Beta]",
-            desc: "Real-time badge counter on the Overwatch Universe Intel feed navigation alerts you immediately when new galaxy events, status changes, or player movements occur."
+            icon: <RefreshCw size={22} color="#38bdf8" />,
+            title: t('changelog.features.scrapMerchantTitle', "Scrap Merchant Overhaul"),
+            desc: t('changelog.features.scrapMerchantDesc', "Redesigned scrap calculation tool with accurate resource returns and full fleet mission support.")
         },
         {
             icon: <ShieldCheck size={22} color="#f43f5e" />,
-            title: "Overwatch Resilience & Bugfixes [Closed Beta]",
-            desc: "Independent tab crash isolation via compact error boundaries, safe 1v1 duel arena empty states, refreshed live highscores, and hardened galaxy event synchronization."
+            title: t('changelog.features.overwatchFixesTitle', "Overwatch Galaxy Sync & Sensor Fixes [Closed Beta]"),
+            desc: t('changelog.features.overwatchFixesDesc', "Fixed new colony and moon alerts on the live universe feed, corrected moon counting in Sensor Phalanx, and improved player class displays.")
         }
     ];
 
@@ -88,57 +105,183 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '18px',
+                    justifyContent: 'space-between',
+                    gap: '16px',
                     borderBottom: '1px solid rgba(0, 242, 255, 0.12)',
                     paddingBottom: '18px',
-                    marginBottom: '22px'
+                    marginBottom: '22px',
+                    position: 'relative',
+                    zIndex: 20
                 }}>
-                    <div style={{
-                        padding: '10px',
-                        borderRadius: '16px',
-                        background: 'rgba(0, 242, 255, 0.08)',
-                        border: '1px solid rgba(0, 242, 255, 0.25)',
-                        boxShadow: '0 0 15px rgba(0, 242, 255, 0.1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--primary)'
-                    }}>
-                        <Sparkles size={26} style={{ filter: 'drop-shadow(0 0 4px var(--primary-glow))' }} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <h2 style={{
-                                fontFamily: 'var(--font-title)',
-                                fontSize: '1.75rem',
-                                fontWeight: 800,
-                                margin: 0,
-                                color: '#fff',
-                                letterSpacing: '-0.02em',
-                                background: 'linear-gradient(135deg, #fff 40%, var(--primary) 100%)',
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent'
-                            }}>
-                                System Updated
-                            </h2>
-                            <span style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 800,
-                                color: '#00f2ff',
-                                background: 'rgba(0, 242, 255, 0.1)',
-                                border: '1px solid rgba(0, 242, 255, 0.3)',
-                                padding: '2px 8px',
-                                borderRadius: '8px',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px',
-                                display: 'inline-block'
-                            }}>
-                                v1.2.6
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{
+                            padding: '10px',
+                            borderRadius: '16px',
+                            background: 'rgba(0, 242, 255, 0.08)',
+                            border: '1px solid rgba(0, 242, 255, 0.25)',
+                            boxShadow: '0 0 15px rgba(0, 242, 255, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--primary)',
+                            flexShrink: 0
+                        }}>
+                            <Sparkles size={26} style={{ filter: 'drop-shadow(0 0 4px var(--primary-glow))' }} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <h2 style={{
+                                    fontFamily: 'var(--font-title)',
+                                    fontSize: '1.75rem',
+                                    fontWeight: 800,
+                                    margin: 0,
+                                    color: '#fff',
+                                    letterSpacing: '-0.02em',
+                                    background: 'linear-gradient(135deg, #fff 40%, var(--primary) 100%)',
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent'
+                                }}>
+                                    {t('changelog.title', 'System Updated')}
+                                </h2>
+                                <span style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 800,
+                                    color: '#00f2ff',
+                                    background: 'rgba(0, 242, 255, 0.1)',
+                                    border: '1px solid rgba(0, 242, 255, 0.3)',
+                                    padding: '2px 8px',
+                                    borderRadius: '8px',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px',
+                                    display: 'inline-block'
+                                }}>
+                                    {t('changelog.versionBadge', 'v1.2.7')}
+                                </span>
+                            </div>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>
+                                {t('changelog.telemetryReport', 'OGAME NEXUS COMMAND DECK TELEMETRY REPORT')}
                             </span>
                         </div>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>
-                            OGAME NEXUS COMMAND DECK TELEMETRY REPORT
-                        </span>
+                    </div>
+
+                    {/* Language Dropdown Selector */}
+                    <div ref={langDropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
+                        <button
+                            type="button"
+                            onClick={() => setIsLangOpen(prev => !prev)}
+                            aria-expanded={isLangOpen}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: isLangOpen ? 'rgba(0, 242, 255, 0.12)' : 'rgba(0, 0, 0, 0.45)',
+                                border: isLangOpen ? '1px solid rgba(0, 242, 255, 0.6)' : '1px solid rgba(255, 255, 255, 0.12)',
+                                borderRadius: '12px',
+                                padding: '6px 12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                color: '#fff',
+                                boxShadow: isLangOpen ? '0 0 16px rgba(0, 242, 255, 0.22)' : 'none'
+                            }}
+                        >
+                            <FlagIcon code={language} size={20} />
+                            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0', letterSpacing: '0.5px' }}>
+                                {language.toUpperCase()}
+                            </span>
+                            <ChevronDown
+                                size={14}
+                                style={{
+                                    color: isLangOpen ? 'var(--primary)' : '#94a3b8',
+                                    transform: isLangOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.2s ease, color 0.2s ease'
+                                }}
+                            />
+                        </button>
+
+                        <AnimatePresence>
+                            {isLangOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 'calc(100% + 6px)',
+                                        right: 0,
+                                        zIndex: 100,
+                                        minWidth: '165px',
+                                        maxHeight: '360px',
+                                        overflowY: 'auto',
+                                        background: 'rgba(9, 14, 24, 0.98)',
+                                        backdropFilter: 'blur(16px)',
+                                        WebkitBackdropFilter: 'blur(16px)',
+                                        border: '1px solid rgba(0, 242, 255, 0.28)',
+                                        borderRadius: '12px',
+                                        padding: '6px',
+                                        boxShadow: '0 12px 32px rgba(0, 0, 0, 0.85), 0 0 20px rgba(0, 242, 255, 0.15)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '3px'
+                                    }}
+                                >
+                                    {(Object.keys(SUPPORTED_LANGUAGES) as SupportedLanguage[]).map((langCode) => {
+                                        const isCurrent = language === langCode;
+                                        const info = SUPPORTED_LANGUAGES[langCode];
+                                        return (
+                                            <button
+                                                key={langCode}
+                                                type="button"
+                                                onClick={() => {
+                                                    setLanguage(langCode);
+                                                    setIsLangOpen(false);
+                                                }}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    gap: '10px',
+                                                    padding: '8px 10px',
+                                                    borderRadius: '8px',
+                                                    border: isCurrent ? '1px solid rgba(0, 242, 255, 0.25)' : '1px solid transparent',
+                                                    background: isCurrent ? 'rgba(0, 242, 255, 0.12)' : 'transparent',
+                                                    color: isCurrent ? '#00f2ff' : '#cbd5e1',
+                                                    cursor: 'pointer',
+                                                    textAlign: 'left',
+                                                    width: '100%',
+                                                    transition: 'all 0.15s ease'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    if (!isCurrent) {
+                                                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                                                        e.currentTarget.style.color = '#fff';
+                                                    }
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (!isCurrent) {
+                                                        e.currentTarget.style.background = 'transparent';
+                                                        e.currentTarget.style.color = '#cbd5e1';
+                                                    }
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                                                    <FlagIcon code={langCode} size={20} />
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <span style={{ fontSize: '0.82rem', fontWeight: isCurrent ? 700 : 500 }}>
+                                                            {info.nativeName}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                                            {info.label}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {isCurrent && <Check size={14} color="#00f2ff" />}
+                                            </button>
+                                        );
+                                    })}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
 
@@ -204,7 +347,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                     marginBottom: '26px'
                 }}>
                     <ShieldCheck size={16} style={{ flexShrink: 0 }} />
-                    <span>Your planetary setups, harvested telemetry, and tracking histories have been preserved securely during this update.</span>
+                    <span>{t('changelog.dataPreservedNotice', 'Your planetary setups, harvested telemetry, and tracking histories have been preserved securely during this update.')}</span>
                 </div>
 
                 {/* Actions Layout */}
@@ -237,7 +380,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                             transition: 'box-shadow 0.2s ease'
                         }}
                     >
-                        Acknowledge <ArrowRight size={16} />
+                        {t('changelog.acknowledge', 'Acknowledge')} <ArrowRight size={16} />
                     </motion.button>
 
                     <motion.button
@@ -257,7 +400,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                             transition: 'all 0.2s ease'
                         }}
                     >
-                        Dismiss for this version
+                        {t('changelog.dismissVersion', 'Dismiss for this version')}
                     </motion.button>
                 </div>
             </motion.div>

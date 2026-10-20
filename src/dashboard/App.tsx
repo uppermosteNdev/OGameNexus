@@ -24,6 +24,7 @@ import Overwatch from './views/Overwatch';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { cleanUniverseId, isSameUniverse } from '../utils/universe';
+import { LanguageProvider, detectLanguageFromServerLink } from '../i18n';
 import './index.css';
 import '../content/styles.css';
 
@@ -46,6 +47,22 @@ const App: React.FC = () => {
             document.title = "OGame Nexus Dashboard";
         }
     }, [activeAccount]);
+
+    useEffect(() => {
+        if (!activeAccount) return;
+        const isManual = localStorage.getItem('ognexus_language_manual') === 'true';
+        if (isManual) return;
+
+        const serverString = activeAccount.universe || activeAccount.serverUrl || '';
+        const detected = detectLanguageFromServerLink(serverString);
+        if (detected) {
+            if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                chrome.storage.local.set({ ognexus_server_detected_language: detected });
+            }
+            localStorage.setItem('ognexus_selected_language', detected);
+            window.dispatchEvent(new CustomEvent('ognexus_language_changed', { detail: { language: detected } }));
+        }
+    }, [activeAccount?.universe, activeAccount?.serverUrl]);
 
     useEffect(() => {
         const loadLowAnimationSetting = async () => {
@@ -224,9 +241,30 @@ const App: React.FC = () => {
             }
         };
 
+        const handleRuntimeMessage = (msg: any) => {
+            if (msg && msg.type === 'SWITCH_ACCOUNT' && msg.playerId) {
+                window.dispatchEvent(new CustomEvent('ognexus_switch_account', {
+                    detail: {
+                        playerId: msg.playerId,
+                        universe: msg.universe
+                    }
+                }));
+            }
+        };
+
+        if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+            chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+        }
+
         window.addEventListener('ognexus_switch_account', handleSwitchAccount);
+        window.addEventListener('popstate', syncTargetAccount);
+
         return () => {
             window.removeEventListener('ognexus_switch_account', handleSwitchAccount);
+            window.removeEventListener('popstate', syncTargetAccount);
+            if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+                chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
+            }
         };
     }, []);
 
@@ -238,7 +276,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to get manifest version", e);
         }
-        return "1.2.6";
+        return "1.2.7";
     };
 
     const autoDismissChangelogForNewInstall = (version: string) => {
@@ -379,41 +417,43 @@ const App: React.FC = () => {
     };
 
     return (
-        <MotionConfig reducedMotion={lowAnimationEnabled ? "always" : "user"}>
-            <StarField hidden={lowAnimationEnabled} />
-            <Sidebar activeView={currentView} onSelect={setCurrentView} />
-            <main className="main-content">
-                {renderView()}
-            </main>
-            <Hotbar onSelect={setCurrentView} />
+        <LanguageProvider>
+            <MotionConfig reducedMotion={lowAnimationEnabled ? "always" : "user"}>
+                <StarField hidden={lowAnimationEnabled} />
+                <Sidebar activeView={currentView} onSelect={setCurrentView} />
+                <main className="main-content">
+                    {renderView()}
+                </main>
+                <Hotbar onSelect={setCurrentView} />
 
-            <AnimatePresence>
-                {showWelcome && (
-                     <WelcomeModal 
-                         onLetsGo={() => setShowWelcome(false)}
-                         onNeverShow={handleNeverShow}
-                         onOpenTutorials={() => {
-                             setShowWelcome(false);
-                             setCurrentView('tutorials');
-                         }}
-                     />
-                )}
-                {showChangelog && !showWelcome && (
-                    <ChangelogModal
-                        onAcknowledge={handleAcknowledgeChangelog}
-                        onDismissVersion={handleDismissChangelog}
-                        onNavigateToSettings={() => {
-                            handleAcknowledgeChangelog();
-                            setCurrentView('settings');
-                        }}
-                        onOpenTutorials={() => {
-                            handleAcknowledgeChangelog();
-                            setCurrentView('tutorials');
-                        }}
-                    />
-                )}
-            </AnimatePresence>
-        </MotionConfig>
+                <AnimatePresence>
+                    {showWelcome && (
+                         <WelcomeModal 
+                             onLetsGo={() => setShowWelcome(false)}
+                             onNeverShow={handleNeverShow}
+                             onOpenTutorials={() => {
+                                 setShowWelcome(false);
+                                 setCurrentView('tutorials');
+                             }}
+                         />
+                    )}
+                    {showChangelog && !showWelcome && (
+                        <ChangelogModal
+                            onAcknowledge={handleAcknowledgeChangelog}
+                            onDismissVersion={handleDismissChangelog}
+                            onNavigateToSettings={() => {
+                                handleAcknowledgeChangelog();
+                                setCurrentView('settings');
+                            }}
+                            onOpenTutorials={() => {
+                                handleAcknowledgeChangelog();
+                                setCurrentView('tutorials');
+                            }}
+                        />
+                    )}
+                </AnimatePresence>
+            </MotionConfig>
+        </LanguageProvider>
     );
 };
 

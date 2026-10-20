@@ -42,6 +42,8 @@ import { OverwatchEmpireHeadToHead } from './OverwatchEmpireHeadToHead';
 import { calculateAccountResearchScore } from '../../utils/researchTimeCalc';
 import { fetchUniverseHighscores } from '../../utils/ogameHighscores';
 import { cleanUniverseId } from '../../utils/universe';
+import { getPlayerClassName, SupportedLanguage, getCurrentLanguage } from '../../i18n/gameData';
+import { useTranslation } from '../../i18n';
 import './OverwatchEmpireComparisonDeck.css';
 
 export interface ShipClassification {
@@ -133,16 +135,17 @@ export function parsePercent(valStr?: string | null): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
-export function resolvePlayerClass(raw: any): { label: string; color: string; bg: string; border: string } {
+export function resolvePlayerClass(raw: any, lang?: SupportedLanguage): { label: string; color: string; bg: string; border: string } {
   const norm = String(raw || '').toLowerCase();
-  if (norm.includes('1') || norm.includes('collector')) {
-    return { label: 'Collector', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.12)', border: 'rgba(251, 191, 36, 0.35)' };
+  const activeLang = lang || getCurrentLanguage();
+  if (norm.includes('1') || norm.includes('collector') || norm.includes('colector') || norm.includes('colectionar') || norm.includes('colecționar') || norm.includes('kollektor') || norm.includes('collecteur') || norm.includes('zbieracz') || norm.includes('verzamelaar') || norm.includes('recolector') || norm.includes('collezionista') || norm.includes('коллекционер') || norm.includes('toplayıcı') || norm.includes('coletor') || norm.includes('colecionador')) {
+    return { label: getPlayerClassName('collector', activeLang), color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.12)', border: 'rgba(251, 191, 36, 0.35)' };
   }
-  if (norm.includes('2') || norm.includes('general') || norm.includes('warrior')) {
-    return { label: 'General', color: '#f87171', bg: 'rgba(248, 113, 113, 0.12)', border: 'rgba(248, 113, 113, 0.35)' };
+  if (norm.includes('2') || norm.includes('general') || norm.includes('warrior') || norm.includes('général') || norm.includes('generał') || norm.includes('generaal') || norm.includes('generale') || norm.includes('генерал')) {
+    return { label: getPlayerClassName('general', activeLang), color: '#f87171', bg: 'rgba(248, 113, 113, 0.12)', border: 'rgba(248, 113, 113, 0.35)' };
   }
-  if (norm.includes('3') || norm.includes('discoverer')) {
-    return { label: 'Discoverer', color: '#00f2ff', bg: 'rgba(0, 242, 255, 0.12)', border: 'rgba(0, 242, 255, 0.35)' };
+  if (norm.includes('3') || norm.includes('discoverer') || norm.includes('explorator') || norm.includes('entdecker') || norm.includes('explorateur') || norm.includes('odkrywca') || norm.includes('ontdekker') || norm.includes('descubridor') || norm.includes('esploratore') || norm.includes('первооткрыватель') || norm.includes('kaşif') || norm.includes('kasif') || norm.includes('explorador')) {
+    return { label: getPlayerClassName('discoverer', activeLang), color: '#00f2ff', bg: 'rgba(0, 242, 255, 0.12)', border: 'rgba(0, 242, 255, 0.35)' };
   }
   return { label: 'Unassigned', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.25)' };
 }
@@ -201,6 +204,7 @@ export const OverwatchEmpireComparisonDeck: React.FC<OverwatchEmpireComparisonDe
   onReorderPlayers,
   universeId,
 }) => {
+  const { language } = useTranslation();
   const [activeCategory, setActiveCategory] = useState<'macro' | 'lifeforms' | 'ships' | 'tech' | 'duel'>('macro');
   const [selectedShipIndex, setSelectedShipIndex] = useState(0);
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
@@ -419,7 +423,7 @@ export const OverwatchEmpireComparisonDeck: React.FC<OverwatchEmpireComparisonDe
       <div className={`ow-compare-hud-deck ${colCountClass}`}>
         {localPlayers.map((p, idx) => {
           const slotTheme = SLOT_COLORS[idx % SLOT_COLORS.length];
-          const pClass = resolvePlayerClass(p.summary.playerClass);
+          const pClass = resolvePlayerClass(p.summary.playerClass, language);
           const pRole = resolveAllianceRole(p.summary.role);
           const avatarSrc = p.summary.avatarUrl;
           const isBenched = activeCategory === 'duel' && localPlayers.length > 2 && idx >= 2;

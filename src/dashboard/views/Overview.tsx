@@ -31,6 +31,7 @@ import { calculateEmpireProduction, safeArray } from '../../utils/amortizationCa
 import { calculateTotalEmpireDailyYield } from '../../utils/empireYield';
 import { ThemeIcon } from '../components/ThemeIcon';
 import { isSameUniverse } from '../../utils/universe';
+import { getPlayerClassName } from '../../i18n/gameData';
 
 import {
     ResponsiveContainer,
@@ -820,7 +821,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             textTransform: 'uppercase',
                                             letterSpacing: '0.05em'
                                         }}>
-                                            {activeAccount.playerClass === 1 ? 'Collector' : activeAccount.playerClass === 2 ? 'Warrior' : 'Discoverer'}
+                                            {getPlayerClassName(activeAccount.playerClass)}
                                         </span>
                                     )}
                                 </div>

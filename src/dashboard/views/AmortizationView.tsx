@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Calculator, CheckCircle2, Circle,
-    Filter, LayoutList, Rocket,
+    Filter, LayoutList, Rocket, Compass,
     TrendingUp, ArrowDownToLine,
     Globe, Zap, Box, Dna, Activity,
     Clock, DollarSign, ListOrdered, ArrowRight
@@ -61,6 +61,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
         [AmortizationType.LifeformProductionResearches]: true,
         [AmortizationType.LifeformExpeditionResearches]: true,
         [AmortizationType.PlasmaTechnology]: true,
+        [AmortizationType.Astrophysics]: true,
     });
     const [limit, setLimit] = useState<number>(25);
     const [resourceTarget, setResourceTarget] = useState<AmortizationResourceTarget>('all');
@@ -254,7 +255,8 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
 
         const updateTodos = async () => {
             for (const item of results) {
-                const key = `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}`;
+                const targetLvl = item.targetLevel || (item.currentLevel + 1);
+                const key = `${item.planetId || 'empire'}_${item.type}_${item.name}_${targetLvl}`;
                 const existing = todoList.find(t => t.projectKey === key);
                 if (existing) {
                     const needsUpdate =
@@ -288,7 +290,8 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     };
 
     const handleToggleTodo = async (item: AmortizationItem) => {
-        const key = `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}`;
+        const targetLvl = item.targetLevel || (item.currentLevel + 1);
+        const key = `${item.planetId || 'empire'}_${item.type}_${item.name}_${targetLvl}`;
         const existing = await db.todoProjects.where('projectKey').equals(key).first();
 
         if (existing) {
@@ -304,11 +307,11 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
             projectKey: key,
             playerId: account?.playerId || "",
             name: item.name,
-            type: AmortizationType[item.type],
+            type: AmortizationType[item.type] || 'Astrophysics',
             icon: getItemIcon(item),
-            targetLevel: item.currentLevel + 1,
+            targetLevel: targetLvl,
             planetId: item.planetId,
-            planetName: planet?.name,
+            planetName: planet?.name || (item.type === AmortizationType.Astrophysics ? 'New Colony' : undefined),
             coords: planet?.coords,
             cost: item.cost,
             msuCost: item.msuCost,
@@ -732,8 +735,9 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                             { id: AmortizationType.LifeformProductionBuildings, label: 'LF Buildings (Production)', sub: 'Residential & Industry', icon: <LayoutList size={16} /> },
                             { id: AmortizationType.LifeformResearchBuildings, label: 'LF Buildings (Research)', sub: 'Tech & Academy', icon: <Activity size={16} /> },
                             { id: AmortizationType.LifeformProductionResearches, label: 'LF Techs (Production)', sub: 'Economic Bonus Labs', icon: <Dna size={16} /> },
-                            { id: AmortizationType.LifeformExpeditionResearches, label: 'LF Techs (Research)', sub: 'Exploration & Discovery', icon: <Rocket size={16} /> },
+                            { id: AmortizationType.LifeformExpeditionResearches, label: 'LF Techs (Research)', sub: 'Exploration & Discovery', icon: <Compass size={16} /> },
                             { id: AmortizationType.PlasmaTechnology, label: 'Plasma Technology', sub: 'Global Empire Bonus', icon: <Zap size={16} /> },
+                            { id: AmortizationType.Astrophysics, label: 'Astrophysics (New Colony)', sub: 'Colony Expansion & Expeditions', icon: <Rocket size={16} /> },
                         ].map(f => (
                             <motion.button
                                 whileHover={{ scale: 1.01, background: 'rgba(255,255,255,0.05)' }}
@@ -820,21 +824,24 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                             const icon = getItemIcon(item);
                             const isFirst = idx === 0;
 
+                            const targetLvl = item.targetLevel || (item.currentLevel + 1);
+                            const rowKey = `${item.planetId || 'empire'}_${item.type}_${item.name}_${targetLvl}`;
+
                             return (
                                 <motion.div
-                                    key={`${item.name}-${item.planetId}-${item.currentLevel}`}
+                                    key={`${item.name}-${item.planetId}-${item.currentLevel}-${targetLvl}`}
                                     initial={{ opacity: 0, scale: 0.98, y: 10 }}
                                     animate={{
                                         opacity: 1,
-                                        scale: animatedRow === `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}` ? [1, 1.01, 1] : 1,
+                                        scale: animatedRow === rowKey ? [1, 1.01, 1] : 1,
                                         y: 0,
-                                        background: animatedRow === `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}`
+                                        background: animatedRow === rowKey
                                             ? 'rgba(0, 242, 255, 0.08)'
                                             : (isFirst ? 'rgba(0, 242, 255, 0.03)' : (idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent'))
                                     }}
                                     exit={{ opacity: 0, scale: 0.95 }}
                                     transition={{
-                                        duration: animatedRow === `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}` ? 0.4 : 0.3,
+                                        duration: animatedRow === rowKey ? 0.4 : 0.3,
                                         delay: animatedRow ? 0 : idx * 0.02
                                     }}
                                     style={{
@@ -846,14 +853,14 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                         position: 'relative',
                                         overflow: 'hidden'
                                     }}
-                                    className={`amortization-row ${animatedRow === `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}` ? 'diagonal-flash' : ''}`}
+                                    className={`amortization-row ${animatedRow === rowKey ? 'diagonal-flash' : ''}`}
                                 >
-                                    {animatedRow === `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}` && (
+                                    {animatedRow === rowKey && (
                                         <div className="flash-overlay" />
                                     )}
                                     <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
                                         <AnimatePresence>
-                                            {notification && notification.key === `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}` && (
+                                            {notification && notification.key === rowKey && (
                                                 <motion.div
                                                     initial={{ opacity: 0, y: 0, scale: 0.5 }}
                                                     animate={{ opacity: 1, y: -30, scale: 1 }}
@@ -880,8 +887,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                         </AnimatePresence>
 
                                         {(() => {
-                                            const key = `${item.planetId || 'empire'}_${item.type}_${item.name}_${item.currentLevel + 1}`;
-                                            const isInTodo = todoList?.some(t => t.projectKey === key);
+                                            const isInTodo = todoList?.some(t => t.projectKey === rowKey);
 
                                             return (
                                                 <motion.button
@@ -956,8 +962,41 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                                             }}>
                                                                 <span style={{ opacity: 0.6 }}>{item.currentLevel}</span>
                                                                 <ArrowRight size={10} color={isFirst ? '#000' : THEME_CYAN} strokeWidth={3} />
-                                                                <span style={{ color: isFirst ? '#000' : THEME_CYAN }}>{item.currentLevel + 1}</span>
+                                                                <span style={{ color: isFirst ? '#000' : THEME_CYAN }}>{targetLvl}</span>
                                                             </div>
+
+                                                            {item.type === AmortizationType.Astrophysics && (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                    <span style={{
+                                                                        fontSize: '10px',
+                                                                        fontWeight: 1000,
+                                                                        letterSpacing: '0.04em',
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: '6px',
+                                                                        background: 'rgba(16, 185, 129, 0.18)',
+                                                                        color: '#10b981',
+                                                                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                                                                        boxShadow: '0 0 10px rgba(16, 185, 129, 0.2)'
+                                                                    }}>
+                                                                        +1 NEW COLONY
+                                                                    </span>
+                                                                    {Boolean(item.details?.unlockedExpoSlots && item.details.unlockedExpoSlots > 0) && (
+                                                                        <span style={{
+                                                                            fontSize: '10px',
+                                                                            fontWeight: 1000,
+                                                                            letterSpacing: '0.04em',
+                                                                            padding: '2px 8px',
+                                                                            borderRadius: '6px',
+                                                                            background: 'rgba(168, 85, 247, 0.2)',
+                                                                            color: '#c084fc',
+                                                                            border: '1px solid rgba(168, 85, 247, 0.45)',
+                                                                            boxShadow: '0 0 10px rgba(168, 85, 247, 0.25)'
+                                                                        }}>
+                                                                            +{item.details?.unlockedExpoSlots} EXPO SLOT
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
 
                                                         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', fontWeight: 800, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -978,7 +1017,11 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                                                     <Globe size={10} color={THEME_CYAN} />
                                                                 )}
                                                             </div>
-                                                            <span style={{ color: isFirst ? '#fff' : 'inherit' }}>{planet ? `${planet.coords === '0:0:0' ? 'Unknown' : planet.coords} • ${planet.name}` : 'EMPIRE-WIDE RESEARCH'}</span>
+                                                            <span style={{ color: isFirst ? '#fff' : 'inherit' }}>
+                                                                {item.type === AmortizationType.Astrophysics
+                                                                    ? 'EMPIRE EXPANSION • NEW COLONY PACKAGE'
+                                                                    : (planet ? `${planet.coords === '0:0:0' ? 'Unknown' : planet.coords} • ${planet.name}` : 'EMPIRE-WIDE RESEARCH')}
+                                                            </span>
                                                         </div>
 
                                                         {ongoingQueue && (
@@ -1039,6 +1082,18 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                                 {activeTheme.unit}
                                             </span>
                                         </div>
+                                        {item.type === AmortizationType.Astrophysics && item.details?.avgMineLevels && (
+                                            <div style={{
+                                                fontSize: '9px',
+                                                fontWeight: 800,
+                                                color: 'rgba(255, 255, 255, 0.4)',
+                                                marginTop: '6px',
+                                                letterSpacing: '0.02em',
+                                                lineHeight: 1.3
+                                            }}>
+                                                Package: Astro + Mines (M{item.details.avgMineLevels.metal}/C{item.details.avgMineLevels.crystal}/D{item.details.avgMineLevels.deuterium}) + LF + Colony Ship
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

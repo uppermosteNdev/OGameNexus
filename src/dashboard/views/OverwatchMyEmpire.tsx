@@ -19,6 +19,7 @@ import {
   Network
 } from 'lucide-react';
 import { db, Planet } from '../../db';
+import { cleanUniverseId } from '../../utils/universe';
 import './OverwatchMyEmpire.css';
 
 export interface EmpireSharingSettings {
@@ -195,7 +196,11 @@ export const OverwatchMyEmpire: React.FC<OverwatchMyEmpireProps> = ({
     saveConfig(updatedConfig);
 
     if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const cleanUni = cleanUniverseId(effectiveAccount?.universe || config?.universeId || '');
+      const pId = String(activePlayerId || '').trim();
+      const accountSharingKey = (cleanUni && pId) ? `nexus_overwatch_empire_sharing_${cleanUni}_${pId}` : 'nexus_overwatch_empire_sharing';
       chrome.storage.local.set({
+        [accountSharingKey]: newSettings,
         nexus_overwatch_empire_sharing: newSettings,
       });
     }

@@ -43,7 +43,16 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { ThemeIcon } from '../components/ThemeIcon';
-import { getOverwatchApiUrl, checkOverwatchHealth, DEFAULT_OVERWATCH_API_URL, validateAllianceGlyph } from '../../utils/overwatchApi';
+import {
+  getOverwatchApiUrl,
+  checkOverwatchHealth,
+  DEFAULT_OVERWATCH_API_URL,
+  validateAllianceGlyph,
+  getStoredOverwatchConfig,
+  saveStoredOverwatchConfig,
+  removeStoredOverwatchConfig,
+  getOverwatchAccountStorageKey,
+} from '../../utils/overwatchApi';
 import { isOverwatchTester, OVERWATCH_ENFORCE_TESTING_GATE, OVERWATCH_TESTER_PASSKEY, syncOverwatchTesterStatusWithCloudflare } from '../../config/overwatchTestingConfig';
 import OverwatchEmpire from './OverwatchEmpire';
 import OverwatchMyEmpire, { EmpireSharingSettings, DEFAULT_EMPIRE_SHARING_SETTINGS } from './OverwatchMyEmpire';
@@ -652,24 +661,42 @@ const DiscordShareButton: React.FC<DiscordShareButtonProps> = ({ glyphCode, alli
 const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
   const [config, setConfig] = useState<AllianceConfig>(DEFAULT_CONFIG);
   const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
+  const [switchTick, setSwitchTick] = useState(0);
 
-  // Strictly select the account corresponding to this Overwatch grid's universe and member playerId
+  // Listen for account switch events from the dashboard sidebar
+  useEffect(() => {
+    const handleSwitch = () => {
+      setSwitchTick(t => t + 1);
+    };
+    window.addEventListener('ognexus_switch_account', handleSwitch);
+    return () => window.removeEventListener('ognexus_switch_account', handleSwitch);
+  }, []);
+
+  // Dynamically follow active account selected in the dashboard
   const activeAccount = useMemo(() => {
-    if (config.playerId && config.universeId) {
-      const matched = accounts.find(a => 
-        String(a.playerId) === String(config.playerId) && 
-        cleanUniverseId(a.universe) === cleanUniverseId(config.universeId)
+    let preferredPlayerId = '';
+    let preferredUniverse = '';
+    try {
+      preferredPlayerId = localStorage.getItem('ognexus_active_player_id') || '';
+      preferredUniverse = localStorage.getItem('ognexus_active_universe') || '';
+    } catch { }
+
+    if (preferredPlayerId) {
+      const matched = accounts.find(a =>
+        String(a.playerId) === String(preferredPlayerId) &&
+        (!preferredUniverse || cleanUniverseId(a.universe) === cleanUniverseId(preferredUniverse))
       );
       if (matched) return matched;
     }
-    if (config.universeId) {
-      const matchedUni = accounts.find(a => cleanUniverseId(a.universe) === cleanUniverseId(config.universeId));
-      if (matchedUni) return matchedUni;
-    }
-    return [...accounts].sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0] || null;
-  }, [accounts, config.playerId, config.universeId]);
 
-  const ownPlanets = useLiveQuery(() => db.planets.toArray()) || [];
+    return [...accounts].sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0] || null;
+  }, [accounts, switchTick]);
+
+  const allPlanets = useLiveQuery(() => db.planets.toArray()) || [];
+  const ownPlanets = useMemo(() => {
+    if (!activeAccount?.playerId) return allPlanets;
+    return allPlanets.filter(p => String(p.playerId) === String(activeAccount.playerId));
+  }, [allPlanets, activeAccount?.playerId]);
 
   // Closed Testing Whitelist & Passkey State
   const [, setTesterSyncTick] = useState(0);
@@ -722,6 +749,38 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     } else {
       setTesterPasskeyError('Invalid passkey. Request access credentials from your Alliance Commander.');
     }
+  };
+
+  const [copiedRequestInfo, setCopiedRequestInfo] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyField = (val: string, fieldName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!val) return;
+    navigator.clipboard.writeText(val);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleCopyAccessRequest = () => {
+    if (!activeAccount) return;
+    const pName = activeAccount.playerName || 'Unknown Commander';
+    const pId = activeAccount.playerId || '';
+    const cleanUni = activeAccount.universe ? cleanUniverseId(activeAccount.universe) : '';
+    const rawUni = activeAccount.universe || '';
+    const uniName = activeAccount.universeName && activeAccount.universeName !== 'unknown' ? activeAccount.universeName : '';
+
+    const payload = [
+      `Nexus Overwatch Access Request:`,
+      `• Pilot: ${pName}`,
+      `• Player ID: ${pId}`,
+      `• Universe: ${cleanUni}${uniName ? ` (${uniName})` : ''}`,
+      rawUni && rawUni !== cleanUni ? `• Domain: ${rawUni}` : '',
+    ].filter(Boolean).join('\n');
+
+    navigator.clipboard.writeText(payload);
+    setCopiedRequestInfo(true);
+    setTimeout(() => setCopiedRequestInfo(false), 2500);
   };
 
   const [loading, setLoading] = useState(true);
@@ -1360,20 +1419,35 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     return health.online;
   }, []);
 
-  // Load config on mount
+  // Load config for active account
   useEffect(() => {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(['nexus_overwatch_config'], (res) => {
-        if (res && res.nexus_overwatch_config) {
-          setConfig({ ...DEFAULT_CONFIG, ...res.nexus_overwatch_config });
+    let cancelled = false;
+    setLoading(true);
+
+    getStoredOverwatchConfig(activeAccount?.universe, activeAccount?.playerId)
+      .then((stored) => {
+        if (cancelled) return;
+        if (stored) {
+          setConfig({ ...DEFAULT_CONFIG, ...stored });
+        } else {
+          setConfig({
+            ...DEFAULT_CONFIG,
+            universeId: activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : null,
+            playerId: activeAccount?.playerId || null,
+          });
         }
         setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
       });
-    } else {
-      setLoading(false);
-    }
+
     pingOverwatchEdge();
-  }, [pingOverwatchEdge]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAccount?.playerId, activeAccount?.universe, pingOverwatchEdge]);
 
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
 
@@ -1840,9 +1914,11 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
   const saveConfig = (newConfig: AllianceConfig) => {
     setConfig(newConfig);
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({ nexus_overwatch_config: newConfig });
-    }
+    saveStoredOverwatchConfig(
+      newConfig,
+      activeAccount?.universe || newConfig.universeId,
+      activeAccount?.playerId || newConfig.playerId
+    );
   };
 
   // 0. Resume Founder Action (1-Click)
@@ -2061,7 +2137,12 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     setPrimaryTab('join');
     setApplicantClearance('idle');
     setPendingAllianceInfo(null);
-    saveConfig({ ...DEFAULT_CONFIG, universeId: activeUniverse });
+    removeStoredOverwatchConfig(activeAccount?.universe, activeAccount?.playerId);
+    setConfig({
+      ...DEFAULT_CONFIG,
+      universeId: activeUniverse,
+      playerId: activeAccount?.playerId || null,
+    });
   };
 
   const handleApproveRequest = async (req: JoinRequestItem, assignedRoleOverride?: 'member' | 'visitor') => {
@@ -2459,15 +2540,56 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
             <div className="ow-testing-pilot-dossier">
               <div className="ow-dossier-row">
                 <span className="ow-dossier-label">DETECTED PILOT:</span>
-                <span className="ow-dossier-val font-mono">{activeAccount?.playerName || 'Unknown Commander'}</span>
+                <span
+                  className="ow-dossier-val font-mono"
+                  onClick={(e) => handleCopyField(activeAccount?.playerName || '', 'pilot', e)}
+                  style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  title="Click to copy Commander name"
+                >
+                  {activeAccount?.playerName || 'Unknown Commander'}
+                  {copiedField === 'pilot' ? (
+                    <Check size={12} style={{ color: '#10b981' }} />
+                  ) : (
+                    <Copy size={11} style={{ opacity: 0.45 }} />
+                  )}
+                </span>
               </div>
               <div className="ow-dossier-row">
                 <span className="ow-dossier-label">PLAYER ID:</span>
-                <span className="ow-dossier-val font-mono">#{activeAccount?.playerId || '—'}</span>
+                <span
+                  className="ow-dossier-val font-mono"
+                  onClick={(e) => handleCopyField(String(activeAccount?.playerId || ''), 'playerId', e)}
+                  style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  title="Click to copy Player ID"
+                >
+                  #{activeAccount?.playerId || '—'}
+                  {copiedField === 'playerId' ? (
+                    <Check size={12} style={{ color: '#10b981' }} />
+                  ) : (
+                    <Copy size={11} style={{ opacity: 0.45 }} />
+                  )}
+                </span>
               </div>
               <div className="ow-dossier-row">
                 <span className="ow-dossier-label">UNIVERSE:</span>
-                <span className="ow-dossier-val font-mono">{activeAccount?.universe || 'Active Uni'}</span>
+                <span
+                  className="ow-dossier-val font-mono"
+                  onClick={(e) => handleCopyField(cleanUniverseId(activeAccount?.universe || ''), 'universe', e)}
+                  style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  title="Click to copy Universe ID (e.g. s808-en)"
+                >
+                  {activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : 'Active Uni'}
+                  {activeAccount?.universe && cleanUniverseId(activeAccount.universe) !== activeAccount.universe && (
+                    <span style={{ opacity: 0.6, fontSize: '11px', color: '#94a3b8', marginLeft: '4px' }}>
+                      ({activeAccount.universe})
+                    </span>
+                  )}
+                  {copiedField === 'universe' ? (
+                    <Check size={12} style={{ color: '#10b981' }} />
+                  ) : (
+                    <Copy size={11} style={{ opacity: 0.45 }} />
+                  )}
+                </span>
               </div>
               <div className="ow-dossier-row">
                 <span className="ow-dossier-label">CLEARANCE STATUS:</span>
@@ -2475,6 +2597,53 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                   <AlertTriangle size={12} style={{ display: 'inline', marginRight: 4 }} />
                   NOT IN TESTER WHITELIST
                 </span>
+              </div>
+
+              {/* Full Access Request Copy Button */}
+              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.015 }}
+                  whileTap={{ scale: 0.985 }}
+                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                  onClick={handleCopyAccessRequest}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    background: copiedRequestInfo
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(5, 150, 105, 0.15) 100%)'
+                      : 'linear-gradient(135deg, rgba(0, 242, 255, 0.14) 0%, rgba(14, 165, 233, 0.06) 100%)',
+                    border: copiedRequestInfo
+                      ? '1px solid rgba(16, 185, 129, 0.5)'
+                      : '1px solid rgba(0, 242, 255, 0.35)',
+                    color: copiedRequestInfo ? '#34d399' : '#00f2ff',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    letterSpacing: '0.3px',
+                    cursor: 'pointer',
+                    boxShadow: copiedRequestInfo
+                      ? '0 0 16px rgba(16, 185, 129, 0.25)'
+                      : '0 0 16px rgba(0, 242, 255, 0.15)',
+                    transition: 'all 0.22s ease',
+                  }}
+                >
+                  {copiedRequestInfo ? (
+                    <>
+                      <Check size={14} style={{ color: '#10b981' }} />
+                      <span>Copied Access Request Details!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={14} />
+                      <span>Copy Access Request Info (Send to Admin)</span>
+                    </>
+                  )}
+                </motion.button>
               </div>
             </div>
 

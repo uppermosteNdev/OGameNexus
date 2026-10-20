@@ -47,6 +47,8 @@ import { calculateEmpireProduction } from '../../utils/amortizationCalc';
 import { calculateAccountResearchScore } from '../../utils/researchTimeCalc';
 import { cleanUniverseId } from '../../utils/universe';
 import { fetchPlayerHighscores } from '../../utils/ogameHighscores';
+import { getPlayerClassName, SupportedLanguage, getCurrentLanguage } from '../../i18n/gameData';
+import { useTranslation } from '../../i18n';
 
 // ----------------------------------------------------------------------------
 // SHIP MSU MAPPING (Metal + 1.5*Crystal + 3*Deuterium)
@@ -292,27 +294,28 @@ function formatTimeAgo(timestamp?: number | null): string {
   return `${Math.floor(ageSec / 86400)}d ago`;
 }
 
-function resolvePlayerClass(raw: any): { label: string; color: string; bg: string; border: string } {
+function resolvePlayerClass(raw: any, lang?: SupportedLanguage): { label: string; color: string; bg: string; border: string } {
   const norm = String(raw || '').toLowerCase();
-  if (norm.includes('1') || norm.includes('collector')) {
+  const activeLang = lang || getCurrentLanguage();
+  if (norm.includes('1') || norm.includes('collector') || norm.includes('colector') || norm.includes('colectionar') || norm.includes('colecționar') || norm.includes('kollektor') || norm.includes('collecteur') || norm.includes('zbieracz') || norm.includes('verzamelaar') || norm.includes('recolector') || norm.includes('collezionista') || norm.includes('коллекционер') || norm.includes('toplayıcı') || norm.includes('coletor') || norm.includes('colecionador')) {
     return {
-      label: 'Collector',
+      label: getPlayerClassName('collector', activeLang),
       color: '#fbbf24',
       bg: 'rgba(251, 191, 36, 0.12)',
       border: 'rgba(251, 191, 36, 0.35)',
     };
   }
-  if (norm.includes('2') || norm.includes('general') || norm.includes('warrior')) {
+  if (norm.includes('2') || norm.includes('general') || norm.includes('warrior') || norm.includes('général') || norm.includes('generał') || norm.includes('generaal') || norm.includes('generale') || norm.includes('генерал')) {
     return {
-      label: 'General',
+      label: getPlayerClassName('general', activeLang),
       color: '#f87171',
       bg: 'rgba(248, 113, 113, 0.12)',
       border: 'rgba(248, 113, 113, 0.35)',
     };
   }
-  if (norm.includes('3') || norm.includes('discoverer')) {
+  if (norm.includes('3') || norm.includes('discoverer') || norm.includes('explorator') || norm.includes('entdecker') || norm.includes('explorateur') || norm.includes('odkrywca') || norm.includes('ontdekker') || norm.includes('descubridor') || norm.includes('esploratore') || norm.includes('первооткрыватель') || norm.includes('kaşif') || norm.includes('kasif') || norm.includes('explorador')) {
     return {
-      label: 'Discoverer',
+      label: getPlayerClassName('discoverer', activeLang),
       color: '#00f2ff',
       bg: 'rgba(0, 242, 255, 0.12)',
       border: 'rgba(0, 242, 255, 0.35)',
@@ -429,6 +432,8 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
   isAdmin,
   apiUrl,
 }) => {
+  const { language } = useTranslation();
+
   // Roster & Totals State
   const [roster, setRoster] = useState<AllianceEmpireSummary[]>([]);
   const [totals, setTotals] = useState<AllianceTotals | null>(null);
@@ -1066,8 +1071,9 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
       if (!matchQuery) return false;
 
       if (classFilter === 'all') return true;
-      const c = resolvePlayerClass(m.playerClass).label.toLowerCase();
-      return c === classFilter;
+      const c = resolvePlayerClass(m.playerClass, language).label.toLowerCase();
+      const expected = getPlayerClassName(classFilter, language).toLowerCase();
+      return c === expected || c === classFilter;
     });
   }, [roster, searchQuery, classFilter]);
 
@@ -1098,7 +1104,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
   // RENDER: MEMBER DRILLDOWN VIEW
   // ==========================================================================
   if (selectedPlayerId && (memberDetail || isLoadingMember)) {
-    const pClass = resolvePlayerClass(memberDetail?.playerClass);
+    const pClass = resolvePlayerClass(memberDetail?.playerClass, language);
     const planets = (memberDetail?.empire.planets || []).filter(p => p.type === 'planet');
     const moons = (memberDetail?.empire.planets || []).filter(p => p.type === 'moon');
 
@@ -2114,7 +2120,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
 
       <div className="ow-roster-cards-grid">
         {filteredRoster.map(member => {
-          const pClass = resolvePlayerClass(member.playerClass);
+          const pClass = resolvePlayerClass(member.playerClass, language);
           const hasData = member.hasSyncedEmpire;
           const isMe = effectiveAccount && String(effectiveAccount.playerId) === String(member.playerId);
           const avatarSrc = member.avatarUrl || (isMe && effectiveAccount?.avatarUrl ? effectiveAccount.avatarUrl : null);

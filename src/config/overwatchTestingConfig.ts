@@ -16,8 +16,13 @@ export interface OverwatchTester {
  * Primary authorization is checked directly against Cloudflare.
  */
 export const OVERWATCH_TESTER_WHITELIST: OverwatchTester[] = [
-  // Local fallback entry (optional — active testers can be synced via Cloudflare D1 overwatch_testers)
-  // { playerId: '123456', universeId: 's199-en', playerName: 'Leader', note: 'Alliance Leader / Admin' },
+  { playerId: '108895', universeId: 's267-en', playerName: 'Vendetta', note: 'Alliance Leader / Admin' },
+  { playerId: '100642', universeId: 's267-en', playerName: 'LazyOldWoman', note: 'Closed Beta Tester' },
+  { playerId: '100714', universeId: 's267-en', playerName: 'GrumpyTeapot', note: 'Closed Beta Tester' },
+  { playerId: '104382', universeId: 's267-en', playerName: 'Zagls', note: 'Closed Beta Tester' },
+  { playerId: '109986', universeId: 's267-en', playerName: 'BloodyMiner', note: 'Closed Beta Tester' },
+  { playerId: '100647', universeId: 's267-en', playerName: 'Imp', note: 'Closed Beta Tester' },
+  { playerId: '108484', universeId: 's267-en', playerName: 'LordVader', note: 'Closed Beta Tester' },
 ];
 
 /**

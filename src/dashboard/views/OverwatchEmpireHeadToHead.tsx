@@ -34,6 +34,7 @@ import {
   parsePercent
 } from './OverwatchEmpireComparisonDeck';
 import { calculateAccountResearchScore } from '../../utils/researchTimeCalc';
+import { useTranslation } from '../../i18n';
 
 interface OverwatchEmpireHeadToHeadProps {
   players: ComparedPlayerSlot[];
@@ -55,6 +56,7 @@ interface DuelMetric {
 }
 
 export const OverwatchEmpireHeadToHead: React.FC<OverwatchEmpireHeadToHeadProps> = ({ players }) => {
+  const { language } = useTranslation();
   // Contenders are strictly the first two players in the comparison deck (Slots 1 & 2)
   const p1 = players[0];
   const p2 = players[1] || players[0];
@@ -421,7 +423,7 @@ export const OverwatchEmpireHeadToHead: React.FC<OverwatchEmpireHeadToHeadProps>
     if (!p1 || !p2) return;
     const text = `⚔️ **OGAME NEXUS — PLAYER COMPARISON**
 ══════════════════════════════════════════
-👑 **${p1.summary.playerName}** [${resolvePlayerClass(p1.summary.playerClass).label}] vs **${p2.summary.playerName}** [${resolvePlayerClass(p2.summary.playerClass).label}]
+👑 **${p1.summary.playerName}** [${resolvePlayerClass(p1.summary.playerClass, language).label}] vs **${p2.summary.playerName}** [${resolvePlayerClass(p2.summary.playerClass, language).label}]
 🏆 **Result:** ${duelSummary.overallLeader !== 'tied' ? `**${duelSummary.overallLeader}** leads (${duelSummary.p1Wins} vs ${duelSummary.p2Wins})` : 'Tied'}
 
 📊 **KEY METRICS:**
@@ -452,8 +454,8 @@ export const OverwatchEmpireHeadToHead: React.FC<OverwatchEmpireHeadToHeadProps>
     );
   }
 
-  const p1Class = resolvePlayerClass(p1.summary.playerClass);
-  const p2Class = resolvePlayerClass(p2.summary.playerClass);
+  const p1Class = resolvePlayerClass(p1.summary.playerClass, language);
+  const p2Class = resolvePlayerClass(p2.summary.playerClass, language);
   const p1Role = resolveAllianceRole(p1.summary.role);
   const p2Role = resolveAllianceRole(p2.summary.role);
 

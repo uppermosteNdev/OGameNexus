@@ -277,6 +277,12 @@ export async function handleGalaxySync(req: Request, env: Env) {
 
     const { universeId: rawUni, galaxy, system, scannedAt, slots } = parseResult.data;
     const universeId = cleanUniverseId(rawUni);
+
+    // Strict multi-account & universe isolation: ensure member token universe matches payload universe
+    if (member.universe_id && cleanUniverseId(member.universe_id) !== universeId) {
+      return json({ error: 'Universe mismatch: Auth token does not belong to the payload universe.' }, { status: 403 });
+    }
+
     const db = getUniverseDb(env, universeId);
     await ensureActivityTables(db);
 
@@ -451,24 +457,23 @@ export async function handleGalaxySync(req: Request, env: Env) {
       // A. Colonization (was empty, now has player)
       // Must NOT be:
       // 1. Same known occupant as baseline or oldSlot
-      // 2. A planet scanned with a moon (new colonies never spawn with moons in OGame)
-      // 3. A player in vacation mode (vacation accounts cannot launch colony ships)
-      // 4. A protected admin account
-      const canBeColonized = (
+      // 2. A protected admin account
+      const canBeColonized = Boolean(
         newSlot.playerId &&
         !isKnownOccupant &&
-        newSlot.hasMoon !== 1 &&
-        !isNewSlotVacation &&
         !isSystemOriginProtected &&
         !isKnownAdmin
       );
 
       // --- CHANGE DETECTION RULES ---
-      if (
-        ((oldSlot && !oldSlot.player_id && newSlot.playerId) ||
-         (!oldSlot && isUniverseSeeded && newSlot.playerId)) &&
-        canBeColonized
-      ) {
+      const isNewlyColonized = Boolean(
+        canBeColonized && (
+          (oldSlot && !oldSlot.player_id && newSlot.playerId) ||
+          (!oldSlot && isUniverseSeeded && newSlot.playerId && (!baselineSlot || !baselineSlot.player_id))
+        )
+      );
+
+      if (isNewlyColonized) {
         hasSlotChanged = true;
         detectedEvents.push({
           universeId,
@@ -476,16 +481,33 @@ export async function handleGalaxySync(req: Request, env: Env) {
           system,
           slot: newSlot.slot,
           eventType: 'colonized',
-          playerId: newSlot.playerId,
+          playerId: newSlot.playerId || null,
           playerName: newSlot.playerName || null,
           oldState: null,
           newState: newSlot,
           detectedAt: now,
         });
-      } else if (newSlot.playerId && (isKnownOccupant || newSlot.hasMoon === 1 || isNewSlotVacation)) {
-        // If the player is already known, has a moon, or is on vacation, any previous phantom
-        // 'abandoned' or 'moon_destroyed' event for this player at this slot was a glitch.
-        // Self-heal universe_events by removing the phantom events!
+
+        // If newly colonized slot already has a moon, also emit moon_spawned event
+        if (newSlot.hasMoon === 1) {
+          detectedEvents.push({
+            universeId,
+            galaxy,
+            system,
+            slot: newSlot.slot,
+            eventType: 'moon_spawned',
+            playerId: newSlot.playerId || null,
+            playerName: newSlot.playerName || null,
+            oldState: { hasMoon: 0 },
+            newState: { hasMoon: 1, moonSize: newSlot.moonSize },
+            detectedAt: now,
+          });
+        }
+      }
+
+      // Self-heal universe_events: if the player is currently present at this slot, any previous phantom
+      // 'abandoned' or 'moon_destroyed' event for this player at this slot was an extension glitch.
+      if (newSlot.playerId && (isKnownOccupant || isNewlyColonized)) {
         statements.push(
           db.prepare(
             `DELETE FROM universe_events
@@ -493,9 +515,14 @@ export async function handleGalaxySync(req: Request, env: Env) {
                AND player_id = ? AND event_type IN ('abandoned', 'moon_destroyed')`
           ).bind(universeId, galaxy, system, newSlot.slot, newSlot.playerId)
         );
-      } else if (oldSlot) {
+      }
+
+      const effectivePriorSlot = oldSlot || (isUniverseSeeded ? baselineSlot : null);
+
+      if (effectivePriorSlot) {
         // B. Abandoned / Left Planet / Destroyed Planet (had player, now no player)
-        if (oldSlot.player_id && !newSlot.playerId) {
+        // Only trigger from oldSlot (verified alliance scan) to avoid mass baseline glitches
+        if (oldSlot && oldSlot.player_id && !newSlot.playerId) {
           if (!isOldSlotVacation) {
             hasSlotChanged = true;
             detectedEvents.push({
@@ -513,7 +540,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
           }
         }
         // C. Colonized / Changed Player (former occupant replaced by new player colony)
-        else if (oldSlot.player_id && newSlot.playerId && oldSlot.player_id !== newSlot.playerId) {
+        else if (effectivePriorSlot.player_id && newSlot.playerId && String(effectivePriorSlot.player_id) !== String(newSlot.playerId)) {
           hasSlotChanged = true;
           detectedEvents.push({
             universeId,
@@ -523,19 +550,33 @@ export async function handleGalaxySync(req: Request, env: Env) {
             eventType: 'colonized',
             playerId: newSlot.playerId,
             playerName: newSlot.playerName || null,
-            oldState: oldSlot,
+            oldState: effectivePriorSlot,
             newState: newSlot,
             detectedAt: now,
           });
+          if (newSlot.hasMoon === 1 && (!effectivePriorSlot.has_moon || effectivePriorSlot.has_moon === 0)) {
+            detectedEvents.push({
+              universeId,
+              galaxy,
+              system,
+              slot: newSlot.slot,
+              eventType: 'moon_spawned',
+              playerId: newSlot.playerId || null,
+              playerName: newSlot.playerName || null,
+              oldState: { hasMoon: 0 },
+              newState: { hasMoon: 1, moonSize: newSlot.moonSize },
+              detectedAt: now,
+            });
+          }
         }
         // D. Player Name Changed (reject pure rank numbers or empty strings)
         else if (
-          oldSlot.player_id &&
+          effectivePriorSlot.player_id &&
           newSlot.playerId &&
-          oldSlot.player_id === newSlot.playerId &&
-          oldSlot.player_name &&
+          String(effectivePriorSlot.player_id) === String(newSlot.playerId) &&
+          effectivePriorSlot.player_name &&
           newSlot.playerName &&
-          oldSlot.player_name.trim() !== newSlot.playerName.trim() &&
+          effectivePriorSlot.player_name.trim() !== newSlot.playerName.trim() &&
           !newSlot.playerName.trim().startsWith('#') &&
           newSlot.playerName.trim().length >= 1
         ) {
@@ -544,7 +585,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
           if (!renamesByPlayer.has(pId)) {
             renamesByPlayer.set(pId, {
               playerId: pId,
-              oldName: oldSlot.player_name.trim(),
+              oldName: effectivePriorSlot.player_name.trim(),
               newName: newSlot.playerName.trim(),
               playerStatus: normalizePlayerStatus(newSlot.playerStatus),
               galaxy,
@@ -554,8 +595,8 @@ export async function handleGalaxySync(req: Request, env: Env) {
           }
         }
 
-        // E. Moon Spawned
-        if ((!oldSlot.has_moon || oldSlot.has_moon === 0) && newSlot.hasMoon === 1) {
+        // E. Moon Spawned (on existing planet that wasn't newly colonized in this pass)
+        if (!isNewlyColonized && (!effectivePriorSlot.has_moon || effectivePriorSlot.has_moon === 0) && newSlot.hasMoon === 1) {
           hasSlotChanged = true;
           detectedEvents.push({
             universeId,
@@ -571,7 +612,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
           });
         }
         // F. Moon Destroyed
-        else if (oldSlot.has_moon === 1 && newSlot.hasMoon === 0 && oldSlot.player_id) {
+        else if (effectivePriorSlot.has_moon === 1 && newSlot.hasMoon === 0 && effectivePriorSlot.player_id) {
           if (!isOldSlotVacation) {
             hasSlotChanged = true;
             detectedEvents.push({
@@ -580,9 +621,9 @@ export async function handleGalaxySync(req: Request, env: Env) {
               system,
               slot: newSlot.slot,
               eventType: 'moon_destroyed',
-              playerId: oldSlot.player_id,
-              playerName: oldSlot.player_name,
-              oldState: { hasMoon: 1, moonSize: oldSlot.moon_size },
+              playerId: effectivePriorSlot.player_id,
+              playerName: effectivePriorSlot.player_name,
+              oldState: { hasMoon: 1, moonSize: effectivePriorSlot.moon_size },
               newState: { hasMoon: 0 },
               detectedAt: now,
             });
@@ -590,12 +631,13 @@ export async function handleGalaxySync(req: Request, env: Env) {
         }
 
         // G. Status Changed (e.g. active to inactive or vacation, or multiple tags like "v,I")
-        const oldStatusNorm = normalizePlayerStatus(oldSlot.player_status);
+        const oldStatusNorm = normalizePlayerStatus(effectivePriorSlot.player_status);
         const newStatusNorm = normalizePlayerStatus(newSlot.playerStatus);
 
         if (
-          oldSlot.player_id &&
+          effectivePriorSlot.player_id &&
           newSlot.playerId &&
+          String(effectivePriorSlot.player_id) === String(newSlot.playerId) &&
           oldStatusNorm !== newStatusNorm
         ) {
           hasSlotChanged = true;
@@ -603,7 +645,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
           if (!statusChangesByPlayer.has(pId)) {
             statusChangesByPlayer.set(pId, {
               playerId: pId,
-              playerName: newSlot.playerName || oldSlot.player_name || null,
+              playerName: newSlot.playerName || effectivePriorSlot.player_name || null,
               oldStatus: oldStatusNorm,
               newStatus: newStatusNorm,
               galaxy,
@@ -614,12 +656,12 @@ export async function handleGalaxySync(req: Request, env: Env) {
         }
 
         // H. Planet Name Changed
-        if (oldSlot.planet_name && newSlot.planetName && oldSlot.planet_name.trim() !== newSlot.planetName.trim()) {
+        if (effectivePriorSlot.planet_name && newSlot.planetName && effectivePriorSlot.planet_name.trim() !== newSlot.planetName.trim()) {
           hasSlotChanged = true;
         }
 
         // I. Alliance Tag Changed
-        if ((oldSlot.alliance_tag || newSlot.allianceTag) && oldSlot.alliance_tag !== newSlot.allianceTag) {
+        if ((effectivePriorSlot.alliance_tag || newSlot.allianceTag) && effectivePriorSlot.alliance_tag !== newSlot.allianceTag) {
           hasSlotChanged = true;
         }
       }
@@ -971,6 +1013,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
 
     // 8. INSTANT EDGE CACHE INVALIDATION (Pillar 5: Guaranteed Freshness)
     await invalidateSystemCache(universeId, member.alliance_id, galaxy, system);
+    await invalidateSystemCache(universeId, 'public', galaxy, system);
 
     // 9. Fetch any active raid locks in this system for this alliance
     const activeLocks = await db.prepare(

@@ -25,6 +25,7 @@ import {
 import { db } from '../../db';
 import { isSameUniverse } from '../../utils/universe';
 import { ThemeIcon } from '../components/ThemeIcon';
+import { useTranslation } from '../../i18n';
 
 interface Account {
     playerName: string;
@@ -49,6 +50,8 @@ interface ImportStats {
 }
 
 const DataManagement: React.FC = () => {
+    const { t } = useTranslation();
+
     // ----------------------------------------------------
     // Global & Active Account Queries
     // ----------------------------------------------------
@@ -418,8 +421,8 @@ const DataManagement: React.FC = () => {
                             <ThemeIcon name="save" size={24} />
                         </div>
                         <div>
-                            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>Command Deck Backup</h2>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0' }}>Export your active tracking metrics locally</p>
+                            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>{t('dataManagement.tabBackup')}</h2>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0' }}>{t('dataManagement.exportSubtitle')}</p>
                         </div>
                     </div>
 
@@ -454,10 +457,10 @@ const DataManagement: React.FC = () => {
                             {/* Database numbers summary */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                 {[
-                                    { label: 'Planets Structure', count: nexusStatsSummary?.planets || 0, icon: <ThemeIcon name="geography-globe" size={16} /> },
-                                    { label: 'Expedition Database', count: nexusStatsSummary?.expeditions || 0, icon: <ThemeIcon name="navigation" size={16} /> },
-                                    { label: 'Combat Reports Log', count: nexusStatsSummary?.combats || 0, icon: <ThemeIcon name="sword" size={16} /> },
-                                    { label: 'Debris field harvests', count: nexusStatsSummary?.debris || 0, icon: <ThemeIcon name="debris-field" size={16} /> },
+                                    { label: t('dataManagement.planetsMoons'), count: nexusStatsSummary?.planets || 0, icon: <ThemeIcon name="geography-globe" size={16} /> },
+                                    { label: t('dataManagement.expeditionsRecorded'), count: nexusStatsSummary?.expeditions || 0, icon: <ThemeIcon name="navigation" size={16} /> },
+                                    { label: t('dataManagement.combatsRecorded'), count: nexusStatsSummary?.combats || 0, icon: <ThemeIcon name="sword" size={16} /> },
+                                    { label: t('dataManagement.debrisHarvests'), count: nexusStatsSummary?.debris || 0, icon: <ThemeIcon name="debris-field" size={16} /> },
                                     { label: 'Lifeform Discoveries', count: nexusStatsSummary?.lifeforms || 0, icon: <ThemeIcon name="leaf" size={16} /> },
                                     { label: 'Saved Build Orders', count: nexusStatsSummary?.todos || 0, icon: <ThemeIcon name="goal" size={16} /> },
                                     { label: 'Raid Radar Targets', count: nexusStatsSummary?.spiedPlanets || 0, icon: <ThemeIcon name="radar" size={16} /> },
@@ -515,17 +518,17 @@ const DataManagement: React.FC = () => {
                         {isExporting ? (
                             <>
                                 <Loader2 size={20} className="animate-spin" />
-                                COMPILING BACKUP PAYLOAD...
+                                {t('dataManagement.compilingBackup')}
                             </>
                         ) : (
                             <>
                                 <Download size={20} />
-                                GENERATE NEXUS BACKUP (.JSON)
+                                {t('dataManagement.generateBackup')}
                             </>
                         )}
                     </button>
                     <div style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '12px' }}>
-                        Backup file contains your coordinates, planet details, construction schedules, and logs.
+                        {t('dataManagement.backupNote')}
                     </div>
                 </div>
             </div>
@@ -552,8 +555,8 @@ const DataManagement: React.FC = () => {
                             <Upload size={22} />
                         </div>
                         <div>
-                            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>System Restore</h2>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0' }}>Sync and restore history on this device</p>
+                            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>{t('dataManagement.restoreTitle')}</h2>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0' }}>{t('dataManagement.restoreSubtitle')}</p>
                         </div>
                     </div>
 
@@ -594,8 +597,8 @@ const DataManagement: React.FC = () => {
                             }}>
                                 <FileJson size={28} />
                             </div>
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>Deploy Nexus Backup</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>Drag and drop your backup .json file or click to browse</p>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>{t('dataManagement.dropTitle')}</h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>{t('dataManagement.dropDesc')}</p>
                         </label>
                     </div>
                 </div>
@@ -637,13 +640,13 @@ const DataManagement: React.FC = () => {
                         <ShieldAlert size={28} />
                     </div>
                     <div>
-                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#ff4444', margin: 0 }}>Import Blocked: Profile Mismatch</h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>Security checks prevent profile crossovers or database corruption</p>
+                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#ff4444', margin: 0 }}>{t('dataManagement.mismatchTitle')}</h2>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>{t('dataManagement.mismatchDesc')}</p>
                     </div>
                 </div>
 
                 <p style={{ color: 'var(--text-main)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '32px' }}>
-                    Your current active command deck belongs to another commander profile or universe. Importing a backup from a different account is blocked to prevent mixing or corrupting coordinates, planet structures, and battle logs.
+                    {t('dataManagement.mismatchExpl')}
                 </p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '40px' }}>
@@ -652,7 +655,7 @@ const DataManagement: React.FC = () => {
                         padding: '24px', borderRadius: '24px',
                         background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)'
                     }}>
-                        <div style={{ fontSize: '0.7rem', color: '#ff4444', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>BACKUP FILE PROFILE</div>
+                        <div style={{ fontSize: '0.7rem', color: '#ff4444', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>{t('dataManagement.backupFileProfile')}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                             <div style={{
                                 width: '36px', height: '36px', borderRadius: '10px',
@@ -678,7 +681,7 @@ const DataManagement: React.FC = () => {
                             background: 'rgba(0, 242, 255, 0.02)', border: '1px solid rgba(0, 242, 255, 0.15)',
                             boxShadow: '0 0 20px rgba(0, 242, 255, 0.02)'
                         }}>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>ACTIVE COMMAND DECK</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>{t('dataManagement.activeCommandDeck')}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                                 <div style={{
                                     width: '36px', height: '36px', borderRadius: '10px',
@@ -714,7 +717,7 @@ const DataManagement: React.FC = () => {
                             display: 'flex', alignItems: 'center', gap: '10px', borderStyle: 'solid'
                         }}
                     >
-                        <ArrowLeft size={16} /> Choose Another Backup File
+                        <ArrowLeft size={16} /> {t('dataManagement.chooseAnotherFile')}
                     </button>
                 </div>
             </motion.div>
@@ -750,8 +753,8 @@ const DataManagement: React.FC = () => {
                         <ShieldCheck size={28} />
                     </div>
                     <div>
-                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', margin: 0 }}>Step 2: Confirm Restore</h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>Review backup metrics before initializing overwrite</p>
+                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', margin: 0 }}>{t('dataManagement.confirmRestore')}</h2>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>{t('dataManagement.confirmRestoreDesc')}</p>
                     </div>
                 </div>
 
@@ -776,15 +779,15 @@ const DataManagement: React.FC = () => {
                 </div>
 
                 <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' }}>
-                    BACKUP COMPONENT SUMMARY
+                    {t('dataManagement.backupSummary')}
                 </h3>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '32px' }}>
                     {[
-                        { label: 'Planets Structure', count: stats.planets?.length || 0, icon: <Server size={16} /> },
-                        { label: 'Expedition Database', count: stats.expeditions?.length || 0, icon: <Compass size={16} /> },
-                        { label: 'Combat Reports Log', count: stats.combatReports?.length || 0, icon: <Swords size={16} /> },
-                        { label: 'Debris Harvest History', count: stats.debrisHarvests?.length || 0, icon: <Rocket size={16} /> },
+                        { label: t('dataManagement.planetsMoons'), count: stats.planets?.length || 0, icon: <Server size={16} /> },
+                        { label: t('dataManagement.expeditionsRecorded'), count: stats.expeditions?.length || 0, icon: <Compass size={16} /> },
+                        { label: t('dataManagement.combatsRecorded'), count: stats.combatReports?.length || 0, icon: <Swords size={16} /> },
+                        { label: t('dataManagement.debrisHarvests'), count: stats.debrisHarvests?.length || 0, icon: <Rocket size={16} /> },
                         { label: 'Lifeform Discoveries', count: stats.lifeformDiscoveries?.length || 0, icon: <Activity size={16} /> },
                         { label: 'Saved Build Orders', count: stats.todoProjects?.length || 0, icon: <Clock size={16} /> },
                         { label: 'Raid Radar Targets', count: stats.spiedPlanets?.length || 0, icon: <Search size={16} /> },
@@ -810,7 +813,7 @@ const DataManagement: React.FC = () => {
                 }}>
                     <AlertCircle size={24} style={{ color: '#ffaa00', flexShrink: 0 }} />
                     <div>
-                        <span style={{ fontWeight: 800, color: '#ffaa00' }}>Warning:</span> Overwriting active databases will replace existing planets, todo lists, and log metrics with the record states inside this backup. High-priority primary keys protect logs from duplicates.
+                        <span style={{ fontWeight: 800, color: '#ffaa00' }}>Warning:</span> {t('dataManagement.warningOverwrite')}
                     </div>
                 </div>
 
@@ -827,7 +830,7 @@ const DataManagement: React.FC = () => {
                             color: '#fff', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', borderStyle: 'solid'
                         }}
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </button>
                     <button
                         onClick={startNexusRestore}
@@ -839,7 +842,7 @@ const DataManagement: React.FC = () => {
                             display: 'flex', alignItems: 'center', gap: '10px'
                         }}
                     >
-                        Initiate System Restore <Database size={18} />
+                        {t('dataManagement.initiateRestore')} <Database size={18} />
                     </button>
                 </div>
             </motion.div>
@@ -860,7 +863,7 @@ const DataManagement: React.FC = () => {
                         {nexusIsImporting ? <Loader2 size={40} className="animate-spin" /> : <ShieldCheck size={40} />}
                     </div>
                     <h2 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '8px' }}>
-                        {nexusIsImporting ? 'Restoring Nexus Database' : 'Restore Finished'}
+                        {nexusIsImporting ? t('dataManagement.restoringDb') : t('dataManagement.restoreFinished')}
                     </h2>
                     <p style={{ color: 'var(--text-muted)' }}>
                         {nexusIsImporting ? 'Processing backup record arrays...' : 'Database restore finished successfully.'}
@@ -878,9 +881,9 @@ const DataManagement: React.FC = () => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                         {[
-                            { label: 'Imported', val: nexusStats.imported, color: 'var(--primary)' },
-                            { label: 'Errors', val: nexusStats.errors, color: '#ff4444' },
-                            { label: 'Total', val: nexusStats.total, color: '#fff' },
+                            { label: t('dataManagement.imported'), val: nexusStats.imported, color: 'var(--primary)' },
+                            { label: t('dataManagement.errors'), val: nexusStats.errors, color: '#ff4444' },
+                            { label: t('dataManagement.total'), val: nexusStats.total, color: '#fff' },
                         ].map((s) => (
                             <div key={s.label} style={{ textAlign: 'center' }}>
                                 <div style={{ fontSize: '1.5rem', fontWeight: 900, color: s.color }}>{s.val}</div>
@@ -907,7 +910,7 @@ const DataManagement: React.FC = () => {
                 {!nexusIsImporting && (
                     <div style={{ display: 'flex', justifyContent: 'center' }}>
                         <button onClick={() => window.location.reload()} style={{ padding: '16px 40px', borderRadius: '16px', background: 'var(--primary)', color: '#000', fontWeight: 800, border: 'none', cursor: 'pointer' }}>
-                            Complete & Refresh Deck
+                            {t('dataManagement.completeRefresh')}
                         </button>
                     </div>
                 )}
@@ -1593,7 +1596,7 @@ const DataManagement: React.FC = () => {
                         transition: 'all 0.3s ease'
                     }}
                 >
-                    Continue to Data Types
+                    {t('dataManagement.continueDataTypes')}
                     <ChevronRight size={24} />
                 </button>
             </div>
@@ -1666,7 +1669,7 @@ const DataManagement: React.FC = () => {
                         boxShadow: '0 8px 32px rgba(0, 242, 255, 0.3)'
                     }}
                 >
-                    Initialize Sync
+                    {t('dataManagement.initializeSync')}
                     <Database size={24} />
                 </button>
             </div>
@@ -1687,7 +1690,7 @@ const DataManagement: React.FC = () => {
                         {isImporting ? <Loader2 size={40} className="animate-spin" /> : <ShieldCheck size={40} />}
                     </div>
                     <h2 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '8px' }}>
-                        {isImporting ? 'Sync in Progress' : 'Import Finished'}
+                        {isImporting ? t('dataManagement.syncInProgress') : t('dataManagement.importComplete')}
                     </h2>
                     <p style={{ color: 'var(--text-muted)' }}>
                         {isImporting ? 'Sequentially processing historical records...' : 'Sync sequence concluded successfully.'}
@@ -1705,10 +1708,10 @@ const DataManagement: React.FC = () => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
                         {[
-                            { label: 'Imported', val: stats.imported, color: 'var(--primary)' },
-                            { label: 'Skipped', val: stats.skipped, color: 'var(--text-muted)' },
-                            { label: 'Errors', val: stats.errors, color: '#ff4444' },
-                            { label: 'Total', val: stats.total, color: '#fff' },
+                            { label: t('dataManagement.imported'), val: stats.imported, color: 'var(--primary)' },
+                            { label: t('dataManagement.skipped'), val: stats.skipped, color: 'var(--text-muted)' },
+                            { label: t('dataManagement.errors'), val: stats.errors, color: '#ff4444' },
+                            { label: t('dataManagement.total'), val: stats.total, color: '#fff' },
                         ].map((s) => (
                             <div key={s.label} style={{ textAlign: 'center' }}>
                                 <div style={{ fontSize: '1.5rem', fontWeight: 900, color: s.color }}>{s.val}</div>
@@ -1735,7 +1738,7 @@ const DataManagement: React.FC = () => {
                 {!isImporting && (
                     <div style={{ display: 'flex', justifyContent: 'center' }}>
                         <button onClick={() => window.location.reload()} style={{ padding: '16px 40px', borderRadius: '16px', background: 'var(--primary)', color: '#000', fontWeight: 800 }}>
-                            Complete & Dismiss
+                            {t('dataManagement.completeDismiss')}
                         </button>
                     </div>
                 )}
@@ -1748,10 +1751,10 @@ const DataManagement: React.FC = () => {
             <header style={{ marginBottom: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <div>
                     <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '8px', background: 'linear-gradient(135deg, #fff 0%, #00f2ff 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                        Data Management
+                        {t('dataManagement.title')}
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', maxWidth: '600px' }}>
-                        Manage locally recorded commander profiles, export database backups, or synchronize from OGame Tracker exports.
+                        {t('dataManagement.subtitle')}
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
@@ -1794,7 +1797,7 @@ const DataManagement: React.FC = () => {
                         border: activeTab === 'nexus' ? '1px solid rgba(0, 242, 255, 0.2)' : '1px solid transparent'
                     }}
                 >
-                    <img src="icons/nexus.png" alt="OGame Nexus Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> OGame Nexus Data
+                    <img src="icons/nexus.png" alt="OGame Nexus Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> {t('dataManagement.tabNexusData')}
                 </button>
                 <button
                     onClick={() => {
@@ -1817,7 +1820,7 @@ const DataManagement: React.FC = () => {
                         border: activeTab === 'tracker' ? '1px solid rgba(0, 242, 255, 0.2)' : '1px solid transparent'
                     }}
                 >
-                    <img src="icons/misc/ogame-tracker.png" alt="OGame Tracker Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> OGame Tracker Sync
+                    <img src="icons/misc/ogame-tracker.png" alt="OGame Tracker Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> {t('dataManagement.tabTrackerSync')}
                 </button>
             </div>
 

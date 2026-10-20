@@ -30,12 +30,21 @@ export function generateNewVaultKey(): string {
  * Retrieves the stored vault key for this player and universe.
  */
 export async function getStoredVaultKey(universe: string, playerId: string): Promise<string> {
-  const storageKey = `${VAULT_KEY_PREFIX}${universe}_${playerId}`;
+  const cleanUni = cleanUniverseId(universe);
+  const cleanPid = String(playerId || '').trim();
+  const storageKey = `${VAULT_KEY_PREFIX}${cleanUni}_${cleanPid}`;
+  const legacyKey = `${VAULT_KEY_PREFIX}${universe}_${playerId}`;
+
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
     try {
-      const res = await chrome.storage.local.get([storageKey]);
+      const res = await chrome.storage.local.get([storageKey, legacyKey]);
       if (res?.[storageKey] && typeof res[storageKey] === 'string') {
         return res[storageKey];
+      }
+      if (res?.[legacyKey] && typeof res[legacyKey] === 'string') {
+        // Auto-migrate legacy key to normalized format
+        await saveStoredVaultKey(universe, playerId, res[legacyKey]);
+        return res[legacyKey];
       }
     } catch {
       // Storage unavailable, check localStorage
@@ -43,7 +52,7 @@ export async function getStoredVaultKey(universe: string, playerId: string): Pro
   }
 
   try {
-    const val = localStorage.getItem(storageKey);
+    const val = localStorage.getItem(storageKey) || localStorage.getItem(legacyKey);
     if (val) return val;
   } catch {}
 
@@ -57,7 +66,9 @@ export async function getStoredVaultKey(universe: string, playerId: string): Pro
  * Saves or updates the stored vault key for this player and universe.
  */
 export async function saveStoredVaultKey(universe: string, playerId: string, key: string): Promise<void> {
-  const storageKey = `${VAULT_KEY_PREFIX}${universe}_${playerId}`;
+  const cleanUni = cleanUniverseId(universe);
+  const cleanPid = String(playerId || '').trim();
+  const storageKey = `${VAULT_KEY_PREFIX}${cleanUni}_${cleanPid}`;
   const cleanKey = key.trim();
 
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {

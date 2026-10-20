@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { calculateEmpireProduction } from '../../utils/amortizationCalc';
 import { isSameUniverse } from '../../utils/universe';
+import { getPlayerClassName } from '../../i18n/gameData';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, 
@@ -307,7 +308,7 @@ const SignatureMaker: React.FC<SignatureMakerProps> = ({ onBack }) => {
 
                 // Class Badge FIRST
                 if (showClass && activeAccount?.playerClass !== undefined) {
-                    const className = activeAccount.playerClass === 1 ? 'COLLECTOR' : activeAccount.playerClass === 2 ? 'WARRIOR' : 'DISCOVERER';
+                    const className = getPlayerClassName(activeAccount.playerClass).toUpperCase();
                     const classColor = activeAccount.playerClass === 1 ? '#E6953C' : activeAccount.playerClass === 2 ? '#ef4444' : '#06b6d4';
                     ctx.font = '900 11px "Inter", sans-serif';
                     const classWidth = ctx.measureText(className).width + 14;
@@ -1052,7 +1053,7 @@ const SignatureMaker: React.FC<SignatureMakerProps> = ({ onBack }) => {
                                                          fontFamily: '"Inter", sans-serif'
                                                      }}
                                                  >
-                                                     {activeAccount.playerClass === 1 ? 'COLLECTOR' : activeAccount.playerClass === 2 ? 'WARRIOR' : 'DISCOVERER'}
+                                                     {getPlayerClassName(activeAccount.playerClass).toUpperCase()}
                                                  </motion.span>
                                              )}
                                          </AnimatePresence>

@@ -2,7 +2,95 @@
 // NEXUS OVERWATCH — CENTRALIZED API CLIENT & HEALTH ENGINE
 // ============================================================================
 
+import { cleanUniverseId } from './universe';
+
 export const DEFAULT_OVERWATCH_API_URL = 'https://nexus-sync-worker.nexus-overwatch.workers.dev';
+
+/**
+ * Returns the storage key for an account's Overwatch configuration.
+ */
+export function getOverwatchAccountStorageKey(universeId?: string | null, playerId?: string | null): string {
+  const cleanUni = cleanUniverseId(universeId || '');
+  const pId = String(playerId || '').trim();
+  if (!cleanUni || !pId) return 'nexus_overwatch_config';
+  return `nexus_overwatch_config_${cleanUni}_${pId}`;
+}
+
+/**
+ * Retrieves the Overwatch configuration for a specific account, falling back to legacy global key if matching.
+ */
+export async function getStoredOverwatchConfig(universeId?: string | null, playerId?: string | null): Promise<any | null> {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) return null;
+  const cleanUni = cleanUniverseId(universeId || '');
+  const pId = String(playerId || '').trim();
+  const accountKey = getOverwatchAccountStorageKey(cleanUni, pId);
+
+  try {
+    const res = await chrome.storage.local.get([accountKey, 'nexus_overwatch_config']);
+    let config = res?.[accountKey] || null;
+    if (!config && res?.nexus_overwatch_config) {
+      const legacy = res.nexus_overwatch_config;
+      // Legacy fallback applies only if universe matches AND:
+      // - If legacy has a playerId set, it MUST strictly match pId.
+      // - If legacy has no playerId set, allow fallback for one-time migration.
+      if (!cleanUni || cleanUniverseId(legacy.universeId) === cleanUni) {
+        if (legacy.playerId) {
+          if (!pId || String(legacy.playerId) === pId) {
+            config = legacy;
+          }
+        } else {
+          // Unassigned legacy config: fallback permitted
+          config = legacy;
+        }
+      }
+    }
+    return config;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persists the Overwatch configuration scoped to a specific account.
+ */
+export async function saveStoredOverwatchConfig(config: any, universeId?: string | null, playerId?: string | null): Promise<void> {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+  const cleanUni = cleanUniverseId(universeId || config?.universeId || '');
+  const pId = String(playerId || config?.playerId || '').trim();
+  const accountKey = getOverwatchAccountStorageKey(cleanUni, pId);
+
+  try {
+    await chrome.storage.local.set({
+      [accountKey]: config,
+      nexus_overwatch_config: config
+    });
+  } catch (err) {
+    console.warn("Failed to persist Overwatch config:", err);
+  }
+}
+
+/**
+ * Removes the Overwatch configuration scoped to a specific account.
+ */
+export async function removeStoredOverwatchConfig(universeId?: string | null, playerId?: string | null): Promise<void> {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+  const cleanUni = cleanUniverseId(universeId || '');
+  const pId = String(playerId || '').trim();
+  const accountKey = getOverwatchAccountStorageKey(cleanUni, pId);
+
+  try {
+    const res = await chrome.storage.local.get(['nexus_overwatch_config']);
+    const legacy = res?.nexus_overwatch_config;
+    const keysToRemove = [accountKey];
+    // Only remove legacy global key if it actually belonged to this player/universe
+    if (legacy && (!legacy.playerId || String(legacy.playerId) === pId)) {
+      keysToRemove.push('nexus_overwatch_config');
+    }
+    await chrome.storage.local.remove(keysToRemove);
+  } catch (err) {
+    console.warn("Failed to remove Overwatch config:", err);
+  }
+}
 
 /**
  * Dynamically resolves the active Overwatch Edge API endpoint.

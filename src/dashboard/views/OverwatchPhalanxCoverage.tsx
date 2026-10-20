@@ -703,6 +703,46 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
       });
   }, [allEffectiveMoons, selectedGalaxy, selectedMemberFilter, searchFilter]);
 
+  // All moons in the currently selected galaxy across all alliance members
+  const selectedGalaxyAllMoons = useMemo(() => {
+    return allEffectiveMoons.filter(m => m.galaxy === selectedGalaxy);
+  }, [allEffectiveMoons, selectedGalaxy]);
+
+  // Map of playerId -> number of moons in the currently selected galaxy
+  const memberGalaxyMoonCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    selectedGalaxyAllMoons.forEach(m => {
+      const pid = String(m.playerId);
+      counts.set(pid, (counts.get(pid) || 0) + 1);
+    });
+    return counts;
+  }, [selectedGalaxyAllMoons]);
+
+  // Consolidated member list including local player fallback if not yet in remote roster
+  const effectiveMembersList = useMemo(() => {
+    const list = [...allianceMembers];
+    if (localMoonsParsed.length > 0) {
+      const localPId = String(playerId || 'local');
+      const alreadyIncluded = list.some(m => String(m.playerId) === localPId);
+      if (!alreadyIncluded) {
+        list.push({
+          playerId: localPId,
+          playerName: playerName ? `${playerName} (You)` : 'You',
+          avatarUrl: effectiveAcc?.avatarUrl || null,
+          isDiscoverer: isLocalDiscoverer,
+          discovererClassBoostPercent: localDiscovererBoost.classBoostPercent,
+          discovererPhalanxBoost: localDiscovererBoost.phalanxBoostPercent,
+          moonCount: localMoonsParsed.length,
+          phalanxCount: localMoonsParsed.filter(m => m.phalanxLevel > 0).length,
+          maxPhalanxLevel: localMoonsParsed.reduce((max, m) => Math.max(max, m.phalanxLevel), 0),
+          ianLevel: localIanBoost.level,
+          ianBoostPercent: localIanBoost.percent,
+        });
+      }
+    }
+    return list;
+  }, [allianceMembers, localMoonsParsed, playerId, playerName, effectiveAcc, isLocalDiscoverer, localDiscovererBoost, localIanBoost]);
+
   // --------------------------------------------------------------------------
   // 4. COMPUTE 499-SYSTEM COVERAGE GRID IN SELECTED GALAXY
   // --------------------------------------------------------------------------
@@ -855,7 +895,7 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
   // Compute active range bonus for display in Card 4
   const activeDisplayBonus = useMemo(() => {
     if (selectedMemberFilter !== 'all') {
-      const mem = allianceMembers.find(m => m.playerId === selectedMemberFilter);
+      const mem = effectiveMembersList.find(m => String(m.playerId) === String(selectedMemberFilter));
       if (mem) {
         const disc = mem.discovererPhalanxBoost || 0;
         const ian = mem.ianBoostPercent || 0;
@@ -893,7 +933,7 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
       };
     }
     return { total: 0, disc: 0, ian: 0, label: 'No Bonus Active' };
-  }, [selectedMemberFilter, allianceMembers, localDiscovererBoost, localIanBoost, galaxyMoons]);
+  }, [selectedMemberFilter, effectiveMembersList, localDiscovererBoost, localIanBoost, galaxyMoons]);
 
   // --------------------------------------------------------------------------
   // RENDER
@@ -1114,12 +1154,17 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
                   onChange={e => setSelectedMemberFilter(e.target.value)}
                   style={{ background: 'transparent', border: 'none', color: '#f1f5f9', outline: 'none', fontSize: '12px', cursor: 'pointer' }}
                 >
-                  <option value="all" style={{ background: '#0f172a' }}>All Alliance Members ({galaxyMoons.length} Moons)</option>
-                  {allianceMembers.map(m => (
-                    <option key={m.playerId} value={m.playerId} style={{ background: '#0f172a' }}>
-                      {m.playerName} {m.isDiscoverer ? '🧭' : ''} ({m.moonCount} Moons)
-                    </option>
-                  ))}
+                  <option value="all" style={{ background: '#0f172a' }}>
+                    All Galaxy Moons ({selectedGalaxyAllMoons.length} {selectedGalaxyAllMoons.length === 1 ? 'Moon' : 'Moons'})
+                  </option>
+                  {effectiveMembersList.map(m => {
+                    const gCount = memberGalaxyMoonCounts.get(String(m.playerId)) || 0;
+                    return (
+                      <option key={m.playerId} value={m.playerId} style={{ background: '#0f172a' }}>
+                        {m.playerName} {m.isDiscoverer ? '🧭' : ''} ({gCount} {gCount === 1 ? 'Moon' : 'Moons'})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

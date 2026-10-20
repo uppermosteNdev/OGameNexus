@@ -5,8 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { ThemeIcon } from '../components/ThemeIcon';
+import { useTranslation } from '../../i18n';
 
 const Settings: React.FC = () => {
+    const { t } = useTranslation();
     const [account, setAccount] = useState<GoogleAccount | null>(null);
     const [showComingSoon, setShowComingSoon] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -274,8 +276,8 @@ const Settings: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
                 <ThemeIcon name="settings" size={44} glow />
                 <div>
-                    <h1 style={{ margin: 0 }}>Settings Hub</h1>
-                    <p style={{ margin: '4px 0 0', color: 'var(--text-muted)' }}>Configure extension behavior, economy baselines, and data management.</p>
+                    <h1 style={{ margin: 0 }}>{t('settings.title')}</h1>
+                    <p style={{ margin: '4px 0 0', color: 'var(--text-muted)' }}>{t('settings.subtitle')}</p>
                 </div>
             </div>
 
@@ -285,15 +287,15 @@ const Settings: React.FC = () => {
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                         <ThemeIcon name="sliders" size={22} />
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Market & Economy Rates</h2>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>{t('settings.marketRates')}</h2>
                     </div>
                     <p style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '20px' }}>
-                        Set the standard trade ratios for your universe (MSU). This affects Amortization returns and Tech optimizations.
+                        {t('settings.marketRatesDesc')}
                     </p>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-metal)' }}>Metal Rate</span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-metal)' }}>{t('settings.metalRate')}</span>
                             <input 
                                 type="number" 
                                 value={rates.metal} 
@@ -302,7 +304,7 @@ const Settings: React.FC = () => {
                             />
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-crystal)' }}>Crystal Rate</span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-crystal)' }}>{t('settings.crystalRate')}</span>
                             <input 
                                 type="number" 
                                 value={rates.crystal} 
@@ -311,7 +313,7 @@ const Settings: React.FC = () => {
                             />
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-deuterium)' }}>Deuterium Rate</span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-deuterium)' }}>{t('settings.deuteriumRate')}</span>
                             <input 
                                 type="number" 
                                 value={rates.deuterium} 
@@ -325,7 +327,7 @@ const Settings: React.FC = () => {
                         style={{ marginTop: '20px', width: '100%', padding: '10px', background: 'var(--primary)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                     >
                         <ThemeIcon name="save" size={16} />
-                        {isSavingRates ? 'Saved!' : 'Save Economy Rates'}
+                        {isSavingRates ? t('settings.ratesSaved') : t('settings.saveRates')}
                     </button>
                 </div>
 
@@ -333,16 +335,16 @@ const Settings: React.FC = () => {
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                         <ThemeIcon name="tools" size={22} />
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Tool Preferences</h2>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>{t('settings.toolPreferences')}</h2>
                     </div>
                     <p style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '20px' }}>
-                        Configure default behaviors for the extension's toolset.
+                        {t('settings.toolPreferencesDesc')}
                     </p>
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <div>
-                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Default Scrap Return %</span>
-                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Loaded automatically in the Scrap Optimizer tool (e.g. 75 for Discoverer).</span>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>{t('settings.defaultScrapPercent')}</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{t('settings.defaultScrapPercentDesc')}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <input 
@@ -358,8 +360,8 @@ const Settings: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <div style={{ marginRight: '16px' }}>
-                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Clean OGLight Duplicate Visuals</span>
-                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Automatically removes OGLight injected markup from processed expedition and lifeform messages.</span>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>{t('settings.cleanOGLight')}</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{t('settings.cleanOGLightDesc')}</span>
                         </div>
                         <div>
                             <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
@@ -386,8 +388,8 @@ const Settings: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <div style={{ marginRight: '16px' }}>
-                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Low Animation Mode</span>
-                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Disables all page and transition animations, twinkling starfield, and heavy CSS effects to maximize performance.</span>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>{t('settings.lowAnimationMode')}</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{t('settings.lowAnimationModeDesc')}</span>
                         </div>
                         <div>
                             <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
@@ -414,8 +416,8 @@ const Settings: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ marginRight: '16px' }}>
-                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>10-Fit Horizontal View for Expeditions</span>
-                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Enables the 10-column horizontal card grid view and layout switcher toggle in the Expeditions tab. Default is OFF.</span>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>{t('settings.expeditionHorizontalView')}</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{t('settings.expeditionHorizontalViewDesc')}</span>
                         </div>
                         <div>
                             <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
@@ -442,8 +444,8 @@ const Settings: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
                         <div style={{ marginRight: '16px' }}>
-                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>Enable Nexus Overseer Bar</span>
-                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Displays the real-time production, research, idle development, and logistics alert bar on the in-game Overview page. Default is ON.</span>
+                            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600 }}>{t('settings.enableNexusOverseer')}</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{t('settings.enableNexusOverseerDesc')}</span>
                         </div>
                         <div>
                             <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
@@ -473,47 +475,47 @@ const Settings: React.FC = () => {
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                         <ThemeIcon name="database" size={22} />
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Data Management</h2>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>{t('settings.dataManagementTitle')}</h2>
                     </div>
                     
                     <p style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '20px' }}>
-                        Manage locally recorded logs and tracking databases. For imports and exports, visit the Data Management tool.
+                        {t('settings.dataManagementDesc')}
                     </p>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <button 
-                            onClick={() => clearTableData('expeditions', 'Expedition Logs')}
+                            onClick={() => clearTableData('expeditions', t('settings.clearExpeditions'))}
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.2)', color: '#ff4444', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                         >
-                            <span>Clear Expedition Logs</span>
+                            <span>{t('settings.clearExpeditions')}</span>
                             <Trash2 size={16} />
                         </button>
                         <button 
-                            onClick={() => clearTableData('combatReports', 'Combat Reports')}
+                            onClick={() => clearTableData('combatReports', t('settings.clearCombats'))}
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.2)', color: '#ff4444', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                         >
-                            <span>Clear Combat Reports</span>
+                            <span>{t('settings.clearCombats')}</span>
                             <Trash2 size={16} />
                         </button>
                         <button 
-                            onClick={() => clearTableData('debrisHarvests', 'Debris Harvests')}
+                            onClick={() => clearTableData('debrisHarvests', t('settings.clearDebris'))}
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.2)', color: '#ff4444', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                         >
-                            <span>Clear Debris Harvests</span>
+                            <span>{t('settings.clearDebris')}</span>
                             <Trash2 size={16} />
                         </button>
                         <button 
                             onClick={resetWelcomeModal}
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)', color: 'var(--primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                         >
-                            <span>Reset Welcome Modal State</span>
+                            <span>{t('settings.resetWelcomeModal')}</span>
                             <Sparkles size={16} />
                         </button>
                         <button 
                             onClick={resetChangelogModal}
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(0, 242, 255, 0.1)', border: '1px solid rgba(0, 242, 255, 0.2)', color: 'var(--primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                         >
-                            <span>Reset Update Modal State</span>
+                            <span>{t('settings.resetUpdateModal')}</span>
                             <Sparkles size={16} />
                         </button>
                     </div>
@@ -523,7 +525,7 @@ const Settings: React.FC = () => {
                 <div className="glass" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                         <ThemeIcon name="protect" size={22} />
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Cloud Backup</h2>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>{t('settings.cloudBackup')}</h2>
                     </div>
 
                     {isLoading ? (
@@ -544,7 +546,7 @@ const Settings: React.FC = () => {
                                 </div>
                                 <div style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <CheckCircle size={14} />
-                                    <span style={{ fontSize: '0.7rem', fontWeight: 800 }}>LINKED</span>
+                                    <span style={{ fontSize: '0.7rem', fontWeight: 800 }}>{t('settings.linked')}</span>
                                 </div>
                             </div>
                             <button
@@ -565,13 +567,13 @@ const Settings: React.FC = () => {
                                     gap: '8px'
                                 }}
                             >
-                                <LogOut size={16} /> Unlink Google Account
+                                <LogOut size={16} /> {t('settings.unlinkGoogle')}
                             </button>
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'center' }}>
                             <p style={{ fontSize: '0.85rem', opacity: 0.6, lineHeight: 1.5 }}>
-                                Link your Google Account to enable automated cloud backups and multi-device synchronization.
+                                {t('settings.cloudBackupDesc')}
                             </p>
                             <button
                                 onClick={handleToggleAuth}
@@ -591,7 +593,7 @@ const Settings: React.FC = () => {
                                     gap: '8px'
                                 }}
                             >
-                                <LogIn size={18} /> Link Account
+                                <LogIn size={18} /> {t('settings.linkAccount')}
                             </button>
                         </div>
                     )}
@@ -657,9 +659,9 @@ const Settings: React.FC = () => {
                             }}>
                                 <Smartphone size={32} color="var(--primary)" />
                             </div>
-                            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '16px', color: '#fff' }}>Deploying Soon</h2>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '16px', color: '#fff' }}>{t('settings.deployingSoon')}</h2>
                             <p style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.6, marginBottom: '32px' }}>
-                                Cloud synchronization and remote backups are currently undergoing flight trials. This feature will be available in a future transmission.
+                                {t('settings.deployingSoonDesc')}
                             </p>
                             <button
                                 onClick={() => setShowComingSoon(false)}
@@ -675,7 +677,7 @@ const Settings: React.FC = () => {
                                     cursor: 'pointer'
                                 }}
                             >
-                                Acknowledge
+                                {t('settings.acknowledge')}
                             </button>
                         </motion.div>
                     </div>

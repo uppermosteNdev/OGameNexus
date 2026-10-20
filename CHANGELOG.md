@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.7] - 2026-10-20
+
+### 🚀 New Features
+
+* **Multi-Language Support (12 Languages)**
+  * Nexus is now fully translated into 12 languages: English, Romanian, German, French, Spanish, Italian, Polish, Portuguese, Brazilian Portuguese, Russian, Turkish, and Dutch.
+  * Easy language switcher available in the dashboard top navigation, settings, and in-game messages.
+
+* **Costs Planner: "Add for All Planets" & Cart Editing**
+  * Added an **"Add for all planets if possible"** button next to buildings in Mines and Facilities categories to plan empire-wide upgrades with one click.
+  * Added an **Edit Level** button directly on every shopping cart item, allowing you to easily adjust desired target levels without deleting and re-adding items.
+
+* **Astrophysics Payback Calculator**
+  * Integrated dedicated payback calculations for additional **Astrophysics** colony unlocks into the Amortization tool.
+  * Calculates exact payback time and payoff speed when expanding your empire with new colony slots, factoring in mine production and upgrade costs.
+
+* **Scrap Merchant Overhaul**
+  * Redesigned Scrap Merchant calculation and display tool, ensuring exact resource recovery numbers.
+  * Fleets currently flying on missions are now fully accounted for in scrap capacity breakdowns.
+
+### 🛡️ Improvements & Bug Fixes
+
+* **Sensor Phalanx Moon Count Fix [Closed Beta]**
+  * Corrected moon counts and sensor phalanx coverage mapping across all sectors and circular universes.
+* **Overwatch Galaxy Sync & Live Feed Fixes [Closed Beta]**
+  * Fixed new colony and moon detection so newly surveyed systems correctly alert the alliance, even when the colony already has a moon or is in vacation mode.
+  * Fixed player class translation displays (e.g. Discoverer) across different game languages.
+
+---
+
 ## [1.2.6] - 2026-10-14
 
 ### 🚀 New Features

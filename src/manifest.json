@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "OGame Nexus",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "description": "Premium dashboard and analytics for OGame.",
     "icons": {
         "16": "icons/nexus.png",
@@ -12,8 +12,7 @@
     "permissions": [
         "storage",
         "identity",
-        "alarms",
-        "contextMenus"
+        "alarms"
     ],
     "commands": {
         "open_dashboard": {

@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { isOverwatchTester, syncOverwatchTesterStatusWithCloudflare } from '../../config/overwatchTestingConfig';
 import { ThemeIcon } from './ThemeIcon';
-import { User, Check, Copy, X } from 'lucide-react';
+import { User, Check, Copy, X, ChevronRight, Sparkles } from 'lucide-react';
 import { cleanUniverseId, isSameUniverse } from '../../utils/universe';
+import { useTranslation, FlagIcon, SUPPORTED_LANGUAGES, SupportedLanguage, detectLanguageFromServerLink } from '../../i18n';
 
 interface SidebarProps {
     activeView: string;
@@ -14,12 +15,23 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     const isCollapsed = true;
+    const { language, setLanguage, t } = useTranslation();
     const [hoveredItem, setHoveredItem] = useState<{ label: string, top: number } | null>(null);
     const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+    const [showLanguageSwitcher, setShowLanguageSwitcher] = useState(false);
     const [copiedLink, setCopiedLink] = useState(false);
 
     const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const sortedAccounts = useMemo(() => {
+        return [...accounts].sort((a, b) => {
+            const isCurrentA = activeAccount?.playerId === a.playerId && isSameUniverse(activeAccount?.universe, a.universe);
+            const isCurrentB = activeAccount?.playerId === b.playerId && isSameUniverse(activeAccount?.universe, b.universe);
+            if (isCurrentA && !isCurrentB) return -1;
+            if (!isCurrentA && isCurrentB) return 1;
+            return (b.lastSeen || 0) - (a.lastSeen || 0);
+        });
+    }, [accounts, activeAccount]);
     const [, setTesterSyncTick] = useState(0);
     const [passkeyUnlocked, setPasskeyUnlocked] = useState<string | null>(() => {
         try {
@@ -69,20 +81,20 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     };
 
     const menuItems = [
-        { id: 'overview', label: 'Empire 360', iconName: 'control-panel' },
-        { id: 'expeditions', label: 'Expeditions', iconName: 'navigation' },
-        { id: 'lifeforms', label: 'Lifeforms', iconName: 'leaf' },
-        { id: 'combat', label: 'Combats', iconName: 'sword' },
-        { id: 'raidRadar', label: 'Raid Radar', iconName: 'radar' },
-        { id: 'debris', label: 'Debris Fields', iconName: 'debris-field' },
-        { id: 'empire', label: 'Empire', iconName: 'skyscrapers' },
-        { id: 'costsPlanner', label: 'Costs Planner', iconName: 'shopping-cart' },
+        { id: 'overview', label: t('nav.overview', 'Empire 360'), iconName: 'control-panel' },
+        { id: 'expeditions', label: t('nav.expeditions', 'Expeditions'), iconName: 'navigation' },
+        { id: 'lifeforms', label: t('common.lifeforms', 'Lifeforms'), iconName: 'leaf' },
+        { id: 'combat', label: t('nav.combat', 'Combats'), iconName: 'sword' },
+        { id: 'raidRadar', label: t('nav.raidRadar', 'Raid Radar'), iconName: 'radar' },
+        { id: 'debris', label: t('nav.debris', 'Debris Fields'), iconName: 'debris-field' },
+        { id: 'empire', label: t('nav.empire', 'Empire'), iconName: 'skyscrapers' },
+        { id: 'costsPlanner', label: t('nav.costsPlanner', 'Costs Planner'), iconName: 'shopping-cart' },
         { id: 'overwatch', label: 'Nexus Overwatch', iconName: 'radar' },
-        { id: 'tools', label: 'Tools', iconName: 'tools' },
-        { id: 'signature', label: 'Signature Forge', iconName: 'sparkling' },
-        { id: 'dataManagement', label: 'Data Management', iconName: 'circuit' },
-        { id: 'settings', label: 'Settings', iconName: 'settings' },
-        { id: 'tutorials', label: 'Tutorials', iconName: 'open-book' },
+        { id: 'tools', label: t('nav.tools', 'Tools'), iconName: 'tools' },
+        { id: 'signature', label: t('nav.signature', 'Signature Forge'), iconName: 'sparkling' },
+        { id: 'dataManagement', label: t('nav.dataManagement', 'Data Management'), iconName: 'circuit' },
+        { id: 'settings', label: t('nav.settings', 'Settings'), iconName: 'settings' },
+        { id: 'tutorials', label: t('nav.tutorials', 'Tutorials'), iconName: 'open-book' },
     ];
 
     return (
@@ -227,16 +239,55 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                 })}
             </nav>
 
-            {/* Account Switcher Button */}
-            <div style={{ marginTop: 'auto', paddingTop: '12px', width: '100%', display: 'flex', justifyContent: 'center' }}>
+            {/* Bottom Controls: Language Switcher & Account Switcher */}
+            <div style={{ marginTop: 'auto', paddingTop: '12px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                {/* Language Switcher Button (Directly Above Account Switcher) */}
                 <motion.button
                     type="button"
-                    onClick={() => setShowAccountSwitcher(prev => !prev)}
-                    onMouseEnter={(e) => handleMouseEnter(e, `Account: ${activeAccount?.playerName || 'Select'} (${cleanUniverseId(activeAccount?.universe)} #${activeAccount?.playerId || '?'})`)}
+                    onClick={() => {
+                        setShowLanguageSwitcher(prev => !prev);
+                        setShowAccountSwitcher(false);
+                    }}
+                    onMouseEnter={(e) => handleMouseEnter(e, `${t('common.language', 'Language')}: ${SUPPORTED_LANGUAGES[language]?.nativeName || language.toUpperCase()}`)}
                     onMouseLeave={() => setHoveredItem(null)}
                     whileHover={{ scale: 1.08 }}
                     whileTap={{ scale: 0.95 }}
-                    title={activeAccount ? `Active: ${activeAccount.playerName} (${cleanUniverseId(activeAccount.universe)} • #${activeAccount.playerId})` : 'Select Account'}
+                    title={`Language: ${SUPPORTED_LANGUAGES[language]?.nativeName}`}
+                    style={{
+                        width: '42px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        border: showLanguageSwitcher ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.12)',
+                        background: showLanguageSwitcher ? 'rgba(0, 242, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                        color: showLanguageSwitcher ? 'var(--primary)' : '#94a3b8',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        transition: 'all 0.25s ease',
+                    }}
+                >
+                    <FlagIcon code={language} size={22} />
+                </motion.button>
+
+                {/* Account Switcher Button */}
+                <motion.button
+                    type="button"
+                    onClick={() => {
+                        setShowAccountSwitcher(prev => !prev);
+                        setShowLanguageSwitcher(false);
+                    }}
+                    onMouseEnter={(e) => {
+                        const uni = activeAccount?.universeName && activeAccount.universeName !== 'unknown' 
+                            ? activeAccount.universeName 
+                            : (activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : '');
+                        handleMouseEnter(e, `${t('nav.switchAccount', 'Account')}: ${activeAccount?.playerName || 'Select'}${uni ? ` (${uni})` : ''}`);
+                    }}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.95 }}
+                    title={activeAccount ? `Active: ${activeAccount.playerName} (${activeAccount.universeName && activeAccount.universeName !== 'unknown' ? activeAccount.universeName : cleanUniverseId(activeAccount.universe)})` : 'Select Account'}
                     style={{
                         width: '42px',
                         height: '42px',
@@ -289,14 +340,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                 </motion.button>
             </div>
 
-            {/* Account Switcher Popover */}
-            {showAccountSwitcher && (
+            {/* Language Switcher Popover */}
+            {showLanguageSwitcher && (
                 <div
                     style={{
                         position: 'fixed',
                         left: '88px',
-                        bottom: '24px',
-                        width: '320px',
+                        bottom: '80px',
+                        width: '280px',
                         background: 'rgba(8, 14, 26, 0.96)',
                         backdropFilter: 'blur(20px)',
                         WebkitBackdropFilter: 'blur(20px)',
@@ -310,12 +361,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                 >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                         <div>
-                            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#fff' }}>Switch Account</h4>
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>Select empire to view in Nexus</span>
+                            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#fff' }}>
+                                {t('common.selectLanguage', 'Select Language')}
+                            </h4>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                {t('common.chooseLanguageDesc', 'Choose your preferred language')}
+                            </span>
                         </div>
                         <button
                             type="button"
-                            onClick={() => setShowAccountSwitcher(false)}
+                            onClick={() => setShowLanguageSwitcher(false)}
                             style={{
                                 background: 'transparent',
                                 border: 'none',
@@ -328,19 +383,161 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                         </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
-                        {accounts.length === 0 ? (
-                            <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '12px' }}>
-                                No accounts stored in local database yet.
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
+                        {(Object.keys(SUPPORTED_LANGUAGES) as SupportedLanguage[]).map((langCode) => {
+                            const info = SUPPORTED_LANGUAGES[langCode];
+                            const isCurrent = language === langCode;
+                            return (
+                                <button
+                                    key={langCode}
+                                    type="button"
+                                    onClick={() => {
+                                        setLanguage(langCode);
+                                        setShowLanguageSwitcher(false);
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        padding: '10px 14px',
+                                        borderRadius: '10px',
+                                        border: isCurrent ? '1px solid rgba(0, 242, 255, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                        background: isCurrent ? 'rgba(0, 242, 255, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        width: '100%',
+                                        transition: 'all 0.2s ease',
+                                    }}
+                                >
+                                    <FlagIcon code={langCode} size={26} />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '13px', fontWeight: 700, color: isCurrent ? '#00f2ff' : '#fff' }}>
+                                            {info.nativeName}
+                                        </div>
+                                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                            {info.label}
+                                        </div>
+                                    </div>
+                                    {isCurrent && (
+                                        <span style={{
+                                            fontSize: '10px',
+                                            fontWeight: 800,
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            background: 'rgba(0, 242, 255, 0.2)',
+                                            color: '#00f2ff',
+                                            border: '1px solid rgba(0, 242, 255, 0.4)'
+                                        }}>
+                                            {t('common.active', 'ACTIVE')}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Account Switcher Popover */}
+            {showAccountSwitcher && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: '88px',
+                        bottom: '24px',
+                        width: '370px',
+                        maxWidth: 'calc(100vw - 105px)',
+                        background: 'linear-gradient(180deg, rgba(8, 15, 28, 0.96) 0%, rgba(4, 8, 16, 0.98) 100%)',
+                        backdropFilter: 'blur(28px)',
+                        WebkitBackdropFilter: 'blur(28px)',
+                        border: '1px solid rgba(0, 242, 255, 0.28)',
+                        borderRadius: '18px',
+                        padding: '16px',
+                        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(0, 242, 255, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.12)',
+                        zIndex: 10000,
+                        animation: 'nexus-tooltip-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                    }}
+                >
+                    {/* Header */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                <span style={{
+                                    fontSize: '9px',
+                                    fontWeight: 800,
+                                    letterSpacing: '0.8px',
+                                    textTransform: 'uppercase',
+                                    color: '#00f2ff',
+                                    background: 'rgba(0, 242, 255, 0.12)',
+                                    border: '1px solid rgba(0, 242, 255, 0.25)',
+                                    padding: '1.5px 6px',
+                                    borderRadius: '4px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                }}>
+                                    <Sparkles size={9} />
+                                    COMMAND DECK
+                                </span>
+                            </div>
+                            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#fff', letterSpacing: '-0.2px' }}>
+                                {t('nav.switchAccount', 'Switch Account')}
+                            </h4>
+                            <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                {t('nav.switchAccountDesc', 'Select empire to view in Nexus')}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowAccountSwitcher(false)}
+                            style={{
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                color: '#94a3b8',
+                                cursor: 'pointer',
+                                padding: '5px',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.color = '#fff';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.color = '#94a3b8';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                            }}
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+
+                    {/* Account List with Slim Double-Bezel Cards */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '350px', overflowY: 'auto', paddingRight: '2px' }}>
+                        {sortedAccounts.length === 0 ? (
+                            <div style={{ padding: '20px 12px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+                                {t('nav.noAccounts', 'No accounts stored in local database yet.')}
                             </div>
                         ) : (
-                            accounts.map(acc => {
+                            sortedAccounts.map(acc => {
                                 const isCurrent = activeAccount?.playerId === acc.playerId && isSameUniverse(activeAccount?.universe, acc.universe);
                                 const cleanUni = cleanUniverseId(acc.universe);
+                                const commLang: SupportedLanguage = detectLanguageFromServerLink(acc.universe || acc.serverUrl) || 'en';
+                                const rawUniName = acc.universeName && acc.universeName !== 'unknown' ? acc.universeName : '';
+                                const displayUniName = rawUniName || cleanUni.replace(/^s\d+-?/i, '').toUpperCase() || cleanUni;
+                                const classId = Number(acc.playerClass ?? (acc as any)?.characterClass);
+                                const classBadge = classId === 3 ? { icon: '🧭', label: 'Discoverer' } : classId === 1 ? { icon: '⛏️', label: 'Collector' } : classId === 2 ? { icon: '⚔️', label: 'General' } : null;
+
                                 return (
-                                    <button
+                                    <motion.div
                                         key={`${cleanUni}_${acc.playerId}`}
-                                        type="button"
+                                        whileHover={{ scale: 1.01, y: -1 }}
+                                        whileTap={{ scale: 0.985 }}
+                                        transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
                                         onClick={() => {
                                             window.dispatchEvent(new CustomEvent('ognexus_switch_account', {
                                                 detail: {
@@ -351,63 +548,207 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                                             setShowAccountSwitcher(false);
                                         }}
                                         style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '10px',
-                                            padding: '10px 12px',
-                                            borderRadius: '10px',
-                                            border: isCurrent ? '1px solid rgba(0, 242, 255, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
-                                            background: isCurrent ? 'rgba(0, 242, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)',
-                                            color: '#fff',
-                                            cursor: 'pointer',
-                                            textAlign: 'left',
                                             width: '100%',
-                                            transition: 'all 0.2s ease',
+                                            padding: '1px', // Slim outer bezel frame
+                                            borderRadius: '10px',
+                                            background: isCurrent
+                                                ? 'linear-gradient(135deg, rgba(0, 242, 255, 0.45) 0%, rgba(0, 242, 255, 0.1) 50%, rgba(16, 185, 129, 0.25) 100%)'
+                                                : 'rgba(255, 255, 255, 0.05)',
+                                            border: isCurrent
+                                                ? '1px solid rgba(0, 242, 255, 0.5)'
+                                                : '1px solid rgba(255, 255, 255, 0.08)',
+                                            boxShadow: isCurrent
+                                                ? '0 0 16px rgba(0, 242, 255, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.15)'
+                                                : '0 2px 6px rgba(0, 0, 0, 0.2)',
+                                            cursor: 'pointer',
+                                            boxSizing: 'border-box',
+                                            transition: 'border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease',
                                         }}
                                     >
-                                        <div style={{
-                                            width: '32px',
-                                            height: '32px',
-                                            borderRadius: '8px',
-                                            background: isCurrent ? 'rgba(0, 242, 255, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-                                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontWeight: 700,
-                                            fontSize: '13px',
-                                            color: isCurrent ? '#00f2ff' : '#94a3b8',
-                                            flexShrink: 0,
-                                        }}>
-                                            {acc.playerName?.[0]?.toUpperCase() || 'P'}
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <span style={{ fontWeight: 600, fontSize: '13px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {acc.playerName}
-                                                </span>
+                                        {/* Slim Inner Core */}
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '9px',
+                                                padding: '6px 10px',
+                                                borderRadius: '9px',
+                                                background: isCurrent
+                                                    ? 'linear-gradient(135deg, rgba(8, 20, 36, 0.96) 0%, rgba(5, 12, 22, 0.98) 100%)'
+                                                    : 'linear-gradient(180deg, rgba(14, 21, 35, 0.88) 0%, rgba(9, 14, 25, 0.94) 100%)',
+                                                boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+                                                boxSizing: 'border-box',
+                                            }}
+                                        >
+                                            {/* Avatar or Monogram */}
+                                            <div style={{ position: 'relative', width: '28px', height: '28px', flexShrink: 0 }}>
+                                                {acc.avatarUrl ? (
+                                                    <img
+                                                        src={acc.avatarUrl}
+                                                        alt={acc.playerName}
+                                                        style={{
+                                                            width: '28px',
+                                                            height: '28px',
+                                                            borderRadius: '7px',
+                                                            objectFit: 'cover',
+                                                            border: isCurrent ? '1px solid rgba(0, 242, 255, 0.45)' : '1px solid rgba(255, 255, 255, 0.12)',
+                                                            boxShadow: isCurrent ? '0 0 8px rgba(0, 242, 255, 0.25)' : 'none',
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        style={{
+                                                            width: '28px',
+                                                            height: '28px',
+                                                            borderRadius: '7px',
+                                                            background: isCurrent
+                                                                ? 'linear-gradient(135deg, rgba(0, 242, 255, 0.25) 0%, rgba(14, 165, 233, 0.1) 100%)'
+                                                                : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
+                                                            border: isCurrent ? '1px solid rgba(0, 242, 255, 0.35)' : '1px solid rgba(255, 255, 255, 0.1)',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            fontWeight: 800,
+                                                            fontSize: '12px',
+                                                            color: isCurrent ? '#00f2ff' : '#94a3b8',
+                                                            textShadow: isCurrent ? '0 0 6px rgba(0, 242, 255, 0.4)' : 'none',
+                                                        }}
+                                                    >
+                                                        {acc.playerName?.[0]?.toUpperCase() || <User size={13} />}
+                                                    </div>
+                                                )}
                                                 {isCurrent && (
-                                                    <span style={{ fontSize: '9px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: 'rgba(0, 242, 255, 0.2)', color: '#00f2ff' }}>
-                                                        ACTIVE
-                                                    </span>
+                                                    <span
+                                                        style={{
+                                                            position: 'absolute',
+                                                            bottom: '-1px',
+                                                            right: '-1px',
+                                                            width: '7px',
+                                                            height: '7px',
+                                                            borderRadius: '50%',
+                                                            backgroundColor: '#10b981',
+                                                            border: '1.5px solid #060b14',
+                                                            boxShadow: '0 0 6px #10b981',
+                                                        }}
+                                                    />
                                                 )}
                                             </div>
-                                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                                                {acc.universeName && acc.universeName !== 'unknown' ? acc.universeName : cleanUni} ({cleanUni}) • #{acc.playerId}
-                                                {acc.score ? ` • ${Math.floor(acc.score).toLocaleString()} pts` : ''}
+
+                                            {/* Identity & Universe Column */}
+                                            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                {/* Row 1: Player Name + Universe Badge (Community Flag + Universe Name) */}
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                                    <span
+                                                        style={{
+                                                            fontWeight: 700,
+                                                            fontSize: '12.5px',
+                                                            color: isCurrent ? '#ffffff' : '#f1f5f9',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap',
+                                                            letterSpacing: '-0.1px',
+                                                        }}
+                                                    >
+                                                        {acc.playerName}
+                                                    </span>
+
+                                                    {/* Universe Pill (Community Flag + Universe Name, NO universe/server # ID) */}
+                                                    <div
+                                                        style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            padding: '1.5px 6px',
+                                                            borderRadius: '4px',
+                                                            background: isCurrent ? 'rgba(0, 242, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                                                            border: isCurrent ? '1px solid rgba(0, 242, 255, 0.28)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        <FlagIcon code={commLang} size={13} />
+                                                        <span
+                                                            style={{
+                                                                fontSize: '10.5px',
+                                                                fontWeight: 700,
+                                                                color: isCurrent ? '#38bdf8' : '#e2e8f0',
+                                                                letterSpacing: '0.2px',
+                                                                whiteSpace: 'nowrap',
+                                                            }}
+                                                        >
+                                                            {displayUniName}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Row 2: Score & Class */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10px' }}>
+                                                    {acc.score ? (
+                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#10b981', fontWeight: 600 }}>
+                                                            <span style={{ fontSize: '7px', opacity: 0.8 }}>◈</span>
+                                                            <span>{Math.floor(acc.score).toLocaleString()} pts</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{ color: '#64748b' }}>OGame</span>
+                                                    )}
+                                                    {classBadge && (
+                                                        <span style={{ color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '2px' }} title={classBadge.label}>
+                                                            <span>{classBadge.icon}</span>
+                                                            <span style={{ fontSize: '9.5px', color: '#64748b' }}>{classBadge.label}</span>
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
+
+                                            {/* Action Indicator on Right */}
+                                            {isCurrent ? (
+                                                <div
+                                                    style={{
+                                                        width: '20px',
+                                                        height: '20px',
+                                                        borderRadius: '50%',
+                                                        background: 'rgba(0, 242, 255, 0.18)',
+                                                        border: '1px solid rgba(0, 242, 255, 0.45)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        flexShrink: 0,
+                                                        boxShadow: '0 0 8px rgba(0, 242, 255, 0.25)',
+                                                    }}
+                                                >
+                                                    <Check size={11} style={{ color: '#00f2ff' }} />
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    style={{
+                                                        width: '18px',
+                                                        height: '18px',
+                                                        borderRadius: '50%',
+                                                        background: 'rgba(255, 255, 255, 0.03)',
+                                                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        flexShrink: 0,
+                                                        opacity: 0.4,
+                                                    }}
+                                                >
+                                                    <ChevronRight size={10} style={{ color: '#94a3b8' }} />
+                                                </div>
+                                            )}
                                         </div>
-                                        {isCurrent && <Check size={14} style={{ color: '#00f2ff', flexShrink: 0 }} />}
-                                    </button>
+                                    </motion.div>
                                 );
                             })
                         )}
                     </div>
 
-                    {/* Bookmark Link Helper */}
+                    {/* Bookmark Link Helper (Button-in-Button Trailing Icon Architecture) */}
                     <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                        <button
+                        <motion.button
                             type="button"
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.98 }}
+                            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
                             onClick={() => {
                                 const extId = (typeof chrome !== 'undefined' && chrome.runtime?.id) ? chrome.runtime.id : '';
                                 const uni = activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : '';
@@ -428,29 +769,45 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                                 width: '100%',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                padding: '8px 12px',
-                                borderRadius: '8px',
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                color: copiedLink ? '#10b981' : '#38bdf8',
-                                fontSize: '12px',
+                                justifyContent: 'space-between',
+                                padding: '7px 12px',
+                                borderRadius: '9999px',
+                                background: copiedLink ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                                border: copiedLink ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255, 255, 255, 0.09)',
+                                color: copiedLink ? '#34d399' : '#e2e8f0',
+                                fontSize: '11.5px',
                                 fontWeight: 600,
                                 cursor: 'pointer',
-                                transition: 'all 0.2s ease',
+                                transition: 'all 0.2s cubic-bezier(0.32, 0.72, 0, 1)',
+                                boxShadow: copiedLink ? '0 0 15px rgba(16, 185, 129, 0.2)' : 'none',
                             }}
                         >
-                            {copiedLink ? <Check size={12} /> : <Copy size={12} />}
-                            <span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {copiedLink 
                                     ? 'Copied Direct Bookmark URL!' 
                                     : activeAccount 
-                                        ? `Copy URL (${cleanUniverseId(activeAccount.universe)} • #${activeAccount.playerId})`
+                                        ? `Copy URL (${activeAccount.universeName && activeAccount.universeName !== 'unknown' ? activeAccount.universeName : activeAccount.playerName})`
                                         : 'Copy Direct Bookmark URL'
                                 }
                             </span>
-                        </button>
+                            {/* Trailing Icon Pill */}
+                            <div
+                                style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    borderRadius: '50%',
+                                    background: copiedLink ? 'rgba(16, 185, 129, 0.25)' : 'rgba(0, 242, 255, 0.12)',
+                                    border: copiedLink ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(0, 242, 255, 0.25)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                    marginLeft: '8px',
+                                }}
+                            >
+                                {copiedLink ? <Check size={12} style={{ color: '#10b981' }} /> : <Copy size={12} style={{ color: '#00f2ff' }} />}
+                            </div>
+                        </motion.button>
                     </div>
                 </div>
             )}

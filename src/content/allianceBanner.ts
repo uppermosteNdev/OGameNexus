@@ -59,7 +59,14 @@ export function initAllianceOverwatchBanner() {
       e.preventDefault();
       try {
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-          chrome.runtime.sendMessage({ type: "OPEN_DASHBOARD", view: "overwatch" });
+          const playerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content');
+          const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content');
+          chrome.runtime.sendMessage({
+            type: "OPEN_DASHBOARD",
+            view: "overwatch",
+            playerId: playerId || undefined,
+            universe: universe || undefined
+          });
         }
       } catch (err) {
         console.warn("OGame Nexus: Error opening dashboard:", err);

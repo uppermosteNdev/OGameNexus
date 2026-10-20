@@ -3,7 +3,32 @@ import { Planet, ActiveResearchInfo } from '../db';
 import { initContentSettings } from './settings';
 import { trackExpeditions, trackRawExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
 
+import { detectLanguageFromServerLink } from '../i18n';
+
 initContentSettings();
+
+function initLanguageAutoDetection(): void {
+  try {
+    const metaUniverse = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content');
+    const detected = detectLanguageFromServerLink(metaUniverse) || detectLanguageFromServerLink(window.location.href);
+    if (detected) {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local.set({ 'ognexus_server_detected_language': detected });
+      }
+      const isManual = localStorage.getItem('ognexus_language_manual') === 'true';
+      if (!isManual) {
+        localStorage.setItem('ognexus_selected_language', detected);
+        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+          chrome.storage.local.set({ 'ognexus_selected_language': detected });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[OGameNexus] Language auto-detection error:', e);
+  }
+}
+
+initLanguageAutoDetection();
 import { trackLifeformDiscoveries, trackRawLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson, parseExternalDataExportJson } from './empire';
 import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier, getAmortizationEntry, findMatchingQueueItem, getCollectorClassBoost } from '../utils/amortizationCalc';
@@ -19,7 +44,7 @@ import { scrapeImportExportDom, initImportExportListener, saveImportExportInfo }
 import { fetchPlayerInventory, parseInventoryHtml, savePlayerInventory } from './inventory';
 import { fetchEmpireProductionQueue, getStoredProductionQueue } from './productionQueue';
 import { initProductionBoxSpeedups, updateProductionBoxSpeedups } from './productionBoxSpeedups';
-import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom } from './fleetMovement';
+import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom, fetchAndSyncFleetMovements } from './fleetMovement';
 import { injectChangelogTab } from './changelogTab';
 import { initAllianceOverwatchBanner } from './allianceBanner';
 import {
@@ -1283,7 +1308,13 @@ function injectButton() {
   dashboardBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     scrapeAndSync();
-    safeSendMessage({ type: "OPEN_DASHBOARD" });
+    const playerId = getMetaContent("ogame-player-id");
+    const universe = getMetaContent("ogame-universe");
+    safeSendMessage({
+      type: "OPEN_DASHBOARD",
+      playerId: playerId || undefined,
+      universe: universe || undefined
+    });
   });
 
   menuTable.appendChild(li);
@@ -2511,109 +2542,22 @@ function updateFleetProgressOverlay() {
   const eventContent = document.getElementById('eventContent');
   if (eventContent) {
     const movementsData = parseEventListDom(eventContent);
-    saveFleetMovements(movementsData);
+    const universe = getMetaContent("ogame-universe");
+    saveFleetMovements(movementsData, playerId, universe || undefined);
 
-    const rows = eventContent.querySelectorAll('tr.eventFleet');
-    let ownFlyingShips = 0;
-    let totalMissions = 0;
+    const ownFlyingShips = movementsData.summary.totalOwnShips;
+    const ownFleets = movementsData.fleets.filter(f => f.origin.isOwn);
+    const totalMissions = ownFleets.length;
     const missionCounts: Record<string, number> = {};
-
-    let flyingMetal = 0;
-    let flyingCrystal = 0;
-    let flyingDeuterium = 0;
-    let flyingFood = 0;
-    const seenFleetIds = new Set<string>();
-
-    rows.forEach(row => {
-      const rowId = row.id || '';
-      const fleetIdMatch = rowId.match(/\d+/);
-      const fleetId = fleetIdMatch ? fleetIdMatch[0] : '';
-      if (fleetId && seenFleetIds.has(fleetId)) {
-        return; // Skip duplicate leg of the same fleet
-      }
-      if (fleetId) seenFleetIds.add(fleetId);
-
-      const missionFleetImg = row.querySelector('td.missionFleet img');
-      if (missionFleetImg) {
-        const tooltipTitle = missionFleetImg.getAttribute('data-tooltip-title') || '';
-        const isOwn = /Own fleet|Eigene Flotte|Flotte personnelle|Flota propia|Flotta propria|Własna flota|Frota própria|Kendi filon|Kendi Filom|Собственный флот|Eigen vloot|Saját flotta|Vlastní flotila|Vlastná flotila|Egen flåde|Egen flotta|Oma laivasto|Vlastita flota|Flota proprie/i.test(tooltipTitle);
-        const isFriendly = /Friendly fleet|Freundliche Flotte|Flotte amicale|Flota amigable|Flotta amica|Przyjazna flota|Frota amigável|Dost filo|Дружественный флот|Vriendelijke vloot|Baráti flotta|Přátelská flotila|Priateľská flotila|Venlig flåde|Vänlig flotta|Vennlig flåte|Ystävällinen laivasto|Φιλικός στόλος|Prijateljska flota|Flota amica/i.test(tooltipTitle);
-        const missionType = row.getAttribute('data-mission-type') || '';
-        const isOwnFleet = isOwn || (isFriendly && (missionType === '18' || missionType === '15'));
-
-        if (isOwnFleet) {
-          const detailsTd = row.querySelector('td.detailsFleet');
-          if (detailsTd) {
-            const text = detailsTd.textContent || '0';
-            const count = parseInt(text.replace(/[,.]/g, '').trim(), 10);
-            if (!isNaN(count) && count > 0) {
-              ownFlyingShips += count;
-              const missionType = row.getAttribute('data-mission-type') || 'unknown';
-              missionCounts[missionType] = (missionCounts[missionType] || 0) + 1;
-              totalMissions += 1;
-            }
-          }
-
-          // Parse shipment resources ONLY on component=overview page
-          if (isOverviewPage) {
-            const tooltipSpan = row.querySelector('td.icon_movement span.tooltip, td.icon_movement_reserve span.tooltip');
-            if (tooltipSpan) {
-              const tooltipHtml = tooltipSpan.getAttribute('data-tooltip-title') || '';
-              if (tooltipHtml) {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(tooltipHtml, 'text/html');
-                const infoRows = doc.querySelectorAll('table.fleetinfo tr');
-                let isParsingShipment = false;
-                let thCount = 0;
-                let resourceIndex = 0;
-                infoRows.forEach(tr => {
-                  const th = tr.querySelector('th');
-                  if (th) {
-                    thCount++;
-                    if (thCount >= 2) {
-                      isParsingShipment = true;
-                    }
-                  } else if (isParsingShipment) {
-                    const labelTd = tr.querySelector('td:not(.value)');
-                    const valueTd = tr.querySelector('td.value');
-                    if (labelTd && valueTd) {
-                      const label = labelTd.textContent?.trim().toLowerCase().replace(':', '') || '';
-                      const valText = valueTd.textContent?.replace(/[,.]/g, '').trim() || '0';
-                      const val = parseInt(valText, 10) || 0;
-
-                      const isMetal = label.includes('metal') || label.includes('metall') || label.includes('métal') || label.includes('металл');
-                      const isCrystal = label.includes('crystal') || label.includes('kristall') || label.includes('cristal') || label.includes('кристалл') || label.includes('krysz');
-                      const isDeuterium = label.includes('deuter') || label.includes('дейтерий');
-                      const isFood = label.includes('food') || label.includes('nahr') || label.includes('nourr') || label.includes('comid') || label.includes('пища') || label.includes('żyw') || label.includes('zyw') || label.includes('popul');
-
-                      if (isMetal) {
-                        flyingMetal += val;
-                      } else if (isCrystal) {
-                        flyingCrystal += val;
-                      } else if (isDeuterium) {
-                        flyingDeuterium += val;
-                      } else if (isFood) {
-                        flyingFood += val;
-                      } else if (resourceIndex === 0 && val > 0) {
-                        flyingMetal += val;
-                      } else if (resourceIndex === 1 && val > 0) {
-                        flyingCrystal += val;
-                      } else if (resourceIndex === 2 && val > 0) {
-                        flyingDeuterium += val;
-                      } else if (resourceIndex === 3 && val > 0) {
-                        flyingFood += val;
-                      }
-
-                      resourceIndex++;
-                    }
-                  }
-                });
-              }
-            }
-          }
-        }
-      }
+    ownFleets.forEach(f => {
+      const typeStr = String(f.missionType);
+      missionCounts[typeStr] = (missionCounts[typeStr] || 0) + 1;
     });
+
+    const flyingMetal = movementsData.summary.flyingResources.metal;
+    const flyingCrystal = movementsData.summary.flyingResources.crystal;
+    const flyingDeuterium = movementsData.summary.flyingResources.deuterium;
+    const flyingFood = movementsData.summary.flyingResources.food;
 
     if (isOverviewPage) {
       const resourcesChanged = !lastParsedFlyingResources ||
@@ -3385,6 +3329,13 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
 
   // Refresh Nexus Overseer with latest synced data
   refreshAssistantBar(playerId);
+
+  // Proactively sync flying fleet movements and ships
+  try {
+    await fetchAndSyncFleetMovements(true);
+  } catch (fleetErr) {
+    console.warn('OGame Nexus: Error syncing flying fleets during empire sync', fleetErr);
+  }
 
   console.log(
     `%c[OGame Nexus Sync] Background Sync Complete:`,

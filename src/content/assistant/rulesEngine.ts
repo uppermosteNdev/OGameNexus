@@ -1047,7 +1047,8 @@ async function evaluateAmortization(
       [AmortizationType.LifeformResearchBuildings]: true,
       [AmortizationType.LifeformProductionResearches]: true,
       [AmortizationType.LifeformExpeditionResearches]: true,
-      [AmortizationType.PlasmaTechnology]: true
+      [AmortizationType.PlasmaTechnology]: true,
+      [AmortizationType.Astrophysics]: true
     };
 
     const items = rankAmortizationItems(validPlanets, account, filters, rates || DEFAULT_RATES, 1, expoAverages);
@@ -1055,11 +1056,11 @@ async function evaluateAmortization(
 
     const topItem = items[0];
     const targetPlanet = validPlanets.find(p => p.id === topItem.planetId);
-    const planetName = targetPlanet ? (targetPlanet.name || 'Planet') : undefined;
+    const planetName = targetPlanet ? (targetPlanet.name || 'Planet') : (topItem.type === AmortizationType.Astrophysics ? 'New Colony' : undefined);
     const coords = targetPlanet ? targetPlanet.coords : undefined;
     const planetImgUrl = targetPlanet ? targetPlanet.imgUrl : undefined;
 
-    const nextLvl = topItem.currentLevel + 1;
+    const nextLvl = topItem.targetLevel || (topItem.currentLevel + 1);
     const roiStr = formatROI(topItem.roiHours);
     const msuIncFormatted = formatNumber(Math.round(topItem.productionIncrease * 24)); // Daily MSU boost
     const costMsuFormatted = formatNumber(Math.round(topItem.msuCost));
@@ -1181,6 +1182,9 @@ async function evaluatePlanetAmortizationTodos(
       }
     } else if (typeStr === 'PlasmaTechnology' || typeStr === '6') {
       const res = account?.researches?.find(r => r.id === 122);
+      currentLevel = res?.level || 0;
+    } else if (typeStr === 'Astrophysics' || typeStr === '7' || name.toLowerCase().includes('astrophysics')) {
+      const res = account?.researches?.find(r => r.id === 124);
       currentLevel = res?.level || 0;
     }
 

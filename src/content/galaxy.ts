@@ -1,6 +1,7 @@
 import { SpiedPlanet } from '../db';
 import { DiscoveredDebrisField } from './assistant/types';
 import { debouncedRefreshAssistantBar } from './assistant/assistantBar';
+import { getStoredOverwatchConfig } from '../utils/overwatchApi';
 
 function isContextValid(): boolean {
   try {
@@ -1935,14 +1936,13 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
   lastOverwatchSyncTime = now;
 
   try {
-    const store = await chrome.storage.local.get(['nexus_overwatch_config']);
-    const config = store.nexus_overwatch_config;
+    const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content') || 's267-en';
+    const ownPlayerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+    const config = await getStoredOverwatchConfig(universe, ownPlayerId);
     if (!config || !config.allianceId || !config.authToken || config.permissions?.shareGalaxy === false) {
       return;
     }
 
-    const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content') || config.universeId || 's267-en';
-    const ownPlayerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
     const ownPlayerName = document.querySelector('meta[name="ogame-player-name"]')?.getAttribute('content') || '';
     const ownAllianceTag = document.querySelector('meta[name="ogame-alliance-tag"]')?.getAttribute('content') ||
                            document.querySelector('meta[name="ogame-alliance-name"]')?.getAttribute('content') || '';
@@ -2285,6 +2285,7 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
         action: "OVERWATCH_SYNC_GALAXY",
         data: {
           universeId: universe,
+          ownPlayerId: ownPlayerId,
           galaxy: targetGalaxy,
           system: targetSystem,
           scannedAt: Date.now(),

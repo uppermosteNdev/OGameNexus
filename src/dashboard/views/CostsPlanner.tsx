@@ -4,7 +4,7 @@ import {
     ShoppingCart, Plus, Minus, Trash2, Globe, ChevronUp, ChevronDown,
     Database, Wrench, Sparkles, Calculator, Dna, Box, Ship, Shield,
     Coins, RotateCcw, Check, CheckCircle2, AlertTriangle, ArrowRight, HelpCircle,
-    Info, FlaskConical, Crown, Clock
+    Info, FlaskConical, Crown, Clock, Pencil, X, Layers
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -14,6 +14,7 @@ import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA, BUILDING_DATA, RESEARCH_DATA, DEFENCE_DATA, LIFEFORM_BUILDING_DATA } from '../../db/staticData';
 import { ThemeIcon } from '../components/ThemeIcon';
 import { isSameUniverse } from '../../utils/universe';
+import { useTranslation } from '../../i18n';
 import './CostsPlanner.css';
 
 // ----------------------------------------------------
@@ -414,6 +415,7 @@ const getEmpireResearchDiscount = (
 // ----------------------------------------------------
 
 const CostsPlanner: React.FC = () => {
+    const { t, getEntityName, getResource } = useTranslation();
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const strPid = activeAccount?.playerId ? String(activeAccount.playerId).trim() : '';
 
@@ -535,13 +537,22 @@ const CostsPlanner: React.FC = () => {
 
     // Categories mapping for visual references in paths
     const categoriesMap: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-        mines: { label: 'Mines', icon: <Box size={18} />, color: '#ff8d33' },
-        facilities: { label: 'Facilities', icon: <Wrench size={18} />, color: '#a855f7' },
-        empireResearch: { label: 'Research', icon: <FlaskConical size={18} />, color: '#00f2ff' },
-        lifeformBuildings: { label: 'LF Buildings', icon: <Globe size={18} />, color: '#22c55e' },
-        lifeformResearch: { label: 'LF Research', icon: <Dna size={18} />, color: '#ec4899' },
-        shipsDefences: { label: 'Ships / Defenses', icon: <Ship size={18} />, color: '#3b82f6' }
+        mines: { label: t('costsPlanner.catMines'), icon: <Box size={18} />, color: '#ff8d33' },
+        facilities: { label: t('costsPlanner.catFacilities'), icon: <Wrench size={18} />, color: '#a855f7' },
+        empireResearch: { label: t('costsPlanner.catResearch'), icon: <FlaskConical size={18} />, color: '#00f2ff' },
+        lifeformBuildings: { label: t('costsPlanner.catLfBuildings'), icon: <Globe size={18} />, color: '#22c55e' },
+        lifeformResearch: { label: t('costsPlanner.catLfResearch'), icon: <Dna size={18} />, color: '#ec4899' },
+        shipsDefences: { label: t('costsPlanner.catShipsDefences'), icon: <Ship size={18} />, color: '#3b82f6' }
     };
+
+    const categoriesList = useMemo(() => [
+        { id: 'mines', label: t('costsPlanner.catMines'), desc: t('costsPlanner.catMinesDesc'), ogIcon: 'icons/resources/metal_mine_large.jpg', color: '#ff8d33' },
+        { id: 'facilities', label: t('costsPlanner.catFacilities'), desc: t('costsPlanner.catFacilitiesDesc'), ogIcon: 'icons/facilities/nanite_factory_large.jpg', color: '#a855f7' },
+        { id: 'empireResearch', label: t('costsPlanner.catResearch'), desc: t('costsPlanner.catResearchDesc'), ogIcon: 'icons/research/expedition-tech-research-large.jpg', color: '#00f2ff' },
+        { id: 'lifeformBuildings', label: t('costsPlanner.catLfBuildings'), desc: t('costsPlanner.catLfBuildingsDesc'), ogIcon: 'icons/lifeforms/mechas-building-7-large.jpg', color: '#22c55e' },
+        { id: 'lifeformResearch', label: t('costsPlanner.catLfResearch'), desc: t('costsPlanner.catLfResearchDesc'), ogIcon: 'icons/lifeforms/humans-tech-t1-large.jpg', color: '#ec4899' },
+        { id: 'shipsDefences', label: t('costsPlanner.catShipsDefences'), desc: t('costsPlanner.catShipsDefencesDesc'), ogIcon: 'icons/ships/battlecruiser-large.jpg', color: '#3b82f6' }
+    ], [t]);
 
     // Cart State
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -710,6 +721,10 @@ const CostsPlanner: React.FC = () => {
     // Notify popups
     const [notification, setNotification] = useState<string | null>(null);
 
+    // Cart Item Inline Edit State
+    const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
+    const [editTargetValue, setEditTargetValue] = useState<number>(0);
+
     const isItemDuplicate = (category: string, planetId: string, itemName: string, targetLevel: number): boolean => {
         return cart.some(item =>
             item.category === category &&
@@ -723,29 +738,34 @@ const CostsPlanner: React.FC = () => {
         return effectivePlanets.find(p => p.id === selectedPlanetId) || null;
     }, [effectivePlanets, selectedPlanetId]);
 
+    const getStoredCurrentLevelForPlanet = (planet: any, category: string, itemName: string, itemId?: number): number => {
+        if (!planet) return 0;
+        if (category === 'mines') {
+            if (itemName === 'Metal Mine') return planet.metalMine || 0;
+            if (itemName === 'Crystal Mine') return planet.crystalMine || 0;
+            if (itemName === 'Deuterium Mine') return planet.deuteriumMine || 0;
+            if (itemName === 'Fusion Reactor') return planet.fusionReactor || 0;
+        }
+        if (category === 'facilities') {
+            if (itemName === 'Robotics Factory') return planet.roboticsFactory || 0;
+            if (itemName === 'Shipyard') return planet.shipyard || 0;
+            if (itemName === 'Research Lab') return planet.researchLab || 0;
+            if (itemName === 'Nanite Factory') return planet.naniteFactory || 0;
+        }
+        if (category === 'lifeformBuildings' && planet.lifeformBuildings) {
+            const found = planet.lifeformBuildings.find((b: any) => b.id === itemId);
+            return found ? found.level : 0;
+        }
+        return 0;
+    };
+
     // Pre-populate target level defaults for active item
     const getStoredCurrentLevel = (category: string, itemName: string, itemId?: number): number => {
-        if (category === 'mines' && activePlanet) {
-            if (itemName === 'Metal Mine') return activePlanet.metalMine || 0;
-            if (itemName === 'Crystal Mine') return activePlanet.crystalMine || 0;
-            if (itemName === 'Deuterium Mine') return activePlanet.deuteriumMine || 0;
-            if (itemName === 'Fusion Reactor') return activePlanet.fusionReactor || 0;
-        }
-        if (category === 'facilities' && activePlanet) {
-            if (itemName === 'Robotics Factory') return activePlanet.roboticsFactory || 0;
-            if (itemName === 'Shipyard') return activePlanet.shipyard || 0;
-            if (itemName === 'Research Lab') return activePlanet.researchLab || 0;
-            if (itemName === 'Nanite Factory') return activePlanet.naniteFactory || 0;
-        }
         if (category === 'empireResearch' && activeAccount?.researches) {
             const found = activeAccount.researches.find(r => r.id === itemId);
             return found ? found.level : 0;
         }
-        if (category === 'lifeformBuildings' && activePlanet?.lifeformBuildings) {
-            const found = activePlanet.lifeformBuildings.find((b: any) => b.id === itemId);
-            return found ? found.level : 0;
-        }
-        return 0;
+        return getStoredCurrentLevelForPlanet(activePlanet, category, itemName, itemId);
     };
 
     const handleLevelChange = (key: string, value: number, maxDown: number) => {
@@ -844,6 +864,66 @@ const CostsPlanner: React.FC = () => {
         }
     };
 
+    const handleAddMineToAllPlanets = (itemName: string) => {
+        if (!activePlanet || effectivePlanets.length === 0) return;
+        const current = getStoredCurrentLevel('mines', itemName);
+        const inputKey = `mines_${selectedPlanetId}_${itemName}`;
+        const target = targetLevels[inputKey] ?? (current + 1);
+        const delta = target - current;
+        if (delta <= 0) return;
+
+        const specName = itemName === 'Deuterium Mine' ? 'Deuterium Mine' : itemName;
+        const costConfig = MINES_BASE_COSTS[specName];
+        if (!costConfig) return;
+
+        const icon = itemName === 'Metal Mine' ? 'icons/resources/metal_mine_large.jpg'
+            : itemName === 'Crystal Mine' ? 'icons/resources/crystal_mine_large.jpg'
+                : itemName === 'Deuterium Mine' ? 'icons/resources/deuterium_mine_large.jpg'
+                    : 'icons/resources/fusion-reactor-large.jpg';
+
+        const newItems: CartItem[] = [];
+        const updatedTargetLevels: Record<string, number> = {};
+        const timestamp = Date.now();
+
+        effectivePlanets.forEach((p, idx) => {
+            const pCurrent = getStoredCurrentLevelForPlanet(p, 'mines', itemName);
+            const pTarget = pCurrent + delta;
+
+            let cost = calculateStandardCost(costConfig.base, costConfig.factor, pCurrent, pTarget);
+            if (itemName !== 'Fusion Reactor') {
+                const multiplier = getMineCostMultiplier(p);
+                cost = applyDiscount(cost, multiplier);
+            }
+
+            newItems.push({
+                id: `${p.id}_mines_${itemName}_${timestamp}_${idx}`,
+                planetId: p.id,
+                planetName: p.name,
+                coords: p.coords,
+                category: 'Mines',
+                itemId: 0,
+                itemName,
+                currentLevel: pCurrent,
+                targetLevel: pTarget,
+                cost,
+                icon
+            });
+
+            updatedTargetLevels[`mines_${p.id}_${itemName}`] = pTarget;
+        });
+
+        setCart(prev => {
+            const planetIds = new Set(effectivePlanets.map(p => p.id));
+            const filtered = prev.filter(item =>
+                !(item.category === 'Mines' && item.itemName === itemName && planetIds.has(item.planetId))
+            );
+            return [...filtered, ...newItems];
+        });
+
+        setTargetLevels(prev => ({ ...prev, ...updatedTargetLevels }));
+        triggerNotification(`Added +${delta} ${itemName} for all ${effectivePlanets.length} planets!`);
+    };
+
     const handleAddFacilityToCart = (itemName: string) => {
         if (!activePlanet) return;
         const current = getStoredCurrentLevel('facilities', itemName);
@@ -899,6 +979,60 @@ const CostsPlanner: React.FC = () => {
         } else {
             triggerNotification(`Added ${itemName} to list!`);
         }
+    };
+
+    const handleAddFacilityToAllPlanets = (itemName: string) => {
+        if (!activePlanet || effectivePlanets.length === 0) return;
+        const current = getStoredCurrentLevel('facilities', itemName);
+        const inputKey = `facilities_${selectedPlanetId}_${itemName}`;
+        const target = targetLevels[inputKey] ?? (current + 1);
+        const delta = target - current;
+        if (delta <= 0) return;
+
+        const costConfig = FACILITIES_BASE_COSTS[itemName];
+        if (!costConfig) return;
+
+        const icon = itemName === 'Robotics Factory' ? 'icons/facilities/robotics_factory_large.jpg'
+            : itemName === 'Shipyard' ? 'icons/facilities/shipyard_large.jpg'
+                : itemName === 'Research Lab' ? 'icons/facilities/research_lab_large.jpg'
+                    : 'icons/facilities/nanite_factory_large.jpg';
+
+        const newItems: CartItem[] = [];
+        const updatedTargetLevels: Record<string, number> = {};
+        const timestamp = Date.now();
+
+        effectivePlanets.forEach((p, idx) => {
+            const pCurrent = getStoredCurrentLevelForPlanet(p, 'facilities', itemName);
+            const pTarget = pCurrent + delta;
+            const cost = calculateStandardCost(costConfig.base, costConfig.factor, pCurrent, pTarget);
+
+            newItems.push({
+                id: `${p.id}_facilities_${itemName}_${timestamp}_${idx}`,
+                planetId: p.id,
+                planetName: p.name,
+                coords: p.coords,
+                category: 'Facilities',
+                itemId: 0,
+                itemName,
+                currentLevel: pCurrent,
+                targetLevel: pTarget,
+                cost,
+                icon
+            });
+
+            updatedTargetLevels[`facilities_${p.id}_${itemName}`] = pTarget;
+        });
+
+        setCart(prev => {
+            const planetIds = new Set(effectivePlanets.map(p => p.id));
+            const filtered = prev.filter(item =>
+                !(item.category === 'Facilities' && item.itemName === itemName && planetIds.has(item.planetId))
+            );
+            return [...filtered, ...newItems];
+        });
+
+        setTargetLevels(prev => ({ ...prev, ...updatedTargetLevels }));
+        triggerNotification(`Added +${delta} ${itemName} for all ${effectivePlanets.length} planets!`);
     };
 
     const handleAddResearchToCart = (tech: any) => {
@@ -1352,6 +1486,129 @@ const CostsPlanner: React.FC = () => {
         setCart(prev => prev.filter(item => item.id !== itemId));
     };
 
+    const handleStartEditCartItem = (item: CartItem) => {
+        setEditingCartItemId(item.id);
+        setEditTargetValue(item.quantity ? item.quantity : item.targetLevel);
+    };
+
+    const handleCancelEditCartItem = () => {
+        setEditingCartItemId(null);
+        setEditTargetValue(0);
+    };
+
+    const recalculateItemCost = (item: CartItem, newTargetOrQty: number): ResourceCost => {
+        if (item.quantity) {
+            const oldQty = Math.max(1, item.quantity);
+            const unitMetal = item.cost.metal / oldQty;
+            const unitCrystal = item.cost.crystal / oldQty;
+            const unitDeut = item.cost.deuterium / oldQty;
+            return {
+                metal: Math.round(unitMetal * newTargetOrQty),
+                crystal: Math.round(unitCrystal * newTargetOrQty),
+                deuterium: Math.round(unitDeut * newTargetOrQty)
+            };
+        }
+
+        const current = item.currentLevel;
+        const target = newTargetOrQty;
+        if (target <= current) return { metal: 0, crystal: 0, deuterium: 0 };
+
+        if (item.category === 'Mines') {
+            const specName = item.itemName === 'Deuterium Mine' ? 'Deuterium Mine' : item.itemName;
+            const costConfig = MINES_BASE_COSTS[specName];
+            if (!costConfig) return item.cost;
+            let cost = calculateStandardCost(costConfig.base, costConfig.factor, current, target);
+            if (item.itemName !== 'Fusion Reactor') {
+                const planet = effectivePlanets.find(p => p.id === item.planetId);
+                if (planet) cost = applyDiscount(cost, getMineCostMultiplier(planet));
+            }
+            return cost;
+        }
+
+        if (item.category === 'Facilities') {
+            const costConfig = FACILITIES_BASE_COSTS[item.itemName];
+            if (!costConfig) return item.cost;
+            return calculateStandardCost(costConfig.base, costConfig.factor, current, target);
+        }
+
+        if (item.category === 'Research') {
+            const costConfig = RESEARCH_BASE_COSTS[item.itemName];
+            if (!costConfig) return item.cost;
+            let cost = calculateStandardCost(costConfig.base, costConfig.factor, current, target);
+            const { discount } = getEmpireResearchDiscount(item.itemName, effectivePlanets, activeAccount);
+            if (discount > 0) cost = applyDiscount(cost, 1 - discount);
+            return cost;
+        }
+
+        if (item.category === 'LF Building') {
+            const baseConfig = LIFEFORM_BUILDINGS_COSTS[item.itemId];
+            if (!baseConfig) return item.cost;
+            let cost = calculateLifeformBuildingCost(item.itemId, baseConfig.base, baseConfig.factor, current, target);
+            const planet = effectivePlanets.find(p => p.id === item.planetId);
+            if (planet) cost = applyDiscount(cost, getLifeformBuildingCostMultiplier(planet));
+            return cost;
+        }
+
+        if (item.category === 'LF Research') {
+            const tech = getLfTech(item.itemId);
+            if (!tech) return item.cost;
+            let cost = calculateCumulativeTechCost(
+                { metal: tech.metalBaseCost, crystal: tech.crystalBaseCost, deuterium: tech.deutBaseCost },
+                { metal: tech.metalIncreaseFactor, crystal: tech.crystalIncreaseFactor, deuterium: tech.deutIncreaseFactor },
+                current,
+                target
+            );
+            const planet = effectivePlanets.find(p => p.id === item.planetId);
+            if (planet) cost = applyDiscount(cost, getLifeformResearchCostMultiplier(planet));
+            return cost;
+        }
+
+        return item.cost;
+    };
+
+    const handleSaveEditCartItem = (itemId: string) => {
+        const item = cart.find(i => i.id === itemId);
+        if (!item) return;
+
+        const minAllowed = item.quantity ? 1 : item.currentLevel + 1;
+        if (editTargetValue < minAllowed) return;
+
+        const newCost = recalculateItemCost(item, editTargetValue);
+
+        setCart(prev => prev.map(i => {
+            if (i.id !== itemId) return i;
+            if (i.quantity) {
+                return {
+                    ...i,
+                    quantity: editTargetValue,
+                    cost: newCost
+                };
+            }
+            return {
+                ...i,
+                targetLevel: editTargetValue,
+                cost: newCost
+            };
+        }));
+
+        if (!item.quantity) {
+            if (item.category === 'Mines') {
+                setTargetLevels(prev => ({ ...prev, [`mines_${item.planetId}_${item.itemName}`]: editTargetValue }));
+            } else if (item.category === 'Facilities') {
+                setTargetLevels(prev => ({ ...prev, [`facilities_${item.planetId}_${item.itemName}`]: editTargetValue }));
+            } else if (item.category === 'Research') {
+                setTargetLevels(prev => ({ ...prev, [`research_${item.itemId}`]: editTargetValue }));
+            } else if (item.category === 'LF Building') {
+                setTargetLevels(prev => ({ ...prev, [`lf_build_${item.planetId}_${item.itemId}`]: editTargetValue }));
+            } else if (item.category === 'LF Research') {
+                setTargetLevels(prev => ({ ...prev, [`lf_tech_${item.planetId}_${item.itemId}`]: editTargetValue }));
+            }
+        }
+
+        setEditingCartItemId(null);
+        triggerNotification(`Updated ${item.itemName} to ${item.quantity ? `Qty ${editTargetValue}` : `Lvl ${editTargetValue}`} in list!`);
+    };
+
     // ----------------------------------------------------
     // COMPUTE CART SUMMARY
     // ----------------------------------------------------
@@ -1546,8 +1803,8 @@ const CostsPlanner: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <ThemeIcon name="shopping-cart" size={44} glow />
                     <div>
-                        <h1 className="view-title">Costs Planner</h1>
-                        <p className="view-subtitle">Simulate building upgrades, technologies, and fleet costs in a cohesive queue</p>
+                        <h1 className="view-title">{t('costsPlanner.title')}</h1>
+                        <p className="view-subtitle">{t('costsPlanner.subtitle')}</p>
                     </div>
                 </div>
 
@@ -1583,14 +1840,7 @@ const CostsPlanner: React.FC = () => {
                                 transition={{ duration: 0.2 }}
                                 className="category-selection-shelf"
                             >
-                                {[
-                                    { id: 'mines', label: 'Mines', desc: 'Colony mines & fusion power plants', ogIcon: 'icons/resources/metal_mine_large.jpg', color: '#ff8d33' },
-                                    { id: 'facilities', label: 'Facilities', desc: 'Advanced nanites & shipyards', ogIcon: 'icons/facilities/nanite_factory_large.jpg', color: '#a855f7' },
-                                    { id: 'empireResearch', label: 'Research', desc: 'Drive & astrophysical sciences', ogIcon: 'icons/research/expedition-tech-research-large.jpg', color: '#00f2ff' },
-                                    { id: 'lifeformBuildings', label: 'LF Buildings', desc: 'Species-specific colony structures', ogIcon: 'icons/lifeforms/mechas-building-7-large.jpg', color: '#22c55e' },
-                                    { id: 'lifeformResearch', label: 'LF Research', desc: 'Intergalactic envoys & slots matrix', ogIcon: 'icons/lifeforms/humans-tech-t1-large.jpg', color: '#ec4899' },
-                                    { id: 'shipsDefences', label: 'Ships / Defenses', desc: 'Starships, fleets & defense grids', ogIcon: 'icons/ships/battlecruiser-large.jpg', color: '#3b82f6' }
-                                ].map(cat => (
+                                {categoriesList.map(cat => (
                                     <motion.div
                                         transition={cardTransition}
                                         whileHover={{ scale: 1.02, y: -4 }}
@@ -1652,23 +1902,16 @@ const CostsPlanner: React.FC = () => {
                                 <div className="step-navigation-header">
                                     <button className="step-back-btn" onClick={() => setPlannerStep(1)}>
                                         <RotateCcw size={13} />
-                                        <span>Back to Categories</span>
+                                        <span>{t('costsPlanner.backToCategories')}</span>
                                     </button>
-                                    <div className="step-instruction-badge">Step 2: Select Operational Scope</div>
+                                    <div className="step-instruction-badge">{t('costsPlanner.step2Instruction')}</div>
                                 </div>
 
                                 <div className="step-2-horizontal-flow">
                                     {/* Active Centered Category Indicator */}
                                     <div className="selected-category-centered">
                                         {(() => {
-                                            const cat = [
-                                                { id: 'mines', label: 'Mines', desc: 'Colony mines & fusion power plants', ogIcon: 'icons/resources/metal_mine_large.jpg', color: '#ff8d33' },
-                                                { id: 'facilities', label: 'Facilities', desc: 'Advanced nanites & shipyards', ogIcon: 'icons/facilities/nanite_factory_large.jpg', color: '#a855f7' },
-                                                { id: 'empireResearch', label: 'Research', desc: 'Drive & astrophysical sciences', ogIcon: 'icons/research/expedition-tech-research-large.jpg', color: '#00f2ff' },
-                                                { id: 'lifeformBuildings', label: 'LF Buildings', desc: 'Species-specific colony structures', ogIcon: 'icons/lifeforms/mechas-building-7-large.jpg', color: '#22c55e' },
-                                                { id: 'lifeformResearch', label: 'LF Research', desc: 'Intergalactic envoys & slots matrix', ogIcon: 'icons/lifeforms/humans-tech-t1-large.jpg', color: '#ec4899' },
-                                                { id: 'shipsDefences', label: 'Ships / Defenses', desc: 'Starships, fleets & defense grids', ogIcon: 'icons/ships/battlecruiser-large.jpg', color: '#3b82f6' }
-                                            ].find(c => c.id === selectedCategory);
+                                            const cat = categoriesList.find(c => c.id === selectedCategory);
 
                                             if (!cat) return null;
 
@@ -1770,7 +2013,7 @@ const CostsPlanner: React.FC = () => {
                                                     >
                                                         <div className="empire-glow-ring" />
                                                         <Globe size={26} />
-                                                        <span className="empire-label">EMPIRE</span>
+                                                        <span className="empire-label">{t('costsPlanner.empire')}</span>
                                                     </button>
                                                 );
                                             })()}
@@ -1797,7 +2040,7 @@ const CostsPlanner: React.FC = () => {
                                         setSelectedCategory('');
                                     }}>
                                         <RotateCcw size={13} />
-                                        <span>Back to Categories</span>
+                                        <span>{t('costsPlanner.backToCategories')}</span>
                                     </button>
 
                                     <div className="breadcrumb-pathway">
@@ -1810,7 +2053,7 @@ const CostsPlanner: React.FC = () => {
                                             {selectedPlanetId === 'empire' ? (
                                                 <>
                                                     <Globe size={14} />
-                                                    <span>Global Empire</span>
+                                                    <span>{t('costsPlanner.globalEmpire')}</span>
                                                 </>
                                             ) : (
                                                 <>
@@ -1859,7 +2102,7 @@ const CostsPlanner: React.FC = () => {
                                                                 alt=""
                                                             />
                                                             <div>
-                                                                <div className="option-title">{mine.name}</div>
+                                                                <div className="option-title">{getEntityName(mine.name)}</div>
                                                                 <div className="option-description">
                                                                     {mine.desc}
                                                                     {activePlanet.lifeformId === 2 && mine.name !== 'Fusion Reactor' && (() => {
@@ -1881,7 +2124,7 @@ const CostsPlanner: React.FC = () => {
                                                         <div className="option-controls-group">
                                                             {/* Levels adjusting shelf */}
                                                             <div className="level-adjuster-shelf">
-                                                                <span className="level-label">Lvl {current}</span>
+                                                                <span className="level-label">{t('common.level')} {current}</span>
                                                                 <ArrowRight size={14} style={{ opacity: 0.3 }} />
                                                                 <div className="slider-input-wrapper">
                                                                     <button className="qty-arrow" onClick={() => handleLevelChange(inputKey, target - 1, current + 1)} disabled={target <= current + 1}>
@@ -1910,13 +2153,13 @@ const CostsPlanner: React.FC = () => {
                                                                 return (
                                                                     <div className="option-mini-cost-container">
                                                                         <div className="option-mini-cost">
-                                                                            <div className="cost-column-header">Lvl {target} Cost</div>
+                                                                            <div className="cost-column-header">{t('common.level')} {target} {t('common.cost')}</div>
                                                                             {singleCost.metal > 0 && <span style={{ color: '#ff8d33' }}>M: {formatNumber(singleCost.metal)}</span>}
                                                                             {singleCost.crystal > 0 && <span style={{ color: '#33b2ff' }}>C: {formatNumber(singleCost.crystal)}</span>}
                                                                             {singleCost.deuterium > 0 && <span style={{ color: '#33ff8d' }}>D: {formatNumber(singleCost.deuterium)}</span>}
                                                                         </div>
                                                                         <div className="option-mini-cost">
-                                                                            <div className="cost-column-header highlighted">Total Cost</div>
+                                                                            <div className="cost-column-header highlighted">{t('common.total')} {t('common.cost')}</div>
                                                                             {calculatedCost.metal > 0 && <span style={{ color: '#ff8d33' }}>M: {formatNumber(calculatedCost.metal)}</span>}
                                                                             {calculatedCost.crystal > 0 && <span style={{ color: '#33b2ff' }}>C: {formatNumber(calculatedCost.crystal)}</span>}
                                                                             {calculatedCost.deuterium > 0 && <span style={{ color: '#33ff8d' }}>D: {formatNumber(calculatedCost.deuterium)}</span>}
@@ -1925,10 +2168,21 @@ const CostsPlanner: React.FC = () => {
                                                                 );
                                                             })()}
 
-                                                            <button className="add-to-cart-btn" onClick={() => handleAddMineToCart(mine.name)} disabled={!hasUpgrade}>
-                                                                <Plus size={16} />
-                                                                <span>Add to List</span>
-                                                            </button>
+                                                            <div className="add-buttons-shelf">
+                                                                <button className="add-to-cart-btn" onClick={() => handleAddMineToCart(mine.name)} disabled={!hasUpgrade}>
+                                                                    <Plus size={16} />
+                                                                    <span>{t('costsPlanner.addToQueue')}</span>
+                                                                </button>
+                                                                <button
+                                                                    className="add-all-planets-btn"
+                                                                    onClick={() => handleAddMineToAllPlanets(mine.name)}
+                                                                    disabled={!hasUpgrade}
+                                                                    title={hasUpgrade ? `Add +${target - current} ${mine.name} for all planets from their current levels` : undefined}
+                                                                >
+                                                                    <Layers size={14} />
+                                                                    <span>{t('costsPlanner.addAllPlanets')}</span>
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 );
@@ -1966,14 +2220,14 @@ const CostsPlanner: React.FC = () => {
                                                                 alt=""
                                                             />
                                                             <div>
-                                                                <div className="option-title">{fac.name}</div>
+                                                                <div className="option-title">{getEntityName(fac.name)}</div>
                                                                 <div className="option-description">{fac.desc}</div>
                                                             </div>
                                                         </div>
 
                                                         <div className="option-controls-group">
                                                             <div className="level-adjuster-shelf">
-                                                                <span className="level-label">Lvl {current}</span>
+                                                                <span className="level-label">{t('common.level')} {current}</span>
                                                                 <ArrowRight size={14} style={{ opacity: 0.3 }} />
                                                                 <div className="slider-input-wrapper">
                                                                     <button className="qty-arrow" onClick={() => handleLevelChange(inputKey, target - 1, current + 1)} disabled={target <= current + 1}>
@@ -1998,13 +2252,13 @@ const CostsPlanner: React.FC = () => {
                                                                 return (
                                                                     <div className="option-mini-cost-container">
                                                                         <div className="option-mini-cost">
-                                                                            <div className="cost-column-header">Lvl {target} Cost</div>
+                                                                            <div className="cost-column-header">{t('common.level')} {target} {t('common.cost')}</div>
                                                                             {singleCost.metal > 0 && <span style={{ color: '#ff8d33' }}>M: {formatNumber(singleCost.metal)}</span>}
                                                                             {singleCost.crystal > 0 && <span style={{ color: '#33b2ff' }}>C: {formatNumber(singleCost.crystal)}</span>}
                                                                             {singleCost.deuterium > 0 && <span style={{ color: '#33ff8d' }}>D: {formatNumber(singleCost.deuterium)}</span>}
                                                                         </div>
                                                                         <div className="option-mini-cost">
-                                                                            <div className="cost-column-header highlighted">Total Cost</div>
+                                                                            <div className="cost-column-header highlighted">{t('common.total')} {t('common.cost')}</div>
                                                                             {calculatedCost.metal > 0 && <span style={{ color: '#ff8d33' }}>M: {formatNumber(calculatedCost.metal)}</span>}
                                                                             {calculatedCost.crystal > 0 && <span style={{ color: '#33b2ff' }}>C: {formatNumber(calculatedCost.crystal)}</span>}
                                                                             {calculatedCost.deuterium > 0 && <span style={{ color: '#33ff8d' }}>D: {formatNumber(calculatedCost.deuterium)}</span>}
@@ -2013,10 +2267,21 @@ const CostsPlanner: React.FC = () => {
                                                                 );
                                                             })()}
 
-                                                            <button className="add-to-cart-btn" onClick={() => handleAddFacilityToCart(fac.name)} disabled={!hasUpgrade}>
-                                                                <Plus size={16} />
-                                                                <span>Add to List</span>
-                                                            </button>
+                                                            <div className="add-buttons-shelf">
+                                                                <button className="add-to-cart-btn" onClick={() => handleAddFacilityToCart(fac.name)} disabled={!hasUpgrade}>
+                                                                    <Plus size={16} />
+                                                                    <span>{t('costsPlanner.addToQueue')}</span>
+                                                                </button>
+                                                                <button
+                                                                    className="add-all-planets-btn"
+                                                                    onClick={() => handleAddFacilityToAllPlanets(fac.name)}
+                                                                    disabled={!hasUpgrade}
+                                                                    title={hasUpgrade ? `Add +${target - current} ${fac.name} for all planets from their current levels` : undefined}
+                                                                >
+                                                                    <Layers size={14} />
+                                                                    <span>{t('costsPlanner.addAllPlanets')}</span>
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 );
@@ -2064,7 +2329,7 @@ const CostsPlanner: React.FC = () => {
                                                                 </div>
 
                                                                 <div className="bento-card-text-group" style={{ margin: '4px 0 8px 0' }}>
-                                                                    <span className="bento-card-label" style={{ fontSize: '0.92rem' }}>{tech.name}</span>
+                                                                    <span className="bento-card-label" style={{ fontSize: '0.92rem' }}>{getEntityName(tech.name)}</span>
                                                                     {(() => {
                                                                         const { discount, techSources } = getEmpireResearchDiscount(tech.name, planets, activeAccount);
                                                                         if (discount > 0) {
@@ -2110,7 +2375,7 @@ const CostsPlanner: React.FC = () => {
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', width: '100%' }}>
                                                 <button className="add-all-techs-btn research-accent-btn" onClick={handleAddAllResearchToCart}>
                                                     <FlaskConical size={18} />
-                                                    <span>Add Additional Levels to Shopping List</span>
+                                                    <span>{t('costsPlanner.addLevelsToCart')}</span>
                                                 </button>
                                             </div>
                                         </div>
@@ -2125,8 +2390,8 @@ const CostsPlanner: React.FC = () => {
                                                     return (
                                                         <div className="empty-state-notice">
                                                             <AlertTriangle size={32} color="#ffaa00" />
-                                                            <div className="empty-title">NO ACTIVE LIFEFORM SPECIES</div>
-                                                            <div className="empty-desc">This planet has no active lifeform species synced in the database. Go to the Lifeforms tab to establish a colony.</div>
+                                                            <div className="empty-title">{t('costsPlanner.noLfSpecies')}</div>
+                                                            <div className="empty-desc">{t('costsPlanner.noLfSpeciesDesc')}</div>
                                                         </div>
                                                     );
                                                 }
@@ -2160,7 +2425,7 @@ const CostsPlanner: React.FC = () => {
                                                                     alt=""
                                                                 />
                                                                 <div>
-                                                                    <div className="option-title">{bld.name}</div>
+                                                                    <div className="option-title">{getEntityName(bld.id || bld.name)}</div>
                                                                     {activePlanet.lifeformId === 2 && (() => {
                                                                         const megalithLvl = activePlanet.lifeformBuildings?.find((b: any) => b.id === 12108)?.level || 0;
                                                                         if (megalithLvl > 0) {
@@ -2179,7 +2444,7 @@ const CostsPlanner: React.FC = () => {
 
                                                             <div className="option-controls-group">
                                                                 <div className="level-adjuster-shelf">
-                                                                    <span className="level-label">Lvl {current}</span>
+                                                                    <span className="level-label">{t('common.level')} {current}</span>
                                                                     <ArrowRight size={14} style={{ opacity: 0.3 }} />
                                                                     <div className="slider-input-wrapper">
                                                                         <button className="qty-arrow" onClick={() => handleLevelChange(inputKey, target - 1, current + 1)} disabled={target <= current + 1}>
@@ -2205,13 +2470,13 @@ const CostsPlanner: React.FC = () => {
                                                                     return (
                                                                         <div className="option-mini-cost-container">
                                                                             <div className="option-mini-cost">
-                                                                                <div className="cost-column-header">Lvl {target} Cost</div>
+                                                                                <div className="cost-column-header">{t('common.level')} {target} {t('common.cost')}</div>
                                                                                 {singleCost.metal > 0 && <span style={{ color: '#ff8d33' }}>M: {formatNumber(singleCost.metal)}</span>}
                                                                                 {singleCost.crystal > 0 && <span style={{ color: '#33b2ff' }}>C: {formatNumber(singleCost.crystal)}</span>}
                                                                                 {singleCost.deuterium > 0 && <span style={{ color: '#33ff8d' }}>D: {formatNumber(singleCost.deuterium)}</span>}
                                                                             </div>
                                                                             <div className="option-mini-cost">
-                                                                                <div className="cost-column-header highlighted">Total Cost</div>
+                                                                                <div className="cost-column-header highlighted">{t('common.total')} {t('common.cost')}</div>
                                                                                 {calculatedCost.metal > 0 && <span style={{ color: '#ff8d33' }}>M: {formatNumber(calculatedCost.metal)}</span>}
                                                                                 {calculatedCost.crystal > 0 && <span style={{ color: '#33b2ff' }}>C: {formatNumber(calculatedCost.crystal)}</span>}
                                                                                 {calculatedCost.deuterium > 0 && <span style={{ color: '#33ff8d' }}>D: {formatNumber(calculatedCost.deuterium)}</span>}
@@ -2222,7 +2487,7 @@ const CostsPlanner: React.FC = () => {
 
                                                                 <button className="add-to-cart-btn" onClick={() => handleAddLifeformBuildingToCart(bld)} disabled={!hasUpgrade}>
                                                                     <Plus size={16} />
-                                                                    <span>Add to List</span>
+                                                                    <span>{t('costsPlanner.addToQueue')}</span>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -2269,8 +2534,8 @@ const CostsPlanner: React.FC = () => {
                                                     return (
                                                         <div className="empty-state-notice">
                                                             <AlertTriangle size={32} color="#ffaa00" />
-                                                            <div className="empty-title">NO TECHNOLOGY SETUP SYNCED</div>
-                                                            <div className="empty-desc">This planet has no active Lifeform Technology setup recorded. Please scan your Lifeform technology menu in-game to build optimization matrix profiles.</div>
+                                                            <div className="empty-title">{t('costsPlanner.noLfTechSetup')}</div>
+                                                            <div className="empty-desc">{t('costsPlanner.noLfTechSetupDesc')}</div>
                                                         </div>
                                                     );
                                                 }
@@ -2280,7 +2545,7 @@ const CostsPlanner: React.FC = () => {
                                                     <div className="matrix-designer-container">
                                                         <div className="designer-instruction" style={{ marginBottom: '16px' }}>
                                                             <Info size={14} color="var(--primary)" />
-                                                            <span>Recreated active planet technology array. Increment target levels inside matrix slots, then add all to cart at once.</span>
+                                                            <span>{t('costsPlanner.matrixDesc')}</span>
                                                         </div>
 
                                                         <div className="tech-grid-layout">
@@ -2290,7 +2555,7 @@ const CostsPlanner: React.FC = () => {
 
                                                                 return (
                                                                     <div key={tier} className="tier-column-group">
-                                                                        <div className="tier-header">Tier {tier} Research</div>
+                                                                        <div className="tier-header">{t('costsPlanner.tierResearch', { tier })}</div>
                                                                         <div className="tier-slots-grid">
                                                                             {tierSlotsIndices.map(idx => {
                                                                                 const slot = activeSetup[idx];
@@ -2369,7 +2634,7 @@ const CostsPlanner: React.FC = () => {
                                                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
                                                             <button className="add-all-techs-btn" onClick={handleAddLifeformResearchToCart}>
                                                                 <Dna size={18} />
-                                                                <span>Add Additional Levels to Shopping List</span>
+                                                                <span>{t('costsPlanner.addLevelsToCart')}</span>
                                                             </button>
                                                         </div>
                                                     </div>
@@ -2382,7 +2647,7 @@ const CostsPlanner: React.FC = () => {
                                     {selectedCategory === 'shipsDefences' && (
                                         <div className="builder-options-list">
                                             <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.5px', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid var(--border)' }}>
-                                                PLANETARY SHIPS (FLEETS)
+                                                {t('costsPlanner.shipsFleetHeading')}
                                             </div>
                                             {SHIP_DATA.map(ship => {
                                                 const inputKey = `batch_${selectedPlanetId}_${ship.id}`;
@@ -2399,14 +2664,14 @@ const CostsPlanner: React.FC = () => {
                                                         <div className="option-info-group flex-row-item">
                                                             <img src={ship.icon} style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }} alt="" />
                                                             <div>
-                                                                <div className="option-title">{ship.name}</div>
+                                                                <div className="option-title">{getEntityName(ship.name || ship.id)}</div>
                                                                 <div className="option-description">Basic Hull ID {ship.id}</div>
                                                             </div>
                                                         </div>
 
                                                         <div className="option-controls-group">
                                                             <div className="level-adjuster-shelf">
-                                                                <span className="level-label">Qty</span>
+                                                                <span className="level-label">{t('costsPlanner.quantity')}</span>
                                                                 <div className="slider-input-wrapper">
                                                                     <button className="qty-arrow" onClick={() => handleQuantityChange(inputKey, qty - 10)} disabled={qty <= 1}>
                                                                         <Minus size={12} />
@@ -2432,7 +2697,7 @@ const CostsPlanner: React.FC = () => {
 
                                                             <button className="add-to-cart-btn" onClick={() => handleAddShipOrDefenseToCart(ship, 'ship')}>
                                                                 <Plus size={16} />
-                                                                <span>Add to List</span>
+                                                                <span>{t('costsPlanner.addToQueue')}</span>
                                                             </button>
                                                         </div>
                                                     </div>
@@ -2440,7 +2705,7 @@ const CostsPlanner: React.FC = () => {
                                             })}
 
                                             <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.5px', marginTop: '32px', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid var(--border)' }}>
-                                                PLANETARY DEFENSES
+                                                {t('costsPlanner.planetaryDefensesHeading')}
                                             </div>
                                             {DEFENCE_DATA.map(def => {
                                                 const inputKey = `batch_${selectedPlanetId}_${def.id}`;
@@ -2455,13 +2720,13 @@ const CostsPlanner: React.FC = () => {
                                                 return (
                                                     <div key={def.id} className="builder-option-row">
                                                         <div className="option-info-group">
-                                                            <div className="option-title">{def.name}</div>
+                                                            <div className="option-title">{getEntityName(def.name || def.id)}</div>
                                                             <div className="option-description">Defense Grid Unit ID {def.id}</div>
                                                         </div>
 
                                                         <div className="option-controls-group">
                                                             <div className="level-adjuster-shelf">
-                                                                <span className="level-label">Qty</span>
+                                                                <span className="level-label">{t('costsPlanner.quantity')}</span>
                                                                 <div className="slider-input-wrapper">
                                                                     <button className="qty-arrow" onClick={() => handleQuantityChange(inputKey, qty - 10)} disabled={qty <= 1}>
                                                                         <Minus size={12} />
@@ -2487,7 +2752,7 @@ const CostsPlanner: React.FC = () => {
 
                                                             <button className="add-to-cart-btn" onClick={() => handleAddShipOrDefenseToCart(def, 'defence')}>
                                                                 <Plus size={16} />
-                                                                <span>Add to List</span>
+                                                                <span>{t('costsPlanner.addToQueue')}</span>
                                                             </button>
                                                         </div>
                                                     </div>
@@ -2507,9 +2772,9 @@ const CostsPlanner: React.FC = () => {
                     <div className="cart-header">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <ShoppingCart size={18} color="var(--primary)" />
-                            <span className="font-title">SHOPPING CART</span>
+                            <span className="font-title">{t('costsPlanner.cartTitle')}</span>
                         </div>
-                        <span className="cart-count-badge">{cart.length} ITEMS</span>
+                        <span className="cart-count-badge">{t('costsPlanner.cartItemsCount', { count: cart.length })}</span>
                     </div>
 
                     {/* Cart scroll container */}
@@ -2548,9 +2813,22 @@ const CostsPlanner: React.FC = () => {
                                             >
                                                 <div className="cart-item-header">
                                                     <div className="item-badge-category">{item.category}</div>
-                                                    <button className="delete-item-btn" onClick={() => handleDeleteCartItem(item.id)}>
-                                                        <Trash2 size={13} />
-                                                    </button>
+                                                    <div className="cart-item-actions">
+                                                        <button
+                                                            className="edit-item-btn"
+                                                            onClick={() => handleStartEditCartItem(item)}
+                                                            title={t('costsPlanner.editItem')}
+                                                        >
+                                                            <Pencil size={12} />
+                                                        </button>
+                                                        <button
+                                                            className="delete-item-btn"
+                                                            onClick={() => handleDeleteCartItem(item.id)}
+                                                            title={t('costsPlanner.removeFromQueue')}
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 <div className="cart-item-body">
@@ -2563,19 +2841,73 @@ const CostsPlanner: React.FC = () => {
                                                     </div>
 
                                                     <div className="item-details-block">
-                                                        <div className="item-name-heading">{item.itemName}</div>
+                                                        <div className="item-name-heading">{getEntityName(item.itemName || item.itemId)}</div>
                                                         <div className="item-coords-sub">
-                                                            {item.planetId === 'empire' ? 'Global Empire Research' : `[${item.coords}] • ${item.planetName}`}
+                                                            {item.planetId === 'empire' ? t('costsPlanner.globalEmpireResearch') : `[${item.coords}] • ${item.planetName}`}
                                                         </div>
                                                         <div className="item-level-transition">
-                                                            {item.quantity ? (
-                                                                <span className="qty-tag">Batch Qty: {item.quantity}</span>
+                                                            {editingCartItemId === item.id ? (
+                                                                <div className="cart-inline-editor">
+                                                                    {item.quantity ? (
+                                                                        <span className="qty-tag">Qty</span>
+                                                                    ) : (
+                                                                        <span className="lvl-prev">{t('common.level')} {item.currentLevel} <ArrowRight size={9} style={{ opacity: 0.4 }} /></span>
+                                                                    )}
+                                                                    <div className="inline-stepper-box">
+                                                                        <button
+                                                                            className="inline-stepper-btn"
+                                                                            onClick={() => setEditTargetValue(prev => Math.max(item.quantity ? 1 : item.currentLevel + 1, prev - 1))}
+                                                                            disabled={editTargetValue <= (item.quantity ? 1 : item.currentLevel + 1)}
+                                                                        >
+                                                                            <Minus size={10} />
+                                                                        </button>
+                                                                        <input
+                                                                            type="number"
+                                                                            className="inline-stepper-input"
+                                                                            value={editTargetValue}
+                                                                            min={item.quantity ? 1 : item.currentLevel + 1}
+                                                                            onChange={(e) => {
+                                                                                const val = parseInt(e.target.value) || (item.quantity ? 1 : item.currentLevel + 1);
+                                                                                setEditTargetValue(Math.max(item.quantity ? 1 : item.currentLevel + 1, val));
+                                                                            }}
+                                                                            onKeyDown={(e) => {
+                                                                                if (e.key === 'Enter') handleSaveEditCartItem(item.id);
+                                                                                if (e.key === 'Escape') handleCancelEditCartItem();
+                                                                            }}
+                                                                            autoFocus
+                                                                        />
+                                                                        <button
+                                                                            className="inline-stepper-btn"
+                                                                            onClick={() => setEditTargetValue(prev => prev + 1)}
+                                                                        >
+                                                                            <Plus size={10} />
+                                                                        </button>
+                                                                    </div>
+                                                                    <button
+                                                                        className="inline-action-btn save"
+                                                                        onClick={() => handleSaveEditCartItem(item.id)}
+                                                                        title={t('costsPlanner.saveEdit')}
+                                                                    >
+                                                                        <Check size={12} />
+                                                                    </button>
+                                                                    <button
+                                                                        className="inline-action-btn cancel"
+                                                                        onClick={handleCancelEditCartItem}
+                                                                        title={t('costsPlanner.cancelEdit')}
+                                                                    >
+                                                                        <X size={12} />
+                                                                    </button>
+                                                                </div>
                                                             ) : (
-                                                                <>
-                                                                    <span className="lvl-prev">Lvl {item.currentLevel}</span>
-                                                                    <ArrowRight size={10} style={{ opacity: 0.4 }} />
-                                                                    <span className="lvl-next">Lvl {item.targetLevel}</span>
-                                                                </>
+                                                                item.quantity ? (
+                                                                    <span className="qty-tag">{t('costsPlanner.batchQty', { qty: item.quantity })}</span>
+                                                                ) : (
+                                                                    <>
+                                                                        <span className="lvl-prev">{t('common.level')} {item.currentLevel}</span>
+                                                                        <ArrowRight size={10} style={{ opacity: 0.4 }} />
+                                                                        <span className="lvl-next">{t('common.level')} {item.targetLevel}</span>
+                                                                    </>
+                                                                )
                                                             )}
                                                         </div>
 
@@ -2631,26 +2963,33 @@ const CostsPlanner: React.FC = () => {
                                                 </div>
 
                                                 {/* Cost breakdown inside row */}
-                                                <div className="cart-item-cost-bar">
-                                                    {item.cost.metal > 0 && (
-                                                        <div className="mini-res">
-                                                            <img src="icons/resources/metal-icon-medium.jpg" alt="" />
-                                                            <span style={{ color: '#ff8d33' }}>{formatFullNumber(item.cost.metal)}</span>
+                                                {(() => {
+                                                    const displayCost = editingCartItemId === item.id
+                                                        ? recalculateItemCost(item, editTargetValue)
+                                                        : item.cost;
+                                                    return (
+                                                        <div className="cart-item-cost-bar">
+                                                            {displayCost.metal > 0 && (
+                                                                <div className="mini-res">
+                                                                    <img src="icons/resources/metal-icon-medium.jpg" alt="" />
+                                                                    <span style={{ color: '#ff8d33' }}>{formatFullNumber(displayCost.metal)}</span>
+                                                                </div>
+                                                            )}
+                                                            {displayCost.crystal > 0 && (
+                                                                <div className="mini-res">
+                                                                    <img src="icons/resources/crystal-icon-medium.jpg" alt="" />
+                                                                    <span style={{ color: '#33b2ff' }}>{formatFullNumber(displayCost.crystal)}</span>
+                                                                </div>
+                                                            )}
+                                                            {displayCost.deuterium > 0 && (
+                                                                <div className="mini-res">
+                                                                    <img src="icons/resources/deuterium-icon-medium.jpg" alt="" />
+                                                                    <span style={{ color: '#33ff8d' }}>{formatFullNumber(displayCost.deuterium)}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                    {item.cost.crystal > 0 && (
-                                                        <div className="mini-res">
-                                                            <img src="icons/resources/crystal-icon-medium.jpg" alt="" />
-                                                            <span style={{ color: '#33b2ff' }}>{formatFullNumber(item.cost.crystal)}</span>
-                                                        </div>
-                                                    )}
-                                                    {item.cost.deuterium > 0 && (
-                                                        <div className="mini-res">
-                                                            <img src="icons/resources/deuterium-icon-medium.jpg" alt="" />
-                                                            <span style={{ color: '#33ff8d' }}>{formatFullNumber(item.cost.deuterium)}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                    );
+                                                })()}
                                             </motion.div>
                                         ))}
                                     </div>
@@ -2661,8 +3000,8 @@ const CostsPlanner: React.FC = () => {
                         {cart.length === 0 && (
                             <div className="empty-cart-state">
                                 <ShoppingCart size={40} style={{ opacity: 0.05, marginBottom: '16px' }} />
-                                <div className="title">LEDGER IS EMPTY</div>
-                                <div className="desc">Stack building queues, technologies, and fleet projects from the left workspace to begin logistical calculations.</div>
+                                <div className="title">{t('costsPlanner.cartEmpty')}</div>
+                                <div className="desc">{t('costsPlanner.cartEmptyDesc')}</div>
                             </div>
                         )}
                     </div>
@@ -2670,13 +3009,13 @@ const CostsPlanner: React.FC = () => {
                     {/* Ledger Summary */}
                     {cart.length > 0 && (
                         <div className="cart-summary-block glass">
-                            <div className="summary-title">ESTIMATED INVESTMENT REQUIRED</div>
+                            <div className="summary-title">{t('costsPlanner.totalCost')}</div>
 
                             <div className="summary-resources-grid">
                                 <div className="summary-res-pod">
                                     <div className="pod-header">
                                         <img src="icons/resources/metal-icon-medium.jpg" alt="" />
-                                        <span>METAL</span>
+                                        <span>{getResource('metal').toUpperCase()}</span>
                                     </div>
                                     <div className="pod-value" style={{ color: '#ff8d33' }}>{formatNumber(cartSummary.cost.metal)}</div>
 
@@ -2684,19 +3023,19 @@ const CostsPlanner: React.FC = () => {
                                     <div className="nexus-pod-tooltip tooltip-align-left">
                                         <div className="tooltip-title-row">
                                             <img src="icons/resources/metal-icon-medium.jpg" className="tooltip-title-icon" alt="" />
-                                            <span className="tooltip-title-text" style={{ color: '#ff8d33' }}>METAL LOGISTICS</span>
+                                            <span className="tooltip-title-text" style={{ color: '#ff8d33' }}>{t('costsPlanner.metalLogistics')}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Cart Required</span>
+                                                <span className="metric-label">{t('costsPlanner.cartRequired')}</span>
                                                 <span className="metric-value" style={{ color: '#ff8d33' }}>{formatFullNumber(cartSummary.cost.metal)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-label">{t('costsPlanner.empireAvailable')}</span>
                                                 <span className="metric-value">{formatFullNumber(currentEmpireResources.metal)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">{packageMetrics.metalDeficit > 0 ? 'Remaining Deficit' : 'Surplus In Stock'}</span>
+                                                <span className="metric-label">{packageMetrics.metalDeficit > 0 ? t('costsPlanner.remainingDeficit') : t('costsPlanner.surplusInStock')}</span>
                                                 <span className="metric-value" style={{ color: packageMetrics.metalDeficit > 0 ? '#ff8d33' : '#22c55e' }}>
                                                     {packageMetrics.metalDeficit > 0 
                                                         ? formatFullNumber(packageMetrics.metalDeficit) 
@@ -2715,7 +3054,7 @@ const CostsPlanner: React.FC = () => {
                                 <div className="summary-res-pod">
                                     <div className="pod-header">
                                         <img src="icons/resources/crystal-icon-medium.jpg" alt="" />
-                                        <span>CRYSTAL</span>
+                                        <span>{getResource('crystal').toUpperCase()}</span>
                                     </div>
                                     <div className="pod-value" style={{ color: '#33b2ff' }}>{formatNumber(cartSummary.cost.crystal)}</div>
 
@@ -2723,19 +3062,19 @@ const CostsPlanner: React.FC = () => {
                                     <div className="nexus-pod-tooltip tooltip-align-center">
                                         <div className="tooltip-title-row">
                                             <img src="icons/resources/crystal-icon-medium.jpg" className="tooltip-title-icon" alt="" />
-                                            <span className="tooltip-title-text" style={{ color: '#33b2ff' }}>CRYSTAL LOGISTICS</span>
+                                            <span className="tooltip-title-text" style={{ color: '#33b2ff' }}>{t('costsPlanner.crystalLogistics')}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Cart Required</span>
+                                                <span className="metric-label">{t('costsPlanner.cartRequired')}</span>
                                                 <span className="metric-value" style={{ color: '#33b2ff' }}>{formatFullNumber(cartSummary.cost.crystal)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-label">{t('costsPlanner.empireAvailable')}</span>
                                                 <span className="metric-value">{formatFullNumber(currentEmpireResources.crystal)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">{packageMetrics.crystalDeficit > 0 ? 'Remaining Deficit' : 'Surplus In Stock'}</span>
+                                                <span className="metric-label">{packageMetrics.crystalDeficit > 0 ? t('costsPlanner.remainingDeficit') : t('costsPlanner.surplusInStock')}</span>
                                                 <span className="metric-value" style={{ color: packageMetrics.crystalDeficit > 0 ? '#33b2ff' : '#22c55e' }}>
                                                     {packageMetrics.crystalDeficit > 0 
                                                         ? formatFullNumber(packageMetrics.crystalDeficit) 
@@ -2754,7 +3093,7 @@ const CostsPlanner: React.FC = () => {
                                 <div className="summary-res-pod">
                                     <div className="pod-header">
                                         <img src="icons/resources/deuterium-icon-medium.jpg" alt="" />
-                                        <span>DEUTERIUM</span>
+                                        <span>{getResource('deuterium').toUpperCase()}</span>
                                     </div>
                                     <div className="pod-value" style={{ color: '#33ff8d' }}>{formatNumber(cartSummary.cost.deuterium)}</div>
 
@@ -2762,19 +3101,19 @@ const CostsPlanner: React.FC = () => {
                                     <div className="nexus-pod-tooltip tooltip-align-right">
                                         <div className="tooltip-title-row">
                                             <img src="icons/resources/deuterium-icon-medium.jpg" className="tooltip-title-icon" alt="" />
-                                            <span className="tooltip-title-text" style={{ color: '#33ff8d' }}>DEUTERIUM LOGISTICS</span>
+                                            <span className="tooltip-title-text" style={{ color: '#33ff8d' }}>{t('costsPlanner.deuteriumLogistics')}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Cart Required</span>
+                                                <span className="metric-label">{t('costsPlanner.cartRequired')}</span>
                                                 <span className="metric-value" style={{ color: '#33ff8d' }}>{formatFullNumber(cartSummary.cost.deuterium)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-label">{t('costsPlanner.empireAvailable')}</span>
                                                 <span className="metric-value">{formatFullNumber(currentEmpireResources.deuterium)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">{packageMetrics.deuteriumDeficit > 0 ? 'Remaining Deficit' : 'Surplus In Stock'}</span>
+                                                <span className="metric-label">{packageMetrics.deuteriumDeficit > 0 ? t('costsPlanner.remainingDeficit') : t('costsPlanner.surplusInStock')}</span>
                                                 <span className="metric-value" style={{ color: packageMetrics.deuteriumDeficit > 0 ? '#33ff8d' : '#22c55e' }}>
                                                     {packageMetrics.deuteriumDeficit > 0 
                                                         ? formatFullNumber(packageMetrics.deuteriumDeficit) 
@@ -2795,36 +3134,36 @@ const CostsPlanner: React.FC = () => {
                                 <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Coins size={16} color="var(--primary)" />
-                                        <span>TOTAL MSU</span>
+                                        <span>{t('costsPlanner.totalMsu')}</span>
                                     </div>
                                     <div className="msu-val-text">{formatNumber(cartSummary.msu)}</div>
                                     <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                        {remainingMSU <= 0 ? 'Goal Reached' : `Remaining: ${formatNumber(remainingMSU)}`}
+                                        {remainingMSU <= 0 ? t('costsPlanner.goalReached') : `${t('costsPlanner.remainingDeficit')}: ${formatNumber(remainingMSU)}`}
                                     </div>
 
                                     {/* Custom Nexus Glass Tooltip */}
                                     <div className="nexus-pod-tooltip tooltip-align-left">
                                         <div className="tooltip-title-row">
                                             <Coins size={14} color="var(--primary)" />
-                                            <span className="tooltip-title-text" style={{ color: 'var(--primary)' }}>TOTAL MSU METRICS</span>
+                                            <span className="tooltip-title-text" style={{ color: 'var(--primary)' }}>{t('costsPlanner.totalMsuMetrics')}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Total Cart Cost</span>
+                                                <span className="metric-label">{t('costsPlanner.totalCost')}</span>
                                                 <span className="metric-value" style={{ color: 'var(--primary)' }}>{formatFullNumber(cartSummary.msu)} MSU</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Empire Available</span>
+                                                <span className="metric-label">{t('costsPlanner.empireAvailable')}</span>
                                                 <span className="metric-value">{formatFullNumber(currentEmpireResources.msu)} MSU</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">{remainingMSU > 0 ? 'Deficit to Gather' : 'Status'}</span>
+                                                <span className="metric-label">{remainingMSU > 0 ? t('costsPlanner.deficitToBuy') : 'Status'}</span>
                                                 <span className="metric-value" style={{ color: remainingMSU > 0 ? '#38bdf8' : '#22c55e' }}>
                                                     {remainingMSU > 0 ? `${formatFullNumber(remainingMSU)} MSU` : 'Goal Reached in MSU'}
                                                 </span>
                                             </div>
                                             <div className="tooltip-metric-sub">
-                                                Standard Rates: M {rates.metal} : C {rates.crystal} : D {rates.deuterium}
+                                                {t('costsPlanner.standardRates', { metal: rates.metal, crystal: rates.crystal, deuterium: rates.deuterium })}
                                             </div>
                                         </div>
                                     </div>
@@ -2833,35 +3172,35 @@ const CostsPlanner: React.FC = () => {
                                 <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#38bdf8" />
-                                        <span>REMAINING GATHER TIME</span>
+                                        <span>{t('costsPlanner.remainingGatherTime')}</span>
                                         <span className="gather-info-icon">
                                             <Info size={12} />
                                         </span>
                                     </div>
                                     <div className="msu-val-text" style={{ color: '#38bdf8', textShadow: '0 0 10px rgba(56, 189, 248, 0.25)' }}>{remainingGatherTimeText}</div>
                                     <div style={{ fontSize: '0.65rem', fontWeight: 700, color: remainingMSU <= 0 ? '#43D159' : 'rgba(56, 189, 248, 0.8)', marginTop: '2px' }}>
-                                        {remainingMSU <= 0 ? 'Ready in MSU' : `${formatNumber(remainingMSU)} MSU needed`}
+                                        {remainingMSU <= 0 ? t('costsPlanner.readyInMsu') : t('costsPlanner.msuNeeded', { amount: formatNumber(remainingMSU) })}
                                     </div>
 
                                     {/* Custom Nexus Glass Tooltip */}
                                     <div className="nexus-pod-tooltip tooltip-align-center">
                                         <div className="tooltip-title-row">
                                             <Clock size={14} color="#38bdf8" />
-                                            <span className="tooltip-title-text" style={{ color: '#38bdf8' }}>REMAINING GATHER TIME</span>
+                                            <span className="tooltip-title-text" style={{ color: '#38bdf8' }}>{t('costsPlanner.remainingGatherTime')}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Est. Time Needed</span>
+                                                <span className="metric-label">{t('costsPlanner.estTimeNeeded')}</span>
                                                 <span className="metric-value" style={{ color: '#38bdf8' }}>{remainingGatherTimeText}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Empire Daily Yield</span>
+                                                <span className="metric-label">{t('costsPlanner.empireDailyYield')}</span>
                                                 <span className="metric-value">{formatFullNumber(totalEmpireDailyYieldMSU)} MSU/d</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Remaining Deficit</span>
+                                                <span className="metric-label">{t('costsPlanner.remainingDeficit')}</span>
                                                 <span className="metric-value" style={{ color: remainingMSU <= 0 ? '#22c55e' : '#38bdf8' }}>
-                                                    {remainingMSU <= 0 ? 'Ready in storage & flight' : `${formatFullNumber(remainingMSU)} MSU`}
+                                                    {remainingMSU <= 0 ? t('costsPlanner.readyInStorageFlight') : `${formatFullNumber(remainingMSU)} MSU`}
                                                 </span>
                                             </div>
                                             <div className="tooltip-metric-sub">
@@ -2874,34 +3213,34 @@ const CostsPlanner: React.FC = () => {
                                 <div className="summary-msu-pod">
                                     <div className="msu-label-group">
                                         <Clock size={16} color="#43D159" />
-                                        <span>TOTAL GATHER TIME</span>
+                                        <span>{t('costsPlanner.totalGatherTime')}</span>
                                     </div>
                                     <div className="msu-val-text" style={{ color: '#43D159', textShadow: '0 0 10px rgba(67, 209, 89, 0.25)' }}>{gatherTimeText}</div>
                                     <div style={{ fontSize: '0.65rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                        From 0 MSU
+                                        {t('costsPlanner.fromZeroMsu')}
                                     </div>
 
                                     {/* Custom Nexus Glass Tooltip */}
                                     <div className="nexus-pod-tooltip tooltip-align-right">
                                         <div className="tooltip-title-row">
                                             <Clock size={14} color="#43D159" />
-                                            <span className="tooltip-title-text" style={{ color: '#43D159' }}>TOTAL GATHER TIME</span>
+                                            <span className="tooltip-title-text" style={{ color: '#43D159' }}>{t('costsPlanner.totalGatherTime')}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">From 0 Resources</span>
+                                                <span className="metric-label">{t('costsPlanner.fromZeroMsu')}</span>
                                                 <span className="metric-value" style={{ color: '#43D159' }}>{gatherTimeText}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Total Cart Cost</span>
+                                                <span className="metric-label">{t('costsPlanner.totalCost')}</span>
                                                 <span className="metric-value">{formatFullNumber(cartSummary.msu)} MSU</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Empire Daily Yield</span>
+                                                <span className="metric-label">{t('costsPlanner.empireDailyYield')}</span>
                                                 <span className="metric-value">{formatFullNumber(totalEmpireDailyYieldMSU)} MSU/d</span>
                                             </div>
                                             <div className="tooltip-metric-sub">
-                                                Calculated from 0 resources at full daily empire production (mines, expeditions, combat & debris)
+                                                {t('costsPlanner.fromZeroSub')}
                                             </div>
                                         </div>
                                     </div>
@@ -2911,39 +3250,39 @@ const CostsPlanner: React.FC = () => {
                             <div className="summary-packages-grid">
                                 <div className="summary-package-pod">
                                     <img src="icons/misc/metal_package_large.png" className="package-icon" alt="" />
-                                    <div className="package-name">Metal Packages</div>
+                                    <div className="package-name">{t('costsPlanner.metalPackages')}</div>
                                     <div className="package-val">
                                         {packageMetrics.metalPacksNeeded > 0 
                                             ? `${packageMetrics.metalPacksNeeded.toFixed(2)} Packs`
                                             : '0.00 Packs'}
                                     </div>
-                                    <div className="package-yield">Yield: {formatNumber(dailyProduction.metal)}</div>
+                                    <div className="package-yield">{t('costsPlanner.packageYield', { yield: formatNumber(dailyProduction.metal) })}</div>
 
                                     {/* Custom Nexus Glass Tooltip */}
                                     <div className="nexus-pod-tooltip tooltip-align-left">
                                         <div className="tooltip-title-row">
                                             <img src="icons/misc/metal_package_large.png" className="tooltip-title-icon" alt="" />
-                                            <span className="tooltip-title-text" style={{ color: '#ff8d33' }}>METAL PACKAGES</span>
+                                            <span className="tooltip-title-text" style={{ color: '#ff8d33' }}>{t('costsPlanner.metalPackages').toUpperCase()}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">1 Pack Yield</span>
+                                                <span className="metric-label">{t('costsPlanner.packYield1')}</span>
                                                 <span className="metric-value" style={{ color: '#ff8d33' }}>{formatFullNumber(dailyProduction.metal)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Total Required</span>
+                                                <span className="metric-label">{t('costsPlanner.totalRequired')}</span>
                                                 <span className="metric-value">{formatFullNumber(cartSummary.cost.metal)} ({packageMetrics.metalPacksNeeded.toFixed(2)} packs)</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Deficit to Buy</span>
+                                                <span className="metric-label">{t('costsPlanner.deficitToBuy')}</span>
                                                 <span className="metric-value" style={{ color: packageMetrics.metalDeficit > 0 ? '#ff8d33' : '#22c55e' }}>
                                                     {packageMetrics.metalDeficit > 0 
                                                         ? `${formatFullNumber(packageMetrics.metalDeficit)} (${packageMetrics.metalPacksRemaining.toFixed(2)} packs)` 
-                                                        : '0 (Covered in storage)'}
+                                                        : t('costsPlanner.coveredInStorage')}
                                                 </span>
                                             </div>
                                             <div className="tooltip-metric-sub">
-                                                1 Pack = 24h Empire Mine Yield (Nexus Production tab total)
+                                                {t('costsPlanner.packYieldSub')}
                                             </div>
                                         </div>
                                     </div>
@@ -2951,39 +3290,39 @@ const CostsPlanner: React.FC = () => {
 
                                 <div className="summary-package-pod">
                                     <img src="icons/misc/crystal_package_large.png" className="package-icon" alt="" />
-                                    <div className="package-name">Crystal Packages</div>
+                                    <div className="package-name">{t('costsPlanner.crystalPackages')}</div>
                                     <div className="package-val">
                                         {packageMetrics.crystalPacksNeeded > 0 
                                             ? `${packageMetrics.crystalPacksNeeded.toFixed(2)} Packs`
                                             : '0.00 Packs'}
                                     </div>
-                                    <div className="package-yield">Yield: {formatNumber(dailyProduction.crystal)}</div>
+                                    <div className="package-yield">{t('costsPlanner.packageYield', { yield: formatNumber(dailyProduction.crystal) })}</div>
 
                                     {/* Custom Nexus Glass Tooltip */}
                                     <div className="nexus-pod-tooltip tooltip-align-center">
                                         <div className="tooltip-title-row">
                                             <img src="icons/misc/crystal_package_large.png" className="tooltip-title-icon" alt="" />
-                                            <span className="tooltip-title-text" style={{ color: '#33b2ff' }}>CRYSTAL PACKAGES</span>
+                                            <span className="tooltip-title-text" style={{ color: '#33b2ff' }}>{t('costsPlanner.crystalPackages').toUpperCase()}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">1 Pack Yield</span>
+                                                <span className="metric-label">{t('costsPlanner.packYield1')}</span>
                                                 <span className="metric-value" style={{ color: '#33b2ff' }}>{formatFullNumber(dailyProduction.crystal)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Total Required</span>
+                                                <span className="metric-label">{t('costsPlanner.totalRequired')}</span>
                                                 <span className="metric-value">{formatFullNumber(cartSummary.cost.crystal)} ({packageMetrics.crystalPacksNeeded.toFixed(2)} packs)</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Deficit to Buy</span>
+                                                <span className="metric-label">{t('costsPlanner.deficitToBuy')}</span>
                                                 <span className="metric-value" style={{ color: packageMetrics.crystalDeficit > 0 ? '#33b2ff' : '#22c55e' }}>
                                                     {packageMetrics.crystalDeficit > 0 
                                                         ? `${formatFullNumber(packageMetrics.crystalDeficit)} (${packageMetrics.crystalPacksRemaining.toFixed(2)} packs)` 
-                                                        : '0 (Covered in storage)'}
+                                                        : t('costsPlanner.coveredInStorage')}
                                                 </span>
                                             </div>
                                             <div className="tooltip-metric-sub">
-                                                1 Pack = 24h Empire Mine Yield (Nexus Production tab total)
+                                                {t('costsPlanner.packYieldSub')}
                                             </div>
                                         </div>
                                     </div>
@@ -2991,39 +3330,39 @@ const CostsPlanner: React.FC = () => {
 
                                 <div className="summary-package-pod">
                                     <img src="icons/misc/deuterium_package_large.png" className="package-icon" alt="" />
-                                    <div className="package-name">Deut Packages</div>
+                                    <div className="package-name">{t('costsPlanner.deuteriumPackages')}</div>
                                     <div className="package-val">
                                         {packageMetrics.deuteriumPacksNeeded > 0 
                                             ? `${packageMetrics.deuteriumPacksNeeded.toFixed(2)} Packs`
                                             : '0.00 Packs'}
                                     </div>
-                                    <div className="package-yield">Yield: {formatNumber(dailyProduction.deuterium)}</div>
+                                    <div className="package-yield">{t('costsPlanner.packageYield', { yield: formatNumber(dailyProduction.deuterium) })}</div>
 
                                     {/* Custom Nexus Glass Tooltip */}
                                     <div className="nexus-pod-tooltip tooltip-align-right">
                                         <div className="tooltip-title-row">
                                             <img src="icons/misc/deuterium_package_large.png" className="tooltip-title-icon" alt="" />
-                                            <span className="tooltip-title-text" style={{ color: '#33ff8d' }}>DEUTERIUM PACKAGES</span>
+                                            <span className="tooltip-title-text" style={{ color: '#33ff8d' }}>{t('costsPlanner.deuteriumPackages').toUpperCase()}</span>
                                         </div>
                                         <div className="tooltip-metrics-list">
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">1 Pack Yield</span>
+                                                <span className="metric-label">{t('costsPlanner.packYield1')}</span>
                                                 <span className="metric-value" style={{ color: '#33ff8d' }}>{formatFullNumber(dailyProduction.deuterium)}</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Total Required</span>
+                                                <span className="metric-label">{t('costsPlanner.totalRequired')}</span>
                                                 <span className="metric-value">{formatFullNumber(cartSummary.cost.deuterium)} ({packageMetrics.deuteriumPacksNeeded.toFixed(2)} packs)</span>
                                             </div>
                                             <div className="tooltip-metric-item">
-                                                <span className="metric-label">Deficit to Buy</span>
+                                                <span className="metric-label">{t('costsPlanner.deficitToBuy')}</span>
                                                 <span className="metric-value" style={{ color: packageMetrics.deuteriumDeficit > 0 ? '#33ff8d' : '#22c55e' }}>
                                                     {packageMetrics.deuteriumDeficit > 0 
                                                         ? `${formatFullNumber(packageMetrics.deuteriumDeficit)} (${packageMetrics.deuteriumPacksRemaining.toFixed(2)} packs)` 
-                                                        : '0 (Covered in storage)'}
+                                                        : t('costsPlanner.coveredInStorage')}
                                                 </span>
                                             </div>
                                             <div className="tooltip-metric-sub">
-                                                1 Pack = 24h Empire Mine Yield (Nexus Production tab total)
+                                                {t('costsPlanner.packYieldSub')}
                                             </div>
                                         </div>
                                     </div>
@@ -3032,7 +3371,7 @@ const CostsPlanner: React.FC = () => {
 
                             <button className="clear-cart-btn" onClick={() => setCart([])}>
                                 <RotateCcw size={14} />
-                                <span>Empty Shopping Cart</span>
+                                <span>{t('costsPlanner.clearCart')}</span>
                             </button>
                         </div>
                     )}

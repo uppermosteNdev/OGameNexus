@@ -320,3 +320,30 @@ function hookJQueryAjax() {
     }
 }
 hookJQueryAjax();
+
+// Silent background request for event list from content script
+window.addEventListener('ogame-nexus-request-eventlist', () => {
+    try {
+        const w = window as any;
+        const targetUrl = w.eventlistLink || `${window.location.origin}/game/index.php?page=componentOnly&component=eventList`;
+        if (typeof w.$ !== 'undefined' && w.$.ajax) {
+            w.$.ajax({
+                url: targetUrl,
+                dataType: 'json',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                success: (data: any) => {
+                    const html = data?.content?.eventlist || data?.eventlist || (typeof data === 'string' ? data : '');
+                    window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-eventlist-loaded', {
+                        detail: { html }
+                    }));
+                },
+                error: () => {
+                    window.dispatchEvent(new CustomEvent('ogame-nexus-ajax-eventlist-loaded', {
+                        detail: { html: '' }
+                    }));
+                }
+            });
+        }
+    } catch (e) {}
+});
+
