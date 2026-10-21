@@ -1370,41 +1370,26 @@ const UI_TEXTS: Record<SupportedLanguage, {
 export async function getSelectedLanguage(): Promise<SupportedLanguage> {
   const ALL_LANGS: SupportedLanguage[] = ['en', 'de', 'fr', 'ro', 'pl', 'nl', 'es', 'it', 'ru', 'tr', 'br', 'pt'];
 
-  // 1. Check if user explicitly set a manual language override
-  let isManual = false;
+  // 1. Check chrome.storage.local for user-selected language first
   try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('ognexus_language_manual') === 'true') {
-      isManual = true;
-    } else if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-      const res = await chrome.storage.local.get(['ognexus_language_manual']);
-      if (res?.['ognexus_language_manual'] === true) {
-        isManual = true;
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const res = await chrome.storage.local.get(['ognexus_selected_language', 'ognexus_language_manual']);
+      const val = res?.['ognexus_selected_language'];
+      if (val && ALL_LANGS.includes(val as SupportedLanguage)) {
+        return val as SupportedLanguage;
       }
     }
   } catch { }
 
-  if (isManual) {
-    // Check chrome.storage.local
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        const res = await chrome.storage.local.get(['ognexus_selected_language']);
-        const val = res?.['ognexus_selected_language'];
-        if (val && ALL_LANGS.includes(val as SupportedLanguage)) {
-          return val as SupportedLanguage;
-        }
-      }
-    } catch { }
+  // 2. Check localStorage on current page
+  try {
+    const local = localStorage.getItem('ognexus_selected_language');
+    if (local && ALL_LANGS.includes(local as SupportedLanguage)) {
+      return local as SupportedLanguage;
+    }
+  } catch { }
 
-    // Check localStorage
-    try {
-      const local = localStorage.getItem('ognexus_selected_language');
-      if (local && ALL_LANGS.includes(local as SupportedLanguage)) {
-        return local as SupportedLanguage;
-      }
-    } catch { }
-  }
-
-  // 2. Detect default language from OGame server link letters (e.g. s189-pl -> pl, s182-br -> br, s284-fr -> fr)
+  // 3. Fallback: Detect default language from OGame server link letters (e.g. s189-pl -> pl, s182-br -> br, s284-fr -> fr)
   try {
     const fromLocation = detectLanguageFromServerLink(window.location.href);
     if (fromLocation) return fromLocation;
@@ -1416,14 +1401,6 @@ export async function getSelectedLanguage(): Promise<SupportedLanguage> {
     const metaLang = document.querySelector('meta[name="ogame-language"]')?.getAttribute('content')?.toLowerCase();
     if (metaLang && ALL_LANGS.includes(metaLang as SupportedLanguage)) {
       return metaLang as SupportedLanguage;
-    }
-  } catch { }
-
-  // 3. Fallback: check stored language if any
-  try {
-    const local = localStorage.getItem('ognexus_selected_language');
-    if (local && ALL_LANGS.includes(local as SupportedLanguage)) {
-      return local as SupportedLanguage;
     }
   } catch { }
 

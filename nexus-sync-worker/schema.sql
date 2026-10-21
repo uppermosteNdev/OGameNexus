@@ -305,6 +305,19 @@ CREATE TABLE IF NOT EXISTS overwatch_testers (
     PRIMARY KEY (player_id, universe_id)
 );
 
+CREATE TABLE IF NOT EXISTS overwatch_access_requests (
+    request_id TEXT PRIMARY KEY,
+    player_id TEXT NOT NULL,
+    player_name TEXT,
+    universe_id TEXT NOT NULL,
+    alliance_tag TEXT,
+    description TEXT,
+    status TEXT DEFAULT 'pending',              -- 'pending', 'approved', 'rejected'
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ow_access_requests_time ON overwatch_access_requests(created_at DESC);
+
 -- 8. PERSONAL VAULT — CREDENTIALS & MULTI-DEVICE PAIRING
 CREATE TABLE IF NOT EXISTS personal_vault_credentials (
     universe_id TEXT NOT NULL,

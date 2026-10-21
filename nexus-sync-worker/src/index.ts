@@ -276,6 +276,146 @@ router.get('/api/v1/testing-gate/config', async (req: Request, env: Env) => {
   }
 });
 
+// ============================================================================
+// 1C. CLOSED TESTING ACCESS REQUESTS (Cloudflare-Stored & Managed)
+// ============================================================================
+const RequestAccessSchema = z.object({
+  playerId: z.string().min(1).max(30),
+  playerName: z.string().max(60).optional(),
+  universeId: z.string().min(2).max(60),
+  allianceTag: z.string().max(20).optional(),
+  description: z.string().min(1).max(1000),
+});
+
+router.post('/api/v1/testing-gate/request-access', async (req: Request, env: Env) => {
+  try {
+    const body = await req.json();
+    const parsed = RequestAccessSchema.safeParse(body);
+    if (!parsed.success) {
+      return json({ error: 'Invalid input', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const { playerId, playerName, universeId, allianceTag, description } = parsed.data;
+    const cleanPid = String(playerId).trim();
+    const cleanUni = cleanUniverseId(universeId);
+    const requestId = `${cleanUni}:${cleanPid}`;
+    const now = Date.now();
+
+    // Ensure table exists in D1
+    try {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS overwatch_access_requests (
+          request_id TEXT PRIMARY KEY,
+          player_id TEXT NOT NULL,
+          player_name TEXT,
+          universe_id TEXT NOT NULL,
+          alliance_tag TEXT,
+          description TEXT,
+          status TEXT DEFAULT 'pending',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      `).run();
+    } catch { }
+
+    await env.DB.prepare(`
+      INSERT INTO overwatch_access_requests (
+        request_id, player_id, player_name, universe_id, alliance_tag, description, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+      ON CONFLICT(request_id) DO UPDATE SET
+        player_name = excluded.player_name,
+        alliance_tag = excluded.alliance_tag,
+        description = excluded.description,
+        status = 'pending',
+        updated_at = excluded.updated_at
+    `).bind(
+      requestId,
+      cleanPid,
+      playerName || 'Unknown Pilot',
+      cleanUni,
+      allianceTag || '',
+      description.trim(),
+      now,
+      now
+    ).run();
+
+    return json({
+      success: true,
+      message: 'Access request successfully registered with Cloudflare.',
+      requestId,
+      discordPrompt: 'https://discord.gg/Jm4haETTYp'
+    });
+  } catch (err: any) {
+    return json({ error: err?.message }, { status: 500 });
+  }
+});
+
+router.get('/api/v1/testing-gate/requests', async (req: Request, env: Env) => {
+  try {
+    try {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS overwatch_access_requests (
+          request_id TEXT PRIMARY KEY,
+          player_id TEXT NOT NULL,
+          player_name TEXT,
+          universe_id TEXT NOT NULL,
+          alliance_tag TEXT,
+          description TEXT,
+          status TEXT DEFAULT 'pending',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      `).run();
+    } catch { }
+
+    const url = new URL(req.url);
+    const status = url.searchParams.get('status');
+    let query = `SELECT request_id, player_id, player_name, universe_id, alliance_tag, description, status, created_at, updated_at FROM overwatch_access_requests`;
+    const binds: any[] = [];
+    if (status) {
+      query += ` WHERE status = ?`;
+      binds.push(status);
+    }
+    query += ` ORDER BY created_at DESC LIMIT 200`;
+
+    const stmt = binds.length > 0 ? env.DB.prepare(query).bind(...binds) : env.DB.prepare(query);
+    const res = await stmt.all();
+
+    return json({
+      requests: res.results || [],
+      count: (res.results || []).length,
+      timestamp: Date.now()
+    });
+  } catch (err: any) {
+    return json({ error: err?.message }, { status: 500 });
+  }
+});
+
+router.get('/api/v1/testing-gate/my-request', async (req: Request, env: Env) => {
+  try {
+    const url = new URL(req.url);
+    const playerId = url.searchParams.get('playerId')?.trim();
+    const universeId = url.searchParams.get('universeId') || url.searchParams.get('universe');
+    if (!playerId) return json({ hasRequest: false });
+    const cleanUni = universeId ? cleanUniverseId(universeId) : '*';
+    const requestId = `${cleanUni}:${playerId}`;
+
+    try {
+      const existing: any = await env.DB.prepare(
+        `SELECT request_id, player_id, player_name, universe_id, alliance_tag, description, status, created_at, updated_at
+         FROM overwatch_access_requests WHERE request_id = ?`
+      ).bind(requestId).first();
+
+      if (!existing) return json({ hasRequest: false });
+      return json({ hasRequest: true, request: existing });
+    } catch {
+      return json({ hasRequest: false });
+    }
+  } catch {
+    return json({ hasRequest: false });
+  }
+});
+
 
 // ============================================================================
 // 2. CREATE ALLIANCE & GENERATE GLYPH (Admin Endpoint)
@@ -304,23 +444,41 @@ router.post('/api/v1/alliances/create', async (req: Request, env: Env) => {
       return json({ error: 'Invalid universe format. Expected format: s<number>-<lang>, e.g. s267-en.' }, { status: 400 });
     }
 
-    // Verify adminPlayerId exists in active universe baseline
+    // 1. Ensure active universe is populated from official Gameforge XML API (initial baseline scan for Universe Map)
+    let seeded = false;
+    try {
+      const alreadySeeded = await isUniverseSeeded(universeId, env);
+      if (!alreadySeeded) {
+        console.log(`[Alliances] Creating new Overwatch: Universe ${universeId} baseline not seeded. Fetching official Gameforge XML API...`);
+        await seedUniverseFromOfficialAPI(universeId, env);
+        seeded = true;
+      } else {
+        seeded = true;
+      }
+    } catch (seedErr: any) {
+      console.warn(`[Alliances] Universe seed warning for ${universeId}:`, seedErr?.message);
+    }
+
+    // 2. Verify adminPlayerId exists in active universe baseline or whitelist
     const playerCheck: any = await env.DB.prepare(
       `SELECT 1 FROM universe_baseline_planets WHERE universe_id = ? AND player_id = ? LIMIT 1`
     ).bind(universeId, adminPlayerId).first();
 
     if (!playerCheck) {
-      const alreadySeeded = await isUniverseSeeded(universeId, env);
-      if (!alreadySeeded) {
-        await seedUniverseFromOfficialAPI(universeId, env);
-        const recheck: any = await env.DB.prepare(
-          `SELECT 1 FROM universe_baseline_planets WHERE universe_id = ? AND player_id = ? LIMIT 1`
-        ).bind(universeId, adminPlayerId).first();
-        if (!recheck) {
-          return json({ error: 'Player ID not found in active universe baseline. Only real active commanders can establish an Overwatch network.' }, { status: 404 });
+      const playerInDb: any = await env.DB.prepare(
+        `SELECT 1 FROM universe_baseline_players WHERE universe_id = ? AND player_id = ? LIMIT 1`
+      ).bind(universeId, adminPlayerId).first();
+
+      if (!playerInDb) {
+        const isTester: any = await env.DB.prepare(
+          `SELECT 1 FROM overwatch_testers WHERE player_id = ? AND (universe_id = ? OR universe_id = '*' OR universe_id IS NULL) AND is_active = 1`
+        ).bind(adminPlayerId, universeId).first();
+
+        if (!isTester) {
+          return json({
+            error: 'Player ID not found in active universe baseline. Only real active commanders can establish an Overwatch network.',
+          }, { status: 404 });
         }
-      } else {
-        return json({ error: 'Player ID not found in active universe baseline. Only real active commanders can establish an Overwatch network.' }, { status: 404 });
       }
     }
 
@@ -399,18 +557,6 @@ router.post('/api/v1/alliances/create', async (req: Request, env: Env) => {
       )
       .run();
 
-    // Check if universe needs initial seeding from official OGame XML API
-    let seeded = false;
-    try {
-      const alreadySeeded = await isUniverseSeeded(universeId, env);
-      if (!alreadySeeded) {
-        console.log(`[Alliances] Universe ${universeId} not seeded. Fetching official Gameforge XML baseline...`);
-        await seedUniverseFromOfficialAPI(universeId, env);
-        seeded = true;
-      }
-    } catch (seedErr: any) {
-      console.warn(`[Alliances] Non-blocking seed warning for ${universeId}:`, seedErr.message);
-    }
 
     return json({
       success: true,
@@ -1385,20 +1531,23 @@ router.post('/api/v1/universe/seed', async (req: Request, env: Env) => {
         }, { status: 429 });
       }
     } else {
-      // Standard call: strictly enforce Gameforge 7-day cache
-      const info: any = await env.DB.prepare(
-        `SELECT next_universe_xml_at, universe_xml_timestamp FROM universe_info WHERE universe_id = ?`
-      ).bind(universeId).first();
+      // Standard call: strictly enforce Gameforge 7-day cache ONLY if universe is fully seeded
+      const isSeeded = await isUniverseSeeded(universeId, env);
+      if (isSeeded) {
+        const info: any = await env.DB.prepare(
+          `SELECT next_universe_xml_at, universe_xml_timestamp FROM universe_info WHERE universe_id = ?`
+        ).bind(universeId).first();
 
-      if (info && info.next_universe_xml_at && Date.now() < info.next_universe_xml_at) {
-        return json({
-          success: true,
-          cached: true,
-          message: 'Gameforge universe.xml has not refreshed yet (7-day on-demand cycle). Baseline data is already up to date with official Gameforge dump.',
-          universeId,
-          universeXmlTimestamp: info.universe_xml_timestamp,
-          nextUniverseXmlAt: info.next_universe_xml_at,
-        });
+        if (info && info.next_universe_xml_at && Date.now() < info.next_universe_xml_at) {
+          return json({
+            success: true,
+            cached: true,
+            message: 'Gameforge universe.xml has not refreshed yet (7-day on-demand cycle). Baseline data is already up to date with official Gameforge dump.',
+            universeId,
+            universeXmlTimestamp: info.universe_xml_timestamp,
+            nextUniverseXmlAt: info.next_universe_xml_at,
+          });
+        }
       }
     }
 

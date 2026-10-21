@@ -345,11 +345,14 @@ export async function handleVaultSend(req: Request, env: Env): Promise<Response>
     for (const d of incomingDiscoveries) if (d.messageId) discMap.set(String(d.messageId), { ...d, playerId, tracked: true });
     const mergedDiscoveries = Array.from(discMap.values()).sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
 
-    // 5. Merge Planner (by projectKey)
-    const planMap = new Map<string, any>();
-    for (const p of existingPlan) if (p.projectKey) planMap.set(String(p.projectKey), p);
-    for (const p of incomingPlanner) if (p.projectKey) planMap.set(String(p.projectKey), { ...p, playerId });
-    const mergedPlanner = Array.from(planMap.values());
+    // 5. Planner Sync: The client sends its complete active planner/cart state.
+    // When plannerProjects array is explicitly sent in the payload, update to client's current state.
+    let mergedPlanner: any[];
+    if (Array.isArray(body.plannerProjects)) {
+      mergedPlanner = incomingPlanner.map(p => ({ ...p, playerId }));
+    } else {
+      mergedPlanner = existingPlan;
+    }
 
     // 6. Merge Radar Targets (by coords, applying Highest Production & Latest Timestamp Rules)
     const radarMap = new Map<string, any>();

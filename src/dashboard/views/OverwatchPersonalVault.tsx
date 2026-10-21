@@ -119,22 +119,14 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
   const localPlannerCount = useLiveQuery(
     async () => {
       const pidStr = String(playerId || '').trim();
+      if (!pidStr) return 0;
       const all = await db.todoProjects.toArray();
-      const userTodos = all.filter(p => !p.playerId || String(p.playerId).trim() === pidStr);
+      const userTodos = all.filter(p => p.playerId && String(p.playerId).trim() === pidStr);
 
       let cartCount = 0;
-      if (pidStr) {
-        const cartSetting = await db.settings.get('costs_planner_cart_' + pidStr);
-        if (Array.isArray((cartSetting as any)?.cartItems)) {
-          cartCount = (cartSetting as any).cartItems.length;
-        }
-      }
-      if (cartCount === 0) {
-        const allSettings = await db.settings.toArray();
-        const found = allSettings.find(s => String(s.id).startsWith('costs_planner_cart_'));
-        if (found && Array.isArray((found as any)?.cartItems)) {
-          cartCount = (found as any).cartItems.length;
-        }
+      const cartSetting = await db.settings.get('costs_planner_cart_' + pidStr);
+      if (Array.isArray((cartSetting as any)?.cartItems)) {
+        cartCount = (cartSetting as any).cartItems.length;
       }
 
       return userTodos.length + cartCount;

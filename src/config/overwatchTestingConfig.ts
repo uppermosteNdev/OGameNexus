@@ -2,7 +2,7 @@
 // NEXUS OVERWATCH — CLOSED TESTING WHITELIST CONFIGURATION (CLOUDFLARE SYNCED)
 // ============================================================================
 
-import { getOverwatchApiUrl } from '../utils/overwatchApi';
+import { getOverwatchApiUrl, fetchOverwatch } from '../utils/overwatchApi';
 
 export interface OverwatchTester {
   playerId: string;    // OGame Player ID (REQUIRED, e.g. '123456')
@@ -151,6 +151,86 @@ export function isOverwatchTester(
     return cleanUni(tester.universeId) === currentUni;
   });
 }
+
+export interface OverwatchAccessRequestPayload {
+  playerId: string | number;
+  playerName?: string;
+  universeId: string;
+  allianceTag?: string;
+  description: string;
+}
+
+/**
+ * Submits an access request to Cloudflare D1 so that admins can review it.
+ */
+export async function submitOverwatchAccessRequest(
+  payload: OverwatchAccessRequestPayload
+): Promise<{ success: boolean; message: string; discordPrompt?: string }> {
+  const cleanPid = String(payload.playerId).trim();
+  const activeUni = cleanUni(payload.universeId);
+
+  try {
+    const res = await fetchOverwatch('/api/v1/testing-gate/request-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerId: cleanPid,
+        playerName: payload.playerName || 'Unknown Pilot',
+        universeId: activeUni,
+        allianceTag: payload.allianceTag || '',
+        description: payload.description,
+      }),
+    });
+
+    const data: any = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
+      try {
+        localStorage.setItem(`nexus_overwatch_req_sent_${activeUni}_${cleanPid}`, JSON.stringify({
+          sentAt: Date.now(),
+          description: payload.description,
+        }));
+      } catch { }
+      return {
+        success: true,
+        message: data?.message || 'Access request successfully registered with Cloudflare.',
+        discordPrompt: data?.discordPrompt || 'https://discord.gg/Jm4haETTYp'
+      };
+    } else {
+      return {
+        success: false,
+        message: data?.error || 'Failed to submit access request to Cloudflare.'
+      };
+    }
+  } catch (err: any) {
+    // In case of network error, still record locally for seamless UX
+    try {
+      localStorage.setItem(`nexus_overwatch_req_sent_${activeUni}_${cleanPid}`, JSON.stringify({
+        sentAt: Date.now(),
+        description: payload.description,
+        offline: true,
+      }));
+    } catch { }
+    return {
+      success: false,
+      message: err?.message || 'Failed to connect to Cloudflare edge. Please check internet connection.'
+    };
+  }
+}
+
+/**
+ * Checks if current player has already submitted an access request.
+ */
+export function hasSubmittedAccessRequest(playerId?: string | number | null, universeId?: string | null): boolean {
+  if (!playerId) return false;
+  const cleanPid = String(playerId).trim();
+  const activeUni = cleanUni(universeId);
+  try {
+    return localStorage.getItem(`nexus_overwatch_req_sent_${activeUni}_${cleanPid}`) !== null;
+  } catch {
+    return false;
+  }
+}
+
 
 
 

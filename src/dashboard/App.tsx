@@ -50,17 +50,10 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (!activeAccount) return;
-        const isManual = localStorage.getItem('ognexus_language_manual') === 'true';
-        if (isManual) return;
-
         const serverString = activeAccount.universe || activeAccount.serverUrl || '';
         const detected = detectLanguageFromServerLink(serverString);
-        if (detected) {
-            if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-                chrome.storage.local.set({ ognexus_server_detected_language: detected });
-            }
-            localStorage.setItem('ognexus_selected_language', detected);
-            window.dispatchEvent(new CustomEvent('ognexus_language_changed', { detail: { language: detected } }));
+        if (detected && typeof chrome !== 'undefined' && chrome.storage?.local) {
+            chrome.storage.local.set({ ognexus_server_detected_language: detected });
         }
     }, [activeAccount?.universe, activeAccount?.serverUrl]);
 

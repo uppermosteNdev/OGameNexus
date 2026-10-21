@@ -11,18 +11,38 @@ function initLanguageAutoDetection(): void {
   try {
     const metaUniverse = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content');
     const detected = detectLanguageFromServerLink(metaUniverse) || detectLanguageFromServerLink(window.location.href);
-    if (detected) {
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        chrome.storage.local.set({ 'ognexus_server_detected_language': detected });
-      }
-      const isManual = localStorage.getItem('ognexus_language_manual') === 'true';
-      if (!isManual) {
-        localStorage.setItem('ognexus_selected_language', detected);
-        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-          chrome.storage.local.set({ 'ognexus_selected_language': detected });
-        }
-      }
+    if (!detected || typeof chrome === 'undefined' || !chrome.storage?.local) {
+      return;
     }
+
+    // Always record the server's detected language for reference
+    chrome.storage.local.set({ 'ognexus_server_detected_language': detected });
+
+    // Check if user has already set a language or if a language is stored
+    chrome.storage.local.get(['ognexus_language_manual', 'ognexus_selected_language'], (res) => {
+      const isManual = res?.['ognexus_language_manual'] === true;
+      const stored = res?.['ognexus_selected_language'];
+
+      // If user has a selected language (either manual or previously stored), NEVER overwrite it!
+      // Synchronize it into this page's localStorage so content scripts and in-game tabs have it synchronously
+      if (stored) {
+        try {
+          localStorage.setItem('ognexus_selected_language', stored);
+          if (isManual) {
+            localStorage.setItem('ognexus_language_manual', 'true');
+          }
+        } catch { }
+        return;
+      }
+
+      // Only on a clean install where no language has ever been selected:
+      if (!isManual && !stored) {
+        chrome.storage.local.set({ 'ognexus_selected_language': detected });
+        try {
+          localStorage.setItem('ognexus_selected_language', detected);
+        } catch { }
+      }
+    });
   } catch (e) {
     console.warn('[OGameNexus] Language auto-detection error:', e);
   }

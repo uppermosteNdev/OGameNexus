@@ -249,19 +249,12 @@ export async function sendLocalDataToVault(
       pidStr ? db.settings.get('costs_planner_cart_' + pidStr) : Promise.resolve(null),
     ]);
 
-    const filteredProjects = allProjects.filter(p => !p.playerId || String(p.playerId).trim() === pidStr);
+    const filteredProjects = allProjects.filter(p => p.playerId && String(p.playerId).trim() === pidStr);
     const localRadar = allSpiedPlanets.filter(p => isSameUniverse(p.universe, universe));
 
-    // Also check if cartSetting was empty but there's any costs_planner_cart_ setting
     let cartItems: any[] = [];
     if (Array.isArray((cartSetting as any)?.cartItems)) {
       cartItems = (cartSetting as any).cartItems;
-    } else {
-      const allSettings = await db.settings.toArray();
-      const found = allSettings.find(s => String(s.id).startsWith('costs_planner_cart_'));
-      if (found && Array.isArray((found as any)?.cartItems)) {
-        cartItems = (found as any).cartItems;
-      }
     }
 
     // 2. Compact payloads (Strip unnecessary bulk)

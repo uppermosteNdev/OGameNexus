@@ -231,9 +231,17 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
                 const stored = res?.[STORAGE_KEY];
                 const detected = res?.['ognexus_server_detected_language'];
 
-                if (isManual && stored && (stored in LOCALES) && stored !== language) {
-                    setLanguageState(stored as SupportedLanguage);
-                } else if (!isManual && detected && (detected in LOCALES) && detected !== language) {
+                if (stored && (stored in LOCALES)) {
+                    if (stored !== language) {
+                        setLanguageState(stored as SupportedLanguage);
+                    }
+                    try {
+                        localStorage.setItem(STORAGE_KEY, stored);
+                        if (isManual) {
+                            localStorage.setItem('ognexus_language_manual', 'true');
+                        }
+                    } catch { }
+                } else if (!isManual && !stored && detected && (detected in LOCALES) && detected !== language) {
                     setLanguageState(detected as SupportedLanguage);
                 }
             });
@@ -242,17 +250,23 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
                 if (areaName === 'local') {
                     if (changes[STORAGE_KEY]?.newValue) {
                         const next = changes[STORAGE_KEY].newValue;
-                        if (next && (next in LOCALES)) {
+                        if (next && (next in LOCALES) && next !== language) {
                             setLanguageState(next as SupportedLanguage);
+                            try {
+                                localStorage.setItem(STORAGE_KEY, next);
+                            } catch { }
                         }
                     } else if (changes['ognexus_server_detected_language']?.newValue) {
-                        const isManual = localStorage.getItem('ognexus_language_manual') === 'true';
-                        if (!isManual) {
-                            const next = changes['ognexus_server_detected_language'].newValue;
-                            if (next && (next in LOCALES)) {
-                                setLanguageState(next as SupportedLanguage);
+                        chrome.storage.local.get([STORAGE_KEY, 'ognexus_language_manual'], (res) => {
+                            const isManual = res?.['ognexus_language_manual'] === true;
+                            const stored = res?.[STORAGE_KEY];
+                            if (!isManual && !stored) {
+                                const next = changes['ognexus_server_detected_language'].newValue;
+                                if (next && (next in LOCALES) && next !== language) {
+                                    setLanguageState(next as SupportedLanguage);
+                                }
                             }
-                        }
+                        });
                     }
                 }
             };

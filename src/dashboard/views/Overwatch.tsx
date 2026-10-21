@@ -5,7 +5,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   RefreshCw,
   Wifi,
@@ -39,6 +39,10 @@ import {
   ChevronsLeft,
   Filter,
   Check,
+  Send,
+  X,
+  ExternalLink,
+  MessageSquare,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -53,7 +57,13 @@ import {
   removeStoredOverwatchConfig,
   getOverwatchAccountStorageKey,
 } from '../../utils/overwatchApi';
-import { isOverwatchTester, OVERWATCH_ENFORCE_TESTING_GATE, OVERWATCH_TESTER_PASSKEY, syncOverwatchTesterStatusWithCloudflare } from '../../config/overwatchTestingConfig';
+import {
+  isOverwatchTester,
+  OVERWATCH_ENFORCE_TESTING_GATE,
+  syncOverwatchTesterStatusWithCloudflare,
+  submitOverwatchAccessRequest,
+  hasSubmittedAccessRequest,
+} from '../../config/overwatchTestingConfig';
 import OverwatchEmpire from './OverwatchEmpire';
 import OverwatchMyEmpire, { EmpireSharingSettings, DEFAULT_EMPIRE_SHARING_SETTINGS } from './OverwatchMyEmpire';
 import OverwatchPersonalVault from './OverwatchPersonalVault';
@@ -708,8 +718,18 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       return null;
     }
   });
-  const [testerPasskeyInput, setTesterPasskeyInput] = useState('');
-  const [testerPasskeyError, setTesterPasskeyError] = useState<string | null>(null);
+  // Access Request Modal State & Cloudflare Submission
+  const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
+  const [accessDescription, setAccessDescription] = useState('');
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [requestSubmitResult, setRequestSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [hasAlreadyRequested, setHasAlreadyRequested] = useState<boolean>(() => {
+    return hasSubmittedAccessRequest(activeAccount?.playerId, activeAccount?.universe);
+  });
+
+  useEffect(() => {
+    setHasAlreadyRequested(hasSubmittedAccessRequest(activeAccount?.playerId, activeAccount?.universe));
+  }, [activeAccount?.playerId, activeAccount?.universe]);
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -734,20 +754,33 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
   const isTester = isOverwatchTester(activeAccount, passkeyUnlocked);
 
-  const handleUnlockTesterPasskey = (e: React.FormEvent) => {
-    e.preventDefault();
-    setTesterPasskeyError(null);
-    const entered = testerPasskeyInput.trim();
-    if (!entered) return;
-    if (entered.toUpperCase() === OVERWATCH_TESTER_PASSKEY.toUpperCase()) {
-      try {
-        localStorage.setItem('nexus_overwatch_tester_unlocked', entered.toUpperCase());
-      } catch { }
-      setPasskeyUnlocked(entered.toUpperCase());
-      setTesterPasskeyInput('');
-      window.dispatchEvent(new Event('nexus_overwatch_tester_updated'));
-    } else {
-      setTesterPasskeyError('Invalid passkey. Request access credentials from your Alliance Commander.');
+  const handleSubmitAccessRequest = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeAccount?.playerId) return;
+    const desc = accessDescription.trim();
+    if (!desc) {
+      setRequestSubmitResult({ success: false, message: 'Please provide a short reason for requesting access.' });
+      return;
+    }
+
+    setIsSubmittingRequest(true);
+    setRequestSubmitResult(null);
+
+    const res = await submitOverwatchAccessRequest({
+      playerId: activeAccount.playerId,
+      playerName: activeAccount.playerName || 'Commander',
+      universeId: activeAccount.universe,
+      description: desc,
+    });
+
+    setIsSubmittingRequest(false);
+    setRequestSubmitResult({
+      success: res.success,
+      message: res.message,
+    });
+
+    if (res.success) {
+      setHasAlreadyRequested(true);
     }
   };
 
@@ -854,6 +887,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
   const [isJoining, setIsJoining] = useState(false);
 
   // Deploy form state
+  const [createAllianceTag, setCreateAllianceTag] = useState('');
   const [createDisplayName, setCreateDisplayName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -914,7 +948,13 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
   const activeAllyTag = effectiveAccount?.allianceTag || '';
   const activeAllyName = effectiveAccount?.allianceName || activeAllyTag;
-  const activeAllyId = effectiveAccount?.allianceId || '500078';
+  const activeAllyId = effectiveAccount?.allianceId ? String(effectiveAccount.allianceId) : '0';
+
+  useEffect(() => {
+    if (activeAllyTag && !createAllianceTag) {
+      setCreateAllianceTag(activeAllyTag);
+    }
+  }, [activeAllyTag]);
 
   const isJoined = Boolean(effectiveConfig.allianceId);
   const overwatchTabName = useMemo(() => {
@@ -2070,7 +2110,13 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       return;
     }
 
-    if (!createDisplayName) {
+    const cleanTag = createAllianceTag.trim().toUpperCase();
+    if (!cleanTag) {
+      setCreateError('Specify an in-game alliance tag.');
+      return;
+    }
+
+    if (!createDisplayName.trim()) {
       setCreateError('Specify an alliance display name.');
       return;
     }
@@ -2085,8 +2131,8 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ogameAllianceId: activeAllyId,
-          allianceDisplayName: createDisplayName,
-          allianceTag: activeAllyTag || 'NEXUS',
+          allianceDisplayName: createDisplayName.trim(),
+          allianceTag: cleanTag,
           universeId: activeUniverse,
           adminPlayerId: activeAccount?.playerId || '100001',
           adminPlayerName: activeAccount?.playerName || 'Admin Leader',
@@ -2099,8 +2145,8 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
           ...config,
           allianceId: data.allianceId,
           ogameAllianceId: activeAllyId,
-          allianceName: createDisplayName,
-          allianceTag: activeAllyTag || 'NEXUS',
+          allianceName: createDisplayName.trim(),
+          allianceTag: cleanTag,
           universeId: activeUniverse,
           playerId: activeAccount?.playerId || null,
           glyphCode: data.glyphCode,
@@ -2599,8 +2645,17 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                 </span>
               </div>
 
-              {/* Full Access Request Copy Button */}
-              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              {/* Full Access Request Copy Button & Request to Join Button */}
+              <div
+                style={{
+                  marginTop: '14px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '10px',
+                }}
+              >
                 <motion.button
                   type="button"
                   whileHover={{ scale: 1.015 }}
@@ -2613,7 +2668,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    padding: '9px 16px',
+                    padding: '9px 14px',
                     borderRadius: '8px',
                     background: copiedRequestInfo
                       ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(5, 150, 105, 0.15) 100%)'
@@ -2635,54 +2690,221 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                   {copiedRequestInfo ? (
                     <>
                       <Check size={14} style={{ color: '#10b981' }} />
-                      <span>Copied Access Request Details!</span>
+                      <span>Copied Access Info!</span>
                     </>
                   ) : (
                     <>
                       <Copy size={14} />
-                      <span>Copy Access Request Info (Send to Admin)</span>
+                      <span>Copy Access Request Info</span>
+                    </>
+                  )}
+                </motion.button>
+
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.015 }}
+                  whileTap={{ scale: 0.985 }}
+                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                  onClick={() => {
+                    setRequestSubmitResult(null);
+                    setIsAccessModalOpen(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '9px 14px',
+                    borderRadius: '8px',
+                    background: hasAlreadyRequested
+                      ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.24) 0%, rgba(217, 119, 6, 0.16) 100%)'
+                      : 'linear-gradient(135deg, rgba(245, 158, 11, 0.32) 0%, rgba(180, 83, 9, 0.22) 100%)',
+                    border: hasAlreadyRequested
+                      ? '1px solid rgba(245, 158, 11, 0.55)'
+                      : '1px solid rgba(245, 158, 11, 0.75)',
+                    color: '#fbbf24',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    letterSpacing: '0.3px',
+                    cursor: 'pointer',
+                    boxShadow: '0 0 16px rgba(245, 158, 11, 0.2)',
+                    transition: 'all 0.22s ease',
+                  }}
+                >
+                  {hasAlreadyRequested ? (
+                    <>
+                      <CheckCircle2 size={14} style={{ color: '#fbbf24' }} />
+                      <span>Request Submitted (Update)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} />
+                      <span>Request to Join</span>
                     </>
                   )}
                 </motion.button>
               </div>
             </div>
 
-            <div className="ow-testing-passkey-box">
-              <div className="ow-passkey-header">
-                <Key size={14} className="ow-passkey-icon" />
-                <span>Tester Override Passkey</span>
-              </div>
-              <p className="ow-passkey-hint">
-                If your Alliance Commander gave you a closed testing authorization key, enter it below to unlock immediate access:
-              </p>
-
-              <form onSubmit={handleUnlockTesterPasskey} className="ow-passkey-form">
-                <input
-                  type="password"
-                  placeholder="Enter Tester Passkey..."
-                  value={testerPasskeyInput}
-                  onChange={(e) => setTesterPasskeyInput(e.target.value)}
-                  className="ow-passkey-input"
-                  autoComplete="off"
-                  spellCheck="false"
-                />
-                <button
-                  type="submit"
-                  className="ow-btn-primary ow-passkey-submit-btn"
-                  disabled={!testerPasskeyInput.trim()}
+            {/* Access Request & Discord Tracking Modal */}
+            <AnimatePresence>
+              {isAccessModalOpen && (
+                <motion.div
+                  className="ow-access-modal-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsAccessModalOpen(false)}
                 >
-                  <ShieldCheck size={14} style={{ marginRight: 6 }} />
-                  <span>Authorize</span>
-                </button>
-              </form>
+                  <motion.div
+                    className="ow-access-modal-card"
+                    initial={{ scale: 0.94, opacity: 0, y: 16 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.94, opacity: 0, y: 16 }}
+                    transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div className="ow-access-modal-header">
+                      <div className="ow-access-modal-title-row">
+                        <div className="ow-access-modal-icon-badge">
+                          <Send size={18} />
+                        </div>
+                        <div>
+                          <h3 className="ow-access-modal-title">Request to Join Nexus Overwatch</h3>
+                          <div className="ow-access-modal-subtitle">
+                            CLOUDFLARE CLOSED TESTING CLEARANCE GATE
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="ow-access-modal-close-btn"
+                        onClick={() => setIsAccessModalOpen(false)}
+                        aria-label="Close"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
 
-              {testerPasskeyError && (
-                <div className="ow-passkey-error">
-                  <XCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-                  <span>{testerPasskeyError}</span>
-                </div>
+                    {/* Detected Pilot Summary */}
+                    <div className="ow-access-modal-pilot-summary">
+                      <span>PILOT: <strong>{activeAccount?.playerName || 'Commander'}</strong></span>
+                      <span>•</span>
+                      <span>ID: <strong>#{activeAccount?.playerId || 'Unknown'}</strong></span>
+                      <span>•</span>
+                      <span>UNIVERSE: <strong>{activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : 'Unknown'}</strong></span>
+                    </div>
+
+                    <form onSubmit={handleSubmitAccessRequest}>
+                      {/* Description textarea */}
+                      <div style={{ marginBottom: '14px' }}>
+                        <label className="ow-access-textarea-label" htmlFor="ow-request-reason">
+                          <span>Why are you requesting access?</span>
+                          <span className="ow-access-textarea-counter">{accessDescription.length} / 500</span>
+                        </label>
+                        <textarea
+                          id="ow-request-reason"
+                          className="ow-access-request-textarea"
+                          rows={3}
+                          maxLength={500}
+                          placeholder="Write a short description of why you are requesting access (e.g. Alliance Commander, fleet coordinator, galaxy scout, tactical testing)..."
+                          value={accessDescription}
+                          onChange={(e) => setAccessDescription(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+
+                      {/* Discord Prompt Box */}
+                      <div className="ow-discord-prompt-box">
+                        <div className="ow-discord-prompt-header">
+                          <MessageSquare size={15} />
+                          <span>Track Access to OGame Overwatch</span>
+                        </div>
+                        <p className="ow-discord-prompt-desc">
+                          Please join our official Discord server in order to track access to OGame Overwatch, verify your clearance status, and receive closed alpha rollout updates.
+                        </p>
+                        <a
+                          href="https://discord.gg/Jm4haETTYp"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ow-discord-join-btn"
+                        >
+                          <span>Join Discord to Track Access (https://discord.gg/Jm4haETTYp)</span>
+                          <ExternalLink size={13} />
+                        </a>
+                      </div>
+
+                      {/* Status feedback */}
+                      {requestSubmitResult && (
+                        <div
+                          style={{
+                            marginTop: '14px',
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: requestSubmitResult.success
+                              ? 'rgba(16, 185, 129, 0.15)'
+                              : 'rgba(239, 68, 68, 0.15)',
+                            border: requestSubmitResult.success
+                              ? '1px solid rgba(16, 185, 129, 0.4)'
+                              : '1px solid rgba(239, 68, 68, 0.4)',
+                            color: requestSubmitResult.success ? '#34d399' : '#f87171',
+                          }}
+                        >
+                          {requestSubmitResult.success ? (
+                            <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+                          ) : (
+                            <XCircle size={15} style={{ flexShrink: 0 }} />
+                          )}
+                          <span>{requestSubmitResult.message}</span>
+                        </div>
+                      )}
+
+                      {/* Modal Footer */}
+                      <div className="ow-access-modal-footer">
+                        <button
+                          type="button"
+                          className="ow-btn-ghost"
+                          onClick={() => setIsAccessModalOpen(false)}
+                          disabled={isSubmittingRequest}
+                        >
+                          Close
+                        </button>
+                        <button
+                          type="submit"
+                          className="ow-btn-primary"
+                          disabled={isSubmittingRequest || !accessDescription.trim()}
+                          style={{
+                            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                            borderColor: '#fbbf24',
+                            color: '#000',
+                            fontWeight: 800,
+                            minWidth: '150px',
+                          }}
+                        >
+                          {isSubmittingRequest ? (
+                            <>
+                              <RefreshCw size={13} className="ow-spin" style={{ marginRight: 6 }} />
+                              <span>Sending...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send size={13} style={{ marginRight: 6 }} />
+                              <span>{hasAlreadyRequested ? 'Update Request' : 'Send Request'}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
 
             <div className="ow-testing-actions-row">
               <button
@@ -3650,9 +3872,11 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                 >
                   <div className="ow-card-header-area">
                     <div className="ow-eyebrow">ALLIANCE SETUP // CREATE ALLIANCE</div>
-                    <h2 className="ow-section-title">Create Overwatch Alliance for [{activeAllyTag || 'Alliance'}]</h2>
+                    <h2 className="ow-section-title">
+                      Create Overwatch Alliance{createAllianceTag.trim() ? ` for [${createAllianceTag.trim()}]` : ''}
+                    </h2>
                     <p className="ow-section-desc">
-                      Set up a shared Overwatch network for <strong>{activeAllyName || 'your alliance'}</strong> in universe {activeUniverseName}.
+                      Set up a shared Overwatch network for {createAllianceTag.trim() ? <strong>[{createAllianceTag.trim()}]</strong> : <strong>your alliance</strong>} in universe {activeUniverseName}.
                     </p>
                   </div>
 
@@ -3666,12 +3890,27 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
                   <div className="ow-specs-grid">
                     <div className="ow-spec-cell">
-                      <div className="ow-spec-kicker">In-Game Tag</div>
-                      <div className="ow-spec-val">{activeAllyTag ? `[${activeAllyTag}]` : 'NEXUS'}</div>
+                      <label className="ow-spec-kicker" htmlFor="ow-create-tag-input">In-Game Tag</label>
+                      <input
+                        id="ow-create-tag-input"
+                        type="text"
+                        className="ow-spec-input"
+                        maxLength={10}
+                        placeholder="e.g. TAG"
+                        value={createAllianceTag}
+                        onChange={(e) => {
+                          setCreateAllianceTag(e.target.value.toUpperCase());
+                          if (createError) setCreateError(null);
+                        }}
+                        autoComplete="off"
+                        spellCheck="false"
+                      />
                     </div>
                     <div className="ow-spec-cell">
                       <div className="ow-spec-kicker">Alliance ID</div>
-                      <div className="ow-spec-val" style={{ color: '#94a3b8' }}>#{activeAllyId}</div>
+                      <div className="ow-spec-val" style={{ color: '#94a3b8' }}>
+                        {effectiveAccount?.allianceId ? `#${effectiveAccount.allianceId}` : 'None (Solo / Custom)'}
+                      </div>
                     </div>
                   </div>
 
@@ -3732,9 +3971,9 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                     <button
                       className="ow-btn-primary"
                       onClick={handleCreate}
-                      disabled={isCreating || !createDisplayName.trim()}
+                      disabled={isCreating || !createDisplayName.trim() || !createAllianceTag.trim()}
                     >
-                      {isCreating ? 'Creating Alliance...' : `Create Alliance for [${activeAllyTag || 'Alliance'}]`}
+                      {isCreating ? 'Scanning Universe API & Initializing...' : 'Create Alliance'}
                     </button>
                   </div>
 

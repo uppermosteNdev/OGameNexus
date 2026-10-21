@@ -276,7 +276,7 @@ export function calculateDiscovererBonus(
     // Calculate aggregated tech bonus for Tech 72 (Kaelesh Discoverer Enhancement)
     let kaeleshEnhancementPct = 0;
     safeArray(planets).filter(p => p && p.type !== 'moon').forEach(p => {
-        const setup = safeArray(p.sandboxSetup || p.lifeformSetup);
+        const setup = safeArray((p.lifeformSetup && p.lifeformSetup.length > 0) ? p.lifeformSetup : p.sandboxSetup);
         const slot18 = setup.find(t => Number(t.selectedTechId || t.id) === 72);
         const level = tech72Overrides && tech72Overrides[p.id] !== undefined
             ? tech72Overrides[p.id]
@@ -310,7 +310,7 @@ export function calculateLifeformResearchReduction(
     let totalTimeReduction = 0;
 
     safeArray(planets).filter(p => p && p.type !== 'moon').forEach(p => {
-        const setup = safeArray(p.sandboxSetup || p.lifeformSetup);
+        const setup = safeArray((p.lifeformSetup && p.lifeformSetup.length > 0) ? p.lifeformSetup : p.sandboxSetup);
         const mult = getPlanetTechMultiplier(p, account);
 
         setup.forEach(slot => {
@@ -649,7 +649,7 @@ export function generateResearchAmortizationList(params: {
 
     // 3. Evaluate Lifeform Research Speed tech upgrades
     validPlanets.forEach(p => {
-        const setup = safeArray(p.sandboxSetup || p.lifeformSetup);
+        const setup = safeArray((p.lifeformSetup && p.lifeformSetup.length > 0) ? p.lifeformSetup : p.sandboxSetup);
         setup.forEach(slot => {
             if (!slot) return;
             const techId = Number(slot.selectedTechId || slot.id);
@@ -713,7 +713,7 @@ export function generateResearchAmortizationList(params: {
     // 4. Evaluate Kaelesh Discoverer Enhancement (tech 72)
     if (baseResult.discovererResult.isDiscoverer) {
         validPlanets.forEach(p => {
-            const setup = safeArray(p.sandboxSetup || p.lifeformSetup);
+            const setup = safeArray((p.lifeformSetup && p.lifeformSetup.length > 0) ? p.lifeformSetup : p.sandboxSetup);
             const slot18 = setup.find(t => Number(t.selectedTechId || t.id) === 72);
             if (!slot18) return;
 

@@ -88,7 +88,7 @@ export async function isUniverseSeeded(rawUniverseId: string, env: Env): Promise
     .bind(universeId)
     .first();
 
-  return (result?.count || 0) > 0;
+  return (result?.count || 0) >= 100;
 }
 
 export async function seedUniverseFromOfficialAPI(rawUniverseId: string, env: Env): Promise<{

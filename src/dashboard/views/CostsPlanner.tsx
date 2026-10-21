@@ -600,7 +600,9 @@ const CostsPlanner: React.FC = () => {
                     const found = realPlanet.lifeformBuildings.find(b => b.id === item.itemId);
                     realCurrent = found ? found.level : 0;
                 } else if (item.category === 'LF Research' && realPlanet) {
-                    const rawSetup = realPlanet.sandboxSetup || realPlanet.lifeformSetup || [];
+                    const rawSetup = (realPlanet.lifeformSetup && realPlanet.lifeformSetup.length > 0)
+                        ? realPlanet.lifeformSetup
+                        : (realPlanet.sandboxSetup || []);
                     const found = rawSetup.find(s => {
                         let tid = s.selectedTechId;
                         if (tid && tid > 10000) {
@@ -717,6 +719,11 @@ const CostsPlanner: React.FC = () => {
     const [targetLevels, setTargetLevels] = useState<Record<string, number>>({});
     const [batchQuantities, setBatchQuantities] = useState<Record<string, number>>({});
     const [lfResearchTargetLevels, setLfResearchTargetLevels] = useState<Record<number, number>>({});
+
+    // Reset staged lifeform research target levels when switching planets
+    useEffect(() => {
+        setLfResearchTargetLevels({});
+    }, [selectedPlanetId]);
 
     // Notify popups
     const [notification, setNotification] = useState<string | null>(null);
@@ -1216,8 +1223,10 @@ const CostsPlanner: React.FC = () => {
             item.itemName === bld.name
         );
 
+        const bldTitle = getEntityName(bld.id || bld.name) || bld.name;
+
         if (existing && existing.targetLevel === target) {
-            triggerNotification(`Lvl ${target} ${bld.name} is already in the list!`);
+            triggerNotification(`Lvl ${target} ${bldTitle} is already in the list!`);
             return;
         }
 
@@ -1259,17 +1268,19 @@ const CostsPlanner: React.FC = () => {
         });
 
         if (existing) {
-            triggerNotification(`Updated ${bld.name} to Lvl ${target} in list!`);
+            triggerNotification(`Updated ${bldTitle} to Lvl ${target} in list!`);
         } else {
-            triggerNotification(`Added ${bld.name} to list!`);
+            triggerNotification(`Added ${bldTitle} to list!`);
         }
     };
 
     const handleAddLifeformResearchToCart = () => {
         if (!activePlanet) return;
 
-        // Fetch and normalize setup on the target planet
-        const rawSetup = activePlanet.sandboxSetup || activePlanet.lifeformSetup || [];
+        // Fetch and normalize setup on the target planet (prioritizing live in-game lifeformSetup)
+        const rawSetup = (activePlanet.lifeformSetup && activePlanet.lifeformSetup.length > 0)
+            ? activePlanet.lifeformSetup
+            : (activePlanet.sandboxSetup || []);
         const activeSetup: { slotNumber: number; selectedTechId: number | null; level: number }[] = Array.from({ length: 18 }, (_, i) => ({
             slotNumber: i + 1,
             selectedTechId: null,
@@ -2425,7 +2436,15 @@ const CostsPlanner: React.FC = () => {
                                                                     alt=""
                                                                 />
                                                                 <div>
-                                                                    <div className="option-title">{getEntityName(bld.id || bld.name)}</div>
+                                                                    <div className="option-title">
+                                                                        {(() => {
+                                                                            const byId = getEntityName(bld.id);
+                                                                            if (byId && byId !== String(bld.id)) return byId;
+                                                                            const byName = getEntityName(bld.name);
+                                                                            if (byName && byName !== bld.name) return byName;
+                                                                            return bld.name || byId || String(bld.id);
+                                                                        })()}
+                                                                    </div>
                                                                     {activePlanet.lifeformId === 2 && (() => {
                                                                         const megalithLvl = activePlanet.lifeformBuildings?.find((b: any) => b.id === 12108)?.level || 0;
                                                                         if (megalithLvl > 0) {
@@ -2501,8 +2520,10 @@ const CostsPlanner: React.FC = () => {
                                     {selectedCategory === 'lifeformResearch' && activePlanet && (
                                         <div className="lf-research-matrix-planner">
                                             {(() => {
-                                                // Fetch and normalize setup on the target planet
-                                                const rawSetup = activePlanet.sandboxSetup || activePlanet.lifeformSetup || [];
+                                                // Fetch and normalize setup on the target planet (prioritizing live in-game lifeformSetup)
+                                                const rawSetup = (activePlanet.lifeformSetup && activePlanet.lifeformSetup.length > 0)
+                                                    ? activePlanet.lifeformSetup
+                                                    : (activePlanet.sandboxSetup || []);
                                                 const activeSetup: { slotNumber: number; selectedTechId: number | null; level: number }[] = Array.from({ length: 18 }, (_, i) => ({
                                                     slotNumber: i + 1,
                                                     selectedTechId: null,
@@ -2585,7 +2606,7 @@ const CostsPlanner: React.FC = () => {
                                                                                         )}
 
                                                                                         <div className="tech-name-overlay">
-                                                                                            <span className="tech-overlay-text">{tech ? tech.name : 'Empty Slot'}</span>
+                                                                                            <span className="tech-overlay-text">{tech ? (getEntityName(tech.gkId || tech.name) || tech.name) : 'Empty Slot'}</span>
                                                                                             {tech && (
                                                                                                 <span className="tech-overlay-discount">
                                                                                                     -{getLifeformResearchDiscountPercentageVal(activePlanet).toFixed(2)}% Discount
@@ -2841,7 +2862,19 @@ const CostsPlanner: React.FC = () => {
                                                     </div>
 
                                                     <div className="item-details-block">
-                                                        <div className="item-name-heading">{getEntityName(item.itemName || item.itemId)}</div>
+                                                        <div className="item-name-heading">
+                                                            {(() => {
+                                                                if (item.itemId) {
+                                                                    const byId = getEntityName(item.itemId);
+                                                                    if (byId && byId !== String(item.itemId)) return byId;
+                                                                }
+                                                                if (item.itemName) {
+                                                                    const byName = getEntityName(item.itemName);
+                                                                    if (byName && byName !== item.itemName) return byName;
+                                                                }
+                                                                return item.itemName || String(item.itemId);
+                                                            })()}
+                                                        </div>
                                                         <div className="item-coords-sub">
                                                             {item.planetId === 'empire' ? t('costsPlanner.globalEmpireResearch') : `[${item.coords}] • ${item.planetName}`}
                                                         </div>
