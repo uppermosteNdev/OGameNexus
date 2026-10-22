@@ -30,28 +30,28 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
     const changes = [
         {
             icon: <Globe size={22} color="#00f2ff" />,
-            title: t('changelog.features.multiLangTitle', "Multi-Language Support"),
-            desc: t('changelog.features.multiLangDesc', "Nexus is now available in 12 languages with an easy language selector in the dashboard header, settings, and in-game messages.")
+            title: t('changelog.features.overwatchSeedingTitle', "Universe Seeding for Overwatch [Closed Beta]"),
+            desc: t('changelog.features.overwatchSeedingDesc', "New Overwatch instances now automatically scan and populate official Gameforge universe positions, ensuring the Universe Map is populated immediately upon creation.")
+        },
+        {
+            icon: <ShieldCheck size={22} color="#fbbf24" />,
+            title: t('changelog.features.overwatchAccessTitle', "Nexus Overwatch Access Requests"),
+            desc: t('changelog.features.overwatchAccessDesc', "Commanders without an alliance can now submit an access request directly in-game and track approval via our official Discord community.")
         },
         {
             icon: <ShoppingCart size={22} color="#10b981" />,
-            title: t('changelog.features.costsPlannerTitle', "Costs Planner: All Planets & Cart Editing"),
-            desc: t('changelog.features.costsPlannerDesc', "Add mine and facility upgrades across all planets with one click, and edit desired levels directly inside your shopping cart.")
+            title: t('changelog.features.costsPlannerSyncTitle', "Costs Planner Multi-Account Sync Isolation"),
+            desc: t('changelog.features.costsPlannerSyncDesc', "Shopping carts are now strictly scoped per player ID during Personal Vault cloud sync, completely eliminating cross-account leaks during cloud backup and restore.")
         },
         {
-            icon: <Sparkles size={22} color="#fbbf24" />,
-            title: t('changelog.features.astroAmortizationTitle', "Astrophysics Payback Calculator"),
-            desc: t('changelog.features.astroAmortizationDesc', "Calculate payback times and payoff speed for unlocking new colony slots through Astrophysics in the Amortization tool.")
+            icon: <Sparkles size={22} color="#ec4899" />,
+            title: t('changelog.features.costsPlannerLifeformsTitle', "Costs Planner Lifeforms & Naming Fixes"),
+            desc: t('changelog.features.costsPlannerLifeformsDesc', "Fixed building cost calculations to reflect real planetary lifeform structures and aligned localized building and research display names.")
         },
         {
             icon: <RefreshCw size={22} color="#38bdf8" />,
-            title: t('changelog.features.scrapMerchantTitle', "Scrap Merchant Overhaul"),
-            desc: t('changelog.features.scrapMerchantDesc', "Redesigned scrap calculation tool with accurate resource returns and full fleet mission support.")
-        },
-        {
-            icon: <ShieldCheck size={22} color="#f43f5e" />,
-            title: t('changelog.features.overwatchFixesTitle', "Overwatch Galaxy Sync & Sensor Fixes [Closed Beta]"),
-            desc: t('changelog.features.overwatchFixesDesc', "Fixed new colony and moon alerts on the live universe feed, corrected moon counting in Sensor Phalanx, and improved player class displays.")
+            title: t('changelog.features.languageSwitchingTitle', "Language Switching Improvements"),
+            desc: t('changelog.features.languageSwitchingDesc', "Enhanced language switching persistence and reactive interface updates across Dashboard, settings, and in-game tabs.")
         }
     ];
 
@@ -155,7 +155,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                     letterSpacing: '1px',
                                     display: 'inline-block'
                                 }}>
-                                    {t('changelog.versionBadge', 'v1.2.7')}
+                                    {t('changelog.versionBadge', 'v1.2.8')}
                                 </span>
                             </div>
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

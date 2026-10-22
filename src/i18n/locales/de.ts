@@ -258,7 +258,7 @@ export const de: LocaleTranslations = {
     },
     changelog: {
         title: "System Aktualisiert",
-        versionBadge: "v1.2.7",
+        versionBadge: "v1.2.8",
         telemetryReport: "OGAME NEXUS KOMMANDODECK TELEMETRIE-BERICHT",
         dataPreservedNotice: "Deine Planeteneinstellungen, erfassten Telemetriedaten und Überwachungsverläufe wurden bei diesem Update sicher beibehalten.",
         acknowledge: "Bestätigen",

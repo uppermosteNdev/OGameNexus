@@ -258,7 +258,7 @@ export const pl: LocaleTranslations = {
     },
     "changelog": {
         "title": "Aktualizacja systemu",
-        "versionBadge": "v1.2.7",
+        "versionBadge": "v1.2.8",
         "telemetryReport": "RAPORT TELEMETRII PANELU DOWODZENIA OGAME NEXUS",
         "dataPreservedNotice": "Twoje konfiguracje planet, zebrana telemetria i historia zostały bezpiecznie zachowane podczas tej aktualizacji.",
         "acknowledge": "Zrozumiałem",

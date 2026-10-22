@@ -256,23 +256,23 @@ export const en = {
     },
     changelog: {
         title: "System Updated",
-        versionBadge: "v1.2.7",
+        versionBadge: "v1.2.8",
         telemetryReport: "OGAME NEXUS COMMAND DECK TELEMETRY REPORT",
         dataPreservedNotice: "Your planetary setups, harvested telemetry, and tracking histories have been preserved securely during this update.",
         acknowledge: "Acknowledge",
         dismissVersion: "Dismiss for this version",
         features: {
-            multiLangTitle: "Multi-Language Support",
-            multiLangDesc: "Nexus is now available in 12 languages with an easy language selector in the dashboard header, settings, and in-game messages.",
-            costsPlannerTitle: "Costs Planner: All Planets & Cart Editing",
-            costsPlannerDesc: "Add mine and facility upgrades across all planets with one click, and edit desired levels directly inside your shopping cart.",
-            astroAmortizationTitle: "Astrophysics Payback Calculator",
-            astroAmortizationDesc: "Calculate payback times and payoff speed for unlocking new colony slots through Astrophysics in the Amortization tool.",
-            scrapMerchantTitle: "Scrap Merchant Overhaul",
-            scrapMerchantDesc: "Redesigned scrap calculation tool with accurate resource returns and full fleet mission support.",
-            overwatchFixesTitle: "Overwatch Galaxy Sync & Sensor Fixes [Closed Beta]",
-            overwatchFixesDesc: "Fixed new colony and moon alerts on the live universe feed, corrected moon counting in Sensor Phalanx, and improved player class displays."
-        }
+            overwatchSeedingTitle: "Universe Seeding for Overwatch [Closed Beta]",
+            overwatchSeedingDesc: "New Overwatch instances now automatically scan and populate official Gameforge universe positions, ensuring the Universe Map is populated immediately upon creation.",
+            overwatchAccessTitle: "Nexus Overwatch Access Requests",
+            overwatchAccessDesc: "Commanders without an alliance can now submit an access request directly in-game and track approval via our official Discord community.",
+            costsPlannerSyncTitle: "Costs Planner Multi-Account Sync Isolation",
+            costsPlannerSyncDesc: "Shopping carts are now strictly scoped per player ID during Personal Vault cloud sync, completely eliminating cross-account leaks during cloud backup and restore.",
+            costsPlannerLifeformsTitle: "Costs Planner Lifeforms & Naming Fixes",
+            costsPlannerLifeformsDesc: "Fixed building cost calculations to reflect real planetary lifeform structures and aligned localized building and research display names.",
+            languageSwitchingTitle: "Language Switching Improvements",
+            languageSwitchingDesc: "Enhanced language switching persistence and reactive interface updates across Dashboard, settings, and in-game tabs."
+        } as Record<string, string>
     }
 };
 

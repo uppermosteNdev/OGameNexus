@@ -1581,30 +1581,230 @@ function renderNexusChangelogAndDonations(inner: HTMLElement, currentLang: Suppo
     `;
   });
 
+function getAffiliateButtonText(lang: SupportedLanguage): string {
+  switch (lang) {
+    case 'ro': return "Susține gratuit (Link GF)";
+    case 'de': return "Kostenlos helfen (GF-Link)";
+    case 'fr': return "Soutien gratuit (Lien GF)";
+    case 'pl': return "Darmowe wsparcie (Link GF)";
+    case 'nl': return "Gratis steunen (GF-link)";
+    case 'es': return "Apoyo gratuito (Enlace GF)";
+    case 'it': return "Supporto gratuito (Link GF)";
+    case 'ru': return "Бесплатная поддержка (GF)";
+    case 'tr': return "Ücretsiz Destek (GF)";
+    case 'br': return "Apoie gratuitamente (Link GF)";
+    case 'pt': return "Apoie gratuitamente (Ligação GF)";
+    case 'en':
+    default:
+      return "Free Support (GF Link)";
+  }
+}
+
+function getCloseGuideText(lang: SupportedLanguage): string {
+  switch (lang) {
+    case 'ro': return "Închide ghidul";
+    case 'de': return "Anleitung schließen";
+    case 'fr': return "Fermer le guide";
+    case 'pl': return "Zamknij instrukcję";
+    case 'nl': return "Gids sluiten";
+    case 'es': return "Cerrar guía";
+    case 'it': return "Chiudi guida";
+    case 'ru': return "Закрыть руководство";
+    case 'tr': return "Rehberi kapat";
+    case 'br': return "Fechar guia";
+    case 'pt': return "Fechar guia";
+    case 'en':
+    default:
+      return "Close guide";
+  }
+}
+
+  const affiliateBtnText = getAffiliateButtonText(currentLang);
+  const closeGuideText = getCloseGuideText(currentLang);
+
   const donationsHtml = `
-    <hr style="background: #282d34; border: none; height: 2px; margin: 36px 0;" />
-    <div class="nexus_donations_card" style="border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; background: rgba(10, 15, 26, 0.95); overflow: hidden; box-shadow: 0 4px 18px rgba(0,0,0,0.8);">
-      <div style="background: linear-gradient(90deg, #182332, #0d141e); padding: 8px 14px; text-align: center; border-bottom: 1px solid rgba(56, 189, 248, 0.3); box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);">
-        <h3 style="margin: 0; color: #38bdf8; font-size: 13px; font-weight: 700; text-transform: capitalize; letter-spacing: 0.5px;">${texts.donationsTitle}</h3>
-      </div>
-      <div style="padding: 16px 20px; font-size: 12px; line-height: 1.65; color: #cbd5e1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        <p style="margin: 0 0 10px 0;">${texts.donationsIntro}</p>
-        <p style="margin: 0 0 10px 0;">${texts.donationLinkPrefix}<a href="https://ko-fi.com/W0M821KSSE" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">${texts.donationLinkText}</a></p>
-        <p style="margin: 0 0 4px 0;">${texts.affiliateTitle}</p>
-        <div style="margin: 4px 0 0 0; padding-left: 0;">
-          <div style="margin-bottom: 3px;">${texts.affiliateStep1}<a href="https://hero.li/OGame-Vendetta" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">https://hero.li/OGame-Vendetta</a></div>
-          <div style="margin-bottom: 3px;">${texts.affiliateStep2}</div>
-          <div style="margin-bottom: 3px;">${texts.affiliateStep3Html}</div>
+    <div class="nexus_donations_banner" style="
+      background: linear-gradient(135deg, rgba(14, 22, 38, 0.92) 0%, rgba(10, 16, 26, 0.96) 100%);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-left: 3px solid #f59e0b;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 22px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    ">
+      <!-- Top Compact Bar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <!-- Left: Icon + Title + Intro text -->
+        <div style="display: flex; align-items: center; gap: 10px; min-width: 220px; flex: 1;">
+          <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.2); flex-shrink: 0;">
+            ☕
+          </div>
+          <div>
+            <div style="color: #ffffff; font-size: 12.5px; font-weight: 700; letter-spacing: 0.3px; display: flex; align-items: center; gap: 6px;">
+              <span>${texts.donationsTitle}</span>
+            </div>
+            <div style="color: #94a3b8; font-size: 11px; margin-top: 1px; line-height: 1.35;">
+              ${texts.donationsIntro}
+            </div>
+          </div>
         </div>
-        <p style="margin: 8px 0 16px 0; color: #94a3b8; font-size: 11.5px;">${texts.affiliateNote}</p>
-        <p style="margin: 0; font-weight: 600; color: #cbd5e1;">${texts.thankYou}</p>
+
+        <!-- Right: Action Pills -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+          <!-- Ko-fi Pill -->
+          <a
+            href="https://ko-fi.com/W0M821KSSE"
+            target="_blank"
+            rel="noopener noreferrer"
+            id="nexus-kofi-link-btn"
+            style="
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+              color: #ffffff;
+              font-weight: 700;
+              font-size: 11.5px;
+              padding: 5px 12px;
+              border-radius: 6px;
+              text-decoration: none;
+              box-shadow: 0 2px 10px rgba(217, 119, 6, 0.35);
+              border: 1px solid rgba(251, 191, 36, 0.5);
+              cursor: pointer;
+              transition: all 0.18s ease;
+            "
+          >
+            <span>☕</span>
+            <span>${texts.donationLinkText}</span>
+          </a>
+
+          <!-- Gameforge Affiliate Pill (Toggle) -->
+          <button
+            type="button"
+            id="nexus-affiliate-toggle-btn"
+            style="
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              background: rgba(0, 242, 255, 0.08);
+              color: #00f2ff;
+              font-weight: 700;
+              font-size: 11.5px;
+              padding: 5px 12px;
+              border-radius: 6px;
+              box-shadow: 0 2px 10px rgba(0, 242, 255, 0.12);
+              border: 1px solid rgba(0, 242, 255, 0.35);
+              cursor: pointer;
+              transition: all 0.18s ease;
+            "
+          >
+            <span>🎮</span>
+            <span>${affiliateBtnText}</span>
+            <svg id="nexus-affiliate-toggle-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" style="vertical-align: middle; transition: transform 0.2s ease;">
+              <path d="M1 1L5 5L9 1" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Expandable Affiliate Drawer -->
+      <div
+        id="nexus-affiliate-drawer"
+        style="
+          display: none;
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid rgba(56, 189, 248, 0.18);
+        "
+      >
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <div style="color: #38bdf8; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+            <span>⭐</span>
+            <span>${texts.affiliateTitle}</span>
+          </div>
+          <button
+            type="button"
+            id="nexus-affiliate-close-btn"
+            style="
+              background: transparent;
+              border: none;
+              color: #94a3b8;
+              font-size: 11px;
+              cursor: pointer;
+              padding: 2px 6px;
+              border-radius: 4px;
+              transition: color 0.15s ease;
+            "
+          >
+            ✕ ${closeGuideText}
+          </button>
+        </div>
+
+        <!-- 3 Cards Layout -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px;">
+          <!-- Step 1 -->
+          <div style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px 12px;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+              <span style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-weight: 800; font-size: 10px; padding: 1px 6px; border-radius: 10px;">1</span>
+              <span style="color: #cbd5e1; font-size: 11.5px; font-weight: 600;">${texts.affiliateStep1.replace(/^\d+\.\s*/, '')}</span>
+            </div>
+            <a
+              href="https://hero.li/OGame-Vendetta"
+              target="_blank"
+              rel="noopener noreferrer"
+              style="
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                color: #00f2ff;
+                background: rgba(0, 242, 255, 0.1);
+                border: 1px solid rgba(0, 242, 255, 0.3);
+                border-radius: 4px;
+                padding: 3px 8px;
+                font-size: 11px;
+                font-weight: 600;
+                text-decoration: none;
+              "
+            >
+              <span>hero.li/OGame-Vendetta</span>
+              <span style="font-size: 10px;">↗</span>
+            </a>
+          </div>
+
+          <!-- Step 2 -->
+          <div style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px 12px;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <span style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-weight: 800; font-size: 10px; padding: 1px 6px; border-radius: 10px;">2</span>
+              <span style="color: #cbd5e1; font-size: 11px; line-height: 1.45;">${texts.affiliateStep2.replace(/^\d+\.\s*/, '')}</span>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px 12px;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <span style="background: rgba(249, 115, 22, 0.25); color: #f97316; font-weight: 800; font-size: 10px; padding: 1px 6px; border-radius: 10px;">3</span>
+              <span style="color: #cbd5e1; font-size: 11px; line-height: 1.45;">${texts.affiliateStep3Html.replace(/^\d+\.\s*/, '')}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Note & Thank you -->
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: rgba(56, 189, 248, 0.05); border-left: 3px solid #38bdf8; border-radius: 0 4px 4px 0; padding: 7px 12px;">
+          <div style="color: #94a3b8; font-size: 11px; line-height: 1.5; flex: 1; min-width: 200px;">
+            ${texts.affiliateNote}
+          </div>
+          <div style="color: #38bdf8; font-size: 11.5px; font-weight: 700; white-space: nowrap;">
+            ${texts.thankYou} 🚀
+          </div>
+        </div>
       </div>
     </div>
   `;
 
   inner.innerHTML = `
     <div class="msg ogl_feedMessage" style="color: #b1b1b2; background: #101419; padding: 26px 25px; line-height: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-sizing: border-box;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; padding-bottom: 14px; border-bottom: 1px solid rgba(56, 189, 248, 0.25);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid rgba(56, 189, 248, 0.25);">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 18px;">🌌</span>
           <span style="color: #ffffff; font-size: 15px; font-weight: 700; letter-spacing: 0.5px;">${texts.headerTitle}</span>
@@ -1660,10 +1860,62 @@ function renderNexusChangelogAndDonations(inner: HTMLElement, currentLang: Suppo
           </div>
         </div>
       </div>
-      ${changelogsHtml}
       ${donationsHtml}
+      ${changelogsHtml}
     </div>
   `;
+
+  // Affiliate drawer toggle & button listeners
+  const affiliateToggleBtn = inner.querySelector<HTMLButtonElement>('#nexus-affiliate-toggle-btn');
+  const affiliateDrawer = inner.querySelector<HTMLDivElement>('#nexus-affiliate-drawer');
+  const affiliateChevron = inner.querySelector<SVGElement>('#nexus-affiliate-toggle-chevron');
+  const affiliateCloseBtn = inner.querySelector<HTMLButtonElement>('#nexus-affiliate-close-btn');
+  const kofiBtn = inner.querySelector<HTMLAnchorElement>('#nexus-kofi-link-btn');
+
+  if (affiliateToggleBtn && affiliateDrawer) {
+    let isAffiliateOpen = false;
+    const toggleAffiliateDrawer = (show?: boolean) => {
+      isAffiliateOpen = show !== undefined ? show : !isAffiliateOpen;
+      affiliateDrawer.style.display = isAffiliateOpen ? 'block' : 'none';
+      if (affiliateChevron) {
+        affiliateChevron.style.transform = isAffiliateOpen ? 'rotate(180deg)' : 'rotate(0deg)';
+      }
+      if (isAffiliateOpen) {
+        affiliateToggleBtn.style.background = 'rgba(0, 242, 255, 0.18)';
+        affiliateToggleBtn.style.borderColor = '#00f2ff';
+      } else {
+        affiliateToggleBtn.style.background = 'rgba(0, 242, 255, 0.08)';
+        affiliateToggleBtn.style.borderColor = 'rgba(0, 242, 255, 0.35)';
+      }
+    };
+
+    affiliateToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleAffiliateDrawer();
+    });
+
+    if (affiliateCloseBtn) {
+      affiliateCloseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleAffiliateDrawer(false);
+      });
+      affiliateCloseBtn.addEventListener('mouseenter', () => {
+        affiliateCloseBtn.style.color = '#fff';
+      });
+      affiliateCloseBtn.addEventListener('mouseleave', () => {
+        affiliateCloseBtn.style.color = '#94a3b8';
+      });
+    }
+  }
+
+  if (kofiBtn) {
+    kofiBtn.addEventListener('mouseenter', () => {
+      kofiBtn.style.filter = 'brightness(1.15)';
+    });
+    kofiBtn.addEventListener('mouseleave', () => {
+      kofiBtn.style.filter = 'brightness(1.0)';
+    });
+  }
 
   // Attach dropdown trigger & interactive language switcher event listeners
   const triggerBtn = inner.querySelector<HTMLButtonElement>('#nexus-lang-dropdown-trigger');

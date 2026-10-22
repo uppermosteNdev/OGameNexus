@@ -258,7 +258,7 @@ export const br: LocaleTranslations = {
     },
     "changelog": {
         "title": "Sistema Atualizado",
-        "versionBadge": "v1.2.7",
+        "versionBadge": "v1.2.8",
         "telemetryReport": "RELATÓRIO DE TELEMETRIA DA PONTE DE COMANDO OGAME NEXUS",
         "dataPreservedNotice": "Suas configurações planetárias, telemetria coletada e históricos foram preservados com total segurança durante esta atualização.",
         "acknowledge": "Entendido",

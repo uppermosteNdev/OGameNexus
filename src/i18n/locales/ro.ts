@@ -258,22 +258,22 @@ export const ro: LocaleTranslations = {
     },
     changelog: {
         title: "Sistem Actualizat",
-        versionBadge: "v1.2.7",
+        versionBadge: "v1.2.8",
         telemetryReport: "RAPORT DE TELEMETRIE PUNTE DE COMANDĂ OGAME NEXUS",
         dataPreservedNotice: "Configurările planetare, datele de telemetrie și istoricul de monitorizare au fost păstrate în siguranță în timpul acestei actualizări.",
         acknowledge: "Confirmă",
         dismissVersion: "Nu mai afișa pentru această versiune",
         features: {
-            multiLangTitle: "Suport multi-lingv",
-            multiLangDesc: "Nexus este acum disponibil în 12 limbi cu un selector simplu de limbă în antetul panoului, setări și mesaje în joc.",
-            costsPlannerTitle: "Planificator costuri: Toate planetele & editare coș",
-            costsPlannerDesc: "Adaugă îmbunătățiri de mine și facilități pe toate planetele dintr-un clic și editează nivelurile dorite direct în coșul de cumpărături.",
-            astroAmortizationTitle: "Calculator amortizare Astrofizică",
-            astroAmortizationDesc: "Calculează durata de amortizare și rentabilitatea pentru deblocarea noilor colonii prin Astrofizică în instrumentul de Amortizare.",
-            scrapMerchantTitle: "Modernizare Negustor de fier vechi",
-            scrapMerchantDesc: "Instrument reproiectat de casare a flotelor cu randamente precise de resurse și suport complet pentru flotele aflate în zbor.",
-            overwatchFixesTitle: "Corecții Overwatch & Sincronizare galaxie [Closed Beta]",
-            overwatchFixesDesc: "S-au corectat alertele de colonii noi și apariții de lună pe fluxul live, numărarea lunilor în Falanga Senzorială și afișarea claselor de jucători."
+            overwatchSeedingTitle: "Scanare și inițializare univers pentru Overwatch [Closed Beta]",
+            overwatchSeedingDesc: "Instanțele noi de Overwatch scanează și populează acum automat pozițiile oficiale Gameforge din univers, afișând Harta Universului completă încă de la creare.",
+            overwatchAccessTitle: "Cereri de acces Nexus Overwatch",
+            overwatchAccessDesc: "Comandanții fără alianță pot trimite acum o cerere de acces direct din joc și pot urmări aprobarea pe comunitatea oficială de Discord.",
+            costsPlannerSyncTitle: "Izolare sincronizare multi-cont în Planificator costuri",
+            costsPlannerSyncDesc: "Coșul de cumpărături este acum strict delimitat pe ID-ul jucătorului în Seiful Personal, eliminând scurgerile între conturi diferite la sincronizarea în cloud.",
+            costsPlannerLifeformsTitle: "Corecturi forme de viață și denumiri clădiri",
+            costsPlannerLifeformsDesc: "Corectat calculele de nivel pentru clădirile formelor de viață conform structurilor reale și uniformizat denumirile clădirilor și cercetărilor.",
+            languageSwitchingTitle: "Îmbunătățiri comutare limbă",
+            languageSwitchingDesc: "Îmbunătățit salvarea limbii selectate și actualizarea instantanee a interfeței în Panou, setări și tab-urile din joc."
         }
     }
 };

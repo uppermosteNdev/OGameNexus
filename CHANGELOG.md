@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.8] - 2026-10-21
+
+### 🚀 New Features
+
+* **Universe Baseline Seeding for Overwatch [Closed Beta]**
+  * Creating a new Overwatch instance now automatically triggers a baseline scan of official Gameforge XML/JSON universe APIs (`serverData.xml`, `universe.xml`, `players.xml`, `alliances.xml`).
+  * Immediately populates all ~5,000+ planets, moons, players, and alliance tags so the Universe Map is completely filled with official positions from day one, before any alliance galaxy scans occur.
+  * Raised seeded universe detection threshold to `>= 100` planets to prevent false positives on legacy or partially populated test universes.
+
+* **Nexus Overwatch Access Request System**
+  * Added an interactive **"Request Access"** modal on the Overwatch onboarding screen for commanders requesting Closed Beta access.
+  * Allows players to submit an access request with custom notes and provides a direct Discord link (`https://discord.gg/Jm4haETTYp`) to track whitelist approval status.
+  * In-game alliance tag is now fully editable during Overwatch creation, and the create action button has been updated to **"Create Alliance"**.
+
+### 🛡️ Improvements & Bug Fixes
+
+* **Costs Planner: Multi-Account Cloud Sync Isolation**
+  * Fixed an issue where accounts with empty shopping carts erroneously fell back to reading cart items from other local accounts during Personal Vault sync.
+  * Shopping cart database queries are now strictly scoped to the active player ID (`costs_planner_cart_${playerId}`).
+  * Updated Cloudflare Worker vault handler so incoming client planner state replaces active cloud state instead of preserving deleted cart items indefinitely in R2.
+
+* **Costs Planner: Planetary Lifeform Level Accuracy**
+  * Fixed an issue where Costs Planner was considering sandbox/mock lifeform levels instead of reading actual planet lifeform building levels from the active account.
+  * Real planetary lifeform building levels are now accurately queried and displayed as the current baseline for all upgrade calculations.
+
+* **Costs Planner: Building & Research Naming Alignment**
+  * Corrected building and research display names across all categories and localized dictionaries in Costs Planner.
+  * Ensures localized titles match official in-game names across all supported languages.
+
+* **Language Switching Improvements**
+  * Fixed language switching reactivity and persistence across the main dashboard header, settings panel, and in-game message tabs.
+  * Changing languages now instantly updates all UI components and preserves the user's manual selection across browser restarts.
+
+---
+
 ## [1.2.7] - 2026-10-20
 
 ### 🚀 New Features

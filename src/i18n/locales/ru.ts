@@ -258,7 +258,7 @@ export const ru: LocaleTranslations = {
     },
     "changelog": {
         "title": "Система обновлена",
-        "versionBadge": "v1.2.7",
+        "versionBadge": "v1.2.8",
         "telemetryReport": "ОТЧЁТ ТЕЛЕМЕТРИИ КОМАНДНОГО МОСТИКА OGAME NEXUS",
         "dataPreservedNotice": "Ваши настройки планет, собранная телеметрия и история были надёжно сохранены во время этого обновления.",
         "acknowledge": "Понятно",

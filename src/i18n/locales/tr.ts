@@ -258,7 +258,7 @@ export const tr: LocaleTranslations = {
     },
     "changelog": {
         "title": "Sistem Güncellendi",
-        "versionBadge": "v1.2.7",
+        "versionBadge": "v1.2.8",
         "telemetryReport": "OGAME NEXUS KOMUTA MERKEZİ TELEMETRİ RAPORU",
         "dataPreservedNotice": "Gezegen yapılandırmalarınız, toplanan telemetri ve geçmişiniz bu güncelleme sırasında güvenle korunmuştur.",
         "acknowledge": "Anlaşıldı",

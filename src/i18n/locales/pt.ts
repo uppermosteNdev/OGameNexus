@@ -258,7 +258,7 @@ export const pt: LocaleTranslations = {
     },
     "changelog": {
         "title": "Sistema Actualizado",
-        "versionBadge": "v1.2.7",
+        "versionBadge": "v1.2.8",
         "telemetryReport": "RELATÓRIO DE TELEMETRIA DO CENTRO DE COMANDO OGAME NEXUS",
         "dataPreservedNotice": "As suas configurações planetárias, telemetria recolhida e histórico foram preservados em total segurança durante esta actualização.",
         "acknowledge": "Compreendido",

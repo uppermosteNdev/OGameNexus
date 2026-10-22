@@ -258,7 +258,7 @@ export const nl: LocaleTranslations = {
     },
     "changelog": {
         "title": "Systeem geüpdatet",
-        "versionBadge": "v1.2.7",
+        "versionBadge": "v1.2.8",
         "telemetryReport": "OGAME NEXUS COMMANDODEK TELEMETRIERAPPORT",
         "dataPreservedNotice": "Je planeetconfiguraties, verzamelde telemetrie en trackinggeschiedenis zijn veilig bewaard tijdens deze update.",
         "acknowledge": "Begrepen",
