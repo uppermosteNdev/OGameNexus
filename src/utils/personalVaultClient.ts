@@ -5,7 +5,7 @@
 // Robust batching with live progress reporting for massive historical archives.
 // ============================================================================
 
-import { db, Expedition, CombatReport, DebrisHarvest, LifeformDiscovery, TodoProject, SpiedPlanet } from '../db';
+import { db, Expedition, CombatReport, DebrisHarvest, LifeformDiscovery, TodoProject, SpiedPlanet, TacticalNote } from '../db';
 import { getOverwatchApiUrl, fetchOverwatch } from './overwatchApi';
 import { cleanUniverseId, isSameUniverse } from './universe';
 
@@ -89,6 +89,7 @@ export interface VaultTelemetryCounts {
   discoveries: number;
   planner: number;
   radar: number;
+  notes?: number;
 }
 
 export interface VaultMaxTimestamps {
@@ -239,6 +240,7 @@ export async function sendLocalDataToVault(
       allProjects,
       allSpiedPlanets,
       cartSetting,
+      allTacticalNotes,
     ] = await Promise.all([
       db.expeditions.where('playerId').anyOf(pidVariants).toArray(),
       db.combatReports.where('playerId').anyOf(pidVariants).toArray(),
@@ -247,10 +249,12 @@ export async function sendLocalDataToVault(
       db.todoProjects.toArray(),
       db.spiedPlanets.toArray(),
       pidStr ? db.settings.get('costs_planner_cart_' + pidStr) : Promise.resolve(null),
+      db.tacticalNotes.toArray(),
     ]);
 
     const filteredProjects = allProjects.filter(p => p.playerId && String(p.playerId).trim() === pidStr);
     const localRadar = allSpiedPlanets.filter(p => isSameUniverse(p.universe, universe));
+    const localNotes = allTacticalNotes.filter(n => isSameUniverse(n.universe, universe));
 
     let cartItems: any[] = [];
     if (Array.isArray((cartSetting as any)?.cartItems)) {
@@ -510,6 +514,7 @@ export async function sendLocalDataToVault(
       discoveries: discoveriesToSend,
       plannerProjects: plannerToSend,
       radarTargets: radarToSend,
+      tacticalNotes: localNotes,
     };
 
     const compressed = await compressPayload(fullPayload);
@@ -556,6 +561,7 @@ export async function sendLocalDataToVault(
         discoveries: discoveriesToSend.length,
         planner: plannerToSend.length,
         radar: radarToSend.length,
+        notes: localNotes.length,
       },
       totalLocal: {
         expeditions: compactedExpeditions.length,
@@ -677,6 +683,7 @@ export async function fetchVaultDataToLocal(
     const discoveries: LifeformDiscovery[] = data.discoveries || [];
     const plannerProjects: TodoProject[] = data.plannerProjects || [];
     const incomingRadar: SpiedPlanet[] = data.radarTargets || [];
+    const incomingNotes: TacticalNote[] = data.tacticalNotes || [];
 
     // Helper to bulkPut in batches to avoid locking the IndexedDB thread
     const chunkedBulkPut = async <T>(table: any, items: T[], batchSize = 1000, label = 'records') => {
@@ -912,6 +919,11 @@ export async function fetchVaultDataToLocal(
       await chunkedBulkPut(db.spiedPlanets, resolvedRadarPlanets, 500, 'radar');
     }
 
+    if (incomingNotes.length > 0) {
+      onProgress?.({ stage: `Restoring ${incomingNotes.length.toLocaleString()} Tactical Dossiers...`, current: 90, total: 100, percent: 92 });
+      await chunkedBulkPut(db.tacticalNotes, incomingNotes, 500, 'notes');
+    }
+
     onProgress?.({ stage: 'Download Complete', current: 100, total: 100, percent: 100 });
 
     return {
@@ -923,6 +935,7 @@ export async function fetchVaultDataToLocal(
         discoveries: discoveries.length,
         planner: plannerProjects.length,
         radar: radarUpdatedCount,
+        notes: incomingNotes.length,
       },
       lastFetchedAt: data.lastFetchedAt || Date.now(),
     };

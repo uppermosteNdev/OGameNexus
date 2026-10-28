@@ -451,6 +451,54 @@ export interface SpiedPlanet {
     hasTraderClass?: boolean;
 }
 
+export interface UniverseBaselineSlot {
+    slot: number;
+    planetId: string;
+    planetName: string;
+    playerId: string;
+    playerName: string;
+    playerStatus: string;
+    allianceTag?: string;
+    hasMoon: boolean;
+    moonId?: string;
+    moonSize?: number;
+}
+
+export interface UniverseBaselineSystem {
+    universe: string;
+    galaxy: number;
+    system: number;
+    slots: UniverseBaselineSlot[];
+    lastUpdated: number;
+}
+
+export type TacticalNoteTag = 'threat' | 'farm' | 'ally' | 'moonkill' | 'intel' | 'custom' | '';
+
+export interface TacticalNoteEntry {
+    id: string;
+    text: string;
+    tag?: TacticalNoteTag;
+    timestamp: number;
+    coords?: string;
+}
+
+export interface TacticalNote {
+    noteKey: string; // e.g. "coord:s267-en:3:38:4" or "player:s267-en:101067"
+    universe: string;
+    targetType: 'coordinate' | 'player';
+    targetId: string; // "3:38:4" or playerId / playerName
+    coords?: string;
+    playerId?: string;
+    playerName?: string;
+    allianceTag?: string;
+    tag: TacticalNoteTag;
+    tagLabel?: string;
+    text: string;
+    entries?: TacticalNoteEntry[];
+    updatedAt: number;
+    createdAt: number;
+}
+
 export class OGNexusDB extends Dexie {
     accounts!: Table<Account>;
     planets!: Table<Planet>;
@@ -466,6 +514,8 @@ export class OGNexusDB extends Dexie {
     debrisHarvests!: Table<DebrisHarvest>;
     combatReports!: Table<CombatReport>;
     spiedPlanets!: Table<SpiedPlanet>;
+    universeBaseline!: Table<UniverseBaselineSystem>;
+    tacticalNotes!: Table<TacticalNote, string>;
 
     constructor() {
         super('OGNexusDB');
@@ -648,6 +698,46 @@ export class OGNexusDB extends Dexie {
             }
         });
 
+
+        // Version 39 adds 'universeBaseline' table for fast 0ms offline Universe Map navigation
+        this.version(39).stores({
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: 'harvestKey, messageId, playerId, timestamp, coords, universe',
+            combatReports: 'messageId, playerId, timestamp, coords, winner',
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId',
+            universeBaseline: '[universe+galaxy+system], universe'
+        });
+
+        // Version 40 adds 'tacticalNotes' table for tactical dossiers and galaxy view slot notes
+        this.version(40).stores({
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: 'harvestKey, messageId, playerId, timestamp, coords, universe',
+            combatReports: 'messageId, playerId, timestamp, coords, winner',
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId',
+            universeBaseline: '[universe+galaxy+system], universe',
+            tacticalNotes: 'noteKey, universe, targetType, targetId, tag, updatedAt'
+        });
+
         // Seed data for new database installations
         this.on('populate', () => {
             this.seedKnowledge();
@@ -817,3 +907,34 @@ export class OGNexusDB extends Dexie {
 }
 
 export const db = new OGNexusDB();
+
+export async function getTacticalNotesForUniverse(universe: string): Promise<TacticalNote[]> {
+    try {
+        const cleanUni = cleanUniverseId(universe);
+        const notes = await db.tacticalNotes.where('universe').equals(cleanUni).toArray();
+        if (notes.length === 0) {
+            const all = await db.tacticalNotes.toArray();
+            return all.filter(n => n.universe === cleanUni || n.universe === universe ||
+                (n.universe && cleanUni && (cleanUni.includes(n.universe) || n.universe.includes(cleanUni))));
+        }
+        return notes;
+    } catch (err) {
+        console.error('OGame Nexus: Error reading tactical notes from DB', err);
+        return [];
+    }
+}
+
+export async function saveTacticalNoteToDB(note: TacticalNote): Promise<string> {
+    const cleanUni = cleanUniverseId(note.universe);
+    const cleanedNote: TacticalNote = {
+        ...note,
+        universe: cleanUni,
+        updatedAt: Date.now()
+    };
+    await db.tacticalNotes.put(cleanedNote);
+    return cleanedNote.noteKey;
+}
+
+export async function deleteTacticalNoteFromDB(noteKey: string): Promise<void> {
+    await db.tacticalNotes.delete(noteKey);
+}

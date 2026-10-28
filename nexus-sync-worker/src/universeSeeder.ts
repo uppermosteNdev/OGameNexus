@@ -9,6 +9,7 @@
 
 import { Env } from './index';
 import { getUniverseDb } from './dbRouter';
+import { gzipCompress } from './migrationR2';
 
 export function cleanUniverseId(raw: string): string {
   if (!raw) return 's267-en';
@@ -24,16 +25,28 @@ export function cleanUniverseId(raw: string): string {
 export function normalizePlayerStatus(raw?: string | null): string {
   if (!raw || raw === 'active') return 'active';
   const clean = raw.trim();
+  const lower = clean.toLowerCase();
+  if (lower === 'active' || lower === 'normal' || lower === '') return 'active';
+
+  // Explicit word mapping
+  if (lower === 'vacation') return 'v';
+  if (lower === 'longinactive') return 'I';
+  if (lower === 'inactive') return 'i';
+  if (lower === 'banned') return 'b';
+
   const tags = new Set<string>();
 
   if (clean.includes(',')) {
     clean.split(',').forEach(t => {
       const part = t.trim();
-      if (part === 'v' || part === 'I' || part === 'i' || part === 'b') {
-        tags.add(part);
-      }
+      const pLower = part.toLowerCase();
+      if (part === 'v' || pLower === 'vacation') tags.add('v');
+      else if (part === 'I' || pLower === 'longinactive') tags.add('I');
+      else if (part === 'i' || pLower === 'inactive') tags.add('i');
+      else if (part === 'b' || pLower === 'banned') tags.add('b');
     });
   } else {
+    // Single compact code from players.xml or gameforge (e.g. "v", "i", "I", "vI", "vi", "vb", "vIb")
     for (const ch of clean) {
       if (ch === 'v' || ch === 'I' || ch === 'i' || ch === 'b') {
         tags.add(ch);
@@ -49,7 +62,7 @@ export function normalizePlayerStatus(raw?: string | null): string {
   else if (tags.has('i')) ordered.push('i');
   if (tags.has('b')) ordered.push('b');
 
-  return ordered.join(',');
+  return ordered.length > 0 ? ordered.join(',') : 'active';
 }
 
 interface ParsedAlliance {
@@ -574,6 +587,13 @@ export async function seedUniverseFromOfficialAPI(rawUniverseId: string, env: En
   const durationMs = Date.now() - startTime;
   console.log(`[UniverseSeeder] Seeded ${parsedPlanets.length} planets, ${moonsCount} moons, ${detectedEvents.length} events logged in ${durationMs}ms for ${universeId}`);
 
+  // Synchronize compressed R2 baseline object for fast CDN delivery
+  try {
+    await exportUniverseBaselineToR2(universeId, env);
+  } catch (r2Err) {
+    console.warn(`[UniverseSeeder] R2 baseline export warning for ${universeId}:`, r2Err);
+  }
+
   return {
     success: true,
     universeId,
@@ -791,6 +811,13 @@ export async function syncDailyPlayersAndAlliances(rawUniverseId: string, env: E
   const durationMs = Date.now() - startTime;
   console.log(`[DailySync] Completed for ${universeId}: ${statements.length} slots updated, ${statusEventsCount} status changes in ${durationMs}ms`);
 
+  // Update R2 baseline with latest player names / statuses
+  try {
+    await exportUniverseBaselineToR2(universeId, env);
+  } catch (r2Err) {
+    console.warn(`[DailySync] R2 baseline export warning for ${universeId}:`, r2Err);
+  }
+
   return {
     success: true,
     universeId,
@@ -845,5 +872,137 @@ export async function ensureBaselinePlanetsMigrated(rawUniverseId: string, env: 
     }
   } catch (err) {
     console.warn('[UniverseSeeder] Migration check notice:', err);
+  }
+}
+
+// ============================================================================
+// CLOUDFLARE R2 UNIVERSE BASELINE EXPORT & CDN SYNCHRONIZATION
+// ============================================================================
+
+export interface UniverseBaselinePlanetDTO {
+  g: number;
+  s: number;
+  slot: number;
+  pid: string;
+  pname: string;
+  uid: string;
+  uname: string;
+  status: string;
+  tag?: string;
+  moon?: number;
+  mid?: string;
+  msize?: number;
+}
+
+export interface UniverseBaselinePayload {
+  version: number;
+  universeId: string;
+  serverName: string;
+  galaxies: number;
+  systems: number;
+  timestamp: number;
+  planetsCount: number;
+  planets: UniverseBaselinePlanetDTO[];
+}
+
+/**
+ * Serializes the official Gameforge universe topology from D1 into a compressed
+ * JSON object in Cloudflare R2 (`universes/{universeId}/baseline.json.gz`).
+ */
+export async function exportUniverseBaselineToR2(
+  rawUniverseId: string,
+  env: Env
+): Promise<{ success: boolean; etag?: string; planetsCount?: number; sizeBytes?: number; error?: string }> {
+  const universeId = cleanUniverseId(rawUniverseId);
+  const db = getUniverseDb(env, universeId);
+
+  try {
+    // 1. Fetch universe metadata
+    const uniInfo: any = await db.prepare(
+      `SELECT server_name, galaxies, systems, last_seeded_at FROM universe_info WHERE universe_id = ?`
+    ).bind(universeId).first();
+
+    // 2. Query all occupied baseline planet slots
+    let rows: any = await db.prepare(
+      `SELECT galaxy, system, slot, planet_id, planet_name, player_id, player_name, player_status, alliance_tag, has_moon, moon_id, moon_size
+       FROM universe_baseline_planets
+       WHERE universe_id = ? AND player_id IS NOT NULL
+       ORDER BY galaxy ASC, system ASC, slot ASC`
+    ).bind(universeId).all();
+
+    let planetsList: any[] = rows?.results || [];
+
+    // If D1 baseline is empty, attempt an initial seed first
+    if (planetsList.length === 0) {
+      console.log(`[UniverseSeeder] Baseline is empty for ${universeId}, running seedUniverseFromOfficialAPI first...`);
+      const seedRes = await seedUniverseFromOfficialAPI(universeId, env);
+      if (!seedRes.success) {
+        return { success: false, error: 'Failed to seed universe from Gameforge' };
+      }
+      rows = await db.prepare(
+        `SELECT galaxy, system, slot, planet_id, planet_name, player_id, player_name, player_status, alliance_tag, has_moon, moon_id, moon_size
+         FROM universe_baseline_planets
+         WHERE universe_id = ? AND player_id IS NOT NULL
+         ORDER BY galaxy ASC, system ASC, slot ASC`
+      ).bind(universeId).all();
+      planetsList = rows?.results || [];
+    }
+
+    const planetsDto: UniverseBaselinePlanetDTO[] = planetsList.map((r: any) => ({
+      g: Number(r.galaxy),
+      s: Number(r.system),
+      slot: Number(r.slot),
+      pid: String(r.planet_id || ''),
+      pname: String(r.planet_name || 'Planet'),
+      uid: String(r.player_id || ''),
+      uname: String(r.player_name || 'Unknown'),
+      status: String(r.player_status || 'active'),
+      tag: r.alliance_tag ? String(r.alliance_tag) : undefined,
+      moon: r.has_moon ? 1 : 0,
+      mid: r.moon_id ? String(r.moon_id) : undefined,
+      msize: r.moon_size ? Number(r.moon_size) : undefined,
+    }));
+
+    const now = Date.now();
+    const payload: UniverseBaselinePayload = {
+      version: 1,
+      universeId,
+      serverName: uniInfo?.server_name || universeId,
+      galaxies: Number(uniInfo?.galaxies || 9),
+      systems: Number(uniInfo?.systems || 499),
+      timestamp: uniInfo?.last_seeded_at || now,
+      planetsCount: planetsDto.length,
+      planets: planetsDto,
+    };
+
+    const jsonString = JSON.stringify(payload);
+    const compressedBytes = await gzipCompress(jsonString);
+
+    const r2Key = `universes/${universeId}/baseline.json.gz`;
+    const r2Obj = await env.VAULT_BUCKET.put(r2Key, compressedBytes, {
+      httpMetadata: {
+        contentType: 'application/json',
+        contentEncoding: 'gzip',
+        cacheControl: 'public, max-age=86400, stale-while-revalidate=3600',
+      },
+      customMetadata: {
+        universeId,
+        timestamp: String(payload.timestamp),
+        planetsCount: String(planetsDto.length),
+        rawSize: String(jsonString.length),
+      },
+    });
+
+    console.log(`[UniverseSeeder] Uploaded ${r2Key} to R2 (${compressedBytes.byteLength} bytes gzipped, ${planetsDto.length} planets)`);
+
+    return {
+      success: true,
+      etag: r2Obj?.httpEtag || `"${now}"`,
+      planetsCount: planetsDto.length,
+      sizeBytes: compressedBytes.byteLength,
+    };
+  } catch (err: any) {
+    console.error(`[UniverseSeeder] Error exporting baseline for ${universeId}:`, err);
+    return { success: false, error: err.message };
   }
 }

@@ -32,7 +32,7 @@ export const ro: LocaleTranslations = {
         empire: "Imperiu",
         fleet: "Mişcări de flotă",
         expeditions: "Expediții",
-        combat: "Simulator de luptă",
+        combat: "Lupte",
         scout: "Căutare inactivi",
         debris: "Câmpuri de rămășițe",
         phalanx: "Acoperire Phalanx",
@@ -258,22 +258,24 @@ export const ro: LocaleTranslations = {
     },
     changelog: {
         title: "Sistem Actualizat",
-        versionBadge: "v1.2.8",
+        versionBadge: "v1.2.9",
         telemetryReport: "RAPORT DE TELEMETRIE PUNTE DE COMANDĂ OGAME NEXUS",
         dataPreservedNotice: "Configurările planetare, datele de telemetrie și istoricul de monitorizare au fost păstrate în siguranță în timpul acestei actualizări.",
         acknowledge: "Confirmă",
         dismissVersion: "Nu mai afișa pentru această versiune",
         features: {
-            overwatchSeedingTitle: "Scanare și inițializare univers pentru Overwatch [Closed Beta]",
-            overwatchSeedingDesc: "Instanțele noi de Overwatch scanează și populează acum automat pozițiile oficiale Gameforge din univers, afișând Harta Universului completă încă de la creare.",
-            overwatchAccessTitle: "Cereri de acces Nexus Overwatch",
-            overwatchAccessDesc: "Comandanții fără alianță pot trimite acum o cerere de acces direct din joc și pot urmări aprobarea pe comunitatea oficială de Discord.",
-            costsPlannerSyncTitle: "Izolare sincronizare multi-cont în Planificator costuri",
-            costsPlannerSyncDesc: "Coșul de cumpărături este acum strict delimitat pe ID-ul jucătorului în Seiful Personal, eliminând scurgerile între conturi diferite la sincronizarea în cloud.",
-            costsPlannerLifeformsTitle: "Corecturi forme de viață și denumiri clădiri",
-            costsPlannerLifeformsDesc: "Corectat calculele de nivel pentru clădirile formelor de viață conform structurilor reale și uniformizat denumirile clădirilor și cercetărilor.",
-            languageSwitchingTitle: "Îmbunătățiri comutare limbă",
-            languageSwitchingDesc: "Îmbunătățit salvarea limbii selectate și actualizarea instantanee a interfeței în Panou, setări și tab-urile din joc."
+            notesFeatureTitle: "Notițe pentru coordonate și jucători",
+            notesFeatureDesc: "Apasă pe numărul oricărei poziții din Galaxie pentru a adăuga și gestiona notițe private cu etichete, istoric cronologic și sincronizare în Seiful Personal.",
+            topFlopTitle: "Top / Flop Alianță",
+            topFlopDesc: "Clasamente zilnice automate pe 24h cu punctele câștigate și pierdute, teme tactice HUD personalizabile și imagini pentru Discord.",
+            playerActivityLinkTitle: "Legătură directă Hartă -> Activitate jucător",
+            playerActivityLinkDesc: "Navigare rapidă cu un singur clic din Harta universului direct în istoricul de activitate al jucătorului.",
+            empireYieldConfigTitle: "Personalizare Producție zilnică imperiu",
+            empireYieldConfigDesc: "Alege ce surse intră în calculul producției zilnice și configurează procentul returnat de Negustorul de fier vechi.",
+            activityTrackingFixTitle: "Urmărire activitate cu alte extensii",
+            activityTrackingFixDesc: "Rezolvat conflictele de detectare a activității în galaxie când sunt active și alte extensii (OGLight, AGR etc.).",
+            statusTrackingFixTitle: "Urmărire status jucători cu alte extensii",
+            statusTrackingFixDesc: "Corectat sincronizarea statusurilor (inactiv, vacanță, bandit) în timpul scanărilor din galaxie."
         }
     }
 };

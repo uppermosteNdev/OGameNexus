@@ -8106,3 +8106,240 @@ input.ow-coord-num-input[type='number'] {
 }
 
 
+
+/* ============================================================================
+   24-HOUR ACTIVITY CLOCK & TACTICAL RADAR
+   ============================================================================ */
+.ow-clock-view-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.ow-clock-instrument-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(4, 9, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.ow-clock-instrument-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at center, rgba(0, 242, 255, 0.03) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.ow-clock-card-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.ow-clock-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+
+.ow-clock-card-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-clock-svg {
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 1 / 1;
+  filter: drop-shadow(0 0 24px rgba(0, 0, 0, 0.95));
+  user-select: none;
+}
+
+/* Radar Sweep Beam Animation */
+@keyframes owRadarSweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ow-clock-radar-sweep {
+  transform-origin: 200px 200px;
+  animation: owRadarSweep 8s linear infinite;
+  pointer-events: none;
+}
+
+/* Activity Star Pulse Animation */
+@keyframes owStarPulse {
+  0%, 100% {
+    opacity: 0.4;
+    filter: drop-shadow(0 0 4px #00f2ff);
+  }
+  50% {
+    opacity: 0.85;
+    filter: drop-shadow(0 0 14px #00f2ff);
+  }
+}
+
+.ow-clock-star-active {
+  animation: owStarPulse 2s ease-in-out infinite;
+}
+
+/* Hour Segment Micro-interactions */
+.ow-clock-hour-segment {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ow-clock-hour-segment:hover {
+  filter: brightness(1.35) drop-shadow(0 0 6px currentColor);
+}
+
+/* Tactical Notations Grid Below Clock */
+.ow-clock-notations {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  margin-top: 18px;
+}
+
+@media (max-width: 540px) {
+  .ow-clock-notations {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ow-clock-note-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.04);
+}
+
+.ow-clock-note-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.ow-clock-note-val {
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.ow-clock-note-desc {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.ow-clock-legend-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ow-clock-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-clock-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+@keyframes owPulseDot {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.6); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.ow-clock-pulse-dot {
+  animation: owPulseDot 1.8s infinite ease-in-out;
+  transform-origin: center;
+}
+
+.ow-table td.ow-activity-cell {
+  padding: 8px 6px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.ow-map-activity-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  color: #ffedd5;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  transition: all 0.15s ease;
+}
+
+.ow-map-activity-btn:hover {
+  background: rgba(249, 115, 22, 0.22);
+  border-color: #f97316;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.45);
+  transform: translateY(-1px);
+}
+
+.ow-map-activity-btn:active {
+  transform: translateY(0);
+}

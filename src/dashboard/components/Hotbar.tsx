@@ -111,7 +111,7 @@ const SHORTCUT_CATEGORIES: CategoryGroup[] = [
         glowColor: 'rgba(20, 184, 166, 0.4)',
         shortcuts: [
             { id: 'tools-scrap-optimizer', label: 'Scrap Merchant', icon: <ThemeIcon name="broom" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'scrap-optimizer' },
-            { id: 'tools-combat-sim', label: 'Combat Analysis', icon: <ThemeIcon name="sniper-crosshair" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'combat-sim', inTesting: true },
+            { id: 'tools-combat-sim', label: 'Nexus Battlesim', icon: <ThemeIcon name="sniper-crosshair" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'combat-sim', inTesting: true },
             { id: 'tools-exp-calc', label: 'Expedition Calculator', icon: <ThemeIcon name="calculator" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'exp-calc' },
             { id: 'tools-acs-splitter', label: 'ACS Splitter', icon: <ThemeIcon name="pie-chart" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'acs-splitter', isBeta: true },
             { id: 'tools-plasma-optimizer', label: 'Plasma Tech', icon: <ThemeIcon name="flash-on-lightning" size={18} />, color: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.3)', view: 'tools', tab: 'plasma-optimizer' },
@@ -434,7 +434,22 @@ const Hotbar: React.FC<HotbarProps> = ({ onSelect }) => {
                                                                                         Beta
                                                                                     </span>
                                                                                 )}
-                                                                                {isTesting && '(In Testing)'}
+                                                                                {isTesting && (
+                                                                                    <span style={{
+                                                                                        fontSize: '8px',
+                                                                                        fontWeight: 800,
+                                                                                        background: 'rgba(255, 106, 0, 0.15)',
+                                                                                        color: '#ff6a00',
+                                                                                        border: '1px solid rgba(255, 106, 0, 0.3)',
+                                                                                        borderRadius: '4px',
+                                                                                        padding: '1px 4px',
+                                                                                        letterSpacing: '0.5px',
+                                                                                        textTransform: 'uppercase',
+                                                                                        lineHeight: 1
+                                                                                    }}>
+                                                                                        Testing
+                                                                                    </span>
+                                                                                )}
                                                                             </span>
                                                                         </div>
                                                                         <div style={{

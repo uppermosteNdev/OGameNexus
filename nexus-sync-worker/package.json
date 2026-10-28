@@ -12,6 +12,7 @@
     "types": "wrangler types"
   },
   "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "itty-router": "^5.0.18",
     "zod": "^3.23.8"
   },

@@ -17,6 +17,29 @@ export interface ChangelogVersion {
 export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]> = {
   en: [
     {
+      version: 'v1.2.9',
+      items: [
+        { type: 'Feature', text: 'Note Taking for Coordinates and Players: Click any slot number in Galaxy View to record and view notes for coordinates and players, with category tagging, timeline history, and on-demand Personal Vault sync.' },
+        { type: 'Feature', text: 'Alliance Top / Flop of the Day: Automated daily 24-hour point gain and loss rankings for your alliance with customizable tactical HUD themes, backgrounds, and Discord bot image integration.' },
+        { type: 'Feature', text: 'Universe Map to Player Activity Link: One-click navigation from any player on the Overwatch Universe Map directly into their comprehensive activity heatmap and timeline.' },
+        { type: 'Feature', text: 'Empire Daily Yield Customization: Fine-tune what counts towards your empire daily yield, with custom scrap merchant percentages and selectable income sources.' },
+        { type: 'Bugfix', text: 'Multi-Extension Activity Tracking: Fixed galaxy activity detection conflicts when running alongside other popular browser extensions (OGLight, AGR, etc.).' },
+        { type: 'Bugfix', text: 'Multi-Extension Status Tracking: Corrected player status parsing (inactive, vacation, outlaw) during live galaxy views with other extensions installed.' }
+      ]
+    },
+    {
+      version: 'v1.2.8',
+      items: [
+        { type: 'Feature', text: 'Overwatch Universe Map: New alliance networks now automatically start with the entire universe map loaded with all players, planets, and moons.' },
+        { type: 'Feature', text: 'Overwatch Beta Access: Request Closed Beta access directly in-game, and customize your alliance tag during setup.' },
+        { type: 'Feature', text: 'Sleeker Support Banner: Quick access to donations and free support options at the top of the Update Center.' },
+        { type: 'Bugfix', text: 'Costs Planner Multi-Account Fix: Fixed shopping cart items mixing up between different accounts during cloud sync.' },
+        { type: 'Bugfix', text: 'Lifeform Levels in Planner: Upgrade costs now accurately use your planet’s real lifeform building levels.' },
+        { type: 'Polishing', text: 'Name Corrections: Fixed building and research names across all languages to match the game.' },
+        { type: 'Polishing', text: 'Language Settings: Changing languages now updates instantly and remembers your choice.' }
+      ]
+    },
+    {
       version: 'v1.2.7',
       items: [
         { type: 'Feature', text: 'Multi-Language Support: Nexus is now available in 12 languages with an easy language selector in the dashboard header, settings, and in-game messages.' },
@@ -86,6 +109,29 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   ro: [
+    {
+      version: 'v1.2.9',
+      items: [
+        { type: 'Feature', text: 'Notițe pentru coordonate și jucători: Apasă pe numărul oricărei poziții din Galaxie pentru a adăuga și vizualiza notițe pentru coordonate și jucători, cu etichete pe categorii și istoric complet.' },
+        { type: 'Feature', text: 'Top / Flop Alianță: Clasamente zilnice automate pe 24h cu punctele câștigate și pierdute, teme tactice HUD personalizabile și imagini pentru Discord.' },
+        { type: 'Feature', text: 'Legătură directă Hartă -> Activitate jucător: Navigare rapidă cu un singur clic din Harta universului direct în istoricul de activitate al jucătorului.' },
+        { type: 'Feature', text: 'Personalizare Producție zilnică imperiu: Alege ce surse intră în calculul producției zilnice și configurează procentul returnat de Negustorul de fier vechi.' },
+        { type: 'Bugfix', text: 'Urmărire activitate cu alte extensii: Rezolvat conflictele de detectare a activității în galaxie când sunt active și alte extensii (OGLight, AGR etc.).' },
+        { type: 'Bugfix', text: 'Urmărire status jucători cu alte extensii: Corectat sincronizarea statusurilor (inactiv, vacanță, bandit) în timpul scanărilor din galaxie.' }
+      ]
+    },
+    {
+      version: 'v1.2.8',
+      items: [
+        { type: 'Feature', text: 'Harta universului în Overwatch: Alianțele noi pornesc acum cu întreaga hartă a universului gata încărcată (toți jucătorii, planetele și lunile).' },
+        { type: 'Feature', text: 'Acces Beta Overwatch: Poți cere acces la Closed Beta direct din joc și poți personaliza tag-ul alianței la creare.' },
+        { type: 'Feature', text: 'Bara de susținere nouă: Acces rapid la donații și opțiuni de susținere gratuită în partea de sus a Centrului de actualizări.' },
+        { type: 'Bugfix', text: 'Coșul Planificatorului multi-cont: Rezolvată problema unde articolele din coș se amestecau între conturi diferite la sincronizare.' },
+        { type: 'Bugfix', text: 'Forme de viață în Planificator: Costurile calculează acum corect nivelurile reale ale clădirilor de forme de viață.' },
+        { type: 'Polishing', text: 'Corecții de denumiri: Numele clădirilor și cercetărilor se potrivesc acum exact cu cele din joc în toate limbile.' },
+        { type: 'Polishing', text: 'Schimbare limbă: Schimbarea limbii se aplică acum instant și se salvează corect.' }
+      ]
+    },
     {
       version: 'v1.2.7',
       items: [
@@ -1455,18 +1501,28 @@ export function injectChangelogTab(): void {
     }
   } catch (e) { }
 
+  const CURRENT_CHANGELOG_VERSION = 'v1.2.9';
+  const hasSeenChangelog = localStorage.getItem('og-nexus-changelog-seen') === CURRENT_CHANGELOG_VERSION;
+
   div.innerHTML = `
     <div class="tabImage">
       ${iconUrl ? `<img src="${iconUrl}" class="nexus-main-tab-img" alt="OGNexus" />` : `<div class="nexus-main-tab-fallback">🌌</div>`}
     </div>
     <div class="tabLabel">OGNexus</div>
-    <div class="newMessagesCount nexus_hidden">new</div>
+    <div class="newMessagesCount ${hasSeenChangelog ? 'nexus_hidden' : ''}">new</div>
   `;
 
   // Attach click listener
   div.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Mark current changelog version as seen and dismiss "new" badge
+    localStorage.setItem('og-nexus-changelog-seen', CURRENT_CHANGELOG_VERSION);
+    const badge = div.querySelector('.newMessagesCount');
+    if (badge) {
+      badge.classList.add('nexus_hidden');
+    }
 
     const wrapper = document.querySelector('#messagewrapper, #messages') as HTMLElement | null;
     if (!wrapper) return;

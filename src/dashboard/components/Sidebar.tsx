@@ -89,10 +89,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
         { id: 'debris', label: t('nav.debris', 'Debris Fields'), iconName: 'debris-field' },
         { id: 'empire', label: t('nav.empire', 'Empire'), iconName: 'skyscrapers' },
         { id: 'costsPlanner', label: t('nav.costsPlanner', 'Costs Planner'), iconName: 'shopping-cart' },
-        { id: 'overwatch', label: 'Nexus Overwatch', iconName: 'radar' },
+        { id: 'overwatch', label: 'Ally Overwatch', iconName: 'radar' },
         { id: 'tools', label: t('nav.tools', 'Tools'), iconName: 'tools' },
-        { id: 'signature', label: t('nav.signature', 'Signature Forge'), iconName: 'sparkling' },
-        { id: 'dataManagement', label: t('nav.dataManagement', 'Data Management'), iconName: 'circuit' },
+        { id: 'signature', label: t('nav.signature', 'Signature'), iconName: 'sparkling' },
+        { id: 'dataManagement', label: t('nav.dataManagement', 'Data'), iconName: 'circuit' },
         { id: 'settings', label: t('nav.settings', 'Settings'), iconName: 'settings' },
         { id: 'tutorials', label: t('nav.tutorials', 'Tutorials'), iconName: 'open-book' },
     ];
@@ -100,8 +100,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     return (
         <motion.aside
             animate={{ 
-                width: 80,
-                padding: '40px 8px'
+                width: 228,
+                padding: '20px 12px'
             }}
             transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
             style={{
@@ -124,44 +124,68 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0px',
-                padding: '0 0 48px',
+                gap: '12px',
+                padding: '0 6px 18px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                marginBottom: '12px',
                 color: 'var(--primary)',
                 textShadow: '0 0 10px var(--primary-glow)',
                 width: '100%',
+                boxSizing: 'border-box',
                 transition: 'all 0.3s ease'
             }}>
                 <div style={{
-                    padding: '4px',
-                    borderRadius: '16px',
+                    padding: '5px',
+                    borderRadius: '12px',
                     background: 'rgba(0, 242, 255, 0.1)',
                     border: '1px solid var(--primary)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.3s ease'
+                    boxShadow: '0 0 12px rgba(0, 242, 255, 0.2)',
+                    flexShrink: 0
                 }}>
                     <img 
                         src="icons/nexus.png" 
                         alt="Planet" 
                         style={{ 
-                            width: '36px', 
-                            height: '36px', 
+                            width: '26px', 
+                            height: '26px', 
                             objectFit: 'contain',
                             transition: 'all 0.3s ease'
                         }} 
                     />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <div style={{
+                        fontSize: '13px',
+                        fontWeight: 900,
+                        letterSpacing: '0.08em',
+                        color: '#fff',
+                        whiteSpace: 'nowrap'
+                    }}>
+                        OGAME <span style={{ color: 'var(--primary)' }}>NEXUS</span>
+                    </div>
+                    <div style={{
+                        fontSize: '9.5px',
+                        color: 'rgba(255, 255, 255, 0.45)',
+                        letterSpacing: '0.04em',
+                        fontWeight: 700,
+                        textTransform: 'uppercase'
+                    }}>
+                        Command Deck
+                    </div>
                 </div>
             </div>
 
             <nav className="sidebar-nav custom-scrollbar" style={{ 
                 display: 'flex', 
                 flexDirection: 'column', 
-                gap: '8px',
+                gap: '4px',
                 flex: 1,
                 overflowY: 'auto',
-                minHeight: 0
+                minHeight: 0,
+                paddingRight: '2px'
             }}>
                 {menuItems.map((item) => {
                     const isActive = activeView === item.id;
@@ -170,25 +194,24 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                             key={item.id}
                             className={`sidebar-item ${isActive ? 'active' : ''}`}
                             onClick={(e) => handleItemClick(e, item.id)}
-                            onMouseEnter={(e) => handleMouseEnter(e, item.label)}
-                            onMouseLeave={() => setHoveredItem(null)}
-                            whileHover={{ scale: 1.08 }}
+                            whileHover={{ x: 3 }}
                             whileTap={{ scale: 0.98 }}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '14px 0',
-                                borderRadius: '12px',
-                                border: 'none',
-                                background: isActive ? 'linear-gradient(90deg, rgba(0, 242, 255, 0.1) 0%, transparent 100%)' : 'transparent',
-                                color: isActive ? 'var(--primary)' : 'var(--text-muted)',
+                                gap: '12px',
+                                padding: '9px 12px',
+                                borderRadius: '10px',
+                                border: isActive ? '1px solid rgba(0, 242, 255, 0.3)' : '1px solid transparent',
+                                background: isActive ? 'linear-gradient(90deg, rgba(0, 242, 255, 0.12) 0%, rgba(0, 242, 255, 0.02) 100%)' : 'transparent',
+                                color: isActive ? 'var(--primary)' : 'rgba(255, 255, 255, 0.7)',
                                 cursor: 'pointer',
                                 position: 'relative',
-                                textAlign: 'center',
+                                textAlign: 'left',
                                 width: '100%',
+                                boxSizing: 'border-box',
                                 overflow: 'hidden',
-                                transition: 'background 0.3s ease, color 0.3s ease'
+                                transition: 'background 0.2s ease, color 0.2s ease, border-color 0.2s ease'
                             }}
                         >
                             {isActive && (
@@ -197,8 +220,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                                     style={{
                                         position: 'absolute',
                                         left: 0,
-                                        top: '20%',
-                                        bottom: '20%',
+                                        top: '15%',
+                                        bottom: '15%',
                                         width: '3px',
                                         backgroundColor: 'var(--primary)',
                                         borderRadius: '0 4px 4px 0',
@@ -211,25 +234,35 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                width: '100%'
+                                flexShrink: 0
                             }}>
-                                <ThemeIcon name={item.iconName} size={22} glow={isActive} />
+                                <ThemeIcon name={item.iconName} size={19} glow={isActive} />
+                            </span>
+                            <span style={{
+                                fontSize: '13.5px',
+                                fontWeight: isActive ? 800 : 600,
+                                letterSpacing: '0.04em',
+                                textTransform: 'uppercase',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                flex: 1,
+                                color: isActive ? '#fff' : 'inherit'
+                            }}>
+                                {item.label}
                             </span>
                             {item.id === 'overwatch' && !isTester && (
                                 <span style={{
-                                    position: 'absolute',
-                                    top: '5px',
-                                    right: '5px',
                                     fontSize: '8px',
                                     fontWeight: 800,
-                                    padding: '1px 3px',
+                                    padding: '1px 4px',
                                     borderRadius: '3px',
                                     background: 'rgba(245, 158, 11, 0.22)',
                                     border: '1px solid rgba(245, 158, 11, 0.5)',
                                     color: '#fbbf24',
                                     lineHeight: 1,
                                     boxShadow: '0 0 6px rgba(245, 158, 11, 0.3)',
-                                    pointerEvents: 'none',
+                                    flexShrink: 0
                                 }}>
                                     TEST
                                 </span>
@@ -240,7 +273,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
             </nav>
 
             {/* Bottom Controls: Language Switcher & Account Switcher */}
-            <div style={{ marginTop: 'auto', paddingTop: '12px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            <div style={{ marginTop: 'auto', paddingTop: '10px', width: '100%', display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
                 {/* Language Switcher Button (Directly Above Account Switcher) */}
                 <motion.button
                     type="button"
@@ -248,27 +281,29 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                         setShowLanguageSwitcher(prev => !prev);
                         setShowAccountSwitcher(false);
                     }}
-                    onMouseEnter={(e) => handleMouseEnter(e, `${t('common.language', 'Language')}: ${SUPPORTED_LANGUAGES[language]?.nativeName || language.toUpperCase()}`)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                    whileHover={{ scale: 1.08 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ backgroundColor: 'rgba(0, 242, 255, 0.08)', borderColor: 'rgba(0, 242, 255, 0.3)' }}
+                    whileTap={{ scale: 0.98 }}
                     title={`Language: ${SUPPORTED_LANGUAGES[language]?.nativeName}`}
                     style={{
-                        width: '42px',
-                        height: '32px',
+                        width: '100%',
+                        padding: '7px 10px',
                         borderRadius: '10px',
-                        border: showLanguageSwitcher ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.12)',
-                        background: showLanguageSwitcher ? 'rgba(0, 242, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                        color: showLanguageSwitcher ? 'var(--primary)' : '#94a3b8',
+                        border: showLanguageSwitcher ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.08)',
+                        background: showLanguageSwitcher ? 'rgba(0, 242, 255, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                        color: '#fff',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        position: 'relative',
-                        transition: 'all 0.25s ease',
+                        gap: '10px',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.2s ease',
                     }}
                 >
-                    <FlagIcon code={language} size={22} />
+                    <FlagIcon code={language} size={18} />
+                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#cbd5e1', flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {SUPPORTED_LANGUAGES[language]?.nativeName || language.toUpperCase()}
+                    </span>
+                    <ChevronRight size={13} color="#64748b" style={{ transform: showLanguageSwitcher ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }} />
                 </motion.button>
 
                 {/* Account Switcher Button */}
@@ -278,65 +313,87 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                         setShowAccountSwitcher(prev => !prev);
                         setShowLanguageSwitcher(false);
                     }}
-                    onMouseEnter={(e) => {
-                        const uni = activeAccount?.universeName && activeAccount.universeName !== 'unknown' 
-                            ? activeAccount.universeName 
-                            : (activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : '');
-                        handleMouseEnter(e, `${t('nav.switchAccount', 'Account')}: ${activeAccount?.playerName || 'Select'}${uni ? ` (${uni})` : ''}`);
-                    }}
-                    onMouseLeave={() => setHoveredItem(null)}
-                    whileHover={{ scale: 1.08 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ backgroundColor: 'rgba(0, 242, 255, 0.08)', borderColor: 'rgba(0, 242, 255, 0.3)' }}
+                    whileTap={{ scale: 0.98 }}
                     title={activeAccount ? `Active: ${activeAccount.playerName} (${activeAccount.universeName && activeAccount.universeName !== 'unknown' ? activeAccount.universeName : cleanUniverseId(activeAccount.universe)})` : 'Select Account'}
                     style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '12px',
-                        border: showAccountSwitcher ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.12)',
-                        background: showAccountSwitcher ? 'rgba(0, 242, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                        color: showAccountSwitcher ? 'var(--primary)' : '#94a3b8',
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '10px',
+                        border: showAccountSwitcher ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.08)',
+                        background: showAccountSwitcher ? 'rgba(0, 242, 255, 0.12)' : 'rgba(255, 255, 255, 0.03)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        position: 'relative',
-                        transition: 'all 0.25s ease',
+                        gap: '10px',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.2s ease',
+                        position: 'relative'
                     }}
                 >
-                    {activeAccount?.avatarUrl ? (
-                        <img
-                            src={activeAccount.avatarUrl}
-                            alt={activeAccount.playerName}
-                            style={{ width: '28px', height: '28px', borderRadius: '8px', objectFit: 'cover' }}
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {activeAccount?.avatarUrl ? (
+                            <img
+                                src={activeAccount.avatarUrl}
+                                alt={activeAccount.playerName}
+                                style={{ width: '26px', height: '26px', borderRadius: '7px', objectFit: 'cover' }}
+                            />
+                        ) : (
+                            <div style={{
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '7px',
+                                background: 'rgba(0, 242, 255, 0.15)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 800,
+                                fontSize: '11.5px',
+                                color: '#00f2ff',
+                                border: '1px solid rgba(0, 242, 255, 0.3)'
+                            }}>
+                                {activeAccount?.playerName?.[0]?.toUpperCase() || <User size={14} />}
+                            </div>
+                        )}
+                        <span
+                            style={{
+                                position: 'absolute',
+                                bottom: '-1px',
+                                right: '-1px',
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                backgroundColor: '#10b981',
+                                boxShadow: '0 0 5px #10b981',
+                                border: '1px solid #060b14'
+                            }}
                         />
-                    ) : (
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'left', minWidth: 0, overflow: 'hidden' }}>
                         <div style={{
-                            width: '26px',
-                            height: '26px',
-                            borderRadius: '7px',
-                            background: 'rgba(0, 242, 255, 0.15)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 800,
                             fontSize: '12px',
-                            color: '#00f2ff',
+                            fontWeight: 700,
+                            color: '#fff',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
                         }}>
-                            {activeAccount?.playerName?.[0]?.toUpperCase() || <User size={15} />}
+                            {activeAccount?.playerName || 'Commander'}
                         </div>
-                    )}
-                    <span
-                        style={{
-                            position: 'absolute',
-                            bottom: '2px',
-                            right: '2px',
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            backgroundColor: '#10b981',
-                            boxShadow: '0 0 6px #10b981',
-                        }}
-                    />
+                        <div style={{
+                            fontSize: '10px',
+                            color: '#00f2ff',
+                            opacity: 0.8,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                        }}>
+                            {activeAccount?.universeName && activeAccount.universeName !== 'unknown' 
+                                ? activeAccount.universeName 
+                                : (activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : 'OGame')}
+                        </div>
+                    </div>
+                    <ChevronRight size={13} color="#64748b" style={{ transform: showAccountSwitcher ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }} />
                 </motion.button>
             </div>
 
@@ -345,7 +402,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                 <div
                     style={{
                         position: 'fixed',
-                        left: '88px',
+                        left: '228px',
                         bottom: '80px',
                         width: '280px',
                         background: 'rgba(8, 14, 26, 0.96)',
@@ -413,7 +470,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                                     <FlagIcon code={langCode} size={26} />
                                     <div style={{ flex: 1 }}>
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: isCurrent ? '#00f2ff' : '#fff' }}>
-                                            {info.nativeName}
+                                             {info.nativeName}
                                         </div>
                                         <div style={{ fontSize: '11px', color: '#94a3b8' }}>
                                             {info.label}
@@ -444,7 +501,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                 <div
                     style={{
                         position: 'fixed',
-                        left: '88px',
+                        left: '228px',
                         bottom: '24px',
                         width: '370px',
                         maxWidth: 'calc(100vw - 105px)',
@@ -867,7 +924,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
                     }}>
                         {hoveredItem.label}
                     </span>
-                    {hoveredItem.label === 'Nexus Overwatch' && !isTester && (
+                    {(hoveredItem.label === 'Ally Overwatch' || hoveredItem.label === 'Nexus Overwatch') && !isTester && (
                         <span style={{
                             fontSize: '9.5px',
                             fontWeight: 800,

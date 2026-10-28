@@ -304,15 +304,17 @@ export async function handleVaultSend(req: Request, env: Env): Promise<Response>
     const incomingDiscoveries: any[] = Array.isArray(body.discoveries) ? body.discoveries : [];
     const incomingPlanner: any[] = Array.isArray(body.plannerProjects) ? body.plannerProjects : [];
     const incomingRadar: any[] = Array.isArray(body.radarTargets) ? body.radarTargets : [];
+    const incomingNotes: any[] = Array.isArray(body.tacticalNotes) ? body.tacticalNotes : [];
 
     // Read existing categories from R2 for non-destructive merge (or full replacement if isFullResync)
-    const [existingExp, existingCom, existingHarv, existingDisc, existingPlan, existingRadar] = await Promise.all([
+    const [existingExp, existingCom, existingHarv, existingDisc, existingPlan, existingRadar, existingNotes] = await Promise.all([
       isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'expeditions'),
       isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'combats'),
       isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'harvests'),
       isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'discoveries'),
       isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'planner'),
       isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'radar'),
+      isFullResync ? Promise.resolve([]) : getR2Category(env.VAULT_BUCKET, prefix, 'notes'),
     ]);
 
     // 1. Merge Expeditions (by messageId)
@@ -372,14 +374,27 @@ export async function handleVaultSend(req: Request, env: Env): Promise<Response>
     }
     const mergedRadar = Array.from(radarMap.values());
 
+    // 7. Merge Tactical Notes (by noteKey, preserving latest updatedAt)
+    const notesMap = new Map<string, any>();
+    for (const n of existingNotes) if (n.noteKey) notesMap.set(String(n.noteKey), n);
+    for (const n of incomingNotes) {
+      if (!n.noteKey) continue;
+      const existing = notesMap.get(String(n.noteKey));
+      if (!existing || Number(n.updatedAt || 0) >= Number(existing.updatedAt || 0)) {
+        notesMap.set(String(n.noteKey), { ...n, universe: universeId });
+      }
+    }
+    const mergedNotes = Array.from(notesMap.values());
+
     // Write all updated categories to Cloudflare R2 with native gzip compression in parallel
-    const [expSize, comSize, harvSize, discSize, planSize, radarSize] = await Promise.all([
+    const [expSize, comSize, harvSize, discSize, planSize, radarSize, notesSize] = await Promise.all([
       putR2Category(env.VAULT_BUCKET, prefix, 'expeditions', mergedExpeditions, universeId, playerId),
       putR2Category(env.VAULT_BUCKET, prefix, 'combats', mergedCombats, universeId, playerId),
       putR2Category(env.VAULT_BUCKET, prefix, 'harvests', mergedHarvests, universeId, playerId),
       putR2Category(env.VAULT_BUCKET, prefix, 'discoveries', mergedDiscoveries, universeId, playerId),
       putR2Category(env.VAULT_BUCKET, prefix, 'planner', mergedPlanner, universeId, playerId),
       putR2Category(env.VAULT_BUCKET, prefix, 'radar', mergedRadar, universeId, playerId),
+      putR2Category(env.VAULT_BUCKET, prefix, 'notes', mergedNotes, universeId, playerId),
     ]);
 
     // Calculate max timestamps
@@ -407,6 +422,7 @@ export async function handleVaultSend(req: Request, env: Env): Promise<Response>
       discoveries: mergedDiscoveries.length,
       planner: mergedPlanner.length,
       radar: mergedRadar.length,
+      notes: mergedNotes.length,
     };
 
     // Write updated manifest to R2
@@ -457,6 +473,7 @@ export async function handleVaultSend(req: Request, env: Env): Promise<Response>
         discoveries: incomingDiscoveries.length,
         planner: incomingPlanner.length,
         radar: incomingRadar.length,
+        notes: incomingNotes.length,
       },
       totalInVault: counts,
       lastSentAt: now,
@@ -523,13 +540,14 @@ export async function handleVaultFetch(req: Request, env: Env): Promise<Response
     const prefix = `vaults/${universeId}/${playerId}`;
 
     // Read all categories from R2 in parallel
-    const [rawExpeditions, rawCombats, rawHarvests, rawDiscoveries, rawPlanner, rawRadar] = await Promise.all([
+    const [rawExpeditions, rawCombats, rawHarvests, rawDiscoveries, rawPlanner, rawRadar, rawNotes] = await Promise.all([
       getR2Category(env.VAULT_BUCKET, prefix, 'expeditions'),
       getR2Category(env.VAULT_BUCKET, prefix, 'combats'),
       getR2Category(env.VAULT_BUCKET, prefix, 'harvests'),
       getR2Category(env.VAULT_BUCKET, prefix, 'discoveries'),
       getR2Category(env.VAULT_BUCKET, prefix, 'planner'),
       getR2Category(env.VAULT_BUCKET, prefix, 'radar'),
+      getR2Category(env.VAULT_BUCKET, prefix, 'notes'),
     ]);
 
     // Apply granular delta filtering if not an explicit full download
@@ -551,6 +569,7 @@ export async function handleVaultFetch(req: Request, env: Env): Promise<Response
 
     const plannerProjects = rawPlanner;
     const radarTargets = rawRadar;
+    const tacticalNotes = rawNotes;
 
     // Update last_fetched_at in D1
     await db
@@ -566,6 +585,7 @@ export async function handleVaultFetch(req: Request, env: Env): Promise<Response
       discoveries,
       plannerProjects,
       radarTargets,
+      tacticalNotes,
       hasMoreExpeditions: false,
       lastFetchedAt: now,
       cooldownSeconds: 120,

@@ -43,6 +43,7 @@ import {
   X,
   ExternalLink,
   MessageSquare,
+  Zap,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -73,6 +74,7 @@ import OverwatchPhalanxCoverage from './OverwatchPhalanxCoverage';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { getStoredVaultKey } from '../../utils/personalVaultClient';
 import { cleanUniverseId } from '../../utils/universe';
+import { checkAndSyncUniverseBaseline, getBaselineSystem } from '../../utils/universeBaselineClient';
 import './Overwatch.css';
 
 interface DetectedAlliance {
@@ -876,6 +878,16 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
   // Primary dynamic tab state ('overwatch' | 'create' | 'join' | 'features')
   const [primaryTab, setPrimaryTab] = useState<'overwatch' | 'create' | 'join' | 'features'>('overwatch');
+  const [heatmapTargetPlayer, setHeatmapTargetPlayer] = useState<{ name: string; id?: string } | null>(null);
+
+  const handleViewPlayerActivity = (playerName: string, playerId?: string) => {
+    if (!playerName) return;
+    setHeatmapTargetPlayer({ name: playerName, id: playerId });
+    setPrimaryTab('overwatch');
+    setActivePillar('intel');
+    setActiveTab('heatmap');
+  };
+
   const [detectedAlliance, setDetectedAlliance] = useState<DetectedAlliance | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -945,6 +957,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
   const activeUniverseName = effectiveAccount?.universeName && effectiveAccount.universeName !== 'unknown'
     ? effectiveAccount.universeName
     : activeUniverse;
+
+  // Synchronize universe baseline topology in background for 0ms offline map navigation
+  useEffect(() => {
+    if (activeUniverse) {
+      checkAndSyncUniverseBaseline(activeUniverse).catch((err: any) => {
+        console.warn('[UniverseBaseline] Background sync notice:', err);
+      });
+    }
+  }, [activeUniverse]);
 
   const activeAllyTag = effectiveAccount?.allianceTag || '';
   const activeAllyName = effectiveAccount?.allianceName || activeAllyTag;
@@ -1764,10 +1785,25 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     setSelectedGalaxy(g);
   };
 
-  // Fetch system data from Edge Cloudflare Worker API with 4s timeout
+  // Fetch system data: renders local Dexie baseline instantly (0ms) and overlays server intel
   const fetchSystemData = useCallback(async (g: number, s: number) => {
-    setIsLoadingSystem(true);
     setSystemFetchError(null);
+
+    // 1. FAST PATH: Instant local Dexie render (0ms response)
+    let hasRenderedLocal = false;
+    try {
+      const localSlots = await getBaselineSystem(activeUniverse || '', g, s);
+      if (localSlots && localSlots.length > 0) {
+        setSystemSlots(localSlots);
+        hasRenderedLocal = true;
+      }
+    } catch {
+      // Local Dexie read fallback
+    }
+
+    if (!hasRenderedLocal) {
+      setIsLoadingSystem(true);
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -1789,14 +1825,16 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
         setSystemSlots(data.slots);
         setEdgeStatus('online');
         setEdgeError(null);
-      } else {
+      } else if (!hasRenderedLocal) {
         throw new Error(data?.error || 'Invalid slot payload');
       }
     } catch (err: any) {
-      const errMsg = err?.name === 'AbortError' ? 'Request timed out' : (err?.message || 'Connection refused');
-      setSystemFetchError(errMsg);
-      setEdgeStatus('offline');
-      setEdgeError(errMsg);
+      if (!hasRenderedLocal) {
+        const errMsg = err?.name === 'AbortError' ? 'Request timed out' : (err?.message || 'Connection refused');
+        setSystemFetchError(errMsg);
+        setEdgeStatus('offline');
+        setEdgeError(errMsg);
+      }
     } finally {
       setIsLoadingSystem(false);
     }
@@ -4789,14 +4827,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                     <div className="ow-table-wrap">
                       <table className="ow-table">
                         <colgroup>
-                          <col style={{ width: '55px' }} />
+                          <col style={{ width: '50px' }} />
+                          <col style={{ width: '110px' }} />
+                          <col style={{ width: '170px' }} />
                           <col style={{ width: '115px' }} />
-                          <col style={{ width: '190px' }} />
-                          <col style={{ width: '125px' }} />
-                          <col style={{ width: '210px' }} />
-                          <col style={{ width: '100px' }} />
-                          <col style={{ width: '140px' }} />
-                          <col style={{ width: '125px' }} />
+                          <col style={{ width: '175px' }} />
+                          <col style={{ width: '105px' }} />
+                          <col style={{ width: '90px' }} />
+                          <col style={{ width: '135px' }} />
+                          <col style={{ width: '110px' }} />
                         </colgroup>
                         <thead>
                           <tr>
@@ -4805,6 +4844,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                             <th>Planet</th>
                             <th>Moon</th>
                             <th>Player</th>
+                            <th style={{ textAlign: 'center' }}>Activity</th>
                             <th>Alliance</th>
                             <th>Debris Field</th>
                             <th>Last Change</th>
@@ -4966,6 +5006,21 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                     <span style={{ color: '#f87171', fontStyle: 'italic', fontSize: '12px', fontWeight: 600 }}>
                                       Abandoned (Pending Wipe)
                                     </span>
+                                  ) : (
+                                    <span style={{ color: '#475569' }}>—</span>
+                                  )}
+                                </td>
+                                <td className="ow-activity-cell" style={{ textAlign: 'center' }}>
+                                  {isColonized && (slot.player_name || slot.playerName) ? (
+                                    <button
+                                      type="button"
+                                      className="ow-map-activity-btn"
+                                      title={`View Activity Clocks for ${slot.player_name || slot.playerName}`}
+                                      onClick={() => handleViewPlayerActivity(slot.player_name || slot.playerName, slot.player_id || slot.playerId)}
+                                    >
+                                      <Zap size={12} color="#f97316" style={{ flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(249, 115, 22, 0.6))' }} />
+                                      <span>Activity</span>
+                                    </button>
                                   ) : (
                                     <span style={{ color: '#475569' }}>—</span>
                                   )}
@@ -5377,6 +5432,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                       activeUniverseName={activeUniverseName}
                       ownPlanets={ownPlanets}
                       events={events}
+                      initialTargetPlayer={heatmapTargetPlayer}
                     />
                   </ErrorBoundary>
                 )

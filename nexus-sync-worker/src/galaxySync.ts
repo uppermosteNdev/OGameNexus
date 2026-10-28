@@ -107,9 +107,9 @@ export async function authenticateMember(req: Request, env: Env) {
   return null;
 }
 
-let hasEnsuredActivityTables = false;
-let lastActivityCleanupVersion = 0;
 const CURRENT_ACTIVITY_CLEANUP_VERSION = 3;
+let hasEnsuredActivityTables = false;
+let lastActivityCleanupVersion = CURRENT_ACTIVITY_CLEANUP_VERSION;
 
 /**
  * Checks whether a player is in vacation mode based on status code or name annotation
@@ -518,6 +518,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
       }
 
       const effectivePriorSlot = oldSlot || (isUniverseSeeded ? baselineSlot : null);
+      let effectiveStatusNorm = normalizePlayerStatus(newSlot.playerStatus);
 
       if (effectivePriorSlot) {
         // B. Abandoned / Left Planet / Destroyed Planet (had player, now no player)
@@ -632,7 +633,20 @@ export async function handleGalaxySync(req: Request, env: Env) {
 
         // G. Status Changed (e.g. active to inactive or vacation, or multiple tags like "v,I")
         const oldStatusNorm = normalizePlayerStatus(effectivePriorSlot.player_status);
-        const newStatusNorm = normalizePlayerStatus(newSlot.playerStatus);
+
+        // Guard against Gameforge Galaxy DOM suppression:
+        // In the in-game galaxy table, Gameforge suppresses secondary status badges (I, i, b) for players in vacation mode,
+        // displaying only "(v)". If the backend already knows this player has composite status (e.g. "v,I", "v,i", "v,b")
+        // from players.xml, an in-game galaxy scan reporting just "v" should NOT downgrade the player to "v" and trigger false flapping events.
+        if (
+          effectiveStatusNorm === 'v' &&
+          oldStatusNorm.includes('v') &&
+          oldStatusNorm !== 'v'
+        ) {
+          effectiveStatusNorm = oldStatusNorm;
+        }
+
+        const newStatusNorm = effectiveStatusNorm;
 
         if (
           effectivePriorSlot.player_id &&
@@ -730,7 +744,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
             newSlot.planetImage || null,
             newSlot.playerId || null,
             newSlot.playerName || null,
-            normalizePlayerStatus(newSlot.playerStatus),
+            effectiveStatusNorm,
             newSlot.playerRank || null,
             newSlot.allianceTag || null,
             newSlot.hasMoon || 0,
@@ -751,7 +765,7 @@ export async function handleGalaxySync(req: Request, env: Env) {
 
         // Keep universe_baseline_planets in sync with live scan data
         if (newSlot.playerId) {
-          const normalizedStatus = normalizePlayerStatus(newSlot.playerStatus);
+          const normalizedStatus = effectiveStatusNorm;
           statements.push(
             db.prepare(
               `INSERT INTO universe_baseline_planets (

@@ -9,7 +9,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { calculateEmpireProduction, getLifeformExpLevel, safeArray } from '../../utils/amortizationCalc';
-import { calculateTotalEmpireDailyYield, formatGatherTime } from '../../utils/empireYield';
+import { calculateTotalEmpireDailyYield, formatGatherTime, useEmpireYieldConfig } from '../../utils/empireYield';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { SHIP_DATA, BUILDING_DATA, RESEARCH_DATA, DEFENCE_DATA, LIFEFORM_BUILDING_DATA } from '../../db/staticData';
 import { ThemeIcon } from '../components/ThemeIcon';
@@ -1662,6 +1662,7 @@ const CostsPlanner: React.FC = () => {
     const effectiveAllPlanetsAndMoons = allPlanetsAndMoons.length > 0 ? allPlanetsAndMoons : stableAllPlanetsRef.current;
 
     // Dynamic multipliers for daily yield MSU calculation
+    const [yieldConfig] = useEmpireYieldConfig();
     const mMultiplier = 1;
     const cMultiplier = useMemo(() => rates.metal / rates.crystal, [rates]);
     const dMultiplier = useMemo(() => rates.metal / rates.deuterium, [rates]);
@@ -1673,9 +1674,10 @@ const CostsPlanner: React.FC = () => {
             expeditions: effectiveExpeditions,
             combatReports: effectiveCombatReports,
             debrisHarvests: effectiveDebrisHarvests,
-            rates
+            rates,
+            yieldConfig
         });
-    }, [activeAccount, effectivePlanets, effectiveExpeditions, effectiveCombatReports, effectiveDebrisHarvests, rates]);
+    }, [activeAccount, effectivePlanets, effectiveExpeditions, effectiveCombatReports, effectiveDebrisHarvests, rates, yieldConfig]);
 
     const totalEmpireDailyYieldMSU = yieldBreakdown.totalDailyYieldMSU;
 

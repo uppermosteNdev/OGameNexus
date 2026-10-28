@@ -33,6 +33,18 @@
     color: var(--text-main);
 }
 
+.tool-menu-item.in-testing {
+    opacity: 0.55;
+    cursor: not-allowed !important;
+}
+
+.tool-menu-item.in-testing:hover {
+    background: transparent !important;
+    border-color: transparent !important;
+    color: var(--text-muted) !important;
+    box-shadow: none !important;
+}
+
 .tool-menu-item.active {
     background: linear-gradient(135deg, rgba(0, 242, 255, 0.1), rgba(189, 0, 255, 0.1));
     border-color: var(--primary);

@@ -1,4 +1,5 @@
-import { SpiedPlanet } from '../db';
+import { SpiedPlanet, TacticalNote, TacticalNoteTag, TacticalNoteEntry } from '../db';
+import { cleanUniverseId } from '../utils/universe';
 import { DiscoveredDebrisField } from './assistant/types';
 import { debouncedRefreshAssistantBar } from './assistant/assistantBar';
 import { getStoredOverwatchConfig } from '../utils/overwatchApi';
@@ -1122,6 +1123,1096 @@ function createSummaryBarElement(): HTMLElement {
   return bar;
 }
 
+/**
+ * Extracts the true Galaxy and System coordinates from DOM row elements via consensus voting.
+ * This is crucial because extension automations and rapid user scrolling update <input> values
+ * hundreds of milliseconds before OGame's AJAX finishes replacing the galaxy table rows.
+ */
+export function getDOMConsensusCoordinates(rows: NodeListOf<Element> | Element[]): { galaxy: number; system: number } | null {
+  if (!rows || rows.length === 0) return null;
+
+  const votes = new Map<string, number>();
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowHtml = row.innerHTML || '';
+
+    // 1. Tooltip / Header coordinates like [2:198:1] or [2:250:10]
+    const headerMatches = rowHtml.match(/\[(\d+):(\d+):\d+\]/g);
+    if (headerMatches) {
+      for (const m of headerMatches) {
+        const parts = m.slice(1, -1).split(':');
+        const g = parseInt(parts[0], 10);
+        const s = parseInt(parts[1], 10);
+        if (!isNaN(g) && !isNaN(s) && g > 0 && s > 0) {
+          const key = `${g}:${s}`;
+          votes.set(key, (votes.get(key) || 0) + 1);
+        }
+      }
+    }
+
+    // 2. Fleet dispatch links (e.g. component=fleetdispatch&galaxy=2&system=198&position=1)
+    const dispatchMatches = rowHtml.match(/(?:galaxy|&amp;galaxy)=(\d+)&(?:amp;)?(?:system)=(\d+)/g);
+    if (dispatchMatches) {
+      for (const dm of dispatchMatches) {
+        const m = dm.match(/galaxy=(\d+).*?system=(\d+)/);
+        if (m) {
+          const g = parseInt(m[1], 10);
+          const s = parseInt(m[2], 10);
+          if (!isNaN(g) && !isNaN(s) && g > 0 && s > 0) {
+            const key = `${g}:${s}`;
+            votes.set(key, (votes.get(key) || 0) + 1);
+          }
+        }
+      }
+    }
+
+    // 3. Spy links (data-spy-coords="2:198:1:1")
+    const spyLink = row.querySelector('[data-spy-coords]');
+    if (spyLink) {
+      const coordsStr = spyLink.getAttribute('data-spy-coords') || '';
+      const parts = coordsStr.split(':').map(Number);
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+        const key = `${parts[0]}:${parts[1]}`;
+        votes.set(key, (votes.get(key) || 0) + 1);
+      }
+    }
+
+    // 4. Onclick actions: sendShips(mission, galaxy, system, position, ...) or {'galaxy': G, 'system': S}
+    const actionEl = row.querySelector('[onclick*="discoverPlanet"], [onclick*="movePlanet"], [onclick*="sendShips"]');
+    if (actionEl) {
+      const onclickStr = actionEl.getAttribute('onclick') || '';
+      const match = onclickStr.match(/'galaxy':\s*(\d+),\s*'system':\s*(\d+)/) ||
+                    onclickStr.match(/sendShips\(\s*\d+,\s*(\d+),\s*(\d+)/);
+      if (match) {
+        const g = parseInt(match[1], 10);
+        const s = parseInt(match[2], 10);
+        if (!isNaN(g) && !isNaN(s) && g > 0 && s > 0) {
+          const key = `${g}:${s}`;
+          votes.set(key, (votes.get(key) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  if (votes.size === 0) return null;
+
+  let maxVotes = -1;
+  let winner: { galaxy: number; system: number } | null = null;
+  for (const [key, count] of votes.entries()) {
+    if (count > maxVotes) {
+      maxVotes = count;
+      const [g, s] = key.split(':').map(Number);
+      winner = { galaxy: g, system: s };
+    }
+  }
+
+  return winner;
+}
+
+/**
+ * Verifies that the OGame Galaxy DOM has genuinely settled and belongs to target coordinates.
+ * Prevents transient/stale DOM from being scraped during rapid user scrolling.
+ */
+export function isGalaxyDOMFullySettled(targetGalaxy: number, targetSystem: number, rows: NodeListOf<Element> | Element[]): boolean {
+  if (!rows || rows.length < 15) return false;
+
+  // 1. Check if galaxyLoading indicator is active or displays old coordinates
+  const loadingEl = document.getElementById('galaxyLoading');
+  if (loadingEl) {
+    const isVisible = window.getComputedStyle(loadingEl).display !== 'none' && loadingEl.style.display !== 'none';
+    if (isVisible) return false;
+
+    const currentPos = loadingEl.getAttribute('data-currentposition');
+    if (currentPos) {
+      const parts = currentPos.split(':').map(Number);
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        if (parts[0] !== targetGalaxy || parts[1] !== targetSystem) {
+          return false;
+        }
+      }
+    }
+  }
+
+  // 2. Cross-verify via consensus coordinates extracted directly from DOM row elements
+  const consensus = getDOMConsensusCoordinates(rows);
+  if (consensus) {
+    if (consensus.galaxy !== targetGalaxy || consensus.system !== targetSystem) {
+      return false; // Row elements belong to a different/stale system!
+    }
+    return true;
+  }
+
+  // Fallback: If no action/dispatch links were present (e.g. empty solar system), verify input values match
+  const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
+  const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
+  if (gInput && sInput) {
+    const curG = parseInt(gInput.value, 10);
+    const curS = parseInt(sInput.value, 10);
+    if (curG !== targetGalaxy || curS !== targetSystem) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Rocksolid parser for player status (v, I, i, b, n, o, active) from OGame galaxy row.
+ * Immune to DOM injection from other extensions (OGLight, AGR, Infinity, PTRE) and independent of locale.
+ */
+export function extractPlayerStatusFromRow(playerCell: Element, row: Element): {
+  tags: string[];
+  statusString: string;
+  isVacation: boolean;
+  isLongInactive: boolean;
+  isShortInactive: boolean;
+  isBanned: boolean;
+  isNoob: boolean;
+  isOutlaw: boolean;
+  isActive: boolean;
+} {
+  const allowedStatus = new Set(['v', 'I', 'i', 'b', 'n', 'o']);
+
+  // Step A: Check OGLight data-status-tag first
+  const statusTagEl = playerCell.querySelector('[data-status-tag]');
+  const directTag = statusTagEl?.getAttribute('data-status-tag')?.trim();
+
+  let tags: string[] = [];
+
+  if (directTag) {
+    tags = directTag
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => allowedStatus.has(t));
+  } else {
+    // Step B: Check <pre> tag specifically.
+    // OGame only renders a <pre> tag inside .cellPlayerName if status abbreviations exist.
+    const preEl = playerCell.querySelector('pre');
+    if (preEl) {
+      const preText = preEl.textContent || '';
+      const preClasses = Array.from(preEl.querySelectorAll('[class*="status_abbr_"]'))
+        .map(s => s.className)
+        .join(' ');
+
+      // Vacation (v)
+      const hasV = preClasses.includes('status_abbr_vacation') ||
+                   row.classList.contains('vacation_filter') ||
+                   /\bv\b/i.test(preText);
+
+      // Inactive: Long inactive 28d (I) vs Short inactive 7d (i)
+      // Note: 'I' is case-sensitive capital I in OGame
+      const hasI = preClasses.includes('status_abbr_longinactive') ||
+                   /\bI\b/.test(preText) ||
+                   preText.includes('28');
+
+      const hasIshort = !hasI && (
+        preClasses.includes('status_abbr_inactive') ||
+        /\bi\b/.test(preText) ||
+        preText.includes('7')
+      );
+
+      // Banned (b)
+      const hasB = preClasses.includes('status_abbr_banned') ||
+                   row.classList.contains('banned_filter') ||
+                   /\bb\b/i.test(preText);
+
+      // Newbie (n)
+      const hasN = preClasses.includes('status_abbr_noob') ||
+                   row.classList.contains('newbie_filter') ||
+                   /\bn\b/i.test(preText);
+
+      // Outlaw (o)
+      const hasO = preClasses.includes('status_abbr_outlaw') ||
+                   /\bo\b/i.test(preText);
+
+      if (hasV) tags.push('v');
+      if (hasI) tags.push('I');
+      else if (hasIshort) tags.push('i');
+      if (hasB) tags.push('b');
+      if (hasN) tags.push('n');
+      if (hasO) tags.push('o');
+    } else {
+      // No <pre> tag -> player has no status abbreviation (active player).
+      // Check row filter classes as a strict fallback
+      if (row.classList.contains('vacation_filter')) {
+        tags.push('v');
+      } else if (row.classList.contains('banned_filter')) {
+        tags.push('b');
+      } else if (row.classList.contains('inactive_filter')) {
+        tags.push('i');
+      } else if (row.classList.contains('newbie_filter')) {
+        tags.push('n');
+      }
+    }
+  }
+
+  const isVacation = tags.includes('v');
+  const isLongInactive = tags.includes('I');
+  const isShortInactive = tags.includes('i');
+  const isBanned = tags.includes('b');
+  const isNoob = tags.includes('n');
+  const isOutlaw = tags.includes('o');
+  const isActive = tags.length === 0;
+  const statusString = tags.length > 0 ? tags.join(',') : 'active';
+
+  return {
+    tags,
+    statusString,
+    isVacation,
+    isLongInactive,
+    isShortInactive,
+    isBanned,
+    isNoob,
+    isOutlaw,
+    isActive,
+  };
+}
+
+
+// ============================================================================
+// NEXUS GALAXY TACTICAL DOSSIERS & INTERACTIVE NUMBERING COLUMN
+// ============================================================================
+
+let tacticalNotesCache: TacticalNote[] = [];
+let isTacticalNotesLoading = false;
+let isTacticalNotesLoaded = false;
+
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+function getNoteEntries(note?: TacticalNote): TacticalNoteEntry[] {
+  if (!note) return [];
+  if (Array.isArray(note.entries) && note.entries.length > 0) {
+    return note.entries;
+  }
+  if (note.text && note.text.trim()) {
+    return [{
+      id: `legacy_${note.createdAt || note.updatedAt || Date.now()}`,
+      text: note.text.trim(),
+      tag: note.tag || '',
+      timestamp: note.createdAt || note.updatedAt || Date.now()
+    }];
+  }
+  return [];
+}
+
+function formatNoteTime(ts: number): string {
+  const date = new Date(ts);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (isToday) {
+    return `Today ${timeStr}`;
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday ${timeStr}`;
+  }
+  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${timeStr}`;
+}
+
+export function reloadTacticalNotesCache(onDone?: () => void) {
+  if (isTacticalNotesLoading) return;
+  isTacticalNotesLoading = true;
+  const rawUni = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+  const universe = cleanUniverseId(rawUni);
+
+  if (!isContextValid()) {
+    isTacticalNotesLoading = false;
+    return;
+  }
+
+  chrome.runtime.sendMessage({ type: "GET_ALL_TACTICAL_NOTES", data: { universe } }, (response) => {
+    isTacticalNotesLoading = false;
+    if (chrome.runtime.lastError) return;
+    if (response && response.success) {
+      tacticalNotesCache = response.notes || [];
+      isTacticalNotesLoaded = true;
+      const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
+      const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
+      const rows = document.querySelectorAll('.galaxyRow.ctContentRow');
+      if (gInput && sInput && rows.length >= 15) {
+        const g = parseInt(gInput.value, 10);
+        const s = parseInt(sInput.value, 10);
+        if (!isNaN(g) && !isNaN(s)) {
+          applyTacticalSlotEnhancements(g, s, rows);
+        }
+      }
+      onDone?.();
+    }
+  });
+}
+
+function findTacticalNotesForSlot(coords: string, playerId?: string, playerName?: string) {
+  const coordNote = tacticalNotesCache.find(n => n.targetType === 'coordinate' && n.targetId === coords);
+  let playerNote: TacticalNote | undefined;
+  if (playerId || playerName) {
+    const cleanPlayer = (playerName || '').toLowerCase().trim();
+    const cleanPid = String(playerId || '').trim();
+    playerNote = tacticalNotesCache.find(n => {
+      if (n.targetType !== 'player') return false;
+      if (cleanPid && n.targetId === cleanPid) return true;
+      if (cleanPlayer && n.targetId.toLowerCase().trim() === cleanPlayer) return true;
+      if (cleanPlayer && n.playerName && n.playerName.toLowerCase().trim() === cleanPlayer) return true;
+      return false;
+    });
+  }
+  return {
+    coordNote,
+    playerNote,
+    activeNote: coordNote || playerNote
+  };
+}
+
+interface TacticalSlotContext {
+  galaxy: number;
+  system: number;
+  position: number;
+  coords: string;
+  playerId: string;
+  playerName: string;
+  allianceTag: string;
+  isSlotEmpty: boolean;
+}
+
+function applyTacticalSlotEnhancements(galaxy: number, system: number, rows: NodeListOf<Element>) {
+  if (!isTacticalNotesLoaded && !isTacticalNotesLoading) {
+    reloadTacticalNotesCache();
+  }
+
+  // Enhance "Planet" header column with sleek note affordance and tooltip
+  const headCell = document.querySelector('.galaxyRow.ctGalaxyHead .galaxyCell.span1-2') as HTMLElement | null;
+  if (headCell && !headCell.hasAttribute('data-nexus-note-hint')) {
+    headCell.setAttribute('data-nexus-note-hint', 'true');
+    headCell.setAttribute('title', 'Planet & Slot Numbers: Click any slot number below to add or view notes');
+  }
+
+  rows.forEach(row => {
+    const posCell = row.querySelector('.cellPosition') as HTMLElement | null;
+    const playerCell = row.querySelector('.cellPlayerName') as HTMLElement | null;
+    if (!posCell) return;
+
+    const position = parseInt(posCell.textContent?.trim() || '', 10);
+    if (isNaN(position) || position <= 0 || position > 16) return;
+
+    const targetCoords = `${galaxy}:${system}:${position}`;
+
+    // Extract occupant details
+    let playerId = '';
+    let playerName = '';
+    let allianceTag = '';
+    const isSlotEmpty = row.classList.contains('empty_filter') && !row.querySelector('.microplanet') && !row.querySelector('.cellPlanetName')?.textContent?.trim();
+
+    if (playerCell) {
+      const pIdAttr = playerCell.querySelector('[data-playerid]')?.getAttribute('data-playerid') ||
+                      playerCell.querySelector('[data-player-id]')?.getAttribute('data-player-id') ||
+                      playerCell.querySelector('[data-uid]')?.getAttribute('data-uid');
+      if (pIdAttr) {
+        playerId = pIdAttr;
+      } else {
+        const pRel = playerCell.querySelector('span[rel^="player"]')?.getAttribute('rel');
+        const match = pRel?.match(/player(\d+)/i);
+        if (match) playerId = match[1];
+      }
+
+      const pNameEl = playerCell.querySelector('.playerName, .playername, span[rel^="player"]');
+      if (pNameEl) {
+        const directClean = extractDirectText(pNameEl).replace(/\s*\([viInob, ]+\)\s*/gi, '').trim();
+        if (directClean && !directClean.startsWith('#')) {
+          playerName = directClean;
+        }
+      }
+      if (!playerName) {
+        const clone = playerCell.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll('.htmlTooltip, .ogl_ranking, .rank, .honorRank, .ogl_tagPicker, .ogl_flagPicker, pre, script, style').forEach(el => el.remove());
+        const clean = clone.textContent?.trim().replace(/\s+/g, ' ') || '';
+        const sanitized = clean.replace(/\([^)]*\)/g, '').replace(/#\d+/g, '').trim();
+        if (sanitized && !sanitized.startsWith('#')) {
+          playerName = sanitized;
+        }
+      }
+    }
+
+    const allyCell = row.querySelector('.cellAlliance') as HTMLElement | null;
+    if (allyCell) {
+      const allySpan = allyCell.querySelector('span');
+      if (allySpan) {
+        allianceTag = extractDirectText(allySpan).trim();
+      }
+    }
+
+    const { coordNote, playerNote, activeNote } = findTacticalNotesForSlot(targetCoords, playerId, playerName);
+
+    // Apply high-end interactive affordances to the slot number
+    posCell.classList.add('nexus-tactical-slot');
+    posCell.classList.remove('has-tactical-note', 'tag-threat', 'tag-farm', 'tag-ally', 'tag-moonkill', 'tag-intel', 'tag-custom');
+
+    if (activeNote) {
+      posCell.classList.add('has-tactical-note');
+      const activeTag = activeNote.tag || (activeNote.entries && activeNote.entries[0]?.tag) || '';
+      if (activeTag) {
+        posCell.classList.add(`tag-${activeTag}`);
+      }
+      const tagLabel = activeTag ? activeTag.toUpperCase() : 'NOTES';
+      const targetLabel = activeNote.targetType === 'player' ? `👤 ${activeNote.playerName || playerName || 'Player'}` : `🪐 [${targetCoords}]`;
+      const entries = getNoteEntries(activeNote);
+      const countLabel = entries.length > 1 ? ` (${entries.length} notes)` : '';
+      const latestText = entries.length > 0 ? entries[0].text : (activeNote.text || '');
+      const snippet = latestText ? `\n"${latestText.slice(0, 75)}${latestText.length > 75 ? '...' : ''}"` : '';
+      posCell.setAttribute('title', `[${tagLabel}] ${targetLabel}${countLabel}${snippet}\nClick to view notes & add entries`);
+    } else {
+      posCell.setAttribute('title', `Slot ${position} [${targetCoords}]: Click to add notes`);
+    }
+
+    // Attach click handler for modal
+    const oldClick = (posCell as any)._ogNexusSlotClick;
+    if (oldClick) {
+      posCell.removeEventListener('click', oldClick);
+    }
+    const onSlotClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openTacticalDossierModal({
+        galaxy,
+        system,
+        position,
+        coords: targetCoords,
+        playerId,
+        playerName,
+        allianceTag,
+        isSlotEmpty
+      });
+    };
+    posCell.addEventListener('click', onSlotClick);
+    (posCell as any)._ogNexusSlotClick = onSlotClick;
+  });
+}
+
+function openTacticalDossierModal(ctx: TacticalSlotContext) {
+  let overlay = document.getElementById('nexus-tactical-dossier-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'nexus-tactical-dossier-overlay';
+    overlay.className = 'nexus-dossier-overlay';
+    // Append directly to documentElement to avoid any body margins/overflow bounds
+    document.documentElement.appendChild(overlay);
+  }
+
+  const { coordNote, playerNote } = findTacticalNotesForSlot(ctx.coords, ctx.playerId, ctx.playerName);
+  
+  // Decide default scope: if coordNote exists, use 'coordinate'. Else if playerNote exists, use 'player'.
+  let activeScope: 'coordinate' | 'player' = 'coordinate';
+  if (coordNote) {
+    activeScope = 'coordinate';
+  } else if (playerNote && ctx.playerName) {
+    activeScope = 'player';
+  } else {
+    activeScope = 'coordinate';
+  }
+
+  const rawUni = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+  const universe = cleanUniverseId(rawUni);
+
+  const getTargetKey = (scope: 'coordinate' | 'player'): string => {
+    return scope === 'coordinate' ? `coord:${universe}:${ctx.coords}` : `player:${universe}:${ctx.playerId || ctx.playerName.toLowerCase()}`;
+  };
+
+  const getCurrentNoteForScope = (scope: 'coordinate' | 'player'): TacticalNote | undefined => {
+    const key = getTargetKey(scope);
+    return tacticalNotesCache.find(n => n.noteKey === key);
+  };
+
+  interface DisplayNoteEntry extends TacticalNoteEntry {
+    sourceNoteKey: string;
+    sourceTargetType: 'coordinate' | 'player';
+  }
+
+  let currentNote = getCurrentNoteForScope(activeScope);
+  let currentTag: TacticalNoteTag = currentNote?.tag || '';
+  let editingEntryId: string | null = null;
+  let editingSourceKey: string | null = null;
+
+  overlay.innerHTML = `
+    <div class="nexus-dossier-shell" onclick="event.stopPropagation()">
+      <div class="nexus-dossier-core">
+        <div class="nexus-dossier-ambient"></div>
+        
+        <!-- Header -->
+        <div class="nexus-dossier-header">
+          <div>
+            <div class="nexus-dossier-eyebrow">Player Briefing</div>
+            <h3 class="nexus-dossier-title">
+              Slot ${ctx.position} • <span class="target-highlight">[${ctx.coords}]</span>
+            </h3>
+            <div class="nexus-dossier-subtitle">
+              ${ctx.playerName ? `<span>Player: <strong style="color:#e2e8f0">${ctx.playerName}</strong></span>` : '<span style="color:#64748b">Uncolonized Coordinate</span>'}
+              ${ctx.allianceTag ? `<span style="color:#38bdf8">[${ctx.allianceTag}]</span>` : ''}
+            </div>
+          </div>
+          <button type="button" class="nexus-dossier-close-btn" id="nexus-dossier-close" title="Close">✕</button>
+        </div>
+
+        <!-- Scope Switcher -->
+        <div class="nexus-scope-bar">
+          <button type="button" class="nexus-scope-tab ${activeScope === 'coordinate' ? 'active' : ''}" id="nexus-scope-coord">
+            🪐 Coordinate [${ctx.coords}]
+          </button>
+          <button type="button" class="nexus-scope-tab ${activeScope === 'player' ? 'active' : ''}" id="nexus-scope-player" ${!ctx.playerName ? 'disabled title="No player occupies this slot"' : ''}>
+            👤 Player: ${ctx.playerName || '(None)'}
+          </button>
+        </div>
+
+        <!-- Types (1-Line Layout) -->
+        <div class="nexus-tags-section">
+          <div class="nexus-tags-label">Type</div>
+          <div class="nexus-tags-grid">
+            <button type="button" class="nexus-tag-btn tag-threat ${currentTag === 'threat' ? 'active' : ''}" data-tag="threat">
+              <span class="tag-dot"></span>
+              <span class="tag-main">Threat</span>
+              <span class="tag-sub">Hostile</span>
+            </button>
+            <button type="button" class="nexus-tag-btn tag-farm ${currentTag === 'farm' ? 'active' : ''}" data-tag="farm">
+              <span class="tag-dot"></span>
+              <span class="tag-main">Prime</span>
+              <span class="tag-sub">Farm</span>
+            </button>
+            <button type="button" class="nexus-tag-btn tag-ally ${currentTag === 'ally' ? 'active' : ''}" data-tag="ally">
+              <span class="tag-dot"></span>
+              <span class="tag-main">Ally</span>
+              <span class="tag-sub">Trade</span>
+            </button>
+            <button type="button" class="nexus-tag-btn tag-moonkill ${currentTag === 'moonkill' ? 'active' : ''}" data-tag="moonkill">
+              <span class="tag-dot"></span>
+              <span class="tag-main">Moonkill</span>
+              <span class="tag-sub">Target</span>
+            </button>
+            <button type="button" class="nexus-tag-btn tag-intel ${currentTag === 'intel' ? 'active' : ''}" data-tag="intel">
+              <span class="tag-dot"></span>
+              <span class="tag-main">Intel</span>
+              <span class="tag-sub">Watch</span>
+            </button>
+            <button type="button" class="nexus-tag-btn tag-custom ${currentTag === 'custom' ? 'active' : ''}" data-tag="custom">
+              <span class="tag-dot"></span>
+              <span class="tag-main">Custom</span>
+              <span class="tag-sub">General</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Recorded Notes (3 Per Line Grid) -->
+        <div class="nexus-entries-section">
+          <div class="nexus-entries-header">
+            <span class="nexus-entries-label">
+              <span>Recorded Notes</span>
+              <span id="nexus-entries-count" style="color:#00f2ff; font-weight:800;"></span>
+            </span>
+            <span style="font-size:9.5px; color:#64748b;">Click any note to read/edit</span>
+          </div>
+          <div class="nexus-entries-container" id="nexus-entries-list">
+            <!-- Dynamic note cards injected here -->
+          </div>
+        </div>
+
+        <!-- Note Composer -->
+        <div class="nexus-composer-section">
+          <div class="nexus-composer-header">
+            <span class="nexus-composer-label" id="nexus-composer-title">+ Add Note</span>
+            <span style="font-size:10px; color:#64748b;">Press Enter to save</span>
+          </div>
+          <textarea
+            class="nexus-note-textarea"
+            id="nexus-dossier-textarea"
+            placeholder="Write a note (fleet, defense, schedule, trade)..."
+          ></textarea>
+          <div class="nexus-composer-actions">
+            <button type="button" class="nexus-btn-add-entry" id="nexus-btn-add-entry">
+              + Add Note
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="nexus-dossier-footer">
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <div class="nexus-dossier-status-pill" id="nexus-dossier-status">
+              ✓ Saved locally
+            </div>
+            <div class="nexus-dossier-vault-hint">
+              <span>🔒 Vault sync available in Overwatch</span>
+            </div>
+          </div>
+
+          <div class="nexus-dossier-actions">
+            <button type="button" class="nexus-btn-delete" id="nexus-dossier-clear-all" style="display:none;">
+              Clear All Notes
+            </button>
+            <button type="button" class="nexus-btn-primary" id="nexus-dossier-done">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Animate in
+  requestAnimationFrame(() => {
+    overlay?.classList.add('visible');
+  });
+
+  const textarea = overlay.querySelector('#nexus-dossier-textarea') as HTMLTextAreaElement;
+  const statusEl = overlay.querySelector('#nexus-dossier-status') as HTMLElement;
+  const clearAllBtn = overlay.querySelector('#nexus-dossier-clear-all') as HTMLElement;
+  const addEntryBtn = overlay.querySelector('#nexus-btn-add-entry') as HTMLElement;
+  const doneBtn = overlay.querySelector('#nexus-dossier-done') as HTMLElement;
+  const closeBtn = overlay.querySelector('#nexus-dossier-close') as HTMLElement;
+  const tabCoord = overlay.querySelector('#nexus-scope-coord') as HTMLElement;
+  const tabPlayer = overlay.querySelector('#nexus-scope-player') as HTMLElement;
+  const tagBtns = overlay.querySelectorAll('.nexus-tag-btn');
+  const entriesList = overlay.querySelector('#nexus-entries-list') as HTMLElement;
+  const entriesCount = overlay.querySelector('#nexus-entries-count') as HTMLElement;
+  const composerTitle = overlay.querySelector('#nexus-composer-title') as HTMLElement;
+
+  const resetComposer = () => {
+    editingEntryId = null;
+    editingSourceKey = null;
+    textarea.value = '';
+    composerTitle.innerHTML = '+ Add Note';
+    addEntryBtn.textContent = '+ Add Note';
+    if (entriesList) {
+      entriesList.querySelectorAll('.nexus-entry-card').forEach(c => c.classList.remove('is-editing'));
+    }
+  };
+
+  // Collect display entries based on active scope
+  const getDisplayEntries = (): DisplayNoteEntry[] => {
+    if (activeScope === 'coordinate') {
+      currentNote = getCurrentNoteForScope('coordinate');
+      const base = getNoteEntries(currentNote);
+      return base.map(e => ({
+        ...e,
+        coords: e.coords || ctx.coords,
+        sourceNoteKey: currentNote?.noteKey || getTargetKey('coordinate'),
+        sourceTargetType: 'coordinate'
+      }));
+    } else {
+      // Player tab: show ALL notes related to this player regardless of coordinate!
+      currentNote = getCurrentNoteForScope('player');
+
+      // 1. Direct player note entries (no coordinate, just player emoji)
+      const playerEntries: DisplayNoteEntry[] = getNoteEntries(currentNote).map(e => ({
+        ...e,
+        coords: undefined, // Player notes have no coords
+        sourceNoteKey: currentNote?.noteKey || getTargetKey('player'),
+        sourceTargetType: 'player'
+      }));
+
+      // 2. All coordinate notes for this player across universe
+      const relatedCoordNotes = tacticalNotesCache.filter(n =>
+        n.targetType === 'coordinate' && (
+          (ctx.playerId && n.playerId && n.playerId === ctx.playerId) ||
+          (ctx.playerName && n.playerName && n.playerName.toLowerCase() === ctx.playerName.toLowerCase()) ||
+          (ctx.playerName && n.coords === ctx.coords)
+        )
+      );
+
+      const coordEntries: DisplayNoteEntry[] = [];
+      relatedCoordNotes.forEach(cn => {
+        getNoteEntries(cn).forEach(e => {
+          coordEntries.push({
+            ...e,
+            coords: e.coords || cn.coords || cn.targetId,
+            sourceNoteKey: cn.noteKey,
+            sourceTargetType: 'coordinate'
+          });
+        });
+      });
+
+      // Deduplicate by entry id
+      const seen = new Set<string>();
+      const combined: DisplayNoteEntry[] = [];
+      [...playerEntries, ...coordEntries].forEach(item => {
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          combined.push(item);
+        }
+      });
+
+      // Sort newest first
+      combined.sort((a, b) => b.timestamp - a.timestamp);
+      return combined;
+    }
+  };
+
+  let activeDisplayEntries: DisplayNoteEntry[] = [];
+
+  // Render the past notes grid (3 per line)
+  const renderTimeline = () => {
+    activeDisplayEntries = getDisplayEntries();
+
+    if (entriesCount) {
+      entriesCount.textContent = activeDisplayEntries.length > 0 ? `(${activeDisplayEntries.length})` : '';
+    }
+
+    if (clearAllBtn) {
+      clearAllBtn.style.display = activeDisplayEntries.length > 0 ? 'inline-block' : 'none';
+    }
+
+    if (!entriesList) return;
+
+    if (activeDisplayEntries.length === 0) {
+      entriesList.innerHTML = `
+        <div class="nexus-entries-empty">
+          No notes recorded yet for this ${activeScope === 'coordinate' ? 'coordinate' : 'player'}.<br/>
+          Write below and press Enter or click <strong>+ Add Note</strong>.
+        </div>
+      `;
+      return;
+    }
+
+    entriesList.innerHTML = activeDisplayEntries.map(entry => {
+      const tagHtml = entry.tag ? `
+        <span class="nexus-entry-tag-badge badge-${entry.tag}">
+          <span class="dot"></span>${entry.tag}
+        </span>
+      ` : '';
+
+      const coordHtml = entry.coords ? `
+        <span class="nexus-entry-coord-pill" title="Recorded at [${escapeHtml(entry.coords)}]">
+          🪐 [${escapeHtml(entry.coords)}]
+        </span>
+      ` : `
+        <span class="nexus-entry-coord-pill is-player" title="Recorded for player ${escapeHtml(ctx.playerName || 'Player')}">
+          👤
+        </span>
+      `;
+
+      const isEditingClass = editingEntryId === entry.id ? 'is-editing' : '';
+
+      return `
+        <div class="nexus-entry-card ${isEditingClass}" data-entry-id="${entry.id}" data-source-key="${entry.sourceNoteKey}">
+          <div class="nexus-entry-header">
+            <div class="nexus-entry-badge-wrap">
+              ${tagHtml}
+              ${coordHtml}
+            </div>
+            <button type="button" class="nexus-entry-del-btn" data-delete-id="${entry.id}" data-source-key="${entry.sourceNoteKey}" title="Delete this note">✕</button>
+          </div>
+          <div class="nexus-entry-text" title="${escapeHtml(entry.text)}">${escapeHtml(entry.text)}</div>
+          <div class="nexus-entry-footer">
+            <span class="nexus-entry-time">${formatNoteTime(entry.timestamp)}</span>
+            <span class="nexus-entry-click-hint">Edit ✎</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Attach card click handlers (edit/read or delete)
+    entriesList.querySelectorAll('.nexus-entry-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        const delBtnClicked = target.closest('.nexus-entry-del-btn') as HTMLElement | null;
+        if (delBtnClicked) {
+          e.stopPropagation();
+          const idToDelete = delBtnClicked.getAttribute('data-delete-id');
+          const sourceKey = delBtnClicked.getAttribute('data-source-key');
+          if (idToDelete && sourceKey) {
+            deleteSingleEntry(idToDelete, sourceKey);
+          }
+          return;
+        }
+
+        // Card clicked to read/edit
+        const entryId = card.getAttribute('data-entry-id');
+        const entry = activeDisplayEntries.find(x => x.id === entryId);
+        if (!entry) return;
+
+        editingEntryId = entry.id;
+        editingSourceKey = entry.sourceNoteKey;
+        textarea.value = entry.text;
+        currentTag = entry.tag || '';
+        updateTagButtonsUI();
+
+        const locHint = entry.coords ? `[${entry.coords}]` : `👤 ${ctx.playerName || 'Player'}`;
+        composerTitle.innerHTML = `<span style="color:#00f2ff">Editing Note</span> <span style="font-size:9.5px; color:#64748b;">(${locHint} • ${formatNoteTime(entry.timestamp)})</span> <button type="button" id="nexus-cancel-edit-btn" style="background:none; border:none; color:#00f2ff; cursor:pointer; font-size:10.5px; margin-left:6px; text-decoration:underline;">(Cancel)</button>`;
+        const cancelBtn = overlay.querySelector('#nexus-cancel-edit-btn');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', (ce) => {
+            ce.stopPropagation();
+            resetComposer();
+          });
+        }
+
+        addEntryBtn.textContent = 'Save Edit';
+
+        entriesList.querySelectorAll('.nexus-entry-card').forEach(c => {
+          if (c.getAttribute('data-entry-id') === entry.id) {
+            c.classList.add('is-editing');
+          } else {
+            c.classList.remove('is-editing');
+          }
+        });
+
+        textarea.focus();
+      });
+    });
+  };
+
+  const updateTagButtonsUI = () => {
+    tagBtns.forEach(b => {
+      const tag = b.getAttribute('data-tag');
+      if (tag === currentTag) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+    });
+  };
+
+  // Persist specific TacticalNote object
+  const persistSpecificNote = (noteToSave: TacticalNote, onDone?: () => void) => {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#00f2ff">● Saving...</span>`;
+
+    chrome.runtime.sendMessage({ type: "SAVE_TACTICAL_NOTE", data: { note: noteToSave } }, (resp) => {
+      if (resp && resp.success) {
+        const idx = tacticalNotesCache.findIndex(n => n.noteKey === noteToSave.noteKey);
+        if (idx >= 0) {
+          tacticalNotesCache[idx] = noteToSave;
+        } else {
+          tacticalNotesCache.push(noteToSave);
+        }
+        applyGalaxyRings();
+        renderTimeline();
+        if (statusEl) statusEl.innerHTML = `<span style="color:#10b981">✓ Saved locally</span>`;
+      } else {
+        if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">Error saving</span>`;
+      }
+      onDone?.();
+    });
+  };
+
+  // Add new note entry or save existing edit
+  const submitComposerEntry = () => {
+    const textVal = textarea.value.trim();
+    if (!textVal) return;
+
+    if (editingEntryId && editingSourceKey) {
+      // Saving edit to existing entry
+      const sourceNote = tacticalNotesCache.find(n => n.noteKey === editingSourceKey);
+      if (sourceNote) {
+        const existingEntries = getNoteEntries(sourceNote);
+        const updatedEntries = existingEntries.map(e => {
+          if (e.id === editingEntryId) {
+            return {
+              ...e,
+              text: textVal,
+              tag: currentTag,
+              timestamp: Date.now()
+            };
+          }
+          return e;
+        });
+
+        const updatedNote: TacticalNote = {
+          ...sourceNote,
+          tag: currentTag || updatedEntries[0]?.tag || '',
+          text: updatedEntries[0]?.text || textVal,
+          entries: updatedEntries,
+          updatedAt: Date.now()
+        };
+
+        resetComposer();
+        persistSpecificNote(updatedNote, () => {
+          textarea.focus();
+        });
+        return;
+      }
+    }
+
+    // Brand new entry
+    // Requirement 3: when creating a Player tab note, don't record coordinate, just a player emoji!
+    // Requirement 1: for coordinate tab note, record coordinate!
+    const newEntryCoords = activeScope === 'coordinate' ? ctx.coords : undefined;
+
+    const newEntry: TacticalNoteEntry = {
+      id: `entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      text: textVal,
+      tag: currentTag,
+      timestamp: Date.now(),
+      coords: newEntryCoords
+    };
+
+    const targetKey = getTargetKey(activeScope);
+    const targetNote = tacticalNotesCache.find(n => n.noteKey === targetKey);
+    const existingEntries = getNoteEntries(targetNote);
+    const updatedEntries = [newEntry, ...existingEntries];
+
+    const noteToSave: TacticalNote = {
+      noteKey: targetKey,
+      universe,
+      targetType: activeScope,
+      targetId: activeScope === 'coordinate' ? ctx.coords : (ctx.playerId || ctx.playerName.toLowerCase()),
+      coords: activeScope === 'coordinate' ? ctx.coords : undefined,
+      playerId: ctx.playerId || undefined,
+      playerName: ctx.playerName || undefined,
+      allianceTag: ctx.allianceTag || undefined,
+      tag: currentTag || updatedEntries[0]?.tag || '',
+      text: textVal,
+      entries: updatedEntries,
+      updatedAt: Date.now(),
+      createdAt: targetNote?.createdAt || Date.now()
+    };
+
+    resetComposer();
+    persistSpecificNote(noteToSave, () => {
+      textarea.focus();
+    });
+  };
+
+  // Delete an individual entry
+  const deleteSingleEntry = (entryId: string, sourceKey: string) => {
+    if (editingEntryId === entryId) {
+      resetComposer();
+    }
+    const sourceNote = tacticalNotesCache.find(n => n.noteKey === sourceKey);
+    if (!sourceNote) return;
+
+    const existingEntries = getNoteEntries(sourceNote);
+    const remaining = existingEntries.filter(e => e.id !== entryId);
+
+    if (remaining.length === 0) {
+      chrome.runtime.sendMessage({ type: "DELETE_TACTICAL_NOTE", data: { noteKey: sourceKey } }, () => {
+        tacticalNotesCache = tacticalNotesCache.filter(n => n.noteKey !== sourceKey);
+        applyGalaxyRings();
+        renderTimeline();
+        if (statusEl) statusEl.innerHTML = `<span style="color:#64748b">Note deleted</span>`;
+      });
+    } else {
+      const updatedNote: TacticalNote = {
+        ...sourceNote,
+        entries: remaining,
+        text: remaining[0].text,
+        tag: remaining[0].tag || currentTag || '',
+        updatedAt: Date.now()
+      };
+      persistSpecificNote(updatedNote);
+    }
+  };
+
+  // Clear all notes for active scope
+  clearAllBtn.addEventListener('click', () => {
+    resetComposer();
+    const targetKey = getTargetKey(activeScope);
+    chrome.runtime.sendMessage({ type: "DELETE_TACTICAL_NOTE", data: { noteKey: targetKey } }, () => {
+      tacticalNotesCache = tacticalNotesCache.filter(n => n.noteKey !== targetKey);
+      applyGalaxyRings();
+      renderTimeline();
+      if (statusEl) statusEl.innerHTML = `<span style="color:#64748b">Notes cleared</span>`;
+    });
+  });
+
+  // Type button clicks (sets classification for target & new entries)
+  tagBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const clickedTag = btn.getAttribute('data-tag') as TacticalNoteTag;
+      if (currentTag === clickedTag) {
+        currentTag = ''; // Toggle off
+      } else {
+        currentTag = clickedTag;
+      }
+      updateTagButtonsUI();
+
+      // If a note already exists for active scope, update its primary tag immediately
+      const activeNote = getCurrentNoteForScope(activeScope);
+      if (activeNote) {
+        const noteToSave: TacticalNote = {
+          ...activeNote,
+          tag: currentTag,
+          updatedAt: Date.now()
+        };
+        persistSpecificNote(noteToSave);
+      }
+    });
+  });
+
+  // Add entry button click
+  addEntryBtn.addEventListener('click', submitComposerEntry);
+
+  // Keyboard shortcut: Enter or Ctrl+Enter in textarea adds/updates the note
+  textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && (!e.shiftKey || e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      submitComposerEntry();
+    }
+  });
+
+  // Scope switcher
+  const switchScope = (newScope: 'coordinate' | 'player') => {
+    if (newScope === activeScope) return;
+    if (newScope === 'player' && !ctx.playerName) return;
+
+    resetComposer();
+
+    activeScope = newScope;
+    if (activeScope === 'coordinate') {
+      tabCoord.classList.add('active');
+      tabPlayer.classList.remove('active');
+    } else {
+      tabPlayer.classList.add('active');
+      tabCoord.classList.remove('active');
+    }
+
+    currentNote = getCurrentNoteForScope(activeScope);
+    currentTag = currentNote?.tag || '';
+    updateTagButtonsUI();
+    renderTimeline();
+    textarea.value = '';
+    textarea.focus();
+  };
+
+  tabCoord.addEventListener('click', () => switchScope('coordinate'));
+  tabPlayer.addEventListener('click', () => switchScope('player'));
+
+  // Close handlers
+  const closeModal = () => {
+    if (textarea.value.trim() && !editingEntryId) {
+      submitComposerEntry();
+    }
+    overlay?.classList.remove('visible');
+    document.removeEventListener('keydown', onKeyDown);
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  };
+  document.addEventListener('keydown', onKeyDown);
+
+  doneBtn.addEventListener('click', closeModal);
+  closeBtn.addEventListener('click', closeModal);
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      closeModal();
+    }
+  };
+
+  // Initial render
+  renderTimeline();
+  updateTagButtonsUI();
+  setTimeout(() => textarea?.focus(), 60);
+}
+
 export function applyGalaxyRings() {
   const galaxyInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
   const systemInput = document.querySelector('input#system_input') as HTMLInputElement | null;
@@ -1172,6 +2263,9 @@ export function applyGalaxyRings() {
 
   // Sync scanned system to Nexus Overwatch (debounced + verified DOM settlement to prevent stale data on fast scrolling)
   scheduleGalaxySyncToOverwatch(galaxy, system);
+
+  // Enhance slot numbers with subtle tactical indicators & dossier popovers
+  applyTacticalSlotEnhancements(galaxy, system, rows);
 
   const ownCoordsList = getOwnCoordinatesList();
   const keysToDelete: string[] = [];
@@ -1228,6 +2322,7 @@ export function applyGalaxyRings() {
     let isDifferentPlayer = false;
     if (!isSlotEmpty && !isDestroyed && playerText && cachedPlanets.length > 0) {
       const rowPlayerId = playerCell.querySelector('[data-playerid]')?.getAttribute('data-playerid') ||
+                          playerCell.querySelector('[data-player-id]')?.getAttribute('data-player-id') ||
                           playerCell.querySelector('[data-uid]')?.getAttribute('data-uid');
       const pNameEl = playerCell.querySelector('.playerName, .playername, span[rel^="player"]');
       let rowPlayerName = pNameEl ? extractDirectText(pNameEl) : playerText;
@@ -1272,13 +2367,19 @@ export function applyGalaxyRings() {
 
     // If the same player is still here, synchronize playerStatus in cache if needed
     if (!isOwn && cachedPlanets.length > 0 && !isDifferentPlayer) {
-      const isVacation = row.classList.contains('vacation_filter') || playerCell.textContent?.includes('(v)');
-      const isLongInactive = row.classList.contains('inactive_filter') && (playerCell.textContent?.includes('(I)') || !!playerCell.querySelector('.status_abbr_longinactive'));
-      const isInactive = row.classList.contains('inactive_filter');
+      const parsed = extractPlayerStatusFromRow(playerCell, row);
+
       const updatedStatus: string[] = [];
-      if (isVacation) updatedStatus.push('vacation');
-      if (isLongInactive) updatedStatus.push('longinactive');
-      else if (isInactive) updatedStatus.push('inactive');
+      if (parsed.isVacation) {
+        updatedStatus.push('vacation');
+        const hadPriorLong = cachedPlanets.some(p => p.playerStatus?.includes('longinactive'));
+        const hadPriorInactive = cachedPlanets.some(p => p.playerStatus?.includes('inactive'));
+        if (parsed.isLongInactive || hadPriorLong) updatedStatus.push('longinactive');
+        else if (parsed.isShortInactive || hadPriorInactive) updatedStatus.push('inactive');
+      } else {
+        if (parsed.isLongInactive) updatedStatus.push('longinactive');
+        else if (parsed.isShortInactive) updatedStatus.push('inactive');
+      }
       if (updatedStatus.length === 0) updatedStatus.push('active');
 
       cachedPlanets.forEach(cp => {
@@ -1443,6 +2544,9 @@ function registerGalaxyGlobalListeners() {
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg?.type === 'SPIED_PLANETS_UPDATED' && document.querySelector('#galaxycomponent')) {
         reloadSpiedPlanetsCache();
+      }
+      if ((msg?.type === 'TACTICAL_NOTE_SAVED' || msg?.type === 'TACTICAL_NOTE_DELETED') && document.querySelector('#galaxycomponent')) {
+        reloadTacticalNotesCache();
       }
     });
   }
@@ -1791,84 +2895,6 @@ function extractDirectText(el: Element | null): string {
   return '';
 }
 
-/**
- * Verifies that the OGame Galaxy DOM has genuinely settled and belongs to target coordinates.
- * Prevents transient/stale DOM from being scraped during rapid user scrolling.
- */
-function isGalaxyDOMFullySettled(targetGalaxy: number, targetSystem: number, rows: NodeListOf<Element>): boolean {
-  if (!rows || rows.length < 15) return false;
-
-  // 1. Check if galaxyLoading indicator is active or displays old coordinates
-  const loadingEl = document.getElementById('galaxyLoading');
-  if (loadingEl) {
-    const isVisible = window.getComputedStyle(loadingEl).display !== 'none' && loadingEl.style.display !== 'none';
-    if (isVisible) return false;
-
-    const currentPos = loadingEl.getAttribute('data-currentposition');
-    if (currentPos) {
-      const parts = currentPos.split(':').map(Number);
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        if (parts[0] !== targetGalaxy || parts[1] !== targetSystem) {
-          return false;
-        }
-      }
-    }
-  }
-
-  // 2. Cross-verify coordinates embedded in interactive row elements (spy links, discovery, colonize, move)
-  let foundAnyCoords = false;
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-
-    // A. Check data-spy-coords (e.g. "5:187:1:1")
-    const spyLink = row.querySelector('[data-spy-coords]');
-    if (spyLink) {
-      const coordsStr = spyLink.getAttribute('data-spy-coords') || '';
-      const parts = coordsStr.split(':').map(Number);
-      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        foundAnyCoords = true;
-        if (parts[0] !== targetGalaxy || parts[1] !== targetSystem) {
-          return false; // Row belongs to a different/stale system!
-        }
-      }
-    }
-
-    // B. Check onclick action strings (discoverPlanet, movePlanet, sendShips)
-    const actionEl = row.querySelector('[onclick*="discoverPlanet"], [onclick*="movePlanet"], [onclick*="sendShips"]');
-    if (actionEl) {
-      const onclickStr = actionEl.getAttribute('onclick') || '';
-      const match = onclickStr.match(/'galaxy':\s*(\d+),\s*'system':\s*(\d+)/) ||
-                    onclickStr.match(/sendShips\(\s*\d+,\s*(\d+),\s*(\d+)/);
-      if (match) {
-        const rowG = parseInt(match[1], 10);
-        const rowS = parseInt(match[2], 10);
-        if (!isNaN(rowG) && !isNaN(rowS)) {
-          foundAnyCoords = true;
-          if (rowG !== targetGalaxy || rowS !== targetSystem) {
-            return false; // Row belongs to a different/stale system!
-          }
-        }
-      }
-    }
-  }
-
-  // If action links had coordinates, they must match target coordinates.
-  // If no action coordinate links were present (e.g. empty or restricted system), verify current input values.
-  if (!foundAnyCoords) {
-    const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
-    const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
-    if (gInput && sInput) {
-      const curG = parseInt(gInput.value, 10);
-      const curS = parseInt(sInput.value, 10);
-      if (curG !== targetGalaxy || curS !== targetSystem) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
 let galaxySyncDebounceTimer: any = null;
 
 /**
@@ -1882,24 +2908,32 @@ export function scheduleGalaxySyncToOverwatch(galaxy: number, system: number) {
   }
 
   galaxySyncDebounceTimer = setTimeout(() => {
+    const currentRows = document.querySelectorAll('.galaxyRow.ctContentRow');
+    if (currentRows.length < 15) return;
+
+    // Check DOM consensus coordinates first to ensure we sync actual rendered rows
+    const consensus = getDOMConsensusCoordinates(currentRows);
     const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
     const sInput = document.querySelector('input#system_input') as HTMLInputElement | null;
-    const targetGalaxy = gInput ? parseInt(gInput.value, 10) : galaxy;
-    const targetSystem = sInput ? parseInt(sInput.value, 10) : system;
+    const targetGalaxy = consensus?.galaxy ?? (gInput ? parseInt(gInput.value, 10) : galaxy);
+    const targetSystem = consensus?.system ?? (sInput ? parseInt(sInput.value, 10) : system);
 
     if (isNaN(targetGalaxy) || isNaN(targetSystem)) return;
 
-    const currentRows = document.querySelectorAll('.galaxyRow.ctContentRow');
     if (isGalaxyDOMFullySettled(targetGalaxy, targetSystem, currentRows)) {
       syncGalaxyToOverwatch(targetGalaxy, targetSystem, currentRows);
     } else {
-      // Retry once after 300ms in case DOM was mid-settle
+      // Retry once after 350ms in case DOM was mid-settle
       setTimeout(() => {
         const retryRows = document.querySelectorAll('.galaxyRow.ctContentRow');
-        if (isGalaxyDOMFullySettled(targetGalaxy, targetSystem, retryRows)) {
-          syncGalaxyToOverwatch(targetGalaxy, targetSystem, retryRows);
+        if (retryRows.length < 15) return;
+        const retryConsensus = getDOMConsensusCoordinates(retryRows);
+        const retryG = retryConsensus?.galaxy ?? (gInput ? parseInt(gInput.value, 10) : targetGalaxy);
+        const retryS = retryConsensus?.system ?? (sInput ? parseInt(sInput.value, 10) : targetSystem);
+        if (!isNaN(retryG) && !isNaN(retryS) && isGalaxyDOMFullySettled(retryG, retryS, retryRows)) {
+          syncGalaxyToOverwatch(retryG, retryS, retryRows);
         }
-      }, 300);
+      }, 350);
     }
   }, 600);
 }
@@ -1908,9 +2942,10 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
   if (!rows || rows.length === 0) return;
   if (!isContextValid()) return;
 
-  // Coordinate detection from inputs or row elements
-  let targetGalaxy = galaxy;
-  let targetSystem = system;
+  // Derive coordinates: consensus from DOM rows takes precedence over stale input parameters
+  const consensus = getDOMConsensusCoordinates(rows);
+  let targetGalaxy = consensus?.galaxy ?? galaxy;
+  let targetSystem = consensus?.system ?? system;
 
   if (!targetGalaxy || !targetSystem || isNaN(targetGalaxy) || isNaN(targetSystem)) {
     const gInput = document.querySelector('input#galaxy_input') as HTMLInputElement | null;
@@ -2029,10 +3064,10 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
           }
         }
 
-        // Fallback for player name if empty
+        // Fallback for player name if empty (strip extension ranking badges and status elements)
         if (!playerName) {
           const clone = playerCell.cloneNode(true) as HTMLElement;
-          clone.querySelectorAll('.htmlTooltip, .ogl_ranking, .rank, .honorRank, .ogl_tagPicker, .ogl_flagPicker, pre, script, style').forEach(el => el.remove());
+          clone.querySelectorAll('.htmlTooltip, .ogl_ranking, .rank, .honorRank, .ogl_tagPicker, .ogl_flagPicker, .ago_galaxy_rank, [class*="ago_"], [class*="ptre"], pre, script, style').forEach(el => el.remove());
           const clean = clone.textContent?.trim().replace(/\s+/g, ' ') || '';
           const sanitized = clean.replace(/\([^)]*\)/g, '').replace(/#\d+/g, '').trim();
           if (sanitized && !sanitized.startsWith('#')) {
@@ -2050,30 +3085,11 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
 
         // If player found, parse status and rank
         if (playerId || playerName) {
-          const statusTagEl = playerCell.querySelector('[data-status-tag]');
-          const directTag = statusTagEl?.getAttribute('data-status-tag')?.trim();
-          const allowedStatus = new Set(['v', 'I', 'i', 'b']);
+          const parsed = extractPlayerStatusFromRow(playerCell, row);
+          playerStatus = parsed.statusString;
 
-          if (directTag) {
-            const parsedTags = directTag
-              .split(',')
-              .map(t => t.trim())
-              .filter(t => allowedStatus.has(t));
-            playerStatus = parsedTags.length > 0 ? parsedTags.join(',') : 'active';
-          } else {
-            // Fallback parsing if data-status-tag is absent
-            const statusParts: string[] = [];
-            const statusClasses = playerCell.className + ' ' + (playerCell.querySelector('span[class*="status_abbr_"]')?.className || '');
-            if (statusClasses.includes('status_abbr_vacation') || playerCell.textContent?.includes('(v)')) statusParts.push('v');
-            if (statusClasses.includes('status_abbr_longinactive') || playerCell.textContent?.includes('(I)')) statusParts.push('I');
-            else if (statusClasses.includes('status_abbr_inactive') || playerCell.textContent?.includes('(i)')) statusParts.push('i');
-            if (statusClasses.includes('status_abbr_banned') || playerCell.textContent?.includes('(b)')) statusParts.push('b');
-
-            playerStatus = statusParts.length > 0 ? statusParts.join(',') : 'active';
-          }
-
-          // Player Rank
-          const rankEl = playerCell.querySelector('.rank a, .ogl_ranking');
+          // Player Rank (support native .rank a, OGLight .ogl_ranking, and AntiGameReborn .ago_galaxy_rank)
+          const rankEl = playerCell.querySelector('.rank a, .ogl_ranking, .ago_galaxy_rank');
           if (rankEl) {
             const rankNum = parseInt(rankEl.textContent?.replace(/\D/g, '') || '', 10);
             if (!isNaN(rankNum)) playerRank = rankNum;
@@ -2164,14 +3180,31 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
       }
 
       // 5. Activity Markers (Planet & Moon tracked separately for deep tactical analysis)
-      const parseActivityElement = (cellEl: Element | null): { marker: string; timestamp: number } | null => {
+      const parseActivityElement = (cellEl: Element | null, isMoon = false): { marker: string; timestamp: number } | null => {
         if (!cellEl) return null;
-        const actEl = cellEl.querySelector('.activity, .minute15, .minute, .show_activity');
+
+        // Isolate the micro-container (microplanet or micromoon)
+        const micro = cellEl.querySelector(isMoon ? '.micromoon' : '.microplanet') || cellEl;
+
+        // Find activity element within micro, strictly ignoring any elements inside tooltips (.htmlTooltip, [id^="planet"], [id^="moon"])
+        const candidates = micro.querySelectorAll('.activity, .minute15, .showMinutes');
+        let actEl: Element | null = null;
+        for (let i = 0; i < candidates.length; i++) {
+          const el = candidates[i];
+          // Ensure element is not part of an internal tooltip or modal
+          if (!el.closest('.htmlTooltip, [id^="planet"], [id^="moon"]')) {
+            actEl = el;
+            break;
+          }
+        }
+
         if (!actEl) return null;
+
+        // Check for 15-59 minutes of activity (class showMinutes or raw text digits)
         const rawText = (actEl.textContent || '').trim();
-        const numMatch = rawText.match(/\d+/);
+        const numMatch = rawText.match(/\b([1-5]\d)\b/);
         if (numMatch) {
-          const mins = parseInt(numMatch[0], 10);
+          const mins = parseInt(numMatch[1], 10);
           if (mins >= 15 && mins <= 59) {
             return {
               marker: `${mins}m`,
@@ -2179,15 +3212,20 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
             };
           }
         }
-        // If has class 'activity' or contains '*', it's recent activity (<15m)
-        return {
-          marker: '*',
-          timestamp: now,
-        };
+
+        // Recent activity (<15m): either class minute15, or explicit '*' text, or empty content within .activity div
+        if (actEl.classList.contains('minute15') || rawText === '*' || rawText === '') {
+          return {
+            marker: '*',
+            timestamp: now,
+          };
+        }
+
+        return null;
       };
 
-      const planetAct = parseActivityElement(row.querySelector('.cellPlanet'));
-      const moonAct = parseActivityElement(row.querySelector('.cellMoon'));
+      const planetAct = parseActivityElement(row.querySelector('.cellPlanet'), false);
+      const moonAct = parseActivityElement(row.querySelector('.cellMoon'), true);
 
       const planetActivityMarker = planetAct?.marker || null;
       const planetActivityTimestamp = planetAct?.timestamp || null;
@@ -2257,9 +3295,9 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
 
     if (slots.length === 0) return;
 
-    // Compute activity signature to detect if anything changed
+    // Compute signature to detect if activity, status, player, or debris changed
     const activitySignature = slots
-      .map(s => `${s.slot}:${s.activityMarker || ''}:${s.debrisMetal > 0 || s.debrisCrystal > 0}`)
+      .map(s => `${s.slot}:${s.activityMarker || ''}:${s.playerStatus || ''}:${s.playerId || ''}:${s.debrisMetal > 0 || s.debrisCrystal > 0}`)
       .join('|');
 
     const cachedSync = recentlySyncedSystems.get(currentCoords);

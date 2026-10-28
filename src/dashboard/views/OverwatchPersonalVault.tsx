@@ -142,6 +142,18 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
     [universeId]
   ) ?? 0;
 
+  const localNotesCount = useLiveQuery(
+    async () => {
+      try {
+        const all = await db.tacticalNotes.toArray();
+        return all.filter(n => isSameUniverse(n.universe, universeId)).length;
+      } catch {
+        return 0;
+      }
+    },
+    [universeId]
+  ) ?? 0;
+
   // Load vault key on mount
   useEffect(() => {
     let isCancelled = false;
@@ -276,7 +288,7 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
         { forceFullDownload: forceFullSync }
       );
       if (res.success && res.hydrated) {
-        const totalItems = (res.hydrated.expeditions || 0) + (res.hydrated.combats || 0) + (res.hydrated.harvests || 0) + (res.hydrated.discoveries || 0) + (res.hydrated.planner || 0) + (res.hydrated.radar || 0);
+        const totalItems = (res.hydrated.expeditions || 0) + (res.hydrated.combats || 0) + (res.hydrated.harvests || 0) + (res.hydrated.discoveries || 0) + (res.hydrated.planner || 0) + (res.hydrated.radar || 0) + (res.hydrated.notes || 0);
         const modeLabel = forceFullSync ? 'Full Sync' : 'Smart Sync';
         const fetchMsg = totalItems === 0
           ? `Vault synchronized (${modeLabel}): All local records are verified in sync with the cloud.`
@@ -352,6 +364,14 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
       localCount: localRadarCount,
       vaultCount: vaultSummary?.counts?.radar ?? 0,
       description: 'Spied planet coordinates and estimated production rates.',
+    },
+    {
+      id: 'notes',
+      label: 'Tactical Dossiers',
+      iconName: 'edit-pencil',
+      localCount: localNotesCount,
+      vaultCount: vaultSummary?.counts?.notes ?? 0,
+      description: 'Target intel, tactical tags, and coordinate observation dossiers.',
     },
   ];
 

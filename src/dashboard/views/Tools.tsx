@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUpRight, RefreshCw, X, ArrowRight } from 'lucide-react';
+import { ArrowUpRight, RefreshCw, X, ArrowRight, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import './Tools.css';
 import { ThemeIcon } from '../components/ThemeIcon';
@@ -9,6 +9,8 @@ import AcsSplitter from './tools/AcsSplitter';
 import PlasmaTechOptimizer from './tools/PlasmaTechOptimizer';
 import DiscovererOptimizer from './tools/DiscovererOptimizer';
 import ResearchTimeOptimizer from './tools/ResearchTimeOptimizer';
+import NexuSim from './tools/nexuSim/NexuSim';
+import AllianceTopFlop from './tools/AllianceTopFlop';
 
 interface Tool {
     id: string;
@@ -51,10 +53,10 @@ const Tools: React.FC = () => {
         },
         {
             id: 'combat-sim',
-            name: 'Combat Analysis',
-            description: 'Advanced battle simulation and fleet compositions',
+            name: 'Nexus Battlesim',
+            description: 'Combat simulator with Lifeforms, ACS fleets, and debris calculations',
             icon: <ThemeIcon name="sniper-crosshair" size={22} />,
-            component: <div className="text-center py-20 text-[var(--text-muted)] italic">Module synchronization in progress...</div>,
+            component: <NexuSim />,
             inTesting: true
         },
         {
@@ -71,6 +73,13 @@ const Tools: React.FC = () => {
             icon: <ThemeIcon name="pie-chart" size={22} />,
             component: <AcsSplitter />,
             isBeta: true
+        },
+        {
+            id: 'alliance-topflop',
+            name: 'Alliance Top / Flop',
+            description: 'Track daily gained and lost points for all alliance members with Discord image links',
+            icon: <ThemeIcon name="trophy" size={22} />,
+            component: <AllianceTopFlop />
         },
         {
             id: 'plasma-optimizer',
@@ -146,7 +155,7 @@ const Tools: React.FC = () => {
                         return (
                             <div
                                 key={tool.id}
-                                className={`tool-menu-item ${activeToolId === tool.id ? 'active' : ''}`}
+                                className={`tool-menu-item ${activeToolId === tool.id ? 'active' : ''} ${isTesting ? 'in-testing' : ''}`}
                                 onClick={() => {
                                     if (isTesting) return;
                                     if (tool.isShortcut && tool.shortcutView) {
@@ -162,7 +171,7 @@ const Tools: React.FC = () => {
                                     setActiveToolId(tool.id);
                                 }}
                                 style={isTesting ? {
-                                    opacity: 0.5,
+                                    opacity: 0.55,
                                     cursor: 'not-allowed'
                                 } : undefined}
                             >
@@ -193,16 +202,16 @@ const Tools: React.FC = () => {
                                             <span style={{
                                                 fontSize: '8px',
                                                 fontWeight: 800,
-                                                background: 'rgba(255,106,0,0.15)',
+                                                background: 'rgba(255, 106, 0, 0.15)',
                                                 color: '#ff6a00',
-                                                border: '1px solid rgba(255,106,0,0.3)',
+                                                border: '1px solid rgba(255, 106, 0, 0.3)',
                                                 borderRadius: '4px',
                                                 padding: '1px 5px',
                                                 letterSpacing: '0.5px',
                                                 textTransform: 'uppercase',
                                                 lineHeight: 1
                                             }}>
-                                                In Testing
+                                                Testing
                                             </span>
                                         )}
                                     </div>
@@ -242,6 +251,22 @@ const Tools: React.FC = () => {
                                                     Beta
                                                 </span>
                                             )}
+                                            {activeTool.inTesting && (
+                                                <span style={{
+                                                    fontSize: '10px',
+                                                    fontWeight: 800,
+                                                    background: 'rgba(255, 106, 0, 0.15)',
+                                                    color: '#ff6a00',
+                                                    border: '1px solid rgba(255, 106, 0, 0.3)',
+                                                    borderRadius: '4px',
+                                                    padding: '2px 6px',
+                                                    letterSpacing: '0.5px',
+                                                    textTransform: 'uppercase',
+                                                    lineHeight: 1
+                                                }}>
+                                                    Testing
+                                                </span>
+                                            )}
                                         </h2>
                                     </div>
                                     {activeTool.id === 'scrap-optimizer' && (
@@ -253,7 +278,43 @@ const Tools: React.FC = () => {
                                 </div>
                                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>{activeTool.description}</p>
                             </div>
-                            {activeTool.component}
+                            {activeTool.inTesting ? (
+                                <div style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '70px 24px',
+                                    textAlign: 'center',
+                                    background: 'rgba(255, 106, 0, 0.03)',
+                                    border: '1px dashed rgba(255, 106, 0, 0.25)',
+                                    borderRadius: '16px',
+                                    marginTop: '20px'
+                                }}>
+                                    <div style={{
+                                        width: '60px',
+                                        height: '60px',
+                                        borderRadius: '50%',
+                                        background: 'rgba(255, 106, 0, 0.12)',
+                                        border: '1px solid rgba(255, 106, 0, 0.35)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginBottom: '16px',
+                                        color: '#ff6a00'
+                                    }}>
+                                        <Lock size={28} />
+                                    </div>
+                                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>
+                                        {activeTool.name} is Currently in Testing
+                                    </h3>
+                                    <p style={{ maxWidth: '460px', color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: 0 }}>
+                                        This tactical simulator is currently undergoing active engineering calibrations and combat verification. Access is temporarily disabled.
+                                    </p>
+                                </div>
+                            ) : (
+                                activeTool.component
+                            )}
                         </>
                     )}
                 </main>

@@ -50,6 +50,7 @@ interface OverwatchActivityHeatmapProps {
   activeUniverseName: string;
   ownPlanets?: any[];
   events?: any[];
+  initialTargetPlayer?: { name: string; id?: string } | null;
 }
 
 interface ShipPreset {
@@ -161,12 +162,41 @@ const formatElapsedWdhm = (scannedAt: number): string => {
   return parts.join(' ');
 };
 
+// Polar to Cartesian coordinate converter for SVG analog clock dials (0 deg = 12 o'clock / Top)
+function polarToCartesian(centerX: number, centerY: number, radius: number, angleInDegrees: number) {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+  return {
+    x: centerX + radius * Math.cos(angleInRadians),
+    y: centerY + radius * Math.sin(angleInRadians),
+  };
+}
+
+// Generates SVG donut sector / curved arc path
+function describeArc(x: number, y: number, innerRadius: number, outerRadius: number, startAngle: number, endAngle: number) {
+  const p1 = polarToCartesian(x, y, outerRadius, startAngle);
+  const p2 = polarToCartesian(x, y, outerRadius, endAngle);
+  const p3 = polarToCartesian(x, y, innerRadius, endAngle);
+  const p4 = polarToCartesian(x, y, innerRadius, startAngle);
+
+  const diff = ((endAngle - startAngle) % 360 + 360) % 360;
+  const largeArcFlag = diff <= 180 ? '0' : '1';
+
+  return [
+    'M', p1.x, p1.y,
+    'A', outerRadius, outerRadius, 0, largeArcFlag, 1, p2.x, p2.y,
+    'L', p3.x, p3.y,
+    'A', innerRadius, innerRadius, 0, largeArcFlag, 0, p4.x, p4.y,
+    'Z',
+  ].join(' ');
+}
+
 export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> = ({
   effectiveConfig,
   activeUniverse,
   activeUniverseName,
   ownPlanets = [],
   events = [],
+  initialTargetPlayer,
 }) => {
   // 1. Search & Target State (Default blank on page load)
   const [searchQuery, setSearchQuery] = useState('');
@@ -509,9 +539,16 @@ export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> =
   }, [driveLevels, lfShipBonuses]);
 
   // 2. View Mode & Filters (Weekly 7-Day Matrix as Default)
-  const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('weekly');
+  const [viewMode, setViewMode] = useState<'weekly' | 'daily' | 'clock'>('weekly');
   const [timezone, setTimezone] = useState<'server' | 'local' | 'utc'>('server');
   const [targetFilter, setTargetFilter] = useState<'all' | 'moon' | 'planet'>('all');
+
+  // Live ticking clock for 24h Activity Clock needle and digital time
+  const [clockNow, setClockNow] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setClockNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const [hoveredCell, setHoveredCell] = useState<{
     dayName?: string;
     displayHour: number;
@@ -687,6 +724,13 @@ export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> =
     },
     [activeUniverse, effectiveConfig.authToken]
   );
+
+  // Automatically load player intelligence if passed via props (e.g. from Universe Map)
+  useEffect(() => {
+    if (initialTargetPlayer?.name) {
+      loadPlayerIntelligence(initialTargetPlayer.name, initialTargetPlayer.id);
+    }
+  }, [initialTargetPlayer, loadPlayerIntelligence]);
 
   // Search Universe Players
   const handleSearchInput = (val: string) => {
@@ -895,6 +939,21 @@ export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> =
       };
     });
   }, [targetDossier, tzOffset, targetFilter, sleepWindow, isDemoMode]);
+
+  // Compute Peak Online Hours (Plain OGame terminology)
+  const peakHoursLabel = useMemo(() => {
+    if (!horizonProfileData || horizonProfileData.length === 0) return 'Awaiting Scan Data';
+    const activeHours = horizonProfileData.filter(h => !h.isUnknown && h.probability >= 0.6);
+    if (activeHours.length === 0) {
+      const sorted = [...horizonProfileData].filter(h => !h.isUnknown).sort((a, b) => b.probability - a.probability);
+      if (sorted.length > 0 && sorted[0].probability >= 0.25) {
+        return `${String(sorted[0].displayHour).padStart(2, '0')}:00 – ${String((sorted[0].displayHour + 1) % 24).padStart(2, '0')}:00 ${tzLabel}`;
+      }
+      return 'Awaiting More Scans';
+    }
+    const sortedHours = activeHours.map(h => h.displayHour).sort((a, b) => a - b);
+    return `${String(sortedHours[0]).padStart(2, '0')}:00 to ${String((sortedHours[sortedHours.length - 1] + 1) % 24).padStart(2, '0')}:00 ${tzLabel}`;
+  }, [horizonProfileData, tzLabel]);
 
   // Compute 7x24 Matrix Data (Guaranteed Pure CSS Grid)
   const matrixData = useMemo(() => {
@@ -1127,6 +1186,67 @@ export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> =
       textColor: '#ffffff',
     };
   };
+
+  // Derived Clock and Real-Time Intel calculations
+  const displayHours = (clockNow.getUTCHours() + tzOffset + 24) % 24;
+  const displayMins = clockNow.getUTCMinutes();
+  const displaySecs = clockNow.getUTCSeconds();
+  const digitalTimeStr = `${String(displayHours).padStart(2, '0')}:${String(displayMins).padStart(2, '0')}:${String(displaySecs).padStart(2, '0')}`;
+
+  const hourHandAngle = ((displayHours + displayMins / 60) / 24) * 360;
+  const minHandAngle = ((displayMins + displaySecs / 60) / 60) * 360;
+  const secHandAngle = displaySecs * 6;
+  const displaySeconds = displaySecs;
+
+  // Latest observation details
+  const latestObs = targetDossier?.observations?.[0] || null;
+  const latestElapsedMins = latestObs
+    ? Math.max(0, Math.round((clockNow.getTime() - (latestObs.inferred_timestamp || latestObs.scanned_at)) / 60000))
+    : null;
+
+  const isRecentlyActive = latestObs && (latestObs.activity_marker === '*' || (latestElapsedMins !== null && latestElapsedMins < 15));
+  const isTimerActive = latestObs && latestElapsedMins !== null && latestElapsedMins >= 15 && latestElapsedMins < 60;
+  const inSleepNow = sleepWindow.hasConfirmedSleep && (
+    sleepWindow.startDisp < sleepWindow.endDisp
+      ? (displayHours >= sleepWindow.startDisp && displayHours < sleepWindow.endDisp)
+      : (displayHours >= sleepWindow.startDisp || displayHours < sleepWindow.endDisp)
+  );
+
+  let playerLiveStatus = 'Idle (No recent activity)';
+  let playerLiveColor = '#64748b';
+  let playerLiveBadge = 'IDLE';
+
+  if (inSleepNow) {
+    playerLiveStatus = 'In Sleep Hours (Best attack window)';
+    playerLiveColor = '#34d399';
+    playerLiveBadge = 'SLEEPING';
+  } else if (isRecentlyActive) {
+    playerLiveStatus = 'Active Now (Activity * under 15m)';
+    playerLiveColor = '#00f2ff';
+    playerLiveBadge = 'ACTIVE NOW';
+  } else if (isTimerActive) {
+    playerLiveStatus = `Offline (${latestElapsedMins}m timer)`;
+    playerLiveColor = '#fbbf24';
+    playerLiveBadge = `${latestElapsedMins}m AGO`;
+  }
+
+  // Colony Activity Share (Primary Fleet Base identification)
+  const colonyActivityList = useMemo(() => {
+    if (!targetDossier?.observations || targetDossier.observations.length === 0) return [];
+    const map = new Map<string, { coords: string; targetType: 'planet' | 'moon'; count: number }>();
+    for (const obs of targetDossier.observations) {
+      const key = `${obs.galaxy}:${obs.system}:${obs.slot}:${obs.target_type}`;
+      const existing = map.get(key) || { coords: `${obs.galaxy}:${obs.system}:${obs.slot}`, targetType: obs.target_type as 'planet' | 'moon', count: 0 };
+      existing.count++;
+      map.set(key, existing);
+    }
+    const sorted = Array.from(map.values()).sort((a, b) => b.count - a.count);
+    const total = sorted.reduce((sum, item) => sum + item.count, 0);
+    return sorted.slice(0, 4).map(item => ({
+      ...item,
+      pct: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    }));
+  }, [targetDossier]);
 
   return (
     <div className="ow-heatmap-vanguard-container">
@@ -1420,10 +1540,10 @@ export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> =
               <div className="ow-matrix-controls-bar">
                 <div>
                   <div className="ow-eyebrow" style={{ color: '#00f2ff' }}>
-                    ACTIVITY HEATMAP // {viewMode === 'weekly' ? '7-DAY MATRIX' : '24-HOUR PROFILE'}
+                    ACTIVITY HEATMAP // {viewMode === 'weekly' ? '7-DAY MATRIX' : viewMode === 'daily' ? '24-HOUR PROFILE' : 'ACTIVITY CLOCKS'}
                   </div>
                   <h3 style={{ margin: '4px 0 0 0', fontSize: 16, fontWeight: 800, color: '#fff' }}>
-                    {viewMode === 'weekly' ? 'Weekly Activity Matrix (7 Days × 24h)' : '24-Hour Activity Profile'}
+                    {viewMode === 'weekly' ? 'Weekly Activity Matrix (7 Days × 24h)' : viewMode === 'daily' ? '24-Hour Activity Profile' : 'Tactical Activity Clocks (24h Daily & 60m Recent)'}
                   </h3>
                 </div>
 
@@ -1445,6 +1565,13 @@ export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> =
                       >
                         <BarChart2 size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: -1 }} />
                         24h Profile
+                      </button>
+                      <button
+                        className={`ow-matrix-toggle-btn ${viewMode === 'clock' ? 'active' : ''}`}
+                        onClick={() => setViewMode('clock')}
+                      >
+                        <Clock size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: -1 }} />
+                        Activity Clocks
                       </button>
                     </div>
                   </div>
@@ -1597,7 +1724,484 @@ export const OverwatchActivityHeatmap: React.FC<OverwatchActivityHeatmapProps> =
                 </div>
               )}
 
-              {/* Cell Inspection Detail Strip (Hover Info) */}
+              {/* VIEW MODE C: TWIN TACTICAL ACTIVITY CLOCKS (24H DAILY & 60M RECENT) */}
+              {viewMode === 'clock' && (
+                <div className="ow-clock-view-grid">
+                  {/* CLOCK 1: 24-HOUR DAILY ACTIVITY PATTERN */}
+                  <div className="ow-clock-instrument-card">
+                    {/* Instrument Header */}
+                    <div className="ow-clock-card-header">
+                      <div className="ow-clock-card-title">
+                        <Clock size={15} style={{ color: '#00f2ff' }} />
+                        <span>24-Hour Daily Pattern</span>
+                      </div>
+                      <div
+                        className="ow-clock-card-badge"
+                        style={{
+                          background: inSleepNow
+                            ? 'rgba(52, 211, 153, 0.15)'
+                            : isRecentlyActive
+                            ? 'rgba(244, 63, 94, 0.15)'
+                            : 'rgba(0, 242, 255, 0.1)',
+                          color: inSleepNow ? '#34d399' : isRecentlyActive ? '#f43f5e' : '#00f2ff',
+                          border: `1px solid ${
+                            inSleepNow
+                              ? 'rgba(52, 211, 153, 0.4)'
+                              : isRecentlyActive
+                              ? 'rgba(244, 63, 94, 0.4)'
+                              : 'rgba(0, 242, 255, 0.25)'
+                          }`,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            background: inSleepNow ? '#34d399' : isRecentlyActive ? '#f43f5e' : '#00f2ff',
+                          }}
+                        />
+                        {inSleepNow ? 'Sleep Hours' : isRecentlyActive ? 'Enemy Active Now' : 'Normal Hours'}
+                      </div>
+                    </div>
+
+                    {/* SVG Dial for 24h Daily Pattern */}
+                    <svg className="ow-clock-svg" viewBox="0 0 400 400">
+                      <defs>
+                        <filter id="ow-clock-glow-24h" x="-20%" y="-20%" width="140%" height="140%">
+                          <feGaussianBlur stdDeviation="3" result="blur" />
+                          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                      </defs>
+
+                      {/* Outer Chassis Ring */}
+                      <circle cx="200" cy="200" r="195" fill="rgba(2, 6, 18, 0.96)" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1.5" />
+                      <circle cx="200" cy="200" r="140" fill="none" stroke="rgba(255, 255, 255, 0.04)" strokeWidth="1" />
+
+                      {/* 24-Hour Sectors */}
+                      {Array.from({ length: 24 }).map((_, h) => {
+                        const hData = horizonProfileData[h];
+                        const startAngle = h * 15 + 0.8;
+                        const endAngle = (h + 1) * 15 - 0.8;
+                        const d = describeArc(200, 200, 142, 174, startAngle, endAngle);
+                        const isCurrentHour = h === displayHours;
+
+                        let fill = 'rgba(255, 255, 255, 0.04)';
+                        let stroke = 'rgba(255, 255, 255, 0.06)';
+
+                        if (!hData || hData.isUnknown) {
+                          fill = 'rgba(255, 255, 255, 0.03)';
+                        } else if (hData.isSleep) {
+                          fill = 'rgba(52, 211, 153, 0.22)';
+                          stroke = 'rgba(52, 211, 153, 0.55)';
+                        } else if (hData.probability > 0.85) {
+                          fill = 'rgba(244, 63, 94, 0.85)';
+                          stroke = 'rgba(244, 63, 94, 0.95)';
+                        } else if (hData.probability > 0.6) {
+                          fill = 'rgba(245, 158, 11, 0.75)';
+                          stroke = 'rgba(245, 158, 11, 0.85)';
+                        } else if (hData.probability > 0.25) {
+                          fill = 'rgba(20, 184, 166, 0.65)';
+                          stroke = 'rgba(20, 184, 166, 0.75)';
+                        } else if (hData.probability > 0) {
+                          fill = 'rgba(14, 165, 233, 0.5)';
+                          stroke = 'rgba(14, 165, 233, 0.6)';
+                        } else {
+                          fill = 'rgba(15, 23, 42, 0.9)';
+                          stroke = 'rgba(255, 255, 255, 0.06)';
+                        }
+
+                        return (
+                          <g key={h}>
+                            <path
+                              d={d}
+                              fill={fill}
+                              stroke={isCurrentHour ? '#00f2ff' : stroke}
+                              strokeWidth={isCurrentHour ? 2 : 0.8}
+                              className="ow-clock-hour-segment"
+                              filter={isCurrentHour ? 'url(#ow-clock-glow-24h)' : undefined}
+                              onMouseEnter={() => setHoveredCell({ dayName: '24h Overall', ...hData })}
+                              onMouseLeave={() => setHoveredCell(null)}
+                            />
+                          </g>
+                        );
+                      })}
+
+                      {/* Sleep Ribbon on Outer Rim */}
+                      {sleepWindow.hasConfirmedSleep && (
+                        <path
+                          d={describeArc(
+                            200,
+                            200,
+                            176,
+                            179,
+                            sleepWindow.startDisp * 15,
+                            sleepWindow.startDisp < sleepWindow.endDisp
+                              ? sleepWindow.endDisp * 15
+                              : sleepWindow.endDisp * 15 + 360
+                          )}
+                          fill="none"
+                          stroke="#34d399"
+                          strokeWidth="3"
+                          filter="url(#ow-clock-glow-24h)"
+                        />
+                      )}
+
+                      {/* Hour Numerals around 24h dial */}
+                      {[0, 3, 6, 9, 12, 15, 18, 21].map(h => {
+                        const pos = polarToCartesian(200, 200, 186, h * 15);
+                        return (
+                          <text
+                            key={h}
+                            x={pos.x}
+                            y={pos.y}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill="#94a3b8"
+                            fontSize="10"
+                            fontWeight="700"
+                            fontFamily="monospace"
+                          >
+                            {String(h).padStart(2, '0')}
+                          </text>
+                        );
+                      })}
+
+                      {/* Inner Plate */}
+                      <circle cx="200" cy="200" r="132" fill="rgba(8, 14, 28, 0.95)" stroke="rgba(255, 255, 255, 0.06)" strokeWidth="1" />
+
+                      {/* Cardinal Hour Labels */}
+                      <text x="200" y="85" textAnchor="middle" fill="#64748b" fontSize="8" fontWeight="700" letterSpacing="0.08em">00:00 (MIDNIGHT)</text>
+                      <text x="315" y="203" textAnchor="middle" fill="#64748b" fontSize="8" fontWeight="700" letterSpacing="0.08em">06:00</text>
+                      <text x="200" y="322" textAnchor="middle" fill="#64748b" fontSize="8" fontWeight="700" letterSpacing="0.08em">12:00 (NOON)</text>
+                      <text x="85" y="203" textAnchor="middle" fill="#64748b" fontSize="8" fontWeight="700" letterSpacing="0.08em">18:00</text>
+
+                      {/* 24-Hour Hour Hand */}
+                      {(() => {
+                        const tip = polarToCartesian(200, 200, 126, hourHandAngle);
+                        const tail = polarToCartesian(200, 200, 20, (hourHandAngle + 180) % 360);
+                        return (
+                          <g filter="url(#ow-clock-glow-24h)">
+                            <line x1={tail.x} y1={tail.y} x2={tip.x} y2={tip.y} stroke="#00f2ff" strokeWidth="2.8" strokeLinecap="round" />
+                            <circle cx={tip.x} cy={tip.y} r="3.5" fill="#fff" />
+                          </g>
+                        );
+                      })()}
+
+                      {/* Center Digital Hub */}
+                      <circle cx="200" cy="200" r="44" fill="rgba(2, 6, 18, 0.98)" stroke="rgba(0, 242, 255, 0.35)" strokeWidth="1.5" />
+                      <text x="200" y="195" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="800" fontFamily="monospace">
+                        {String(displayHours).padStart(2, '0')}:{String(displayMins).padStart(2, '0')}
+                      </text>
+                      <text x="200" y="210" textAnchor="middle" fill="#00f2ff" fontSize="8" fontWeight="700" letterSpacing="0.08em">
+                        {tzLabel}
+                      </text>
+                    </svg>
+
+                    {/* Dial Legend Strip for 24h Clock */}
+                    <div className="ow-clock-legend-strip">
+                      <div className="ow-clock-legend-item">
+                        <span className="ow-clock-legend-dot" style={{ background: '#34d399' }} />
+                        <span>Sleep Window</span>
+                      </div>
+                      <div className="ow-clock-legend-item">
+                        <span className="ow-clock-legend-dot" style={{ background: '#f43f5e' }} />
+                        <span>Peak Active</span>
+                      </div>
+                      <div className="ow-clock-legend-item">
+                        <span className="ow-clock-legend-dot" style={{ background: '#14b8a6' }} />
+                        <span>Moderate</span>
+                      </div>
+                      <div className="ow-clock-legend-item">
+                        <span className="ow-clock-legend-dot" style={{ background: '#0ea5e9' }} />
+                        <span>Low</span>
+                      </div>
+                    </div>
+
+                    {/* Tactical Notations for 24h Clock */}
+                    <div className="ow-clock-notations">
+                      <div className="ow-clock-note-card">
+                        <div className="ow-clock-note-title">
+                          <span className="ow-clock-legend-dot" style={{ background: '#34d399' }} />
+                          <span>Sleep Hours (Attack Window)</span>
+                        </div>
+                        <div className="ow-clock-note-val" style={{ color: sleepWindow.hasConfirmedSleep ? '#34d399' : '#fbbf24' }}>
+                          {sleepWindow.label}
+                        </div>
+                        <div className="ow-clock-note-desc">
+                          {sleepWindow.hasConfirmedSleep
+                            ? 'Confirmed sleep pattern. Safest window to launch fleet attacks while player is offline.'
+                            : 'Scout enemy systems in Galaxy View to confirm sleep hours.'}
+                        </div>
+                      </div>
+
+                      <div className="ow-clock-note-card">
+                        <div className="ow-clock-note-title">
+                          <span className="ow-clock-legend-dot" style={{ background: '#f43f5e' }} />
+                          <span>Peak Online Hours</span>
+                        </div>
+                        <div className="ow-clock-note-val" style={{ color: '#f43f5e' }}>
+                          {peakHoursLabel}
+                        </div>
+                        <div className="ow-clock-note-desc">
+                          Player is regularly online at these hours. Expect fast recalls, active fleetsaves, and fleet dodging.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CLOCK 2: 60-MINUTE RECENT ACTIVITY & RADAR */}
+                  <div className="ow-clock-instrument-card">
+                    {/* Instrument Header */}
+                    <div className="ow-clock-card-header">
+                      <div className="ow-clock-card-title">
+                        <Radio size={15} style={{ color: isRecentlyActive ? '#00f2ff' : '#94a3b8' }} />
+                        <span>60-Minute Recent Activity</span>
+                      </div>
+                      <div
+                        className="ow-clock-card-badge"
+                        style={{
+                          background: isRecentlyActive
+                            ? 'rgba(0, 242, 255, 0.15)'
+                            : isTimerActive
+                            ? 'rgba(245, 158, 11, 0.15)'
+                            : 'rgba(255, 255, 255, 0.05)',
+                          color: isRecentlyActive ? '#00f2ff' : isTimerActive ? '#f59e0b' : '#94a3b8',
+                          border: `1px solid ${
+                            isRecentlyActive
+                              ? 'rgba(0, 242, 255, 0.4)'
+                              : isTimerActive
+                              ? 'rgba(245, 158, 11, 0.4)'
+                              : 'rgba(255, 255, 255, 0.1)'
+                          }`,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            background: isRecentlyActive ? '#00f2ff' : isTimerActive ? '#f59e0b' : '#64748b',
+                          }}
+                        />
+                        {isRecentlyActive
+                          ? '★ Active Star (*) Detected'
+                          : isTimerActive
+                          ? `Timer: ${latestElapsedMins}m Ago`
+                          : 'Idle (>60m)'}
+                      </div>
+                    </div>
+
+                    {/* SVG Dial for 60m Tactical Clock */}
+                    <svg className="ow-clock-svg" viewBox="0 0 400 400">
+                      <defs>
+                        <filter id="ow-clock-glow-60m" x="-20%" y="-20%" width="140%" height="140%">
+                          <feGaussianBlur stdDeviation="3" result="blur" />
+                          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                        {/* Radar Gradient for Sweeping Beam */}
+                        <linearGradient id="ow-radar-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#00f2ff" stopOpacity="0.22" />
+                          <stop offset="100%" stopColor="#00f2ff" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Outer Chassis Ring */}
+                      <circle cx="200" cy="200" r="195" fill="rgba(2, 6, 18, 0.96)" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1.5" />
+                      <circle cx="200" cy="200" r="140" fill="none" stroke="rgba(255, 255, 255, 0.04)" strokeWidth="1" />
+
+                      {/* Zone 1: 0m to 15m (★ Activity Star Zone) */}
+                      <path
+                        d={describeArc(200, 200, 142, 174, 0, 90)}
+                        fill={isRecentlyActive ? 'rgba(0, 242, 255, 0.22)' : 'rgba(0, 242, 255, 0.07)'}
+                        stroke={isRecentlyActive ? '#00f2ff' : 'rgba(0, 242, 255, 0.35)'}
+                        strokeWidth={isRecentlyActive ? 2 : 1}
+                        className={isRecentlyActive ? 'ow-clock-star-active' : undefined}
+                        filter={isRecentlyActive ? 'url(#ow-clock-glow-60m)' : undefined}
+                      />
+
+                      {/* Zone 2: 15m to 60m (Countdown Timers Zone) */}
+                      <path
+                        d={describeArc(200, 200, 142, 174, 90, 360)}
+                        fill="rgba(15, 23, 42, 0.85)"
+                        stroke="rgba(255, 255, 255, 0.08)"
+                        strokeWidth="1"
+                      />
+
+                      {/* 60 Minute Ticks */}
+                      {Array.from({ length: 60 }).map((_, m) => {
+                        const isMajor = m % 15 === 0;
+                        const isMid = m % 5 === 0;
+                        const r1 = 173;
+                        const r2 = isMajor ? 158 : isMid ? 164 : 168;
+                        const p1 = polarToCartesian(200, 200, r1, m * 6);
+                        const p2 = polarToCartesian(200, 200, r2, m * 6);
+                        return (
+                          <line
+                            key={m}
+                            x1={p1.x}
+                            y1={p1.y}
+                            x2={p2.x}
+                            y2={p2.y}
+                            stroke={isMajor ? '#00f2ff' : isMid ? '#94a3b8' : 'rgba(255,255,255,0.12)'}
+                            strokeWidth={isMajor ? 2 : 1}
+                          />
+                        );
+                      })}
+
+                      {/* Minute Numerals around perimeter */}
+                      {[0, 15, 30, 45].map(m => {
+                        const pos = polarToCartesian(200, 200, 186, m * 6);
+                        return (
+                          <text
+                            key={m}
+                            x={pos.x}
+                            y={pos.y}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill={m === 0 || m === 15 ? '#00f2ff' : '#94a3b8'}
+                            fontSize="10"
+                            fontWeight="700"
+                            fontFamily="monospace"
+                          >
+                            {String(m).padStart(2, '0')}m
+                          </text>
+                        );
+                      })}
+
+                      {/* Inner Plate */}
+                      <circle cx="200" cy="200" r="132" fill="rgba(8, 14, 28, 0.95)" stroke="rgba(255, 255, 255, 0.06)" strokeWidth="1" />
+
+                      {/* Zone Labeling text on plate */}
+                      <text x="260" y="130" textAnchor="middle" fill="#00f2ff" fontSize="8" fontWeight="800" letterSpacing="0.06em">
+                        ★ STAR (*) 0–15m
+                      </text>
+                      <text x="140" y="270" textAnchor="middle" fill="#64748b" fontSize="8" fontWeight="700" letterSpacing="0.06em">
+                        TIMERS 15m–59m
+                      </text>
+
+                      {/* Rotating Radar Sweep Beam (/animate) */}
+                      <g className="ow-clock-radar-sweep">
+                        <path d={describeArc(200, 200, 44, 174, 0, 45)} fill="url(#ow-radar-gradient)" />
+                        <line x1="200" y1="200" x2="200" y2="26" stroke="#00f2ff" strokeWidth="1.5" opacity="0.8" filter="url(#ow-clock-glow-60m)" />
+                      </g>
+
+                      {/* Plotted Activity Sighting Beacon on 60m Dial */}
+                      {latestObs && latestElapsedMins !== null && latestElapsedMins < 60 && (
+                        (() => {
+                          const actionMinute = (displayMins - latestElapsedMins + 60) % 60;
+                          const pipPos = polarToCartesian(200, 200, 158, actionMinute * 6);
+                          const isMoon = latestObs.target_type === 'moon';
+                          return (
+                            <g filter="url(#ow-clock-glow-60m)">
+                              {/* Guide beacon */}
+                              {isMoon ? (
+                                <polygon
+                                  points={`${pipPos.x},${pipPos.y - 7} ${pipPos.x + 6},${pipPos.y} ${pipPos.x},${pipPos.y + 7} ${pipPos.x - 6},${pipPos.y}`}
+                                  fill="#c084fc"
+                                  stroke="#fff"
+                                  strokeWidth="1.5"
+                                />
+                              ) : (
+                                <circle cx={pipPos.x} cy={pipPos.y} r="6" fill="#00f2ff" stroke="#fff" strokeWidth="1.5" />
+                              )}
+                              <text
+                                x={pipPos.x}
+                                y={pipPos.y > 200 ? pipPos.y - 12 : pipPos.y + 16}
+                                textAnchor="middle"
+                                fill={isMoon ? '#c084fc' : '#00f2ff'}
+                                fontSize="8"
+                                fontWeight="800"
+                                fontFamily="monospace"
+                              >
+                                [{latestObs.galaxy}:{latestObs.system}:{latestObs.slot}]
+                              </text>
+                            </g>
+                          );
+                        })()
+                      )}
+
+                      {/* 60-Minute Hand */}
+                      {(() => {
+                        const tip = polarToCartesian(200, 200, 128, minHandAngle);
+                        const tail = polarToCartesian(200, 200, 20, (minHandAngle + 180) % 360);
+                        return (
+                          <g filter="url(#ow-clock-glow-60m)">
+                            <line x1={tail.x} y1={tail.y} x2={tip.x} y2={tip.y} stroke="#f8fafc" strokeWidth="2.4" strokeLinecap="round" opacity="0.95" />
+                            <circle cx={tip.x} cy={tip.y} r="3" fill="#00f2ff" />
+                          </g>
+                        );
+                      })()}
+
+                      {/* Center Digital Hub */}
+                      <circle cx="200" cy="200" r="44" fill="rgba(2, 6, 18, 0.98)" stroke="rgba(0, 242, 255, 0.35)" strokeWidth="1.5" />
+                      <text x="200" y="195" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="800" fontFamily="monospace">
+                        :{String(displayMins).padStart(2, '0')}:{String(displaySeconds).padStart(2, '0')}
+                      </text>
+                      <text
+                        x="200"
+                        y="210"
+                        textAnchor="middle"
+                        fill={isRecentlyActive ? '#00f2ff' : isTimerActive ? '#f59e0b' : '#64748b'}
+                        fontSize="8"
+                        fontWeight="700"
+                        letterSpacing="0.06em"
+                      >
+                        {isRecentlyActive ? 'ACTIVE (*)' : isTimerActive ? `${latestElapsedMins}m AGO` : 'IDLE (>60m)'}
+                      </text>
+                    </svg>
+
+                    {/* Dial Legend Strip for 60m Clock */}
+                    <div className="ow-clock-legend-strip">
+                      <div className="ow-clock-legend-item">
+                        <span className="ow-clock-legend-dot" style={{ background: '#00f2ff' }} />
+                        <span>Activity Star (*) [0–15m]</span>
+                      </div>
+                      <div className="ow-clock-legend-item">
+                        <span className="ow-clock-legend-dot" style={{ background: '#64748b' }} />
+                        <span>Countdown Timers [15–59m]</span>
+                      </div>
+                      <div className="ow-clock-legend-item">
+                        <span className="ow-clock-legend-dot" style={{ background: '#c084fc' }} />
+                        <span>Moon Sighting</span>
+                      </div>
+                    </div>
+
+                    {/* Tactical Notations for 60m Clock */}
+                    <div className="ow-clock-notations">
+                      <div className="ow-clock-note-card">
+                        <div className="ow-clock-note-title">
+                          <span className="ow-clock-legend-dot" style={{ background: '#00f2ff' }} />
+                          <span>Activity Star (*) [0–15 min]</span>
+                        </div>
+                        <div className="ow-clock-note-val" style={{ color: isRecentlyActive ? '#00f2ff' : '#94a3b8' }}>
+                          {isRecentlyActive ? 'Active Star (*) Detected Now' : 'No Active Star (*)'}
+                        </div>
+                        <div className="ow-clock-note-desc">
+                          In OGame, an activity star (*) indicates the player clicked a colony in the past 15 minutes.
+                        </div>
+                      </div>
+
+                      <div className="ow-clock-note-card">
+                        <div className="ow-clock-note-title">
+                          <span className="ow-clock-legend-dot" style={{ background: '#f59e0b' }} />
+                          <span>Latest Sighting (Timers)</span>
+                        </div>
+                        <div className="ow-clock-note-val" style={{ color: isTimerActive ? '#f59e0b' : isRecentlyActive ? '#00f2ff' : '#94a3b8' }}>
+                          {latestObs
+                            ? `${latestObs.activity_marker === '*' ? 'Star (*)' : latestObs.activity_marker + 'm timer'} at [${latestObs.galaxy}:${latestObs.system}:${latestObs.slot}] ${latestObs.target_type === 'moon' ? 'Moon' : 'Planet'}`
+                            : 'No Recent Timers'}
+                        </div>
+                        <div className="ow-clock-note-desc">
+                          {latestObs && latestElapsedMins !== null
+                            ? `Last seen ${latestElapsedMins} min ago by ${latestObs.scanned_by || 'Scout'}.`
+                            : 'Scan enemy systems in Galaxy View to record live colony timers.'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="ow-heatmap-detail-bar">
                 {hoveredCell ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', width: '100%', fontSize: 11.5 }}>

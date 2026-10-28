@@ -32,7 +32,7 @@ export const pt: LocaleTranslations = {
         "empire": "Império",
         "fleet": "Movimentos de Frota",
         "expeditions": "Expedições",
-        "combat": "Simulador de Combate",
+        "combat": "Combates",
         "scout": "Explorador de Inativos",
         "debris": "Campos de Destroços",
         "phalanx": "Alcance Phalanx",
@@ -258,7 +258,7 @@ export const pt: LocaleTranslations = {
     },
     "changelog": {
         "title": "Sistema Actualizado",
-        "versionBadge": "v1.2.8",
+        "versionBadge": "v1.2.9",
         "telemetryReport": "RELATÓRIO DE TELEMETRIA DO CENTRO DE COMANDO OGAME NEXUS",
         "dataPreservedNotice": "As suas configurações planetárias, telemetria recolhida e histórico foram preservados em total segurança durante esta actualização.",
         "acknowledge": "Compreendido",

@@ -5,15 +5,29 @@ import { handleGalaxySync, handleGetPlayerActivity, handleGetGalaxyEvents, handl
 import { handleShareSpyReport, handleGetSpyReports } from './spyReports';
 import { handleEmpireSync, handleGetEmpireRoster, handleGetEmpireMember, handleGetPhalanxCoverage } from './empireSync';
 import { handleVaultSend, handleVaultFetch, handleVaultSummary, hashVaultKey } from './personalVault';
-import { handleMigrateVaultToR2, handleVerifyVaultR2 } from './migrationR2';
+import { handleMigrateVaultToR2, handleVerifyVaultR2, getMasterAdminSecret } from './migrationR2';
+import { archiveHistoricalEventsBatch, getUniverseEventArchive, listUniverseEventArchives } from './eventArchiver';
 import { handleInactiveScout } from './inactiveScout';
-import { isUniverseSeeded, seedUniverseFromOfficialAPI, syncDailyPlayersAndAlliances, cleanUniverseId, ensureBaselinePlanetsMigrated } from './universeSeeder';
+import { isUniverseSeeded, seedUniverseFromOfficialAPI, syncDailyPlayersAndAlliances, cleanUniverseId, ensureBaselinePlanetsMigrated, exportUniverseBaselineToR2 } from './universeSeeder';
 import { getCoreDb, getUniverseDb } from './dbRouter';
 import {
   CLOUDFLARE_TESTER_WHITELIST,
   CLOUDFLARE_ENFORCE_TESTING_GATE,
   CLOUDFLARE_TESTER_PASSKEY,
 } from './testingConfig';
+
+import {
+  handleGetTopFlopImage,
+  handleGetTopFlopPresets,
+  handleSaveTopFlopPreset,
+  handleGenerateTopFlopNow,
+  handleScheduledTopFlopCron,
+  handleTopFlopStatus,
+  handleBackfillHourlySnapshots,
+  handleUploadTopFlopLogo,
+  handleGetTopFlopAsset,
+  handleGetTopFlopVaultImage,
+} from './topFlopRoutes';
 
 export interface Env {
   DB: D1Database;
@@ -62,8 +76,8 @@ const router = AutoRouter<any>({
       const url = new URL(req.url);
       const path = url.pathname;
 
-      // Allow public root and health check
-      if (path === '/' || path === '/api/health') {
+      // Allow public root, health check, and public TopFlop image endpoints (for Discord bot)
+      if (path === '/' || path === '/api/health' || path.startsWith('/topflop/') || path.startsWith('/api/topflop/') || path.startsWith('/api/v1/topflop/')) {
         return;
       }
 
@@ -164,6 +178,39 @@ router.get('/api/health', () => {
     timestamp: Date.now(),
   });
 });
+
+// ============================================================================
+// ALLIANCE TOP / FLOP — PUBLIC DISCORD IMAGE ENDPOINTS (No Auth Needed)
+// ============================================================================
+router.get('/topflop/status', handleTopFlopStatus);
+router.get('/topflop/assets/:p1/:p2', handleGetTopFlopAsset);
+router.get('/topflop/assets/:p1', handleGetTopFlopAsset);
+router.get('/topflop/vault/:p1/:p2', handleGetTopFlopVaultImage);
+router.get('/topflop/:universe/:alliance/:player/topflop.png', handleGetTopFlopImage);
+router.get('/topflop/:universe/:alliance/:player', handleGetTopFlopImage);
+router.get('/topflop/:universe/:alliance/topflop.png', (req: any, env: Env) => {
+  req.params.player = 'default';
+  return handleGetTopFlopImage(req, env);
+});
+router.get('/topflop/:universe/:alliance', (req: any, env: Env) => {
+  req.params.player = 'default';
+  return handleGetTopFlopImage(req, env);
+});
+
+// ============================================================================
+// ALLIANCE TOP / FLOP — EXTENSION PRESETS & LIVE GENERATION
+// ============================================================================
+router.get('/api/v1/topflop/presets', handleGetTopFlopPresets);
+router.get('/api/topflop/presets', handleGetTopFlopPresets);
+router.post('/api/v1/topflop/preset', handleSaveTopFlopPreset);
+router.post('/api/topflop/preset', handleSaveTopFlopPreset);
+router.post('/api/v1/topflop/generate-now', handleGenerateTopFlopNow);
+router.post('/api/topflop/generate-now', handleGenerateTopFlopNow);
+router.post('/api/v1/topflop/upload-logo', handleUploadTopFlopLogo);
+router.post('/api/topflop/upload-logo', handleUploadTopFlopLogo);
+router.get('/api/topflop/backfill-snapshots', handleBackfillHourlySnapshots);
+router.post('/api/topflop/backfill-snapshots', handleBackfillHourlySnapshots);
+
 
 // ============================================================================
 // 1B. CLOSED TESTING GATE — DYNAMIC ACCESS VERIFICATION (Cloudflare-Managed)
@@ -1709,6 +1756,196 @@ router.get('/api/v1/players/search', handleSearchPlayers);
 router.get('/api/v1/players/:playerId/activity', handleGetPlayerActivity);
 
 // ============================================================================
+// 5B. UNIVERSE BASELINE TOPOLOGY (CLOUDFLARE R2 GZIP & CDN EDGE CACHING)
+// Serves compressed Gameforge universe topology (~85 KB) with ETag / 304 support
+// ============================================================================
+router.get('/api/v1/universe/:universeId/baseline', async (req: Request, env: Env) => {
+  try {
+    const url = new URL(req.url);
+    const universeParam = (req as any).params?.universeId || url.searchParams.get('universeId') || 's267-en';
+    const universeId = cleanUniverseId(universeParam);
+    const r2Key = `universes/${universeId}/baseline.json.gz`;
+
+    const ifNoneMatch = req.headers.get('if-none-match');
+
+    // 1. Fetch baseline object from R2
+    let object = await env.VAULT_BUCKET.get(r2Key);
+
+    // If missing in R2, generate it on-the-fly from D1 / Gameforge
+    if (!object) {
+      console.log(`[BaselineRoute] ${r2Key} not found in R2. Generating on-the-fly...`);
+      const exportRes = await exportUniverseBaselineToR2(universeId, env);
+      if (!exportRes.success) {
+        return json({ error: 'Universe baseline not found or could not be generated', details: exportRes.error }, { status: 404 });
+      }
+      object = await env.VAULT_BUCKET.get(r2Key);
+      if (!object) {
+        return json({ error: 'Failed to retrieve generated baseline from R2' }, { status: 500 });
+      }
+    }
+
+    const etag = object.httpEtag;
+
+    // 2. Conditional HTTP 304 Not Modified validation
+    if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === `W/${etag}` || `W/${ifNoneMatch}` === etag)) {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          'ETag': etag,
+          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'ETag',
+        },
+      });
+    }
+
+    // 3. Return compressed stream directly
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    headers.set('Content-Encoding', 'gzip');
+    headers.set('ETag', etag);
+    headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Expose-Headers', 'ETag, Content-Encoding');
+
+    return new Response(object.body, {
+      status: 200,
+      headers,
+    });
+  } catch (err: any) {
+    console.error('[BaselineRoute] Error serving baseline:', err);
+    return json({ error: 'Failed to serve universe baseline', details: err.message }, { status: 500 });
+  }
+});
+
+router.post('/api/v1/admin/sync-baseline-r2', async (req: Request, env: Env) => {
+  const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
+  if (adminSecretHeader !== getMasterAdminSecret(env)) {
+    return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
+  }
+
+  const url = new URL(req.url);
+  const targetUniverse = url.searchParams.get('universeId');
+
+  if (targetUniverse) {
+    const universeId = cleanUniverseId(targetUniverse);
+    const res = await exportUniverseBaselineToR2(universeId, env);
+    return json({ success: res.success, universeId, res });
+  }
+
+  // If no universe passed, sync all active universes
+  const activeUnisQuery = await env.DB.prepare(`
+    SELECT DISTINCT universe_id FROM (
+      SELECT universe_id FROM alliances WHERE subscription_status = 'active'
+      UNION
+      SELECT universe_id FROM overwatch_testers WHERE is_active = 1 AND universe_id != '*'
+    )
+  `).all();
+
+  const results: any[] = [];
+  for (const row of (activeUnisQuery?.results || [])) {
+    const uId = cleanUniverseId((row as any).universe_id);
+    const res = await exportUniverseBaselineToR2(uId, env);
+    results.push({ universeId: uId, ...res });
+  }
+
+  return json({ success: true, count: results.length, results });
+});
+
+// ============================================================================
+// 5C. HISTORICAL EVENT ARCHIVES (CLOUDFLARE R2 GZIP STORAGE)
+// Serves monthly compressed historical event archives older than hot retention
+// ============================================================================
+router.get('/api/v1/galaxy/events/archive', async (req: Request, env: Env) => {
+  try {
+    const url = new URL(req.url);
+    const universeParam = url.searchParams.get('universeId') || 's267-en';
+    const universeId = cleanUniverseId(universeParam);
+    const month = url.searchParams.get('month'); // e.g. "2026-10"
+
+    if (!month) {
+      // List available monthly archives for this universe
+      const list = await listUniverseEventArchives(universeId, env);
+      return json({
+        success: true,
+        universeId,
+        archives: list,
+      });
+    }
+
+    const object = await getUniverseEventArchive(universeId, month, env);
+    if (!object) {
+      return json({ error: 'Archive not found for specified universe and month' }, { status: 404 });
+    }
+
+    const etag = object.httpEtag;
+    const ifNoneMatch = req.headers.get('if-none-match');
+    if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === `W/${etag}` || `W/${ifNoneMatch}` === etag)) {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          'ETag': etag,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'ETag',
+        },
+      });
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    headers.set('Content-Encoding', 'gzip');
+    headers.set('ETag', etag);
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Expose-Headers', 'ETag, Content-Encoding');
+
+    return new Response(object.body, { status: 200, headers });
+  } catch (err: any) {
+    return json({ error: 'Failed to retrieve event archive', details: err.message }, { status: 500 });
+  }
+});
+
+router.post('/api/v1/admin/archive-events', async (req: Request, env: Env) => {
+  const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
+  if (adminSecretHeader !== getMasterAdminSecret(env)) {
+    return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
+  }
+
+  const url = new URL(req.url);
+  const targetUniverse = url.searchParams.get('universeId') || undefined;
+  const olderThanDays = url.searchParams.get('days') ? parseInt(url.searchParams.get('days')!, 10) : 7;
+  const batchSize = url.searchParams.get('batchSize') ? parseInt(url.searchParams.get('batchSize')!, 10) : 1000;
+  const maxBatches = url.searchParams.get('maxBatches') ? parseInt(url.searchParams.get('maxBatches')!, 10) : 1;
+  const deleteFromD1 = url.searchParams.get('delete') !== 'false';
+
+  let totalArchived = 0;
+  let totalPurged = 0;
+  const batchResults: any[] = [];
+
+  for (let b = 0; b < maxBatches; b++) {
+    const res = await archiveHistoricalEventsBatch(env, {
+      universeId: targetUniverse,
+      olderThanDays,
+      batchSize,
+      deleteFromD1,
+    });
+    batchResults.push(res);
+    totalArchived += res.count;
+    totalPurged += res.purgedCount;
+    if (!res.hasMore || !res.success) break;
+  }
+
+  return json({
+    success: true,
+    totalArchived,
+    totalPurged,
+    batchesRun: batchResults.length,
+    batchResults,
+  });
+});
+
+// ============================================================================
 // 6. SHARED ESPIONAGE VAULT
 // ============================================================================
 router.post('/api/v1/spy/share', handleShareSpyReport);
@@ -1792,25 +2029,38 @@ async function handleScheduledUniverseSync(env: Env) {
     const now = Date.now();
 
     // 0. Periodic Database Maintenance & Garbage Collection
-    // Purges expired locks, trims observation streams, and bounds historical events.
+    // Purges expired locks and trims observation streams.
     try {
       await Promise.allSettled([
         env.DB.prepare('DELETE FROM raid_locks WHERE expires_at < ?').bind(now).run(),
         env.DB.prepare('DELETE FROM player_activity_observations WHERE scanned_at < ?').bind(now - 14 * 86400000).run(),
-        env.DB.prepare('DELETE FROM universe_events WHERE detected_at < ?').bind(now - 30 * 86400000).run(),
         env.DB.prepare('DELETE FROM spy_reports WHERE report_timestamp < ?').bind(now - 30 * 86400000).run(),
       ]);
     } catch (gcErr) {
       console.warn('[ScheduledSync] Retention cleanup notice:', gcErr);
     }
 
-    // Query for the single highest-urgency universe due for an update:
+    // Phase 3: Incremental Hot/Cold Partitioning of Historical Events to R2
+    // Safely archives up to 500 events older than 7 days to monthly compressed R2 archives per 5-min run
+    try {
+      await archiveHistoricalEventsBatch(env, { batchSize: 500, olderThanDays: 7, deleteFromD1: true });
+    } catch (archiveErr) {
+      console.warn('[ScheduledSync] Event archiving notice:', archiveErr);
+    }
+
+    // Query for the single highest-urgency ACTIVE universe due for an update:
+    // (Only maintenance-sync universes that have active alliances or active testers)
     // Priority 1: Weekly universe.xml expired
     // Priority 2: Daily players.xml expired
     const dueUniverse: any = await coreDb.prepare(
       `SELECT universe_id, next_universe_xml_at, next_players_xml_at, last_seeded_at
        FROM universe_info
-       WHERE next_universe_xml_at <= ? OR next_players_xml_at <= ?
+       WHERE (next_universe_xml_at <= ? OR next_players_xml_at <= ?)
+         AND universe_id IN (
+           SELECT DISTINCT universe_id FROM alliances WHERE subscription_status = 'active'
+           UNION
+           SELECT DISTINCT universe_id FROM overwatch_testers WHERE is_active = 1 AND universe_id != '*' AND universe_id IS NOT NULL
+         )
        ORDER BY
          CASE
            WHEN next_universe_xml_at <= ? THEN 1
@@ -1871,7 +2121,10 @@ export default {
       return json({ error: 'Internal edge server error', details: err.message }, { status: 500 });
     }),
   async scheduled(event: any, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(handleScheduledUniverseSync(env));
+    ctx.waitUntil(Promise.allSettled([
+      handleScheduledUniverseSync(env),
+      handleScheduledTopFlopCron(env),
+    ]));
   },
 };
 

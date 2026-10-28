@@ -32,7 +32,7 @@ export const it: LocaleTranslations = {
         "empire": "Impero",
         "fleet": "Movimenti flotta",
         "expeditions": "Spedizioni",
-        "combat": "Simulatore di battaglia",
+        "combat": "Combattimenti",
         "scout": "Ricognitore inattivi",
         "debris": "Campi detriti",
         "phalanx": "Copertura Falange",
@@ -258,7 +258,7 @@ export const it: LocaleTranslations = {
     },
     "changelog": {
         "title": "Sistema aggiornato",
-        "versionBadge": "v1.2.8",
+        "versionBadge": "v1.2.9",
         "telemetryReport": "RAPPORTO TELEMETRIA DEL PONTE DI COMANDO OGAME NEXUS",
         "dataPreservedNotice": "Le configurazioni dei pianeti, la telemetria raccolta e la cronologia sono state conservate in sicurezza durante l'aggiornamento.",
         "acknowledge": "Ho capito",

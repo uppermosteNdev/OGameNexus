@@ -21,14 +21,17 @@ import {
     Orbit,
     History,
     Gem,
-    X
+    X,
+    Settings,
+    Check,
+    Sliders
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { SHIP_DATA } from '../../db/staticData';
 import { renderAnalyticsTab } from '../../content/analytics';
 import { calculateEmpireProduction, safeArray } from '../../utils/amortizationCalc';
-import { calculateTotalEmpireDailyYield } from '../../utils/empireYield';
+import { calculateTotalEmpireDailyYield, useEmpireYieldConfig } from '../../utils/empireYield';
 import { ThemeIcon } from '../components/ThemeIcon';
 import { isSameUniverse } from '../../utils/universe';
 import { getPlayerClassName } from '../../i18n/gameData';
@@ -128,27 +131,82 @@ const Modal: React.FC<{
 const BentoCard: React.FC<{
     title: string;
     icon: React.ReactNode;
+    badge?: React.ReactNode;
     gridArea?: string;
     children: React.ReactNode;
-}> = ({ title, icon, gridArea, children }) => (
+}> = ({ title, icon, badge, gridArea, children }) => (
     <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="glass"
         style={{
             gridArea,
-            padding: '24px',
+            padding: '24px 28px',
             display: 'flex',
             flexDirection: 'column',
-            willChange: 'transform, opacity'
+            willChange: 'transform, opacity',
+            background: 'linear-gradient(180deg, rgba(10, 18, 30, 0.82) 0%, rgba(6, 11, 20, 0.92) 100%)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            border: '1px solid rgba(0, 242, 255, 0.16)',
+            borderRadius: '24px',
+            boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 24px rgba(0, 242, 255, 0.02)',
+            position: 'relative',
+            overflow: 'hidden'
         }}
     >
-        <div className="card-title">
-            {icon}
-            <span>{title}</span>
+        {/* Top edge subtle technical glow line */}
+        <div style={{
+            position: 'absolute',
+            top: 0,
+            left: '12%',
+            right: '12%',
+            height: '1px',
+            background: 'linear-gradient(90deg, transparent, rgba(0, 242, 255, 0.4), transparent)',
+            pointerEvents: 'none'
+        }} />
+
+        {/* Card Header */}
+        <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '20px',
+            paddingBottom: '14px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+            position: 'relative'
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'rgba(0, 242, 255, 0.08)',
+                    border: '1px solid rgba(0, 242, 255, 0.25)',
+                    boxShadow: '0 0 12px rgba(0, 242, 255, 0.18)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: THEME_CYAN,
+                    flexShrink: 0
+                }}>
+                    {icon}
+                </div>
+                <span style={{
+                    fontSize: '0.92rem',
+                    fontWeight: 900,
+                    color: '#fff',
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    fontFamily: 'var(--font-title, sans-serif)',
+                    textShadow: '0 0 14px rgba(0, 242, 255, 0.2)'
+                }}>
+                    {title}
+                </span>
+            </div>
+            {badge && <div>{badge}</div>}
         </div>
-        <div style={{ flex: 1 }}>{children}</div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>{children}</div>
     </motion.div>
 );
 
@@ -671,6 +729,14 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
         return days;
     }, [expeditions, combatReports, debrisHarvests, mMultiplier, cMultiplier, dMultiplier, totalMSUPerHour]);
 
+    const [yieldConfig, setYieldConfig] = useEmpireYieldConfig();
+    const [isScrapModalOpen, setIsScrapModalOpen] = useState(false);
+    const [scrapPercentInput, setScrapPercentInput] = useState<number>(() => Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100));
+
+    useEffect(() => {
+        setScrapPercentInput(Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100));
+    }, [yieldConfig.scrapMerchantRatio]);
+
     const [activeModal, setActiveModal] = useState<'mines' | 'expedition' | 'fleet' | 'combats' | 'debris' | 'total' | null>(null);
     const [isDonateHovered, setIsDonateHovered] = useState(false);
 
@@ -678,15 +744,27 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
     return (
         <div className="view">
             <GlobalStyles />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px' }}>
-                <motion.h1
-                    initial={{ x: -20, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    className="view-title"
-                    style={{ marginBottom: 0 }}
-                >
-                    Empire 360°
-                </motion.h1>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '36px' }}>
+                <div>
+                    <motion.h1
+                        initial={{ x: -20, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        className="view-title"
+                        style={{ marginBottom: 0 }}
+                    >
+                        Empire 360°
+                    </motion.h1>
+                    <div style={{
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        color: 'rgba(255, 255, 255, 0.45)',
+                        letterSpacing: '0.15em',
+                        marginTop: '6px',
+                        textTransform: 'uppercase'
+                    }}>
+                        Command Telemetry & Empire Yield
+                    </div>
+                </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     {activeAccount && (
@@ -697,25 +775,26 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             animate={{ opacity: 1, x: 0 }}
                             whileHover={{
                                 scale: 1.02,
-                                backgroundColor: 'rgba(0, 242, 255, 0.06)',
-                                borderColor: 'rgba(0, 242, 255, 0.3)',
-                                boxShadow: '0 0 15px rgba(0, 242, 255, 0.15)'
+                                backgroundColor: 'rgba(0, 242, 255, 0.08)',
+                                borderColor: 'rgba(0, 242, 255, 0.35)',
+                                boxShadow: '0 0 20px rgba(0, 242, 255, 0.2)'
                             }}
                             whileTap={{ scale: 0.98 }}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                background: 'rgba(0, 242, 255, 0.03)',
+                                background: 'linear-gradient(135deg, rgba(10, 18, 30, 0.8) 0%, rgba(6, 11, 20, 0.9) 100%)',
                                 padding: '12px 20px',
-                                borderRadius: '24px',
-                                border: '1px solid rgba(0, 242, 255, 0.1)',
-                                backdropFilter: 'blur(10px)',
-                                height: '106px',
+                                borderRadius: '20px',
+                                border: '1px solid rgba(0, 242, 255, 0.16)',
+                                backdropFilter: 'blur(16px)',
+                                height: '100px',
                                 boxSizing: 'border-box',
-                                transition: 'border-color 0.2s, background-color 0.2s',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                 cursor: 'pointer',
-                                overflow: 'hidden'
+                                overflow: 'hidden',
+                                boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
                             }}
                         >
                             <a
@@ -766,21 +845,28 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                         <motion.div
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
-                            whileHover={{ scale: 1.02, backgroundColor: 'rgba(0, 242, 255, 0.06)', borderColor: 'rgba(0, 242, 255, 0.3)' }}
+                            whileHover={{
+                                scale: 1.02,
+                                borderColor: 'rgba(0, 242, 255, 0.4)',
+                                boxShadow: '0 12px 36px rgba(0, 242, 255, 0.18)'
+                            }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => onSelect && onSelect('signature')}
                             title="Customize Empire Signature"
                             style={{
                                 display: 'flex',
-                                gap: '24px',
+                                gap: '22px',
                                 alignItems: 'center',
-                                background: 'rgba(0, 242, 255, 0.03)',
-                                padding: '16px 24px',
-                                borderRadius: '24px',
-                                border: '1px solid rgba(0, 242, 255, 0.1)',
-                                backdropFilter: 'blur(10px)',
+                                background: 'linear-gradient(135deg, rgba(10, 18, 30, 0.85) 0%, rgba(6, 11, 20, 0.95) 100%)',
+                                padding: '14px 24px',
+                                borderRadius: '20px',
+                                border: '1px solid rgba(0, 242, 255, 0.2)',
+                                backdropFilter: 'blur(16px)',
+                                boxShadow: '0 12px 36px -6px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
                                 cursor: 'pointer',
-                                transition: 'border-color 0.2s, background-color 0.2s'
+                                height: '100px',
+                                boxSizing: 'border-box',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
                             }}
                         >
                             <div style={{ textAlign: 'right' }}>
@@ -942,7 +1028,8 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             expeditions,
                             combatReports,
                             debrisHarvests,
-                            rates
+                            rates,
+                            yieldConfig
                         });
                         const mineDaily = yieldBreakdown.mineDailyMSU;
                         const expResDaily = yieldBreakdown.expResDailyMSU;
@@ -951,138 +1038,570 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                         const debrisDaily = yieldBreakdown.debrisDailyMSU;
                         const totalRevenue = yieldBreakdown.totalDailyYieldMSU;
 
-                        const mineProp = (mineDaily / totalRevenue) * 283;
-                        const expResProp = (expResDaily / totalRevenue) * 283;
-                        const expShipProp = (expShipDaily / totalRevenue) * 283;
-                        const combatProp = (combatDaily / totalRevenue) * 283;
-                        const debrisProp = (debrisDaily / totalRevenue) * 283;
+                        const mineProp = totalRevenue > 0 ? (mineDaily / totalRevenue) * 283 : 0;
+                        const expResProp = totalRevenue > 0 ? (expResDaily / totalRevenue) * 283 : 0;
+                        const expShipProp = totalRevenue > 0 ? (expShipDaily / totalRevenue) * 283 : 0;
+                        const combatProp = totalRevenue > 0 ? (combatDaily / totalRevenue) * 283 : 0;
+                        const debrisProp = totalRevenue > 0 ? (debrisDaily / totalRevenue) * 283 : 0;
 
                         const isExpHeavy = (expResDaily + expShipDaily) > mineDaily;
-                        const dominantLabel = isExpHeavy ? "EXPEDITION DOMINANT" : "PRODUCTION DOMINANT";
-                        const dominantPercent = isExpHeavy
-                            ? ((expResDaily + expShipDaily) / totalRevenue * 100).toFixed(1)
-                            : (mineDaily / totalRevenue * 100).toFixed(1);
+                        const dominantLabel = totalRevenue === 0
+                            ? "NO ACTIVE SOURCES"
+                            : isExpHeavy ? "EXPEDITION DOMINANT" : "PRODUCTION DOMINANT";
+                        const dominantPercent = totalRevenue > 0
+                            ? (isExpHeavy
+                                ? ((expResDaily + expShipDaily) / totalRevenue * 100).toFixed(1)
+                                : (mineDaily / totalRevenue * 100).toFixed(1))
+                            : "0.0";
+
+                        const activeCount = [
+                            yieldConfig.includeMines,
+                            yieldConfig.includeExpeditions,
+                            yieldConfig.includeSalvagedFleet,
+                            yieldConfig.includeCombatProfits,
+                            yieldConfig.includeDebrisFields
+                        ].filter(Boolean).length;
 
                         return (
-                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', padding: '12px 0' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', padding: '6px 0 0 0' }}>
                                 {/* THE POWER CORE HEADER */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                                    <div style={{ position: 'relative', width: '90px', height: '90px', flexShrink: 0 }}>
-                                        {/* Decorative concentric circles */}
-                                        <div style={{ position: 'absolute', inset: -6, border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '50%' }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
+                                    <div style={{ position: 'relative', width: '102px', height: '102px', flexShrink: 0 }}>
+                                        {/* Outer technical radar ticks */}
+                                        <svg viewBox="0 0 100 100" style={{ position: 'absolute', inset: -6, width: 'calc(100% + 12px)', height: 'calc(100% + 12px)', pointerEvents: 'none' }}>
+                                            <circle cx="50" cy="50" r="48" fill="none" stroke="rgba(0, 242, 255, 0.25)" strokeWidth="1" strokeDasharray="3 6" opacity="0.7" />
+                                            <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="1" />
+                                        </svg>
+
+                                        {/* Reactor Ambient Glow */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: '10%',
+                                            borderRadius: '50%',
+                                            background: 'radial-gradient(circle, rgba(0, 242, 255, 0.18) 0%, rgba(0, 242, 255, 0.04) 60%, transparent 80%)',
+                                            filter: 'blur(5px)',
+                                            pointerEvents: 'none'
+                                        }} />
 
                                         <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
-                                            <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="8" />
+                                            <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="8.5" />
                                             {/* Mine (Cyan) */}
-                                            <circle
-                                                cx="50" cy="50" r="45" fill="none" stroke={THEME_CYAN} strokeWidth="8"
-                                                strokeDasharray={`${mineProp} 283`}
-                                                strokeLinecap="round"
-                                                style={{ transition: 'all 1s ease-out' }}
-                                            />
+                                            {yieldConfig.includeMines && (
+                                                <circle
+                                                    cx="50" cy="50" r="45" fill="none" stroke={THEME_CYAN} strokeWidth="8.5"
+                                                    strokeDasharray={`${mineProp} 283`}
+                                                    strokeLinecap="round"
+                                                    style={{ transition: 'all 0.6s ease-out' }}
+                                                />
+                                            )}
                                             {/* Exp Res (Green) */}
-                                            <circle
-                                                cx="50" cy="50" r="45" fill="none" stroke="#22c55e" strokeWidth="8"
-                                                strokeDasharray={`${expResProp} 283`}
-                                                strokeDashoffset={-mineProp}
-                                                strokeLinecap="round"
-                                                style={{ transition: 'all 1s ease-out' }}
-                                            />
+                                            {yieldConfig.includeExpeditions && (
+                                                <circle
+                                                    cx="50" cy="50" r="45" fill="none" stroke="#22c55e" strokeWidth="8.5"
+                                                    strokeDasharray={`${expResProp} 283`}
+                                                    strokeDashoffset={-mineProp}
+                                                    strokeLinecap="round"
+                                                    style={{ transition: 'all 0.6s ease-out' }}
+                                                />
+                                            )}
                                             {/* Salvage (Magenta) */}
-                                            <circle
-                                                cx="50" cy="50" r="45" fill="none" stroke={THEME_MAGENTA} strokeWidth="8"
-                                                strokeDasharray={`${expShipProp} 283`}
-                                                strokeDashoffset={-(mineProp + expResProp)}
-                                                strokeLinecap="round"
-                                                style={{ transition: 'all 1s ease-out' }}
-                                            />
+                                            {yieldConfig.includeSalvagedFleet && (
+                                                <circle
+                                                    cx="50" cy="50" r="45" fill="none" stroke={THEME_MAGENTA} strokeWidth="8.5"
+                                                    strokeDasharray={`${expShipProp} 283`}
+                                                    strokeDashoffset={-(mineProp + expResProp)}
+                                                    strokeLinecap="round"
+                                                    style={{ transition: 'all 0.6s ease-out' }}
+                                                />
+                                            )}
                                             {/* Combat (Red) */}
-                                            <circle
-                                                cx="50" cy="50" r="45" fill="none" stroke="#ef4444" strokeWidth="8"
-                                                strokeDasharray={`${combatProp} 283`}
-                                                strokeDashoffset={-(mineProp + expResProp + expShipProp)}
-                                                strokeLinecap="round"
-                                                style={{ transition: 'all 1s ease-out' }}
-                                            />
+                                            {yieldConfig.includeCombatProfits && (
+                                                <circle
+                                                    cx="50" cy="50" r="45" fill="none" stroke="#ef4444" strokeWidth="8.5"
+                                                    strokeDasharray={`${combatProp} 283`}
+                                                    strokeDashoffset={-(mineProp + expResProp + expShipProp)}
+                                                    strokeLinecap="round"
+                                                    style={{ transition: 'all 0.6s ease-out' }}
+                                                />
+                                            )}
                                             {/* Debris (Yellow) */}
-                                            <circle
-                                                cx="50" cy="50" r="45" fill="none" stroke="#eab308" strokeWidth="8"
-                                                strokeDasharray={`${debrisProp} 283`}
-                                                strokeDashoffset={-(mineProp + expResProp + expShipProp + combatProp)}
-                                                strokeLinecap="round"
-                                                style={{ transition: 'all 1s ease-out' }}
-                                            />
+                                            {yieldConfig.includeDebrisFields && (
+                                                <circle
+                                                    cx="50" cy="50" r="45" fill="none" stroke="#eab308" strokeWidth="8.5"
+                                                    strokeDasharray={`${debrisProp} 283`}
+                                                    strokeDashoffset={-(mineProp + expResProp + expShipProp + combatProp)}
+                                                    strokeLinecap="round"
+                                                    style={{ transition: 'all 0.6s ease-out' }}
+                                                />
+                                            )}
                                         </svg>
-                                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <TrendingUp size={28} color={THEME_CYAN} style={{ filter: `drop-shadow(0 0 8px ${THEME_CYAN}88)` }} />
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            pointerEvents: 'none'
+                                        }}>
+                                            <div style={{
+                                                width: '44px',
+                                                height: '44px',
+                                                borderRadius: '50%',
+                                                background: 'rgba(6, 11, 20, 0.94)',
+                                                border: '1.5px solid rgba(0, 242, 255, 0.35)',
+                                                boxShadow: '0 0 16px rgba(0, 242, 255, 0.3), inset 0 0 12px rgba(0, 242, 255, 0.15)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                            }}>
+                                                <Zap size={20} color={THEME_CYAN} style={{ filter: `drop-shadow(0 0 8px ${THEME_CYAN})` }} />
+                                            </div>
                                         </div>
                                     </div>
 
                                     <div style={{ flex: 1, position: 'relative' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative', zIndex: 50 }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800, letterSpacing: '0.15em' }}>EMPIRE DAILY YIELD</div>
+                                            <div style={{
+                                                fontSize: '0.72rem',
+                                                color: 'rgba(255,255,255,0.65)',
+                                                fontWeight: 900,
+                                                letterSpacing: '0.14em',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}>
+                                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: THEME_CYAN, boxShadow: `0 0 8px ${THEME_CYAN}` }} />
+                                                EMPIRE DAILY YIELD
+                                            </div>
                                             <span
                                                 className="nexus-yield-info-btn"
-                                                data-nexus-tooltip={`Empire Daily Yield Calculation\n\n• Planetary Mines: 24h theoretical output based on live mine levels, plasma tech, lifeforms & active bonuses.\n• Expeditions, Fleet Salvage, Combat & Debris: Rolling daily average calculated over the last 7 days (or available tracked days if < 7d).\n• MSU (Metal Standard Units): Standardized revenue based on your conversion rates (${rates.metal}:${rates.crystal}:${rates.deuterium}).`}
+                                                data-nexus-tooltip={`Empire Daily Yield Calculation\n\n• Checkboxes: Toggle any revenue category to customize your global empire calculation.\n• Planetary Mines: 24h theoretical output based on live mine levels, plasma tech, lifeforms & active bonuses.\n• Expeditions, Fleet Salvage, Combat & Debris: Rolling daily average calculated over the last 7 days.\n• Salvaged Fleet: Scaled by your average Scrap Merchant recovery rate (${Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100)}%).\n• MSU (Metal Standard Units): Standardized revenue based on your conversion rates (${rates.metal}:${rates.crystal}:${rates.deuterium}).`}
                                             >
                                                 i
                                             </span>
                                         </div>
-                                        <div style={{ fontSize: '2.8rem', fontWeight: 900, color: '#fff', lineHeight: 1, margin: '6px 0', display: 'flex', alignItems: 'baseline', gap: '8px', position: 'relative', zIndex: 1 }}>
+                                        <div style={{
+                                            fontSize: '3.1rem',
+                                            fontWeight: 900,
+                                            color: '#ffffff',
+                                            lineHeight: 1,
+                                            margin: '8px 0',
+                                            display: 'flex',
+                                            alignItems: 'baseline',
+                                            gap: '10px',
+                                            position: 'relative',
+                                            zIndex: 1,
+                                            fontFamily: 'var(--font-title, sans-serif)',
+                                            textShadow: '0 0 25px rgba(0, 242, 255, 0.2)'
+                                        }}>
                                             {formatNumber(totalRevenue)}
-                                            <span style={{ fontSize: '1.1rem', fontWeight: 800, color: THEME_CYAN, opacity: 0.8 }}>MSU</span>
+                                            <span style={{
+                                                fontSize: '0.95rem',
+                                                fontWeight: 900,
+                                                color: THEME_CYAN,
+                                                background: 'rgba(0, 242, 255, 0.1)',
+                                                border: '1px solid rgba(0, 242, 255, 0.28)',
+                                                padding: '2px 8px',
+                                                borderRadius: '6px',
+                                                letterSpacing: '0.06em',
+                                                textShadow: 'none'
+                                            }}>
+                                                MSU/d
+                                            </span>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: '4px', width: 'fit-content', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isExpHeavy ? THEME_MAGENTA : THEME_CYAN, boxShadow: `0 0 8px ${isExpHeavy ? THEME_MAGENTA : THEME_CYAN}` }} />
-                                            <div style={{ fontSize: '0.75rem', color: '#fff', fontWeight: 700, letterSpacing: '0.02em' }}>
-                                                {dominantLabel} <span style={{ color: THEME_CYAN }}>({dominantPercent}%)</span>
+                                        <div style={{
+                                            display: 'inline-flex',
+                                            gap: '8px',
+                                            alignItems: 'center',
+                                            background: totalRevenue === 0
+                                                ? 'rgba(255,255,255,0.03)'
+                                                : isExpHeavy ? 'rgba(189, 0, 255, 0.1)' : 'rgba(0, 242, 255, 0.08)',
+                                            border: `1px solid ${totalRevenue === 0 ? 'rgba(255,255,255,0.08)' : isExpHeavy ? 'rgba(189, 0, 255, 0.3)' : 'rgba(0, 242, 255, 0.25)'}`,
+                                            padding: '5px 12px',
+                                            borderRadius: '8px',
+                                            boxShadow: totalRevenue === 0 ? 'none' : `0 0 14px ${isExpHeavy ? 'rgba(189, 0, 255, 0.18)' : 'rgba(0, 242, 255, 0.15)'}`
+                                        }}>
+                                            <div style={{
+                                                width: '7px',
+                                                height: '7px',
+                                                borderRadius: '50%',
+                                                background: totalRevenue === 0 ? '#64748b' : isExpHeavy ? THEME_MAGENTA : THEME_CYAN,
+                                                boxShadow: `0 0 8px ${totalRevenue === 0 ? '#64748b' : isExpHeavy ? THEME_MAGENTA : THEME_CYAN}`
+                                            }} />
+                                            <div style={{ fontSize: '0.74rem', color: '#fff', fontWeight: 800, letterSpacing: '0.03em' }}>
+                                                {dominantLabel} <span style={{ color: isExpHeavy ? '#e879f9' : THEME_CYAN }}>({dominantPercent}%)</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* DATA SLATS */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '16px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '18px' }}>
                                     {/* MINES */}
-                                    <div className="glass-hover" onClick={() => setActiveModal('mines')} style={{ padding: '12px', background: 'rgba(0, 242, 255, 0.03)', border: '1px solid rgba(0, 242, 255, 0.08)', position: 'relative', cursor: 'pointer', borderRadius: '12px' }}>
-                                        <div style={{ position: 'absolute', left: 0, top: '20%', height: '60%', width: '2px', background: THEME_CYAN }} />
-                                        <div style={{ fontSize: '0.6rem', color: THEME_CYAN, fontWeight: 900, marginBottom: '4px' }}>PLANETARY MINES</div>
-                                        <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>{formatNumber(mineDaily)}</div>
+                                    <div
+                                        className="glass-hover"
+                                        onClick={() => setActiveModal('mines')}
+                                        style={{
+                                            padding: '12px 14px',
+                                            background: yieldConfig.includeMines ? 'linear-gradient(135deg, rgba(14, 23, 38, 0.85) 0%, rgba(8, 14, 24, 0.95) 100%)' : 'rgba(255, 255, 255, 0.015)',
+                                            border: yieldConfig.includeMines ? '1px solid rgba(0, 242, 255, 0.25)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                            boxShadow: yieldConfig.includeMines ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(0, 242, 255, 0.04)' : 'none',
+                                            position: 'relative',
+                                            cursor: 'pointer',
+                                            borderRadius: '14px',
+                                            opacity: yieldConfig.includeMines ? 1 : 0.45,
+                                            transition: 'all 0.2s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minHeight: '68px'
+                                        }}
+                                    >
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeMines ? THEME_CYAN : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeMines ? `0 0 8px ${THEME_CYAN}88` : 'none' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setYieldConfig({ includeMines: !yieldConfig.includeMines });
+                                                    }}
+                                                    title={yieldConfig.includeMines ? "Exclude Planetary Mines from Empire Daily Yield" : "Include Planetary Mines in Empire Daily Yield"}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        borderRadius: '4px',
+                                                        border: yieldConfig.includeMines ? `1.5px solid ${THEME_CYAN}` : '1px solid rgba(255,255,255,0.25)',
+                                                        background: yieldConfig.includeMines ? 'rgba(0, 242, 255, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: 'pointer',
+                                                        boxShadow: yieldConfig.includeMines ? `0 0 8px ${THEME_CYAN}55` : 'none'
+                                                    }}
+                                                >
+                                                    {yieldConfig.includeMines && <Check size={11} color={THEME_CYAN} strokeWidth={3} />}
+                                                </div>
+                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeMines ? THEME_CYAN : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>PLANETARY MINES</span>
+                                            </div>
+                                            {!yieldConfig.includeMines && (
+                                                <span style={{ fontSize: '0.52rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239,68,68,0.15)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.35)', letterSpacing: '0.04em' }}>OFF</span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <div style={{ fontSize: '1.22rem', fontWeight: 900, color: yieldConfig.includeMines ? '#fff' : 'rgba(255,255,255,0.4)', letterSpacing: '-0.02em' }}>
+                                                {formatNumber(yieldBreakdown.rawMineDailyMSU)}
+                                            </div>
+                                            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>MSU/d</span>
+                                        </div>
                                     </div>
 
                                     {/* EXPEDITION RESOURCES */}
-                                    <div className="glass-hover" onClick={() => setActiveModal('expedition')} style={{ padding: '12px', background: 'rgba(34, 197, 94, 0.03)', border: '1px solid rgba(34, 197, 94, 0.08)', position: 'relative', cursor: 'pointer', borderRadius: '12px' }}>
-                                        <div style={{ position: 'absolute', left: 0, top: '20%', height: '60%', width: '2px', background: '#22c55e' }} />
-                                        <div style={{ fontSize: '0.6rem', color: '#22c55e', fontWeight: 900, marginBottom: '4px' }}>EXPEDITION RESOURCES</div>
-                                        <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>{formatNumber(expResDaily)}</div>
+                                    <div
+                                        className="glass-hover"
+                                        onClick={() => setActiveModal('expedition')}
+                                        style={{
+                                            padding: '12px 14px',
+                                            background: yieldConfig.includeExpeditions ? 'linear-gradient(135deg, rgba(14, 23, 38, 0.85) 0%, rgba(8, 14, 24, 0.95) 100%)' : 'rgba(255, 255, 255, 0.015)',
+                                            border: yieldConfig.includeExpeditions ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                            boxShadow: yieldConfig.includeExpeditions ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(34, 197, 94, 0.04)' : 'none',
+                                            position: 'relative',
+                                            cursor: 'pointer',
+                                            borderRadius: '14px',
+                                            opacity: yieldConfig.includeExpeditions ? 1 : 0.45,
+                                            transition: 'all 0.2s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minHeight: '68px'
+                                        }}
+                                    >
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeExpeditions ? '#22c55e' : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeExpeditions ? '0 0 8px rgba(34, 197, 94, 0.6)' : 'none' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setYieldConfig({ includeExpeditions: !yieldConfig.includeExpeditions });
+                                                    }}
+                                                    title={yieldConfig.includeExpeditions ? "Exclude Expedition Resources from Empire Daily Yield" : "Include Expedition Resources in Empire Daily Yield"}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        borderRadius: '4px',
+                                                        border: yieldConfig.includeExpeditions ? '1.5px solid #22c55e' : '1px solid rgba(255,255,255,0.25)',
+                                                        background: yieldConfig.includeExpeditions ? 'rgba(34, 197, 94, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: 'pointer',
+                                                        boxShadow: yieldConfig.includeExpeditions ? '0 0 8px rgba(34, 197, 94, 0.55)' : 'none'
+                                                    }}
+                                                >
+                                                    {yieldConfig.includeExpeditions && <Check size={11} color="#22c55e" strokeWidth={3} />}
+                                                </div>
+                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeExpeditions ? '#22c55e' : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>EXPEDITION RESOURCES</span>
+                                            </div>
+                                            {!yieldConfig.includeExpeditions && (
+                                                <span style={{ fontSize: '0.52rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239,68,68,0.15)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.35)', letterSpacing: '0.04em' }}>OFF</span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <div style={{ fontSize: '1.22rem', fontWeight: 900, color: yieldConfig.includeExpeditions ? '#fff' : 'rgba(255,255,255,0.4)', letterSpacing: '-0.02em' }}>
+                                                {formatNumber(yieldBreakdown.rawExpResDailyMSU)}
+                                            </div>
+                                            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>MSU/d</span>
+                                        </div>
                                     </div>
 
-                                    {/* FLEET SALVAGE */}
-                                    <div className="glass-hover" onClick={() => setActiveModal('fleet')} style={{ padding: '12px', background: 'rgba(189, 0, 255, 0.03)', border: '1px solid rgba(189, 0, 255, 0.08)', position: 'relative', cursor: 'pointer', borderRadius: '12px' }}>
-                                        <div style={{ position: 'absolute', left: 0, top: '20%', height: '60%', width: '2px', background: THEME_MAGENTA }} />
-                                        <div style={{ fontSize: '0.6rem', color: THEME_MAGENTA, fontWeight: 900, marginBottom: '4px' }}>SALVAGED FLEET</div>
-                                        <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>{formatNumber(expShipDaily)}</div>
+                                    {/* SALVAGED FLEET */}
+                                    <div
+                                        className="glass-hover"
+                                        onClick={() => setActiveModal('fleet')}
+                                        style={{
+                                            padding: '12px 14px',
+                                            background: yieldConfig.includeSalvagedFleet ? 'linear-gradient(135deg, rgba(14, 23, 38, 0.85) 0%, rgba(8, 14, 24, 0.95) 100%)' : 'rgba(255, 255, 255, 0.015)',
+                                            border: yieldConfig.includeSalvagedFleet ? '1px solid rgba(189, 0, 255, 0.28)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                            boxShadow: yieldConfig.includeSalvagedFleet ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(189, 0, 255, 0.05)' : 'none',
+                                            position: 'relative',
+                                            cursor: 'pointer',
+                                            borderRadius: '14px',
+                                            opacity: yieldConfig.includeSalvagedFleet ? 1 : 0.45,
+                                            transition: 'all 0.2s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minHeight: '68px'
+                                        }}
+                                    >
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeSalvagedFleet ? THEME_MAGENTA : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeSalvagedFleet ? `0 0 8px ${THEME_MAGENTA}88` : 'none' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setYieldConfig({ includeSalvagedFleet: !yieldConfig.includeSalvagedFleet });
+                                                    }}
+                                                    title={yieldConfig.includeSalvagedFleet ? "Exclude Salvaged Fleet from Empire Daily Yield" : "Include Salvaged Fleet in Empire Daily Yield"}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        borderRadius: '4px',
+                                                        border: yieldConfig.includeSalvagedFleet ? `1.5px solid ${THEME_MAGENTA}` : '1px solid rgba(255,255,255,0.25)',
+                                                        background: yieldConfig.includeSalvagedFleet ? 'rgba(189, 0, 255, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: 'pointer',
+                                                        boxShadow: yieldConfig.includeSalvagedFleet ? `0 0 8px ${THEME_MAGENTA}55` : 'none'
+                                                    }}
+                                                >
+                                                    {yieldConfig.includeSalvagedFleet && <Check size={11} color={THEME_MAGENTA} strokeWidth={3} />}
+                                                </div>
+                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeSalvagedFleet ? THEME_MAGENTA : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>SALVAGED FLEET</span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                {!yieldConfig.includeSalvagedFleet && (
+                                                    <span style={{ fontSize: '0.52rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239,68,68,0.15)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.35)', letterSpacing: '0.04em' }}>OFF</span>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setScrapPercentInput(Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100));
+                                                        setIsScrapModalOpen(true);
+                                                    }}
+                                                    title="Configure Scrap Merchant Recovery Rate"
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        padding: '2px 7px',
+                                                        background: 'rgba(189, 0, 255, 0.18)',
+                                                        border: '1px solid rgba(189, 0, 255, 0.45)',
+                                                        color: '#e879f9',
+                                                        borderRadius: '5px',
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.62rem',
+                                                        fontWeight: 800,
+                                                        lineHeight: 1,
+                                                        transition: 'all 0.2s ease'
+                                                    }}
+                                                >
+                                                    <Settings size={10} />
+                                                    <span>{Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100)}%</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                                            <div style={{ fontSize: '1.22rem', fontWeight: 900, color: yieldConfig.includeSalvagedFleet ? '#fff' : 'rgba(255,255,255,0.4)', letterSpacing: '-0.02em' }}>
+                                                {formatNumber(yieldBreakdown.expShipDailyMSU)}
+                                            </div>
+                                            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>MSU/d</span>
+                                            {yieldConfig.includeSalvagedFleet && yieldConfig.scrapMerchantRatio < 1 && (
+                                                <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', fontWeight: 600, marginLeft: '2px' }}>
+                                                    ({formatNumber(yieldBreakdown.rawExpShipDailyMSU)} raw)
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
-                                    {/* COMBAT LOOT */}
-                                    <div className="glass-hover" onClick={() => setActiveModal('combats')} style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.03)', border: '1px solid rgba(239, 68, 68, 0.08)', position: 'relative', cursor: 'pointer', borderRadius: '12px' }}>
-                                        <div style={{ position: 'absolute', left: 0, top: '20%', height: '60%', width: '2px', background: '#ef4444' }} />
-                                        <div style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 900, marginBottom: '4px' }}>COMBAT PROFITS</div>
-                                        <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>{formatNumber(combatDaily)}</div>
+                                    {/* COMBAT PROFITS */}
+                                    <div
+                                        className="glass-hover"
+                                        onClick={() => setActiveModal('combats')}
+                                        style={{
+                                            padding: '12px 14px',
+                                            background: yieldConfig.includeCombatProfits ? 'linear-gradient(135deg, rgba(14, 23, 38, 0.85) 0%, rgba(8, 14, 24, 0.95) 100%)' : 'rgba(255, 255, 255, 0.015)',
+                                            border: yieldConfig.includeCombatProfits ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                            boxShadow: yieldConfig.includeCombatProfits ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(239, 68, 68, 0.04)' : 'none',
+                                            position: 'relative',
+                                            cursor: 'pointer',
+                                            borderRadius: '14px',
+                                            opacity: yieldConfig.includeCombatProfits ? 1 : 0.45,
+                                            transition: 'all 0.2s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minHeight: '68px'
+                                        }}
+                                    >
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeCombatProfits ? '#ef4444' : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeCombatProfits ? '0 0 8px rgba(239, 68, 68, 0.6)' : 'none' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setYieldConfig({ includeCombatProfits: !yieldConfig.includeCombatProfits });
+                                                    }}
+                                                    title={yieldConfig.includeCombatProfits ? "Exclude Combat Profits from Empire Daily Yield" : "Include Combat Profits in Empire Daily Yield"}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        borderRadius: '4px',
+                                                        border: yieldConfig.includeCombatProfits ? '1.5px solid #ef4444' : '1px solid rgba(255,255,255,0.25)',
+                                                        background: yieldConfig.includeCombatProfits ? 'rgba(239, 68, 68, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: 'pointer',
+                                                        boxShadow: yieldConfig.includeCombatProfits ? '0 0 8px rgba(239, 68, 68, 0.55)' : 'none'
+                                                    }}
+                                                >
+                                                    {yieldConfig.includeCombatProfits && <Check size={11} color="#ef4444" strokeWidth={3} />}
+                                                </div>
+                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeCombatProfits ? '#ef4444' : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>COMBAT PROFITS</span>
+                                            </div>
+                                            {!yieldConfig.includeCombatProfits && (
+                                                <span style={{ fontSize: '0.52rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239,68,68,0.15)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.35)', letterSpacing: '0.04em' }}>OFF</span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <div style={{ fontSize: '1.22rem', fontWeight: 900, color: yieldConfig.includeCombatProfits ? '#fff' : 'rgba(255,255,255,0.4)', letterSpacing: '-0.02em' }}>
+                                                {formatNumber(yieldBreakdown.rawCombatDailyMSU)}
+                                            </div>
+                                            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>MSU/d</span>
+                                        </div>
                                     </div>
 
-                                    {/* DEBRIS HARVESTING */}
-                                    <div className="glass-hover" onClick={() => setActiveModal('debris')} style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.03)', border: '1px solid rgba(234, 179, 8, 0.08)', position: 'relative', cursor: 'pointer', borderRadius: '12px' }}>
-                                        <div style={{ position: 'absolute', left: 0, top: '20%', height: '60%', width: '2px', background: '#eab308' }} />
-                                        <div style={{ fontSize: '0.6rem', color: '#eab308', fontWeight: 900, marginBottom: '4px' }}>DEBRIS FIELDS</div>
-                                        <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>{formatNumber(debrisDaily)}</div>
+                                    {/* DEBRIS FIELDS */}
+                                    <div
+                                        className="glass-hover"
+                                        onClick={() => setActiveModal('debris')}
+                                        style={{
+                                            padding: '12px 14px',
+                                            background: yieldConfig.includeDebrisFields ? 'linear-gradient(135deg, rgba(14, 23, 38, 0.85) 0%, rgba(8, 14, 24, 0.95) 100%)' : 'rgba(255, 255, 255, 0.015)',
+                                            border: yieldConfig.includeDebrisFields ? '1px solid rgba(234, 179, 8, 0.25)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                            boxShadow: yieldConfig.includeDebrisFields ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(234, 179, 8, 0.04)' : 'none',
+                                            position: 'relative',
+                                            cursor: 'pointer',
+                                            borderRadius: '14px',
+                                            opacity: yieldConfig.includeDebrisFields ? 1 : 0.45,
+                                            transition: 'all 0.2s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minHeight: '68px'
+                                        }}
+                                    >
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeDebrisFields ? '#eab308' : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeDebrisFields ? '0 0 8px rgba(234, 179, 8, 0.6)' : 'none' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setYieldConfig({ includeDebrisFields: !yieldConfig.includeDebrisFields });
+                                                    }}
+                                                    title={yieldConfig.includeDebrisFields ? "Exclude Debris Fields from Empire Daily Yield" : "Include Debris Fields in Empire Daily Yield"}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        borderRadius: '4px',
+                                                        border: yieldConfig.includeDebrisFields ? '1.5px solid #eab308' : '1px solid rgba(255,255,255,0.25)',
+                                                        background: yieldConfig.includeDebrisFields ? 'rgba(234, 179, 8, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: 'pointer',
+                                                        boxShadow: yieldConfig.includeDebrisFields ? '0 0 8px rgba(234, 179, 8, 0.55)' : 'none'
+                                                    }}
+                                                >
+                                                    {yieldConfig.includeDebrisFields && <Check size={11} color="#eab308" strokeWidth={3} />}
+                                                </div>
+                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeDebrisFields ? '#eab308' : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>DEBRIS FIELDS</span>
+                                            </div>
+                                            {!yieldConfig.includeDebrisFields && (
+                                                <span style={{ fontSize: '0.52rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239,68,68,0.15)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.35)', letterSpacing: '0.04em' }}>OFF</span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <div style={{ fontSize: '1.22rem', fontWeight: 900, color: yieldConfig.includeDebrisFields ? '#fff' : 'rgba(255,255,255,0.4)', letterSpacing: '-0.02em' }}>
+                                                {formatNumber(yieldBreakdown.rawDebrisDailyMSU)}
+                                            </div>
+                                            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>MSU/d</span>
+                                        </div>
                                     </div>
 
                                     {/* TOTAL AVG */}
-                                    <div className="glass-hover" onClick={() => setActiveModal('total')} style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', position: 'relative', cursor: 'pointer', borderRadius: '12px' }}>
-                                        <div style={{ position: 'absolute', left: 0, top: '20%', height: '60%', width: '2px', background: '#fff' }} />
-                                        <div style={{ fontSize: '0.6rem', color: '#fff', fontWeight: 900, marginBottom: '4px', opacity: 0.6 }}>TOTAL DAILY</div>
-                                        <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>{formatNumber(totalRevenue)}</div>
+                                    <div
+                                        className="glass-hover"
+                                        onClick={() => setActiveModal('total')}
+                                        style={{
+                                            padding: '12px 14px',
+                                            background: 'linear-gradient(135deg, rgba(16, 26, 44, 0.9) 0%, rgba(10, 18, 30, 0.95) 100%)',
+                                            border: '1px solid rgba(0, 242, 255, 0.3)',
+                                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 16px rgba(0, 242, 255, 0.08)',
+                                            position: 'relative',
+                                            cursor: 'pointer',
+                                            borderRadius: '14px',
+                                            transition: 'all 0.2s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minHeight: '68px'
+                                        }}
+                                    >
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: '#00f2ff', boxShadow: '0 0 10px rgba(0, 242, 255, 0.8)' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                            <span style={{ fontSize: '0.64rem', color: '#fff', fontWeight: 900, opacity: 0.95, letterSpacing: '0.05em' }}>TOTAL DAILY</span>
+                                            <span style={{
+                                                fontSize: '0.55rem',
+                                                fontWeight: 900,
+                                                padding: '2px 7px',
+                                                borderRadius: '4px',
+                                                background: activeCount === 5 ? 'rgba(0, 242, 255, 0.16)' : 'rgba(245, 158, 11, 0.16)',
+                                                border: activeCount === 5 ? '1px solid rgba(0, 242, 255, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+                                                color: activeCount === 5 ? '#00f2ff' : '#fbbf24',
+                                                letterSpacing: '0.04em'
+                                            }}>
+                                                {activeCount}/5 ACTIVE
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', textShadow: '0 0 12px rgba(0, 242, 255, 0.3)' }}>
+                                                {formatNumber(totalRevenue)}
+                                            </div>
+                                            <span style={{ fontSize: '0.68rem', fontWeight: 800, color: THEME_CYAN }}>MSU/d</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1102,90 +1621,276 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', position: 'relative' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                                <div style={{ position: 'relative', width: '80px', height: '80px', flexShrink: 0 }}>
-                                    <div style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: 'linear-gradient(135deg, #43D159, #00F2FF, #BD00FF)', opacity: 0.2, filter: 'blur(10px)' }} />
-                                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)', position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {/* DOMINANT SPECIES COMMAND BANNER */}
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '22px',
+                                padding: '16px 20px',
+                                background: 'linear-gradient(135deg, rgba(14, 23, 38, 0.8) 0%, rgba(8, 14, 24, 0.9) 100%)',
+                                borderRadius: '16px',
+                                border: '1px solid rgba(0, 242, 255, 0.18)',
+                                position: 'relative',
+                                overflow: 'hidden'
+                            }}>
+                                {/* Ambient Glow */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '-40%',
+                                    right: '-10%',
+                                    width: '180px',
+                                    height: '180px',
+                                    background: 'radial-gradient(circle, rgba(0, 242, 255, 0.12) 0%, transparent 70%)',
+                                    pointerEvents: 'none'
+                                }} />
+
+                                {/* Dominant Species Avatar */}
+                                <div style={{ position: 'relative', width: '82px', height: '82px', flexShrink: 0 }}>
+                                    <div style={{
+                                        position: 'absolute',
+                                        inset: -4,
+                                        borderRadius: '50%',
+                                        background: 'linear-gradient(135deg, #00F2FF, #43D159, #BD00FF)',
+                                        opacity: 0.35,
+                                        filter: 'blur(8px)'
+                                    }} />
+                                    <div style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        borderRadius: '50%',
+                                        overflow: 'hidden',
+                                        border: '2px solid rgba(0, 242, 255, 0.4)',
+                                        boxShadow: '0 0 20px rgba(0, 242, 255, 0.25)',
+                                        background: '#060b14',
+                                        position: 'relative',
+                                        zIndex: 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
                                         <img
                                             src={`icons/lifeforms/${lfStats.domSpecies.toLowerCase().replace(/['’‘`\s]/g, "")}-icon-large.jpg`}
-                                            alt=""
+                                            alt={lfStats.domSpecies}
                                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                             onError={(e) => { (e.target as any).src = 'icons/lifeforms/humans-icon-large.jpg'; }}
                                         />
                                     </div>
-                                    <div style={{ position: 'absolute', bottom: -5, right: -5, width: '28px', height: '28px', borderRadius: '50%', background: '#0a141e', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: -2,
+                                        right: -2,
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        background: '#060b14',
+                                        border: '1.5px solid rgba(0, 242, 255, 0.4)',
+                                        boxShadow: '0 0 10px rgba(0, 242, 255, 0.3)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        zIndex: 2
+                                    }}>
                                         <Globe size={14} color={THEME_CYAN} />
                                     </div>
                                 </div>
 
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', fontWeight: 800, letterSpacing: '0.15em', marginBottom: '4px' }}>DOMINANT SPECIES</div>
-                                    <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', letterSpacing: '0.02em', lineHeight: 1.1 }}>{lfStats.domSpecies}</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                                        <div style={{ background: 'rgba(67, 209, 89, 0.1)', border: '1px solid rgba(67, 209, 89, 0.2)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.6rem', fontWeight: 900, color: '#43D159' }}>{lfStats.coverage}% COVERAGE</div>
-                                        <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.6rem', fontWeight: 700, color: 'rgba(255,255,255,0.5)' }}>{lfStats.totalBuildings} STRUCTURES</div>
+                                {/* Dominant Species Text & Badges */}
+                                <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1 }}>
+                                    <div style={{
+                                        fontSize: '0.68rem',
+                                        color: 'rgba(255,255,255,0.55)',
+                                        fontWeight: 900,
+                                        letterSpacing: '0.14em',
+                                        textTransform: 'uppercase',
+                                        marginBottom: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}>
+                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#43D159', boxShadow: '0 0 8px #43D159' }} />
+                                        DOMINANT SPECIES
+                                    </div>
+                                    <div style={{
+                                        fontSize: '1.85rem',
+                                        fontWeight: 900,
+                                        color: '#ffffff',
+                                        letterSpacing: '0.01em',
+                                        lineHeight: 1.1,
+                                        fontFamily: 'var(--font-title, sans-serif)',
+                                        textShadow: '0 0 20px rgba(0, 242, 255, 0.25)'
+                                    }}>
+                                        {lfStats.domSpecies}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                        <div style={{
+                                            background: 'rgba(67, 209, 89, 0.12)',
+                                            border: '1px solid rgba(67, 209, 89, 0.35)',
+                                            padding: '3px 10px',
+                                            borderRadius: '6px',
+                                            fontSize: '0.68rem',
+                                            fontWeight: 900,
+                                            color: '#43D159',
+                                            letterSpacing: '0.04em',
+                                            boxShadow: '0 0 10px rgba(67, 209, 89, 0.15)'
+                                        }}>
+                                            {lfStats.coverage}% COLONY COVERAGE
+                                        </div>
+                                        <div style={{
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            padding: '3px 10px',
+                                            borderRadius: '6px',
+                                            fontSize: '0.68rem',
+                                            fontWeight: 800,
+                                            color: 'rgba(255, 255, 255, 0.85)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '5px'
+                                        }}>
+                                            <Box size={12} color="rgba(0, 242, 255, 0.7)" />
+                                            <span>{lfStats.totalBuildings.toLocaleString()} STRUCTURES</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                                <div style={{ fontSize: '0.65rem', fontWeight: 900, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '4px' }}>SPECIES EVOLUTION & PROGRESS</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
+                            {/* 2X2 SPECIES EVOLUTION & MASTERY MATRIX */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                                <div style={{
+                                    fontSize: '0.68rem',
+                                    fontWeight: 900,
+                                    color: 'rgba(255, 255, 255, 0.55)',
+                                    letterSpacing: '0.12em',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between'
+                                }}>
+                                    <span>SPECIES EVOLUTION & MASTERY</span>
+                                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'rgba(255,255,255,0.35)' }}>4 SPECIES REGISTERED</span>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                                     {[1, 2, 3, 4].map(id => {
                                         const species = safeArray(lifeformSpecies).find((s: any) => s.lifeformId === id);
                                         const experience = safeArray(activeAccount?.lifeformExperience).find((e: any) => e.lifeformId === id || e.id === id);
                                         const name = species?.lifeformName || (id === 1 ? 'Humans' : id === 2 ? "Rock'tal" : id === 3 ? 'Mechas' : 'Kaelesh');
+                                        const slug = id === 1 ? 'humans' : id === 2 ? 'rocktal' : id === 3 ? 'mechas' : 'kaelesh';
 
                                         const level = experience?.level || 0;
                                         const progress = level >= 100 ? 100 : (experience && experience.nextLevelExp > 0 ? (experience.currentExp / experience.nextLevelExp) * 100 : 0);
 
                                         const colors: Record<number, string> = {
-                                            1: '#43D159', // Human - Green
-                                            2: '#FF4D00', // Rocktal - Orange
-                                            3: '#00F2FF', // Mecha - Cyan
+                                            1: '#43D159', // Humans - Green
+                                            2: '#f97316', // Rock'tal - Volcanic Orange
+                                            3: '#00F2FF', // Mechas - Cyan
                                             4: '#BD00FF'  // Kaelesh - Magenta
                                         };
                                         const color = colors[id];
+                                        const isActive = level > 0;
 
                                         return (
-                                            <div key={id} style={{
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '4px',
-                                                padding: '8px 12px',
-                                                background: level > 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.01)',
-                                                borderRadius: '10px',
-                                                border: `1px solid ${level > 0 ? 'rgba(255,255,255,0.05)' : 'transparent'}`,
-                                                opacity: level > 0 ? 1 : 0.4
-                                            }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: color }} />
-                                                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#fff' }}>{name.toUpperCase()}</span>
-                                                    </div>
-                                                    <div style={{ fontSize: '0.7rem', fontWeight: 900, color }}>
-                                                        <span style={{ opacity: 0.5, fontSize: '0.55rem', color: '#fff' }}>LVL</span> {level}
-                                                    </div>
-                                                </div>
-                                                <div style={{ height: '3px', background: 'rgba(255,255,255,0.03)', borderRadius: '2px', overflow: 'hidden', position: 'relative' }}>
-                                                    <motion.div
-                                                        initial={{ width: 0 }}
-                                                        animate={{ width: `${progress}%` }}
-                                                        style={{
-                                                            height: '100%',
-                                                            background: color,
-                                                            boxShadow: `0 0 10px ${color}33`,
-                                                            borderRadius: '2px'
-                                                        }}
+                                            <div
+                                                key={id}
+                                                className="glass-hover"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    padding: '12px 14px',
+                                                    background: isActive ? 'linear-gradient(135deg, rgba(14, 22, 36, 0.8) 0%, rgba(8, 14, 24, 0.9) 100%)' : 'rgba(255, 255, 255, 0.015)',
+                                                    borderRadius: '14px',
+                                                    border: `1px solid ${isActive ? `${color}44` : 'rgba(255, 255, 255, 0.05)'}`,
+                                                    boxShadow: isActive ? `0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px ${color}11` : 'none',
+                                                    opacity: isActive ? 1 : 0.45,
+                                                    transition: 'all 0.2s ease',
+                                                    minHeight: '66px'
+                                                }}
+                                            >
+                                                {/* Species Avatar Thumbnail */}
+                                                <div style={{
+                                                    position: 'relative',
+                                                    width: '42px',
+                                                    height: '42px',
+                                                    borderRadius: '10px',
+                                                    overflow: 'hidden',
+                                                    border: `1.5px solid ${isActive ? color : 'rgba(255,255,255,0.1)'}`,
+                                                    boxShadow: isActive ? `0 0 10px ${color}55` : 'none',
+                                                    flexShrink: 0,
+                                                    background: '#060b14'
+                                                }}>
+                                                    <img
+                                                        src={`icons/lifeforms/${slug}-icon-large.jpg`}
+                                                        alt={name}
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                        onError={(e) => { (e.target as any).src = 'icons/lifeforms/humans-icon-large.jpg'; }}
                                                     />
                                                 </div>
-                                                {level > 0 && (
-                                                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                                        <span style={{ fontSize: '0.45rem', fontWeight: 600, color: 'rgba(255,255,255,0.3)' }}>
-                                                            {level >= 100 ? 'MAX LEVEL' : `${progress.toFixed(1)}% TO LVL ${level + 1}`}
+
+                                                {/* Species Info & Progress */}
+                                                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#fff', letterSpacing: '0.04em' }}>
+                                                            {name.toUpperCase()}
                                                         </span>
+                                                        <div style={{
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: 900,
+                                                            color: color,
+                                                            display: 'flex',
+                                                            alignItems: 'baseline',
+                                                            gap: '3px'
+                                                        }}>
+                                                            <span style={{ opacity: 0.55, fontSize: '0.55rem', color: '#fff', fontWeight: 700 }}>LVL</span>
+                                                            <span>{level}</span>
+                                                        </div>
                                                     </div>
-                                                )}
+
+                                                    {/* 6px Glowing Energy Conduit Progress Bar */}
+                                                    <div style={{
+                                                        height: '6px',
+                                                        background: 'rgba(255, 255, 255, 0.06)',
+                                                        borderRadius: '3px',
+                                                        overflow: 'hidden',
+                                                        position: 'relative'
+                                                    }}>
+                                                        <motion.div
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${progress}%` }}
+                                                            transition={{ duration: 0.8, ease: 'easeOut' }}
+                                                            style={{
+                                                                height: '100%',
+                                                                background: `linear-gradient(90deg, ${color}88, ${color})`,
+                                                                boxShadow: `0 0 10px ${color}`,
+                                                                borderRadius: '3px'
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    {/* Status line */}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <span style={{ fontSize: '0.58rem', fontWeight: 700, color: isActive ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.25)' }}>
+                                                            {level >= 100
+                                                                ? 'MAX LEVEL'
+                                                                : isActive
+                                                                    ? `${progress.toFixed(1)}% TO LVL ${level + 1}`
+                                                                    : 'DORMANT'}
+                                                        </span>
+                                                        {level >= 100 && (
+                                                            <span style={{
+                                                                fontSize: '0.52rem',
+                                                                fontWeight: 900,
+                                                                color: '#fbbf24',
+                                                                background: 'rgba(251, 191, 36, 0.15)',
+                                                                padding: '1px 5px',
+                                                                borderRadius: '3px',
+                                                                border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                                letterSpacing: '0.04em'
+                                                            }}>
+                                                                MASTERED
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -1582,6 +2287,233 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 <div style={{ marginTop: '24px', textAlign: 'center', opacity: 0.5, fontSize: '0.8rem' }}>
                     Aggregate view of your total income (Mines + Expeditions + Fleet + Combat + Debris) expressed in MSU over the last 7 days.
                 </div>
+            </Modal>
+
+            {/* SCRAP MERCHANT SETTINGS MODAL */}
+            <Modal
+                isOpen={isScrapModalOpen}
+                onClose={() => setIsScrapModalOpen(false)}
+                title="Scrap Merchant Settings"
+                icon={<Settings size={28} />}
+            >
+                {(() => {
+                    const yieldBreakdown = calculateTotalEmpireDailyYield({
+                        activeAccount,
+                        planets,
+                        expeditions,
+                        combatReports,
+                        debrisHarvests,
+                        rates,
+                        yieldConfig
+                    });
+                    const rawExpShip = yieldBreakdown.rawExpShipDailyMSU;
+                    const previewYield = rawExpShip * (scrapPercentInput / 100);
+                    const diffMSU = rawExpShip - previewYield;
+
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '680px', margin: '0 auto', width: '100%' }}>
+                            {/* EXPLANATION */}
+                            <div style={{
+                                background: 'rgba(189, 0, 255, 0.05)',
+                                border: '1px solid rgba(189, 0, 255, 0.2)',
+                                borderRadius: '16px',
+                                padding: '16px 20px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px'
+                            }}>
+                                <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#e879f9', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <ThemeIcon name="tools" size={18} />
+                                    Scrap Merchant Yield Recovery
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.85)', lineHeight: 1.5 }}>
+                                    Ships found during expeditions can be converted into resources at the Scrap Merchant. The unboosted rate starts at <strong>35% base</strong> and can reach up to <strong>100%</strong> with event or premium items.
+                                </div>
+                                <div style={{ fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.4 }}>
+                                    We recommend using a comfortable percentage that you usually scrap at to accurately reflect your true daily income. This calculation applies globally across all OGame Nexus planners and yield displays.
+                                </div>
+                            </div>
+
+                            {/* RATE SELECTOR WITH PRESETS */}
+                            <div style={{
+                                background: 'rgba(0, 0, 0, 0.3)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '16px',
+                                padding: '20px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '16px'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff', letterSpacing: '0.04em' }}>
+                                        AVERAGE SCRAP MERCHANT RATE
+                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                        <span style={{ fontSize: '1.8rem', fontWeight: 900, color: '#e879f9', letterSpacing: '-0.02em' }}>
+                                            {scrapPercentInput}
+                                        </span>
+                                        <span style={{ fontSize: '1rem', fontWeight: 800, color: '#e879f9' }}>%</span>
+                                    </div>
+                                </div>
+
+                                {/* PRESET BUTTONS */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                                    {[
+                                        { label: '35% (Base)', value: 35 },
+                                        { label: '75% (Standard)', value: 75 },
+                                        { label: '85% (Boosted)', value: 85 },
+                                        { label: '100% (Event/Max)', value: 100 }
+                                    ].map(preset => {
+                                        const isSelected = scrapPercentInput === preset.value;
+                                        return (
+                                            <button
+                                                key={preset.value}
+                                                type="button"
+                                                onClick={() => setScrapPercentInput(preset.value)}
+                                                style={{
+                                                    padding: '10px 8px',
+                                                    borderRadius: '10px',
+                                                    border: isSelected ? '1px solid #bd00ff' : '1px solid rgba(255, 255, 255, 0.1)',
+                                                    background: isSelected ? 'rgba(189, 0, 255, 0.25)' : 'rgba(255, 255, 255, 0.03)',
+                                                    color: isSelected ? '#fff' : 'rgba(255, 255, 255, 0.7)',
+                                                    fontWeight: isSelected ? 800 : 600,
+                                                    fontSize: '0.8rem',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease',
+                                                    boxShadow: isSelected ? '0 0 12px rgba(189, 0, 255, 0.3)' : 'none'
+                                                }}
+                                            >
+                                                {preset.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* RANGE SLIDER */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                                    <input
+                                        type="range"
+                                        min={35}
+                                        max={100}
+                                        step={1}
+                                        value={scrapPercentInput}
+                                        onChange={(e) => setScrapPercentInput(Number(e.target.value))}
+                                        style={{
+                                            width: '100%',
+                                            accentColor: '#bd00ff',
+                                            cursor: 'pointer',
+                                            height: '6px'
+                                        }}
+                                    />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 700 }}>
+                                        <span style={{ color: scrapPercentInput === 35 ? '#e879f9' : 'inherit' }}>35% (Base)</span>
+                                        <span>50%</span>
+                                        <span style={{ color: scrapPercentInput === 75 ? '#e879f9' : 'inherit' }}>75% (Standard)</span>
+                                        <span style={{ color: scrapPercentInput === 85 ? '#e879f9' : 'inherit' }}>85% (Boosted)</span>
+                                        <span style={{ color: scrapPercentInput === 100 ? '#e879f9' : 'inherit' }}>100% (Event/Max)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* LIVE IMPACT SUMMARY */}
+                            <div style={{
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid rgba(255, 255, 255, 0.06)',
+                                borderRadius: '16px',
+                                padding: '16px 20px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '10px'
+                            }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255, 255, 255, 0.5)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                                    Daily Impact Preview
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                                    <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Raw Recovered Fleet Value (100%):</span>
+                                    <span style={{ fontWeight: 800, color: '#fff' }}>{formatNumber(rawExpShip)} MSU/d</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                                    <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Scrap Merchant Multiplier:</span>
+                                    <span style={{ fontWeight: 800, color: '#e879f9' }}>× {scrapPercentInput}%</span>
+                                </div>
+                                <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '2px 0' }} />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem' }}>
+                                    <span style={{ fontWeight: 800, color: '#fff' }}>Counted Towards Daily Yield:</span>
+                                    <span style={{ fontWeight: 900, color: THEME_CYAN, fontSize: '1.1rem' }}>
+                                        {formatNumber(previewYield)} MSU/d
+                                    </span>
+                                </div>
+                                {diffMSU > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                                        <span>Excluded Scrap Margin:</span>
+                                        <span>-{formatNumber(diffMSU)} MSU/d</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* MODAL ACTIONS */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setScrapPercentInput(75)}
+                                    style={{
+                                        padding: '10px 18px',
+                                        borderRadius: '10px',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        background: 'rgba(255, 255, 255, 0.04)',
+                                        color: 'rgba(255, 255, 255, 0.7)',
+                                        fontWeight: 700,
+                                        fontSize: '0.82rem',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    Reset to Default (75%)
+                                </button>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsScrapModalOpen(false)}
+                                        style={{
+                                            padding: '10px 18px',
+                                            borderRadius: '10px',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            background: 'rgba(255, 255, 255, 0.04)',
+                                            color: '#fff',
+                                            fontWeight: 700,
+                                            fontSize: '0.82rem',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setYieldConfig({ scrapMerchantRatio: scrapPercentInput / 100 });
+                                            setIsScrapModalOpen(false);
+                                        }}
+                                        style={{
+                                            padding: '10px 24px',
+                                            borderRadius: '10px',
+                                            border: '1px solid #bd00ff',
+                                            background: 'linear-gradient(135deg, rgba(189, 0, 255, 0.4) 0%, rgba(189, 0, 255, 0.2) 100%)',
+                                            color: '#fff',
+                                            fontWeight: 800,
+                                            fontSize: '0.85rem',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 0 20px rgba(189, 0, 255, 0.35)',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                    >
+                                        Save & Apply
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
             </Modal>
 
         </div>

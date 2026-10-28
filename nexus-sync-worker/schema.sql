@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS universe_events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_ally_time ON universe_events(alliance_id, universe_id, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_player ON universe_events(alliance_id, universe_id, player_id);
+CREATE INDEX IF NOT EXISTS idx_events_detected_at ON universe_events(detected_at);
+CREATE INDEX IF NOT EXISTS idx_events_uni_time_ally ON universe_events(universe_id, detected_at DESC, alliance_id);
 
 -- 3. 24/7 ACTIVITY PROFILES & SLEEP CYCLE MATRIX (Alliance-Isolated Intel)
 CREATE TABLE IF NOT EXISTS player_activity_heatmap (
@@ -206,6 +208,7 @@ CREATE TABLE IF NOT EXISTS player_activity_observations (
     scanned_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_obs_player ON player_activity_observations(alliance_id, universe_id, player_id, inferred_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_obs_scanned_at ON player_activity_observations(scanned_at);
 
 -- 4. SHARED ESPIONAGE DATABASE & ATOMIC RAID LOCKS
 CREATE TABLE IF NOT EXISTS spy_reports (
@@ -232,6 +235,7 @@ CREATE TABLE IF NOT EXISTS spy_reports (
 CREATE INDEX IF NOT EXISTS idx_spy_alliance_coords ON spy_reports(alliance_id, coords);
 CREATE INDEX IF NOT EXISTS idx_spy_alliance_uni_coords ON spy_reports(alliance_id, universe_id, coords, is_moon);
 CREATE INDEX IF NOT EXISTS idx_spy_target ON spy_reports(alliance_id, target_player_id);
+CREATE INDEX IF NOT EXISTS idx_spy_report_ts ON spy_reports(report_timestamp);
 
 -- ATOMIC RAID LOCKS (Prevents Friendly Fire & Duplicate Hits)
 CREATE TABLE IF NOT EXISTS raid_locks (
@@ -333,86 +337,11 @@ CREATE TABLE IF NOT EXISTS personal_vault_credentials (
     PRIMARY KEY (universe_id, player_id)
 );
 
--- 9. PERSONAL VAULT — EXPEDITIONS ARCHIVE
-CREATE TABLE IF NOT EXISTS personal_vault_expeditions (
-    universe_id TEXT NOT NULL,
-    player_id TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    coords TEXT NOT NULL,
-    depletion INTEGER DEFAULT 0,
-    size INTEGER DEFAULT 0,
-    result TEXT NOT NULL,
-    result_details_json TEXT,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (universe_id, player_id, message_id)
-);
-CREATE INDEX IF NOT EXISTS idx_vault_exp_time ON personal_vault_expeditions(universe_id, player_id, timestamp);
+-- 9. PERSONAL VAULT ARCHIVES (EXPEDITIONS, COMBATS, HARVESTS, DISCOVERIES)
+-- MIGRATED TO CLOUDFLARE R2 (`nexus-personal-vault`).
+-- D1 tables and indexes dropped to free ~40MB storage and eliminate unindexed scans.
 
--- 10. PERSONAL VAULT — COMBAT REPORTS ARCHIVE
-CREATE TABLE IF NOT EXISTS personal_vault_combats (
-    universe_id TEXT NOT NULL,
-    player_id TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    coords TEXT NOT NULL,
-    winner TEXT NOT NULL,
-    loot_metal INTEGER DEFAULT 0,
-    loot_crystal INTEGER DEFAULT 0,
-    loot_deut INTEGER DEFAULT 0,
-    loot_food INTEGER DEFAULT 0,
-    debris_metal INTEGER DEFAULT 0,
-    debris_crystal INTEGER DEFAULT 0,
-    debris_deut INTEGER DEFAULT 0,
-    attacker_losses INTEGER DEFAULT 0,
-    defender_losses INTEGER DEFAULT 0,
-    attacker_name TEXT,
-    defender_name TEXT,
-    my_losses INTEGER DEFAULT 0,
-    is_acs INTEGER DEFAULT 0,
-    is_expedition INTEGER DEFAULT 0,
-    expedition_attack_type TEXT,
-    summary_json TEXT,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (universe_id, player_id, message_id)
-);
-CREATE INDEX IF NOT EXISTS idx_vault_com_time ON personal_vault_combats(universe_id, player_id, timestamp);
-
--- 11. PERSONAL VAULT — DEBRIS HARVESTS ARCHIVE
-CREATE TABLE IF NOT EXISTS personal_vault_harvests (
-    universe_id TEXT NOT NULL,
-    player_id TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    harvest_key TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    coords TEXT NOT NULL,
-    metal INTEGER DEFAULT 0,
-    crystal INTEGER DEFAULT 0,
-    deut INTEGER DEFAULT 0,
-    recycler_amount INTEGER DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (universe_id, player_id, message_id)
-);
-CREATE INDEX IF NOT EXISTS idx_vault_harv_time ON personal_vault_harvests(universe_id, player_id, timestamp);
-
--- 12. PERSONAL VAULT — LIFEFORM DISCOVERIES ARCHIVE
-CREATE TABLE IF NOT EXISTS personal_vault_discoveries (
-    universe_id TEXT NOT NULL,
-    player_id TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    coords TEXT NOT NULL,
-    lifeform INTEGER,
-    discovery_type TEXT NOT NULL,
-    lifeform_exp INTEGER DEFAULT 0,
-    artifacts_found INTEGER DEFAULT 0,
-    artifact_size TEXT,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (universe_id, player_id, message_id)
-);
-CREATE INDEX IF NOT EXISTS idx_vault_disc_time ON personal_vault_discoveries(universe_id, player_id, timestamp);
-
--- 13. PERSONAL VAULT — COSTS PLANNER QUEUES (TODO PROJECTS)
+-- 10. PERSONAL VAULT — COSTS PLANNER QUEUES (TODO PROJECTS)
 CREATE TABLE IF NOT EXISTS personal_vault_planner (
     universe_id TEXT NOT NULL,
     player_id TEXT NOT NULL,
@@ -463,6 +392,75 @@ CREATE TABLE IF NOT EXISTS personal_vault_radar (
     PRIMARY KEY (universe_id, player_id, coords)
 );
 CREATE INDEX IF NOT EXISTS idx_vault_radar_coords ON personal_vault_radar(universe_id, player_id, coords);
+
+-- 15. ALLIANCE TOP/FLOP — MULTI-PRESET CONFIGURATIONS
+CREATE TABLE IF NOT EXISTS alliance_topflop_configs (
+    config_id TEXT PRIMARY KEY,                 -- e.g. "s267-en_500078_100642" or UUID
+    universe_id TEXT NOT NULL,                  -- e.g. "s267-en"
+    ogame_alliance_id TEXT NOT NULL,            -- e.g. "500078"
+    alliance_tag TEXT NOT NULL,                 -- e.g. "LoW"
+    config_name TEXT NOT NULL,                  -- Display title (e.g. "Main Alliance Daily")
+    player_id TEXT NOT NULL,                    -- OGame player ID who configured it
+    player_name TEXT NOT NULL,                  -- In-game player name
+    scheduled_utc_hour INTEGER NOT NULL DEFAULT 0, -- 0 to 23 UTC
+    theme TEXT NOT NULL DEFAULT 'tactical',     -- 'tactical', 'cyan', 'gold', 'stealth'
+    custom_logo_url TEXT,                       -- Custom mascot image URL
+    custom_title TEXT DEFAULT 'Top / Flop of the day',
+    category INTEGER NOT NULL DEFAULT 0,        -- 0: Total Points, 1: Economy, 3: Fleet
+    is_default INTEGER NOT NULL DEFAULT 0,      -- 1 if default for alliance
+    last_generated_at INTEGER,                  -- Timestamp ms
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_topflop_sched ON alliance_topflop_configs(scheduled_utc_hour);
+CREATE INDEX IF NOT EXISTS idx_topflop_ally ON alliance_topflop_configs(universe_id, ogame_alliance_id);
+CREATE INDEX IF NOT EXISTS idx_topflop_ally_player ON alliance_topflop_configs(universe_id, ogame_alliance_id, player_id);
+
+-- 16. ALLIANCE TOP/FLOP — 24-HOUR ROLLING HOURLY RING BUFFER
+CREATE TABLE IF NOT EXISTS alliance_hourly_snapshots (
+    universe_id TEXT NOT NULL,                  -- e.g. "s267-en"
+    ogame_alliance_id TEXT NOT NULL,            -- e.g. "500078"
+    hour_utc INTEGER NOT NULL,                  -- 0 to 23
+    recorded_at INTEGER NOT NULL,               -- Timestamp ms
+    member_count INTEGER NOT NULL,
+    scores_json TEXT NOT NULL,                  -- JSON: {"100642": 833303521, "100714": 534999555, ...}
+    prev_scores_json TEXT,                      -- JSON: Previous 24h cycle snapshot for exact 24h delta comparison
+    PRIMARY KEY (universe_id, ogame_alliance_id, hour_utc)
+);
+
+-- 17. ALLIANCE TOP/FLOP — FROZEN DAILY 24-HOUR REPORTS
+CREATE TABLE IF NOT EXISTS alliance_daily_topflop (
+    report_id TEXT PRIMARY KEY,                 -- e.g. "s267-en_500078_0_0" (universe_ally_category_scheduledHour)
+    universe_id TEXT NOT NULL,                  -- e.g. "s267-en"
+    ogame_alliance_id TEXT NOT NULL,            -- e.g. "500078"
+    category INTEGER NOT NULL DEFAULT 0,        -- 0: Total Points, 1: Economy, etc.
+    scheduled_utc_hour INTEGER NOT NULL DEFAULT 0, -- Cut-off hour (0 to 23)
+    score_date TEXT NOT NULL,                   -- "YYYY-MM-DD"
+    date_display TEXT NOT NULL,                 -- e.g. "28-10-2026 • 00:00 UTC"
+    server_name TEXT,                           -- e.g. "Lyra"
+    alliance_name TEXT,                         -- e.g. "League of Wolves"
+    alliance_tag TEXT,                          -- e.g. "LoW"
+    custom_logo_url TEXT,                       -- Alliance logo
+    top_json TEXT NOT NULL,                     -- JSON array of TopFlopPlayerResult
+    flop_json TEXT NOT NULL,                    -- JSON array of TopFlopPlayerResult
+    neutral_json TEXT NOT NULL,                 -- JSON array of TopFlopPlayerResult
+    generated_at INTEGER NOT NULL               -- Timestamp ms
+);
+CREATE INDEX IF NOT EXISTS idx_daily_topflop_lookup ON alliance_daily_topflop(universe_id, ogame_alliance_id, category, scheduled_utc_hour);
+
+-- 18. ALLIANCE TOP/FLOP — GENERATION HISTORY & DAILY DELTA ARCHIVE
+CREATE TABLE IF NOT EXISTS alliance_topflop_history (
+    history_id TEXT PRIMARY KEY,                -- e.g. "s267-en_500078_100642_2026-10-27"
+    universe_id TEXT NOT NULL,
+    ogame_alliance_id TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    score_date TEXT NOT NULL,                   -- "YYYY-MM-DD"
+    r2_image_path TEXT NOT NULL,                -- e.g. "topflop/s267-en/500078/100642/topflop.png"
+    top_json TEXT NOT NULL,                     -- JSON array of top gained
+    flop_json TEXT NOT NULL,                    -- JSON array of flop lost
+    generated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_topflop_history_date ON alliance_topflop_history(universe_id, ogame_alliance_id, score_date);
+
 
 
 

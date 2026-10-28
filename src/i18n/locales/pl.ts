@@ -32,7 +32,7 @@ export const pl: LocaleTranslations = {
         "empire": "Imperium",
         "fleet": "Ruchy flot",
         "expeditions": "Ekspedycje",
-        "combat": "Symulator walki",
+        "combat": "Walki",
         "scout": "Szpiegowanie nieaktywnych",
         "debris": "Pola zniszczeń",
         "phalanx": "Zasięg falangi",
@@ -258,7 +258,7 @@ export const pl: LocaleTranslations = {
     },
     "changelog": {
         "title": "Aktualizacja systemu",
-        "versionBadge": "v1.2.8",
+        "versionBadge": "v1.2.9",
         "telemetryReport": "RAPORT TELEMETRII PANELU DOWODZENIA OGAME NEXUS",
         "dataPreservedNotice": "Twoje konfiguracje planet, zebrana telemetria i historia zostały bezpiecznie zachowane podczas tej aktualizacji.",
         "acknowledge": "Zrozumiałem",

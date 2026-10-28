@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, getTacticalNotesForUniverse, saveTacticalNoteToDB, deleteTacticalNoteFromDB, TacticalNote } from "../db";
 import { parseOverview, parsePlayerDataXml, parseSupplies, parseResearches, parseLifeformResearch, parseLifeformBuildings, parseLifeformBonuses, parseServerDataXml } from "./scrapers";
 import { LIFEFORM_BUILDING_DATA, SHIP_DATA } from "../db/staticData";
 import { LIFEFORM_TECH_DATA, getLfTech, isLifeformBuilding } from "../db/lifeformTechData";
@@ -2341,6 +2341,71 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                 sendResponse({ success: true, deletedCount: keysToDelete.size });
             } catch (err) {
                 console.error("OGame Nexus: Error in DELETE_SPIED_PLANET", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "GET_ALL_TACTICAL_NOTES") {
+        const { universe } = message.data || {};
+        (async () => {
+            try {
+                const notes = await getTacticalNotesForUniverse(universe || '');
+                sendResponse({ success: true, notes });
+            } catch (err) {
+                console.error("OGame Nexus: Error in GET_ALL_TACTICAL_NOTES", err);
+                sendResponse({ success: false, notes: [], error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "SAVE_TACTICAL_NOTE") {
+        const { note } = message.data || {};
+        (async () => {
+            try {
+                if (!note || !note.noteKey) {
+                    throw new Error("Invalid note payload");
+                }
+                const savedKey = await saveTacticalNoteToDB(note);
+                if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+                    chrome.tabs.query({}, (tabs) => {
+                        tabs.forEach(tab => {
+                            if (tab.id) {
+                                chrome.tabs.sendMessage(tab.id, { type: "TACTICAL_NOTE_SAVED", note }).catch(() => {});
+                            }
+                        });
+                    });
+                }
+                sendResponse({ success: true, noteKey: savedKey });
+            } catch (err) {
+                console.error("OGame Nexus: Error in SAVE_TACTICAL_NOTE", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "DELETE_TACTICAL_NOTE") {
+        const { noteKey } = message.data || {};
+        (async () => {
+            try {
+                if (noteKey) {
+                    await deleteTacticalNoteFromDB(noteKey);
+                    if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+                        chrome.tabs.query({}, (tabs) => {
+                            tabs.forEach(tab => {
+                                if (tab.id) {
+                                    chrome.tabs.sendMessage(tab.id, { type: "TACTICAL_NOTE_DELETED", noteKey }).catch(() => {});
+                                }
+                            });
+                        });
+                    }
+                }
+                sendResponse({ success: true });
+            } catch (err) {
+                console.error("OGame Nexus: Error in DELETE_TACTICAL_NOTE", err);
                 sendResponse({ success: false, error: String(err) });
             }
         })();

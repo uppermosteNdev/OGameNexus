@@ -32,7 +32,7 @@ export const de: LocaleTranslations = {
         empire: "Imperium",
         fleet: "Flottenbewegungen",
         expeditions: "Expeditionen",
-        combat: "Kampfsimulator",
+        combat: "Kämpfe",
         scout: "Inaktiven-Scout",
         debris: "Trümmerfelder",
         phalanx: "Phalanx-Reichweite",
@@ -258,7 +258,7 @@ export const de: LocaleTranslations = {
     },
     changelog: {
         title: "System Aktualisiert",
-        versionBadge: "v1.2.8",
+        versionBadge: "v1.2.9",
         telemetryReport: "OGAME NEXUS KOMMANDODECK TELEMETRIE-BERICHT",
         dataPreservedNotice: "Deine Planeteneinstellungen, erfassten Telemetriedaten und Überwachungsverläufe wurden bei diesem Update sicher beibehalten.",
         acknowledge: "Bestätigen",
