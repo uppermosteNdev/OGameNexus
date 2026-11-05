@@ -164,12 +164,14 @@ window.addEventListener('ogame-nexus-trigger-tooltips', () => {
     try {
         if (overlaysTimeout) clearTimeout(overlaysTimeout);
         overlaysTimeout = setTimeout(() => {
-            // @ts-ignore
-            if (typeof initOverlays === 'function') {
-                // @ts-ignore
-                initOverlays();
+            const win = window as any;
+            if (typeof win.initOverlays === 'function') {
+                try { win.initOverlays(); } catch {}
             }
-        }, 50);
+            if (typeof win.initTooltips === 'function') {
+                try { win.initTooltips(); } catch {}
+            }
+        }, 40);
     } catch (e) {
         console.warn('OGame Nexus: Error triggering tooltips in page context', e);
     }

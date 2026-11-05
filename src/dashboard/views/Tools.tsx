@@ -71,8 +71,7 @@ const Tools: React.FC = () => {
             name: 'ACS Splitter',
             description: 'Split combat results across multiple alliance members',
             icon: <ThemeIcon name="pie-chart" size={22} />,
-            component: <AcsSplitter />,
-            isBeta: true
+            component: <AcsSplitter />
         },
         {
             id: 'alliance-topflop',
@@ -211,7 +210,7 @@ const Tools: React.FC = () => {
                                                 textTransform: 'uppercase',
                                                 lineHeight: 1
                                             }}>
-                                                Testing
+                                                IN TESTING
                                             </span>
                                         )}
                                     </div>
@@ -264,7 +263,7 @@ const Tools: React.FC = () => {
                                                     textTransform: 'uppercase',
                                                     lineHeight: 1
                                                 }}>
-                                                    Testing
+                                                    IN TESTING
                                                 </span>
                                             )}
                                         </h2>

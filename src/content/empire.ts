@@ -329,6 +329,7 @@ function mapTechToPlanet(planet: Partial<Planet>, techId: number, level: number)
         case 41: planet.lunarBase = level; break;
         case 42: planet.sensorPhalanx = level; break;
         case 43: planet.jumpGate = level; break;
+        case 45: planet.iaScanner = level; break;
     }
 }
 
@@ -440,13 +441,28 @@ export function parseExternalDataExportJson(data: any): {
 
             // Buildings
             if (rawP.buildings && typeof rawP.buildings === 'object') {
+                const ccBuildings: { id: number; level: number }[] = [];
+                const facilitiesList: { id: number; level: number }[] = [];
+                const FACILITY_IDS = [14, 15, 21, 31, 33, 34, 36, 41, 42, 43, 44, 45];
                 Object.entries(rawP.buildings).forEach(([techIdStr, lvl]) => {
                     const techId = parseInt(techIdStr);
                     const level = Number(lvl);
                     if (!isNaN(techId)) {
                         mapTechToPlanet(planet, techId, level);
+                        if (techId >= 4001 && techId <= 4007) {
+                            ccBuildings.push({ id: techId, level });
+                        }
+                        if (FACILITY_IDS.includes(techId) && level > 0) {
+                            facilitiesList.push({ id: techId, level });
+                        }
                     }
                 });
+                if (ccBuildings.length > 0) {
+                    planet.controlCenterBuildings = ccBuildings;
+                }
+                if (facilitiesList.length > 0) {
+                    planet.facilities = facilitiesList;
+                }
 
                 // Calculate storage capacities from storage building levels
                 const isTraderAlliance = Number(data.allianceClassId) === 2 || Number(data.allianceClassId) === 1;

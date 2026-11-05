@@ -83,6 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onSelect }) => {
     const menuItems = [
         { id: 'overview', label: t('nav.overview', 'Empire 360'), iconName: 'control-panel' },
         { id: 'expeditions', label: t('nav.expeditions', 'Expeditions'), iconName: 'navigation' },
+        { id: 'anomalies', label: t('nav.anomalies', 'Anomalies'), iconName: 'sparkling' },
         { id: 'lifeforms', label: t('common.lifeforms', 'Lifeforms'), iconName: 'leaf' },
         { id: 'combat', label: t('nav.combat', 'Combats'), iconName: 'sword' },
         { id: 'raidRadar', label: t('nav.raidRadar', 'Raid Radar'), iconName: 'radar' },

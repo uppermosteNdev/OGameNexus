@@ -180,10 +180,11 @@ export async function trackEspionageReports(playerId: string) {
     updateScrapedSpyCount(espionageData.length);
 
     const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+    const effectivePlayerId = playerId || document.querySelector('meta[name="ogame-player-id"]')?.getAttribute("content") || "";
 
     chrome.runtime.sendMessage({
         type: "TRACK_ESPIONAGE",
-        data: { espionageReports: espionageData, userPlayerId: playerId, universe }
+        data: { espionageReports: espionageData, userPlayerId: effectivePlayerId, universe }
     }, (response) => {
         if (response?.success) {
             response.data.forEach((report: any) => {
@@ -300,10 +301,11 @@ export async function trackRawEspionageReports(playerId: string, htmls: string[]
     unprocessedReports.forEach(report => processedRawMessageIds.add(report.messageId));
 
     const universe = document.querySelector('meta[name="ogame-universe"]')?.getAttribute("content") || "unknown";
+    const effectivePlayerId = playerId || document.querySelector('meta[name="ogame-player-id"]')?.getAttribute("content") || "";
 
     chrome.runtime.sendMessage({
         type: "TRACK_ESPIONAGE",
-        data: { espionageReports: unprocessedReports, userPlayerId: playerId, universe }
+        data: { espionageReports: unprocessedReports, userPlayerId: effectivePlayerId, universe }
     }, (response) => {
         if (response?.success) {
             response.data.forEach((report: any) => {

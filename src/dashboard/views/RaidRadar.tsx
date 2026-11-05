@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { ThemeIcon } from '../components/ThemeIcon';
-import { isSameUniverse } from '../../utils/universe';
+import { cleanUniverseId, isSameUniverse } from '../../utils/universe';
 
 const THEME_CYAN = '#0062ff';
 const RESOURCE_COLORS = {
@@ -43,13 +43,24 @@ const parseCoords = (coordsStr: string) => {
 const RaidRadar: React.FC = () => {
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const spiedPlanets = useLiveQuery<SpiedPlanet[]>(async () => {
-        if (!activeAccount) return [];
+        if (!activeAccount?.playerId) return [];
+        const cleanUni = cleanUniverseId(activeAccount.universe || '');
         const all = await db.spiedPlanets.toArray();
-        return all.filter(p =>
-            isSameUniverse(p.universe, activeAccount.universe) &&
-            (!p.userPlayerId || p.userPlayerId === activeAccount.playerId)
+        const matching = all.filter(p =>
+            isSameUniverse(p.universe, cleanUni) &&
+            p.userPlayerId === activeAccount.playerId
         );
-    }, [activeAccount]) || [];
+        if (matching.length > 0) return matching;
+
+        // Fallback ONLY for single-account universes (never leak if multiple accounts exist on this universe)
+        const allAccounts = await db.accounts.toArray();
+        const accountsOnUni = allAccounts.filter(a => isSameUniverse(a.universe, cleanUni));
+        if (accountsOnUni.length <= 1) {
+            return all.filter(p => isSameUniverse(p.universe, cleanUni) && (!p.userPlayerId || p.userPlayerId === activeAccount.playerId));
+        }
+
+        return matching;
+    }, [activeAccount?.playerId, activeAccount?.universe]) || [];
     const ownPlanets = useLiveQuery<Planet[]>(() => {
         if (!activeAccount) return [];
         return db.planets.where('playerId').equals(activeAccount.playerId).filter(p => p.type === 'planet').toArray();

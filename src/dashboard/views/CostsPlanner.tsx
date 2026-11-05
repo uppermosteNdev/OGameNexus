@@ -476,6 +476,21 @@ const CostsPlanner: React.FC = () => {
         [strPid, activeUniverse]
     ) || [];
 
+    const anomalyMissions = useLiveQuery(
+        async () => {
+            if (!strPid) return await db.anomalyMissions.toArray();
+            const numPid = Number(strPid);
+            const pidVariants: any[] = [strPid];
+            if (!isNaN(numPid) && String(numPid) === strPid) pidVariants.push(numPid);
+            const userAnomalies = await db.anomalyMissions.where('playerId').anyOf(pidVariants).toArray();
+            const filtered = userAnomalies.length > 0
+                ? userAnomalies
+                : (await db.anomalyMissions.toArray()).filter(m => String(m.playerId) === strPid);
+            return filtered.filter(m => isSameUniverse(m.universe, activeUniverse));
+        },
+        [strPid, activeUniverse]
+    ) || [];
+
     // Cached stable references so asynchronous query re-evaluations never momentarily flash empty data
     const stablePlanetsRef = useRef<any[]>([]);
     if (planets.length > 0) stablePlanetsRef.current = planets;
@@ -484,6 +499,10 @@ const CostsPlanner: React.FC = () => {
     const stableExpeditionsRef = useRef<any[]>([]);
     if (expeditions.length > 0) stableExpeditionsRef.current = expeditions;
     const effectiveExpeditions = expeditions.length > 0 ? expeditions : stableExpeditionsRef.current;
+
+    const stableAnomalyMissionsRef = useRef<any[]>([]);
+    if (anomalyMissions.length > 0) stableAnomalyMissionsRef.current = anomalyMissions;
+    const effectiveAnomalyMissions = anomalyMissions.length > 0 ? anomalyMissions : stableAnomalyMissionsRef.current;
 
     const stableCombatReportsRef = useRef<any[]>([]);
     if (combatReports.length > 0) stableCombatReportsRef.current = combatReports;
@@ -1674,10 +1693,11 @@ const CostsPlanner: React.FC = () => {
             expeditions: effectiveExpeditions,
             combatReports: effectiveCombatReports,
             debrisHarvests: effectiveDebrisHarvests,
+            anomalyMissions: effectiveAnomalyMissions,
             rates,
             yieldConfig
         });
-    }, [activeAccount, effectivePlanets, effectiveExpeditions, effectiveCombatReports, effectiveDebrisHarvests, rates, yieldConfig]);
+    }, [activeAccount, effectivePlanets, effectiveExpeditions, effectiveCombatReports, effectiveDebrisHarvests, effectiveAnomalyMissions, rates, yieldConfig]);
 
     const totalEmpireDailyYieldMSU = yieldBreakdown.totalDailyYieldMSU;
 

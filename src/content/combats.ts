@@ -34,6 +34,7 @@ function parseCombatElement(msg: Element): any | null {
     const coordsRaw = msg.getAttribute('data-raw-coords');
     const resultRaw = msg.getAttribute('data-raw-result');
     const fleetsRaw = msg.getAttribute('data-raw-fleets');
+    const combatRoundsRaw = msg.getAttribute('data-raw-combatrounds');
 
     if (timestamp && coordsRaw && resultRaw) {
         try {
@@ -76,6 +77,13 @@ function parseCombatElement(msg: Element): any | null {
                 parsedFleets = JSON.parse(fleetsRaw || '[]');
             } catch (e) {
                 parsedFleets = [];
+            }
+
+            let parsedCombatRounds: any[] = [];
+            try {
+                parsedCombatRounds = JSON.parse(combatRoundsRaw || '[]');
+            } catch (e) {
+                parsedCombatRounds = [];
             }
 
             // Check for ACS
@@ -145,6 +153,41 @@ function parseCombatElement(msg: Element): any | null {
                 }
             }
 
+            // Identify Anomaly Mission Combat (Project Orion)
+            let isAnomaly = false;
+            let anomalyId: number | undefined;
+            let anomalyName: string | undefined;
+
+            const defenderSpaceObjectRaw = msg.getAttribute('data-raw-defenderspaceobject');
+            if (defenderSpaceObjectRaw) {
+                try {
+                    const defenderSpaceObject = JSON.parse(defenderSpaceObjectRaw);
+                    if (defenderSpaceObject && (defenderSpaceObject.type === 'anomaly' || defenderSpaceObject.id)) {
+                        if (defenderSpaceObject.type === 'anomaly') {
+                            isAnomaly = true;
+                            anomalyId = defenderSpaceObject.id;
+                        }
+                    }
+                } catch (e) {
+                    // Ignore JSON parse error on defenderSpaceObject
+                }
+            }
+
+            if (!isAnomaly) {
+                const anomalyIcon = parentMsg?.querySelector('.msgTitle figure.planetIcon.anomaly, .msg_title figure.planetIcon.anomaly');
+                if (anomalyIcon) {
+                    isAnomaly = true;
+                }
+            }
+
+            if (isAnomaly) {
+                const titleText = parentMsg?.querySelector('.msgTitle, .msg_title')?.textContent || '';
+                const match = titleText.match(/Combat Report\s+([^[<]+)/i);
+                if (match) {
+                    anomalyName = match[1].trim();
+                }
+            }
+
             return {
                 messageId,
                 timestamp: parseInt(timestamp),
@@ -160,8 +203,12 @@ function parseCombatElement(msg: Element): any | null {
                 moonChance: result.moonCreation?.chance || 0,
                 isAcs,
                 isExpedition,
+                isAnomaly,
+                anomalyId,
+                anomalyName,
                 tracked: false,
                 rawFleets: parsedFleets,
+                rawCombatRounds: parsedCombatRounds,
                 rawResult: result
             };
         } catch (e) {
@@ -256,6 +303,16 @@ function parseCombatFromHTMLString(html: string): any | null {
                 }
             }
 
+            const combatRoundsMatch = html.match(/data-raw-combatrounds=['"](\[.*?\])['"]/i);
+            let parsedCombatRounds: any[] = [];
+            if (combatRoundsMatch) {
+                try {
+                    parsedCombatRounds = JSON.parse(combatRoundsMatch[1].replace(/&quot;/g, '"'));
+                } catch (e) {
+                    parsedCombatRounds = [];
+                }
+            }
+
             const isExpedition = coords.trim().endsWith(':16');
             const attackers = Array.isArray(parsedFleets) ? parsedFleets.filter((p: any) => p.side === 'attacker' || p.isAttacker) : [];
             const defenders = Array.isArray(parsedFleets) ? parsedFleets.filter((p: any) => p.side === 'defender' || p.isDefender) : [];
@@ -265,6 +322,37 @@ function parseCombatFromHTMLString(html: string): any | null {
 
             if (isExpedition && defenderName === 'Unknown') {
                 defenderName = 'Expedition Hostile';
+            }
+
+            // Identify Anomaly Mission Combat (Project Orion)
+            let isAnomaly = false;
+            let anomalyId: number | undefined;
+            let anomalyName: string | undefined;
+
+            const defenderSpaceObjectMatch = html.match(/data-raw-defenderspaceobject=['"](\{.*?\})['"]/i);
+            if (defenderSpaceObjectMatch) {
+                try {
+                    const defenderSpaceObject = JSON.parse(defenderSpaceObjectMatch[1].replace(/&quot;/g, '"'));
+                    if (defenderSpaceObject && (defenderSpaceObject.type === 'anomaly' || defenderSpaceObject.id)) {
+                        if (defenderSpaceObject.type === 'anomaly') {
+                            isAnomaly = true;
+                            anomalyId = defenderSpaceObject.id;
+                        }
+                    }
+                } catch (e) {
+                    // Ignore JSON parse error
+                }
+            }
+
+            if (!isAnomaly && (html.includes('figure class="planetIcon anomaly') || html.includes('figure class=\'planetIcon anomaly'))) {
+                isAnomaly = true;
+            }
+
+            if (isAnomaly) {
+                const titleMatch = html.match(/Combat Report\s+([^[<]+)/i);
+                if (titleMatch) {
+                    anomalyName = titleMatch[1].trim();
+                }
             }
 
             return {
@@ -280,6 +368,11 @@ function parseCombatFromHTMLString(html: string): any | null {
                 defenderName,
                 honor: result.honor?.attacker || 0,
                 moonChance: result.moonCreation?.chance || 0,
+                isAnomaly,
+                anomalyId,
+                anomalyName,
+                rawFleets: parsedFleets,
+                rawCombatRounds: parsedCombatRounds,
                 rawResult: result
             };
         } catch (e) {
@@ -427,6 +520,34 @@ export function updateCombatVisuals(msgElement: HTMLElement, combat: any, remove
 
     if (msgElement.hasAttribute('data-og-nexus-visuals-applied')) return;
     msgElement.setAttribute('data-og-nexus-visuals-applied', 'true');
+
+    // 0.5 Add Anomaly Mission badge in header if combat belongs to Project Orion Anomaly
+    if (combat.isAnomaly) {
+        const titleEl = msgElement.querySelector('.msgTitle, .msg_title');
+        if (titleEl && !titleEl.querySelector('.nexus-anomaly-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'nexus-anomaly-badge tooltip ogl_ready';
+            badge.setAttribute('data-tooltip-title', combat.anomalyId ? `Orion Anomaly Mission (ID: ${combat.anomalyId})` : 'Orion Anomaly Mission');
+            badge.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 1px 6px;
+                margin-left: 6px;
+                background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.4) 100%);
+                border: 1px solid rgba(245, 158, 11, 0.6);
+                border-radius: 3px;
+                color: #fbbf24;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.05em;
+                vertical-align: middle;
+                text-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+            `;
+            badge.textContent = combat.anomalyName ? `ANOMALY: ${combat.anomalyName}` : 'ORION ANOMALY';
+            titleEl.appendChild(badge);
+        }
+    }
 
     // 1. Add tracked icon in footer
     const footerActions = msgElement.querySelector('message-footer-actions') || msgElement.querySelector('.msg_actions');

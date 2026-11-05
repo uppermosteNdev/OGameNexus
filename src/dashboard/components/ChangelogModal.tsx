@@ -29,34 +29,34 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
 
     const changes = [
         {
-            icon: <NotebookPen size={22} color="#a855f7" />,
-            title: t('changelog.features.notesFeatureTitle', "Note Taking for Coordinates and Players"),
-            desc: t('changelog.features.notesFeatureDesc', "Click any slot number in Galaxy View to record and manage private notes with category tagging, timeline history, and on-demand Personal Vault sync.")
+            icon: <Orbit size={22} color="#00f2ff" />,
+            title: t('changelog.features.orionSuiteTitle', "Project Orion: Deep-Space Anomalies"),
+            desc: t('changelog.features.orionSuiteDesc', "Comprehensive command module for Project Orion: track deep-space anomalies, rank planetary scanners, calculate mission profitability, and plan Lithium building amortization.")
         },
         {
-            icon: <TrendingUp size={22} color="#00f2ff" />,
-            title: t('changelog.features.topFlopTitle', "Universe Top / Flop of the Day"),
-            desc: t('changelog.features.topFlopDesc', "Automated daily 24-hour point gain & loss rankings with customizable tactical HUD overlays, themes, and Discord shareable image generation.")
+            icon: <Ship size={22} color="#f43f5e" />,
+            title: t('changelog.features.waveCombatSimTitle', "Multi-Wave Combat Simulator"),
+            desc: t('changelog.features.waveCombatSimDesc', "Simulate hostile wave encounters with step-by-step ship progression, casualty animations, 0-loss targets, and native General class combat bonus support.")
         },
         {
-            icon: <Activity size={22} color="#38bdf8" />,
-            title: t('changelog.features.playerActivityLinkTitle', "Universe Map to Activity Direct Link"),
-            desc: t('changelog.features.playerActivityLinkDesc', "Jump straight from any player or coordinate on the Overwatch Universe Map directly into that player's comprehensive activity heatmap.")
+            icon: <TrendingUp size={22} color="#10b981" />,
+            title: t('changelog.features.smartLithiumTitle', "Smart Lithium Planning & Yields"),
+            desc: t('changelog.features.smartLithiumDesc', "Planetary scanner now displays smart gather times to unlock mission rewards, backed by dedicated daily Lithium Yield tracking and remaining wave costs.")
         },
         {
-            icon: <SlidersHorizontal size={22} color="#10b981" />,
-            title: t('changelog.features.empireYieldConfigTitle', "Custom Empire Daily Yield"),
-            desc: t('changelog.features.empireYieldConfigDesc', "Customize exactly what counts towards your empire daily yield, with configurable scrap merchant percentages and harvest sources.")
+            icon: <Calculator size={22} color="#fbbf24" />,
+            title: t('changelog.features.rewardValuationTitle', "Dynamic Reward Valuation"),
+            desc: t('changelog.features.rewardValuationDesc', "Accurately calculates average Metal Standard Unit (MSU) returns for random ship discoveries across all anomaly tiers, clearly separating prospective loot from claimed receipts.")
         },
         {
-            icon: <Radio size={22} color="#fbbf24" />,
-            title: t('changelog.features.activityTrackingFixTitle', "Multi-Extension Activity Tracking"),
-            desc: t('changelog.features.activityTrackingFixDesc', "Hardened galaxy activity detection to accurately track player activity times even when running alongside other OGame extensions.")
+            icon: <Eye size={22} color="#a855f7" />,
+            title: t('changelog.features.liveFeedFilterTitle', "Targeted Live Feed Filters"),
+            desc: t('changelog.features.liveFeedFilterDesc', "Filter live events in the Overwatch Universe Feed by player name for focused activity surveillance and alert tracking.")
         },
         {
-            icon: <Eye size={22} color="#ec4899" />,
-            title: t('changelog.features.statusTrackingFixTitle', "Multi-Extension Status Tracking"),
-            desc: t('changelog.features.statusTrackingFixDesc', "Enhanced player status synchronization across galaxy scans, preventing conflicting inactive, vacation, or outlaw tags.")
+            icon: <ShieldCheck size={22} color="#38bdf8" />,
+            title: t('changelog.features.logisticsIsolationTitle', "Logistics & Multi-Account Isolation"),
+            desc: t('changelog.features.logisticsIsolationDesc', "Factored espionage probe cargo capacity into anomaly delivery logistics, and hardened multi-account data separation so radar targets never spill between accounts.")
         }
     ];
 
@@ -160,7 +160,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                     letterSpacing: '1px',
                                     display: 'inline-block'
                                 }}>
-                                    {t('changelog.versionBadge', 'v1.2.9')}
+                                    {t('changelog.versionBadge', 'v1.3.0')}
                                 </span>
                             </div>
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

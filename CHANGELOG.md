@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-11-06
+
+### 🚀 New Features
+
+* **Project Orion Command Suite**
+  * Integrated dedicated command center for OGame's Project Orion deep-space anomalies.
+  * Real-time anomaly mission telemetry, planetary scanner ranking, mission ROI optimization, and Lithium amortization.
+* **Anomaly Wave Combat Simulator**
+  * Multi-wave combat simulation engine built specifically for hostile anomaly encounters.
+  * Step-by-step ship progression across consecutive waves with live casualty calculations, 0-loss targets, and tactical recommendations.
+  * Full support for Player Class research bonuses (e.g., General class +2 Weapons / Shields).
+* **Smart Lithium Planning & Yield Analytics**
+  * Scanner displays clear gather times and required Lithium generation directly on anomaly missions so you know when fuel will be ready.
+  * Dedicated interactive "Lithium Yield" subtab and chart tracking daily fuel expenditure and net yield ratios over time.
+  * Real-time remaining Lithium cost calculations to unlock and claim remaining rewards across active multi-wave encounters.
+* **Dynamic Ship Reward Valuation**
+  * Calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers, accurately projecting total mission returns.
+* **Possible vs. Collected Rewards Distinction**
+  * Clear visual separation in anomaly mission cards and summaries between prospective loot waiting in deep space and already secured receipts.
+* **Overwatch Live Feed Player Name Filters**
+  * Added instant player name search filter to the Overwatch Live Universe Feed for pinpoint activity surveillance and alert tracking.
+
+### 🛡️ Improvements & Bug Fixes
+
+* **Espionage Probe Cargo Logistics**
+  * Factored espionage probe cargo capacity into anomaly delivery transport planning and cargo loadouts.
+* **Multi-Account Universe Isolation**
+  * Hardened target caching and data separation so Raid Radar targets and anomaly missions never overlap or spill between different accounts active on the same universe.
+* **Anomaly Mission Modal Polish**
+  * Streamlined mission modal with authentic game resource icons, simplified wave cost indicators, compact casualty badges, and victory-status card tinting.
+* **Empire Amortization Integration**
+  * Normalized Anomaly facilities within Amortization to match standard empire building entries.
+* **Command Tools Refinement**
+  * Marked Nexus Battlesim as "IN TESTING" for public preview while powering the in-game anomaly simulator; graduated ACS Splitter from beta.
+
+---
+
 ## [1.2.9] - 2026-10-28
 
 ### 🚀 New Features

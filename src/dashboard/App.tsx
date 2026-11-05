@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import StarField from './components/StarField';
 import Overview from './views/Overview';
 import Expeditions from './views/Expeditions';
+import Anomalies from './views/Anomalies';
 import Lifeforms from './views/Lifeforms';
 import Combat from './views/Combat';
 import DebrisFields from './views/DebrisFields';
@@ -159,7 +160,10 @@ const App: React.FC = () => {
 
                 // 3. Query universe ID only
                 if (!target && queryUniverse) {
-                    target = accounts.find(a => isSameUniverse(a.universe, queryUniverse));
+                    const matching = accounts.filter(a => isSameUniverse(a.universe, queryUniverse));
+                    if (matching.length > 0) {
+                        target = matching.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0];
+                    }
                 }
 
                 // 4. Legacy fallback for ?account=<name> (case-insensitive name match)
@@ -269,7 +273,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to get manifest version", e);
         }
-        return "1.2.9";
+        return "1.3.0";
     };
 
     const autoDismissChangelogForNewInstall = (version: string) => {
@@ -390,6 +394,7 @@ const App: React.FC = () => {
                 >
                     {currentView === 'overview' && <Overview onSelect={setCurrentView} />}
                     {currentView === 'expeditions' && <Expeditions />}
+                    {currentView === 'anomalies' && <Anomalies />}
                     {currentView === 'lifeforms' && <Lifeforms />}
                     {currentView === 'combat' && <Combat />}
                     {currentView === 'debris' && <DebrisFields />}

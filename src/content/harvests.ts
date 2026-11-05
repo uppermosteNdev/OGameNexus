@@ -48,13 +48,20 @@ export function scrapeDebrisHarvestMessages() {
                 console.warn('OGame Nexus: Failed to parse debris resources JSON', e);
             }
 
+            const contentText = parentMsg?.querySelector('.msgContent')?.textContent || parentMsg?.textContent || '';
+            const reaperMatch = contentText.match(/Your\s+Reaper\s*\((\d+)\s*ships?\)/i);
+            const isReaperHarvest = !!reaperMatch;
+            const reaperCount = reaperMatch ? parseInt(reaperMatch[1], 10) : 0;
+
             results.push({
                 messageId,
                 timestamp: parseInt(timestamp),
                 coords,
                 recyclerAmount: recyclerAmount ? parseInt(recyclerAmount) : undefined,
                 totalCapacity: totalCapacity ? parseInt(totalCapacity) : undefined,
-                recycledResources
+                recycledResources,
+                isReaperHarvest,
+                reaperCount
             });
 
             // Mark as processed immediately on parent .msg

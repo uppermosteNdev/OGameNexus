@@ -20,10 +20,12 @@ import {
     Loader2,
     ShieldAlert,
     Download,
-    Search
+    Search,
+    ArrowRightLeft,
+    ArrowRight
 } from 'lucide-react';
 import { db } from '../../db';
-import { isSameUniverse } from '../../utils/universe';
+import { isSameUniverse, cleanUniverseId } from '../../utils/universe';
 import { ThemeIcon } from '../components/ThemeIcon';
 import { useTranslation } from '../../i18n';
 
@@ -63,7 +65,7 @@ const DataManagement: React.FC = () => {
             const p = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
             const pIds = p.map(x => x.id);
             const tCount = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).count();
-            const spiedCount = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(x => !x.userPlayerId || x.userPlayerId === activeAccount.playerId).count();
+            const spiedCount = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(x => x.userPlayerId === activeAccount.playerId).count();
             return {
                 planets: p.length,
                 expeditions: await db.expeditions.where('playerId').equals(activeAccount.playerId).count(),
@@ -107,6 +109,12 @@ const DataManagement: React.FC = () => {
     const [nexusImportLog, setNexusImportLog] = useState<string[]>([]);
     const [nexusStats, setNexusStats] = useState({ total: 0, processed: 0, skipped: 0, imported: 0, errors: 0 });
     const [isExporting, setIsExporting] = useState(false);
+    const [isMergerExporting, setIsMergerExporting] = useState(false);
+    const [selectedLocalAccount, setSelectedLocalAccount] = useState<string>('');
+    const allAccounts = useLiveQuery(() => db.accounts.toArray()) || [];
+    const otherAccounts = allAccounts.filter(a => 
+        String(a.playerId) !== String(activeAccount?.playerId) || a.universe !== activeAccount?.universe
+    );
 
     // ----------------------------------------------------
     // Database Healing Migration (Resolves 1970 Date Warp)
@@ -174,7 +182,8 @@ const DataManagement: React.FC = () => {
 
             const pIds = planets.map(p => p.id);
             const todoProjects = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).toArray();
-            const spiedPlanets = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(p => !p.userPlayerId || p.userPlayerId === activeAccount.playerId).toArray();
+            const spiedPlanets = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(p => p.userPlayerId === activeAccount.playerId).toArray();
+            const lifeformSavedSetups = await db.lifeformSavedSetups.where('playerId').equals(activeAccount.playerId).toArray();
 
             // Construct secure backup JSON payload
             const backupPayload = {
@@ -193,7 +202,8 @@ const DataManagement: React.FC = () => {
                     debrisHarvests,
                     combatReports,
                     todoProjects,
-                    spiedPlanets
+                    spiedPlanets,
+                    lifeformSavedSetups
                 }
             };
 
@@ -213,6 +223,101 @@ const DataManagement: React.FC = () => {
             setError("Failed to compile database backup payload.");
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    // ----------------------------------------------------
+    // Universe Merger Dedicated Export Engine
+    // ----------------------------------------------------
+    const handleMergerExport = async () => {
+        if (!activeAccount) return;
+        try {
+            setIsMergerExporting(true);
+            setError(null);
+
+            const account = activeAccount;
+            const expeditions = await db.expeditions.where('playerId').equals(activeAccount.playerId).toArray();
+            const lifeformDiscoveries = await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).toArray();
+            const debrisHarvests = (await db.debrisHarvests.where('playerId').anyOf([String(activeAccount.playerId), Number(activeAccount.playerId) as any]).toArray()).filter(d => isSameUniverse(d.universe, activeAccount.universe));
+            const combatReports = await db.combatReports.where('playerId').equals(activeAccount.playerId).toArray();
+            const lifeformSavedSetups = await db.lifeformSavedSetups.where('playerId').equals(activeAccount.playerId).toArray();
+
+            const backupPayload = {
+                type: 'ogame-nexus-backup',
+                isMergerBackup: true,
+                version: 1,
+                exportedAt: Date.now(),
+                playerId: activeAccount.playerId,
+                universe: activeAccount.universe,
+                universeName: activeAccount.universeName,
+                playerName: activeAccount.playerName,
+                data: {
+                    account,
+                    expeditions,
+                    lifeformDiscoveries,
+                    debrisHarvests,
+                    combatReports,
+                    lifeformSavedSetups
+                }
+            };
+
+            const jsonStr = JSON.stringify(backupPayload, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ogame-nexus-merger-backup_${activeAccount.universe}_${activeAccount.playerName.replace(/\s+/g, '_')}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err: any) {
+            console.error("Merger backup export failed", err);
+            setError("Failed to compile merger backup payload.");
+        } finally {
+            setIsMergerExporting(false);
+        }
+    };
+
+    // ----------------------------------------------------
+    // Local Same-Browser Merger Transfer Engine
+    // ----------------------------------------------------
+    const handleLocalMergerTransfer = async (sourcePlayerId: string) => {
+        if (!sourcePlayerId || !activeAccount) return;
+        const sourceAcc = otherAccounts.find(a => String(a.playerId) === String(sourcePlayerId));
+        if (!sourceAcc) return;
+
+        try {
+            const exps = await db.expeditions.where('playerId').equals(sourceAcc.playerId).toArray();
+            const combats = await db.combatReports.where('playerId').equals(sourceAcc.playerId).toArray();
+            const debris = (await db.debrisHarvests.where('playerId').anyOf([String(sourceAcc.playerId), Number(sourceAcc.playerId) as any]).toArray()).filter(d => isSameUniverse(d.universe, sourceAcc.universe));
+            const lifeforms = await db.lifeformDiscoveries.where('playerId').equals(sourceAcc.playerId).toArray();
+            const setups = await db.lifeformSavedSetups.where('playerId').equals(sourceAcc.playerId).toArray();
+
+            const syntheticBackup = {
+                type: 'ogame-nexus-backup',
+                isMergerBackup: true,
+                version: 1,
+                exportedAt: Date.now(),
+                playerId: sourceAcc.playerId,
+                universe: sourceAcc.universe,
+                universeName: sourceAcc.universeName || sourceAcc.universe,
+                playerName: sourceAcc.playerName,
+                data: {
+                    account: sourceAcc,
+                    expeditions: exps,
+                    combatReports: combats,
+                    debrisHarvests: debris,
+                    lifeformDiscoveries: lifeforms,
+                    lifeformSavedSetups: setups
+                }
+            };
+
+            setNexusBackupData(syntheticBackup);
+            setNexusTabStep('mismatch');
+        } catch (err: any) {
+            console.error("Local merger transfer failed", err);
+            setError("Failed to compile local account history.");
         }
     };
 
@@ -368,8 +473,25 @@ const DataManagement: React.FC = () => {
             // 8. Spied Planets (Raid Radar)
             if (backup.spiedPlanets && backup.spiedPlanets.length > 0) {
                 setNexusImportLog(prev => [...prev, `Restoring ${backup.spiedPlanets.length} spied targets for Raid Radar...`]);
-                await db.spiedPlanets.bulkPut(backup.spiedPlanets);
+                const cleanUni = cleanUniverseId(activeAccount?.universe || backup.universe || (backup.account as any)?.universe || '');
+                const targetPid = activeAccount?.playerId || backup.playerId || (backup.account as any)?.playerId || '';
+                const normalizedSpied = backup.spiedPlanets.map((p: any) => {
+                    const pid = p.userPlayerId || targetPid;
+                    return {
+                        ...p,
+                        universe: cleanUni,
+                        userPlayerId: pid,
+                        planetKey: `${cleanUni}_${pid}_${p.planetId || p.coords}`
+                    };
+                });
+                await db.spiedPlanets.bulkPut(normalizedSpied);
                 setNexusStats(s => ({ ...s, processed: s.processed + backup.spiedPlanets.length, imported: s.imported + backup.spiedPlanets.length }));
+            }
+
+            // 9. Lifeform Saved Setups
+            if (backup.lifeformSavedSetups && backup.lifeformSavedSetups.length > 0) {
+                setNexusImportLog(prev => [...prev, `Restoring ${backup.lifeformSavedSetups.length} lifeform tech setups...`]);
+                await db.lifeformSavedSetups.bulkAdd(backup.lifeformSavedSetups);
             }
 
             setNexusImportLog(prev => [...prev, '✓ Restore sequence completed successfully.', 'All data components verified.']);
@@ -382,10 +504,311 @@ const DataManagement: React.FC = () => {
     };
 
     // ----------------------------------------------------
+    // Universe Merger Dedicated Restore Engine
+    // ----------------------------------------------------
+    const startMergerRestore = async (customBackupData?: any) => {
+        const backupData = customBackupData || nexusBackupData;
+        if (!backupData || !activeAccount) return;
+
+        try {
+            setNexusIsImporting(true);
+            setNexusTabStep('progress');
+            setError(null);
+
+            const sourceData = backupData.data || {};
+            const sourcePlayerName = backupData.playerName || sourceData.account?.playerName || 'Unknown';
+            const sourceUniverse = backupData.universe || sourceData.account?.universe || 'Unknown';
+            const targetPlayerId = String(activeAccount.playerId);
+            const targetUniverse = String(activeAccount.universe);
+            const targetPlayerName = activeAccount.playerName;
+
+            setNexusImportLog([
+                'Initializing Universe Merger migration sequence...',
+                `Source Empire: ${sourcePlayerName} @ ${sourceUniverse}`,
+                `Target Empire: ${targetPlayerName} @ ${targetUniverse} (${targetPlayerId})`
+            ]);
+
+            const exps = sourceData.expeditions || [];
+            const combats = sourceData.combatReports || [];
+            const debris = sourceData.debrisHarvests || [];
+            const lifeforms = sourceData.lifeformDiscoveries || [];
+            const setups = sourceData.lifeformSavedSetups || [];
+
+            const total = exps.length + combats.length + debris.length + lifeforms.length + setups.length;
+            setNexusStats({ total, processed: 0, skipped: 0, imported: 0, errors: 0 });
+
+            // 1. Expeditions
+            if (exps.length > 0) {
+                setNexusImportLog(prev => [...prev, `Migrating ${exps.length} expedition logs to Commander ID ${targetPlayerId}...`]);
+                const remappedExps = exps.map((e: any) => ({
+                    ...e,
+                    playerId: targetPlayerId
+                }));
+                await db.expeditions.bulkPut(remappedExps);
+                setNexusStats(s => ({ ...s, processed: s.processed + exps.length, imported: s.imported + exps.length }));
+            }
+
+            // 2. Combat Reports with name alias protection
+            if (combats.length > 0) {
+                setNexusImportLog(prev => [...prev, `Migrating ${combats.length} battle reports & mapping attacker/defender aliases...`]);
+                const remappedCombats = combats.map((c: any) => {
+                    const updated = { ...c, playerId: targetPlayerId };
+                    if (sourcePlayerName && targetPlayerName && sourcePlayerName !== targetPlayerName) {
+                        if (updated.attackerName === sourcePlayerName) {
+                            updated.attackerName = targetPlayerName;
+                        }
+                        if (updated.defenderName === sourcePlayerName) {
+                            updated.defenderName = targetPlayerName;
+                        }
+                    }
+                    return updated;
+                });
+                await db.combatReports.bulkPut(remappedCombats);
+                setNexusStats(s => ({ ...s, processed: s.processed + combats.length, imported: s.imported + combats.length }));
+            }
+
+            // 3. Debris Harvests with universe key recalculation
+            if (debris.length > 0) {
+                setNexusImportLog(prev => [...prev, `Migrating ${debris.length} debris field harvests to universe ${targetUniverse}...`]);
+                const remappedDebris = debris.map((d: any) => ({
+                    ...d,
+                    playerId: targetPlayerId,
+                    universe: targetUniverse,
+                    harvestKey: `${targetUniverse}_${d.messageId}`
+                }));
+                await db.debrisHarvests.bulkPut(remappedDebris);
+                setNexusStats(s => ({ ...s, processed: s.processed + debris.length, imported: s.imported + debris.length }));
+            }
+
+            // 4. Lifeform Discoveries
+            if (lifeforms.length > 0) {
+                setNexusImportLog(prev => [...prev, `Migrating ${lifeforms.length} lifeform discoveries...`]);
+                const remappedLf = lifeforms.map((l: any) => ({
+                    ...l,
+                    playerId: targetPlayerId
+                }));
+                await db.lifeformDiscoveries.bulkPut(remappedLf);
+                setNexusStats(s => ({ ...s, processed: s.processed + lifeforms.length, imported: s.imported + lifeforms.length }));
+            }
+
+            // 5. Lifeform Saved Setups
+            if (setups.length > 0) {
+                setNexusImportLog(prev => [...prev, `Migrating ${setups.length} lifeform tech loadouts...`]);
+                const remappedSetups = setups.map((s: any) => {
+                    const { id, ...rest } = s;
+                    return {
+                        ...rest,
+                        playerId: targetPlayerId
+                    };
+                });
+                await db.lifeformSavedSetups.bulkAdd(remappedSetups);
+                setNexusStats(s => ({ ...s, processed: s.processed + setups.length, imported: s.imported + setups.length }));
+            }
+
+            // 6. Reset Costs Planner Shopping Cart
+            try {
+                localStorage.removeItem(`costs_planner_cart_${targetPlayerId}`);
+                setNexusImportLog(prev => [...prev, 'Reset Costs Planner shopping cart for target universe.']);
+            } catch (e) {
+                console.warn('Could not reset cart', e);
+            }
+
+            setNexusImportLog(prev => [
+                ...prev,
+                '✓ Universe Merger migration completed successfully!',
+                `Transferred ${total} lifetime career records into Commander ${targetPlayerName}.`
+            ]);
+            setNexusIsImporting(false);
+        } catch (err: any) {
+            setNexusImportLog(prev => [...prev, `✖ CRITICAL MIGRATION FAULT: ${err.message || 'Unknown database exception'}`]);
+            setNexusStats(s => ({ ...s, errors: s.errors + 1 }));
+            setNexusIsImporting(false);
+        }
+    };
+
+    // ----------------------------------------------------
     // Nexus Backup & Restore Sub-Views
     // ----------------------------------------------------
     const renderNexusUpload = () => (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            {/* Universe Merger Migration Hub */}
+            <div style={{
+                padding: '32px',
+                borderRadius: '28px',
+                background: 'linear-gradient(135deg, rgba(28, 20, 10, 0.75) 0%, rgba(13, 22, 38, 0.85) 100%)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.4), inset 0 0 20px rgba(245, 158, 11, 0.05)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px',
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
+                <div style={{
+                    position: 'absolute',
+                    top: '-60px',
+                    right: '-60px',
+                    width: '180px',
+                    height: '180px',
+                    borderRadius: '50%',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    filter: 'blur(50px)',
+                    pointerEvents: 'none'
+                }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{
+                            width: '52px',
+                            height: '52px',
+                            minWidth: '52px',
+                            borderRadius: '16px',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            border: '1px solid rgba(245, 158, 11, 0.35)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#f59e0b',
+                            boxShadow: '0 0 20px rgba(245, 158, 11, 0.2)'
+                        }}>
+                            <ArrowRightLeft size={26} />
+                        </div>
+                        <div>
+                            <div style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 900,
+                                color: '#f59e0b',
+                                letterSpacing: '0.12em',
+                                textTransform: 'uppercase',
+                                marginBottom: '4px'
+                            }}>
+                                Universe Merger Assistant
+                            </div>
+                            <h2 style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff', margin: 0 }}>
+                                {t('dataManagement.mergerCardTitle')}
+                            </h2>
+                            <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.85rem', margin: '4px 0 0', maxWidth: '650px' }}>
+                                {t('dataManagement.mergerCardSubtitle')}
+                            </p>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={handleMergerExport}
+                        disabled={!activeAccount || isMergerExporting}
+                        style={{
+                            padding: '14px 28px',
+                            borderRadius: '14px',
+                            background: activeAccount && !isMergerExporting ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(255,255,255,0.05)',
+                            color: activeAccount && !isMergerExporting ? '#000' : 'var(--text-muted)',
+                            border: 'none',
+                            fontSize: '0.9rem',
+                            fontWeight: 900,
+                            cursor: activeAccount && !isMergerExporting ? 'pointer' : 'not-allowed',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            boxShadow: activeAccount && !isMergerExporting ? '0 0 25px rgba(245, 158, 11, 0.3)' : 'none',
+                            transition: 'all 0.3s ease'
+                        }}
+                    >
+                        {isMergerExporting ? (
+                            <>
+                                <Loader2 size={18} className="animate-spin" />
+                                {t('dataManagement.compilingBackup')}
+                            </>
+                        ) : (
+                            <>
+                                <Download size={18} />
+                                {t('dataManagement.mergerDownloadBtn')}
+                            </>
+                        )}
+                    </button>
+                </div>
+
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: otherAccounts.length > 0 ? '1.2fr 0.8fr' : '1fr',
+                    gap: '20px',
+                    padding: '20px',
+                    borderRadius: '20px',
+                    background: 'rgba(0, 0, 0, 0.25)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                }}>
+                    <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.6 }}>
+                        <div style={{ fontWeight: 800, color: '#fff', marginBottom: '6px' }}>How Universe Migration Works:</div>
+                        <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <li><strong>Step 1 (Before Merge):</strong> Click above to download your Merger Backup file (.json).</li>
+                            <li><strong>Step 2 (After Merge):</strong> Log into your new universe, open this tab, and drop the file into the Restore box below.</li>
+                            <li><strong>Result:</strong> Your lifetime expeditions, battles, debris, and lifeform tech merge instantly into your new empire without touching your new planets.</li>
+                        </ul>
+                    </div>
+
+                    {otherAccounts.length > 0 && (
+                        <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                            paddingLeft: '20px'
+                        }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Same-Browser Quick Transfer
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                                {t('dataManagement.mergerLocalDesc')}
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                                <select
+                                    value={selectedLocalAccount}
+                                    onChange={(e) => setSelectedLocalAccount(e.target.value)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '10px 14px',
+                                        borderRadius: '12px',
+                                        background: 'rgba(10, 15, 25, 0.8)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        color: '#fff',
+                                        fontSize: '0.85rem',
+                                        outline: 'none',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <option value="">{t('dataManagement.mergerLocalSelect')}</option>
+                                    {otherAccounts.map(a => (
+                                        <option key={a.playerId} value={a.playerId}>
+                                            {a.playerName} — {a.universeName || a.universe} ({a.universe})
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={() => handleLocalMergerTransfer(selectedLocalAccount)}
+                                    disabled={!selectedLocalAccount || nexusIsImporting}
+                                    style={{
+                                        padding: '10px 18px',
+                                        borderRadius: '12px',
+                                        background: selectedLocalAccount ? 'rgba(0, 242, 255, 0.15)' : 'rgba(255,255,255,0.05)',
+                                        border: selectedLocalAccount ? '1px solid rgba(0, 242, 255, 0.4)' : '1px solid rgba(255,255,255,0.1)',
+                                        color: selectedLocalAccount ? 'var(--primary)' : 'var(--text-muted)',
+                                        fontWeight: 800,
+                                        fontSize: '0.85rem',
+                                        cursor: selectedLocalAccount ? 'pointer' : 'not-allowed',
+                                        whiteSpace: 'nowrap',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    <ArrowRightLeft size={14} /> {t('dataManagement.mergerLocalBtn')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Standard Backup & Restore Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
             {/* Export Left Column */}
             <div style={{
                 padding: '40px',
@@ -611,62 +1034,91 @@ const DataManagement: React.FC = () => {
                 )}
             </div>
         </div>
+    </div>
     );
 
     const renderNexusMismatch = () => {
         if (!nexusBackupData) return null;
         const fileAcc = nexusBackupData;
+        const stats = nexusBackupData.data || {};
+
+        const expsCount = stats.expeditions?.length || 0;
+        const combatsCount = stats.combatReports?.length || 0;
+        const debrisCount = stats.debrisHarvests?.length || 0;
+        const lifeformsCount = stats.lifeformDiscoveries?.length || 0;
+        const setupsCount = stats.lifeformSavedSetups?.length || 0;
+        const hasDataToMigrate = (expsCount + combatsCount + debrisCount + lifeformsCount + setupsCount) > 0;
 
         return (
             <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 style={{
-                    maxWidth: '850px',
+                    maxWidth: '880px',
                     margin: '0 auto',
                     padding: '40px',
                     borderRadius: '32px',
-                    background: 'rgba(255, 68, 68, 0.02)',
-                    border: '1px solid rgba(255, 68, 68, 0.15)',
-                    boxShadow: '0 0 40px rgba(255, 68, 68, 0.05)'
+                    background: 'linear-gradient(135deg, rgba(28, 20, 10, 0.6) 0%, rgba(13, 22, 38, 0.7) 100%)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    boxShadow: '0 0 50px rgba(245, 158, 11, 0.1)',
+                    backdropFilter: 'blur(16px)'
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px', color: '#ff4444' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '28px' }}>
                     <div style={{
                         width: '56px', height: '56px', borderRadius: '18px',
-                        background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.2)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.35)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b',
+                        boxShadow: '0 0 20px rgba(245, 158, 11, 0.25)'
                     }}>
-                        <ShieldAlert size={28} />
+                        <ArrowRightLeft size={28} />
                     </div>
                     <div>
-                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#ff4444', margin: 0 }}>{t('dataManagement.mismatchTitle')}</h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>{t('dataManagement.mismatchDesc')}</p>
+                        <div style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 900,
+                            color: '#f59e0b',
+                            letterSpacing: '0.12em',
+                            textTransform: 'uppercase',
+                            marginBottom: '4px'
+                        }}>
+                            Migration Safeguard
+                        </div>
+                        <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', margin: 0 }}>
+                            {t('dataManagement.mergerDetectedTitle')}
+                        </h2>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
+                            {t('dataManagement.mergerDetectedDesc')}
+                        </p>
                     </div>
                 </div>
 
-                <p style={{ color: 'var(--text-main)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '32px' }}>
-                    {t('dataManagement.mismatchExpl')}
+                <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '32px' }}>
+                    {t('dataManagement.mergerDetectedExpl')}
                 </p>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '40px' }}>
-                    {/* File details card */}
+                {/* Side-by-side Source vs Target */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '20px', alignItems: 'center', marginBottom: '36px' }}>
+                    {/* Source file details card */}
                     <div style={{
                         padding: '24px', borderRadius: '24px',
-                        background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)'
+                        background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(245, 158, 11, 0.2)'
                     }}>
-                        <div style={{ fontSize: '0.7rem', color: '#ff4444', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>{t('dataManagement.backupFileProfile')}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>
+                            SOURCE (PRE-MERGE EMPIRE)
+                        </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                             <div style={{
-                                width: '36px', height: '36px', borderRadius: '10px',
-                                background: 'rgba(255,255,255,0.05)', color: '#fff',
+                                width: '40px', height: '40px', borderRadius: '12px',
+                                background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center'
                             }}>
-                                <FileJson size={16} />
+                                <FileJson size={20} />
                             </div>
                             <div>
-                                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>{fileAcc.playerName}</div>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{fileAcc.universeName} ({fileAcc.universe})</div>
+                                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff' }}>{fileAcc.playerName}</div>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{fileAcc.universeName} ({fileAcc.universe})</div>
                             </div>
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -674,25 +1126,36 @@ const DataManagement: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* Arrow transition */}
+                    <div style={{
+                        width: '44px', height: '44px', borderRadius: '50%',
+                        background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b'
+                    }}>
+                        <ArrowRight size={22} />
+                    </div>
+
                     {/* Active account details card */}
                     {activeAccount && (
                         <div style={{
                             padding: '24px', borderRadius: '24px',
-                            background: 'rgba(0, 242, 255, 0.02)', border: '1px solid rgba(0, 242, 255, 0.15)',
-                            boxShadow: '0 0 20px rgba(0, 242, 255, 0.02)'
+                            background: 'rgba(0, 242, 255, 0.03)', border: '1px solid rgba(0, 242, 255, 0.25)',
+                            boxShadow: '0 0 20px rgba(0, 242, 255, 0.05)'
                         }}>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>{t('dataManagement.activeCommandDeck')}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 900, letterSpacing: '0.1em', marginBottom: '16px' }}>
+                                TARGET (ACTIVE EMPIRE)
+                            </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                                 <div style={{
-                                    width: '36px', height: '36px', borderRadius: '10px',
+                                    width: '40px', height: '40px', borderRadius: '12px',
                                     background: 'var(--primary)', color: '#000',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center'
                                 }}>
-                                    <User size={16} />
+                                    <User size={20} />
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>{activeAccount.playerName}</div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{activeAccount.universeName} ({activeAccount.universe})</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff' }}>{activeAccount.playerName}</div>
+                                    <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{activeAccount.universeName} ({activeAccount.universe})</div>
                                 </div>
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -702,7 +1165,78 @@ const DataManagement: React.FC = () => {
                     )}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                {/* Component Breakdown Card */}
+                <div style={{
+                    padding: '24px', borderRadius: '24px',
+                    background: 'rgba(0, 0, 0, 0.3)', border: '1px solid rgba(255, 255, 255, 0.05)',
+                    marginBottom: '36px'
+                }}>
+                    <div style={{
+                        fontSize: '0.75rem', fontWeight: 900, color: 'var(--text-muted)',
+                        letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '16px'
+                    }}>
+                        Career Records to Migrate into {activeAccount?.playerName}:
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '18px' }}>
+                        {[
+                            { label: 'Expeditions', count: expsCount, icon: <ThemeIcon name="navigation" size={16} /> },
+                            { label: 'Combat Reports', count: combatsCount, icon: <ThemeIcon name="sword" size={16} /> },
+                            { label: 'Debris Harvests', count: debrisCount, icon: <ThemeIcon name="debris-field" size={16} /> },
+                            { label: 'Lifeform Discoveries', count: lifeformsCount, icon: <ThemeIcon name="leaf" size={16} /> },
+                            { label: 'Lifeform Setups', count: setupsCount, icon: <ThemeIcon name="goal" size={16} /> }
+                        ].map((item, idx) => (
+                            <div key={idx} style={{
+                                padding: '12px 16px', borderRadius: '14px',
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid rgba(255, 255, 255, 0.04)',
+                                display: 'flex', alignItems: 'center', gap: '10px'
+                            }}>
+                                {item.icon}
+                                <div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 900, color: '#fff' }}>{item.count.toLocaleString()}</div>
+                                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{item.label}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.65)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} style={{ color: '#22c55e' }} />
+                            <span>Your current planets, moons, and coordinates will <strong>not</strong> be overwritten.</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} style={{ color: 'var(--primary)' }} />
+                            <span>{t('dataManagement.mergerCartResetNote')}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                    <button
+                        onClick={() => startMergerRestore()}
+                        disabled={!hasDataToMigrate || nexusIsImporting}
+                        style={{
+                            padding: '16px 36px',
+                            borderRadius: '16px',
+                            background: hasDataToMigrate ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(255,255,255,0.05)',
+                            color: hasDataToMigrate ? '#000' : 'var(--text-muted)',
+                            fontSize: '0.95rem',
+                            fontWeight: 900,
+                            cursor: hasDataToMigrate ? 'pointer' : 'not-allowed',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            border: 'none',
+                            boxShadow: hasDataToMigrate ? '0 0 30px rgba(245, 158, 11, 0.35)' : 'none',
+                            transition: 'all 0.3s ease'
+                        }}
+                    >
+                        <ArrowRightLeft size={18} /> {t('dataManagement.mergerExecuteBtn')}
+                    </button>
+
                     <button
                         onClick={() => {
                             setNexusBackupFile(null);
@@ -711,10 +1245,17 @@ const DataManagement: React.FC = () => {
                             setError(null);
                         }}
                         style={{
-                            padding: '16px 36px', borderRadius: '16px',
-                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                            color: '#fff', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '10px', borderStyle: 'solid'
+                            padding: '16px 30px',
+                            borderRadius: '16px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            color: '#fff',
+                            fontSize: '0.9rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px'
                         }}
                     >
                         <ArrowLeft size={16} /> {t('dataManagement.chooseAnotherFile')}

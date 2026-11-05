@@ -701,10 +701,17 @@ export async function syncDailyPlayersAndAlliances(rawUniverseId: string, env: E
     const player = playersMap.get(slot.player_id);
     if (!player) {
       // The player's account was deleted/pruned in OGame (missing from players.xml)
-      // Delete this abandoned planet from baseline and emit an 'abandoned' event
+      // Delete this abandoned planet from baseline and alliance overlays, and emit an 'abandoned' event
       statements.push(
         db.prepare(
           `DELETE FROM universe_baseline_planets
+           WHERE universe_id = ? AND galaxy = ? AND system = ? AND slot = ?`
+        ).bind(universeId, slot.galaxy, slot.system, slot.slot)
+      );
+
+      statements.push(
+        db.prepare(
+          `DELETE FROM alliance_galaxy_slots
            WHERE universe_id = ? AND galaxy = ? AND system = ? AND slot = ?`
         ).bind(universeId, slot.galaxy, slot.system, slot.slot)
       );

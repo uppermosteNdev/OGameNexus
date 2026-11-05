@@ -67,6 +67,7 @@ import { initProductionBoxSpeedups, updateProductionBoxSpeedups } from './produc
 import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom, fetchAndSyncFleetMovements } from './fleetMovement';
 import { injectChangelogTab } from './changelogTab';
 import { initAllianceOverwatchBanner } from './allianceBanner';
+import { initOrionMissionEnhancer, initOrionScannerEnhancer, handleOrionAutoFleetDispatch, enhanceCollectRewardsOverlay } from './orion';
 import {
   SHIP_DATA,
   RESEARCH_DATA,
@@ -1183,6 +1184,32 @@ function scrapeFacilitiesData() {
   return buildings.length > 0 ? buildings : null;
 }
 
+function scrapeControlCenterBuildings(): { id: number, name: string, level: number }[] | null {
+  const url = window.location.href;
+  const isControlCenter = (url.includes("component=orion") && url.includes("tab=controlcenter")) ||
+                          !!document.querySelector('#technologies li.technology[data-technology="4001"]');
+  if (!isControlCenter) return null;
+
+  const buildings: { id: number, name: string, level: number }[] = [];
+  const buildingNodes = document.querySelectorAll("#technologies li.technology");
+
+  buildingNodes.forEach(node => {
+    const techId = parseInt(node.getAttribute("data-technology") || "0", 10);
+    const name = node.getAttribute("aria-label") || "Unknown Control Centre Building";
+    const levelNode = node.querySelector(".level");
+
+    if (techId >= 4001 && techId <= 4007 && levelNode) {
+      let level = parseInt(levelNode.getAttribute("data-value") || "0", 10);
+      if (node.classList.contains("active") && level > 0) {
+        level--;
+      }
+      buildings.push({ id: techId, name, level });
+    }
+  });
+
+  return buildings.length > 0 ? buildings : null;
+}
+
 function scrapeHeaderResources() {
   const metalEl = document.querySelector("#resources_metal");
   const crystalEl = document.querySelector("#resources_crystal");
@@ -1276,7 +1303,8 @@ function scrapeAndSync() {
     lifeformBuildings: undefined,
     overview: scrapeOverviewData(),
     supplies: scrapeSuppliesData(),
-    facilities: undefined,
+    facilities: scrapeFacilitiesData() || undefined,
+    controlCenterBuildings: scrapeControlCenterBuildings() || undefined,
     production: scrapeProductionData(),
     empire: empire
   };
@@ -2678,6 +2706,7 @@ const throttledObserverLogic = throttle(() => {
     window.location.href.includes("component=facilities") ||
     window.location.href.includes("component=supplies") ||
     window.location.href.includes("component=empire") ||
+    window.location.href.includes("tab=controlcenter") ||
     window.location.href.toLowerCase().includes("resourcesettings");
 
   // Check if the URL has changed since last scrape to handle AJAX navigation
@@ -2751,6 +2780,26 @@ const throttledObserverLogic = throttle(() => {
     updateDispatchSlotsFromDom(document);
   }
 
+  // Project Orion Anomaly & Mission Enhancer
+  if (document.querySelector(".orionTabContent, .anomalyMission, #orionscanner, #scanner, #scannerResultHolder")) {
+    initOrionMissionEnhancer().catch(() => {});
+    try { initOrionScannerEnhancer(); } catch {}
+  }
+
+  // Project Orion Collect Rewards Modal Enhancer
+  const collectOverlay = document.querySelector<HTMLElement>('.orionCollectRewards');
+  if (collectOverlay) {
+    try { enhanceCollectRewardsOverlay(collectOverlay); } catch {}
+  }
+
+  // Auto-fill fleet from Orion 1-click dispatch
+  if (window.location.href.includes("component=fleetdispatch")) {
+    handleOrionAutoFleetDispatch();
+  } else {
+    (window as any)._ogNexusOrionFleetDispatched = false;
+    (window as any)._ogNexusOrionFleetDispatchInProgress = false;
+  }
+
   // Passive Lifeform Artefacts scraper (#slot01) on lfresearch page
   if (document.querySelector("#slot01") || window.location.href.includes("component=lfresearch")) {
     scrapeAndSyncArtifacts();
@@ -2783,9 +2832,58 @@ const throttledObserverLogic = throttle(() => {
       initAssistantBar(playerId);
     }
   }
-}, 50);
+}, 150);
+
+function isNexusSelfMutation(mutations: MutationRecord[]): boolean {
+  return mutations.length > 0 && mutations.every((m) => {
+    const target = m.target as HTMLElement | null;
+    if (target && typeof target.closest === 'function') {
+      if (
+        target.closest('.nexus-mission-intel-bar') ||
+        target.closest('.nexus-mission-rewards-summary') ||
+        target.closest('.nexus-advisory-section') ||
+        target.closest('.nexus-floating-rewards-tooltip') ||
+        target.closest('.nexus-scanner-advisor') ||
+        target.closest('#og-nexus-assistant-bar') ||
+        target.closest('.nexus-tag') ||
+        target.closest('#nexus-scanner-ranking-card') ||
+        target.closest('.nexus-scanner-ranking-card') ||
+        target.closest('.nexus-native-tooltip-popup') ||
+        target.id?.startsWith('nexus-') ||
+        (typeof target.className === 'string' && target.className.includes('nexus-'))
+      ) {
+        return true;
+      }
+    }
+
+    if (m.addedNodes.length > 0 || m.removedNodes.length > 0) {
+      const checkNode = (node: Node) => {
+        if (node.nodeType !== Node.ELEMENT_NODE) return true;
+        const el = node as HTMLElement;
+        return (
+          el.classList?.contains('nexus-floating-rewards-tooltip') ||
+          el.classList?.contains('nexus-mission-intel-bar') ||
+          el.classList?.contains('nexus-mission-rewards-summary') ||
+          el.classList?.contains('nexus-advisory-section') ||
+          el.classList?.contains('nexus-scanner-advisor') ||
+          el.id?.startsWith('nexus-') ||
+          (typeof el.className === 'string' && el.className.includes('nexus-'))
+        );
+      };
+
+      const addedNexus = Array.from(m.addedNodes).every(checkNode);
+      const removedNexus = Array.from(m.removedNodes).every(checkNode);
+      if (addedNexus && removedNexus) return true;
+    }
+
+    return false;
+  });
+}
 
 const observer = new MutationObserver((mutations) => {
+  if (isNexusSelfMutation(mutations)) {
+    return;
+  }
   if (document.querySelector("#menuTable")) {
     injectButton();
   }
@@ -2794,6 +2892,7 @@ const observer = new MutationObserver((mutations) => {
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+throttledObserverLogic();
 
 // Initialize Flying Fleet Movements Tracker
 initFleetMovementListener();
@@ -3109,6 +3208,24 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
       if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
         const accJson = JSON.parse(trimmed);
         const parsedExt = parseExternalDataExportJson(accJson);
+
+        // Detect if universe supports Orion / Anomaly update (Tech 45 or 4001..4007)
+        const rawPlanets = Object.values(accJson.planets || {});
+        const hasAnomalies = rawPlanets.some((p: any) =>
+          p.buildings && ('45' in p.buildings || '4001' in p.buildings)
+        );
+        const anomalyKey = 'ognexus_has_anomalies_' + playerId;
+        try {
+          if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            chrome.storage.local.set({
+              [anomalyKey]: hasAnomalies,
+              'ognexus_has_anomalies': hasAnomalies
+            });
+          }
+        } catch (e) {}
+        try {
+          localStorage.setItem('ognexus_has_anomalies', hasAnomalies ? 'true' : 'false');
+        } catch (e) {}
         planetsData = { planets: parsedExt.planets, research: parsedExt.research };
         moonsData = { planets: parsedExt.moons, research: parsedExt.research };
         if (parsedExt.speciesExperience) {
@@ -3504,6 +3621,9 @@ async function checkAutoSync() {
 // Run sync check once shortly after the player loads/navigates to the page
 setTimeout(checkAutoSync, 3000);
 
+// Standing periodic auto-sync every 60 seconds (respects 20s navigation cooldown)
+setInterval(checkAutoSync, 60 * 1000);
+
 document.addEventListener('change', (e) => {
   const target = e.target as HTMLElement;
   if (target && (target.tagName === 'SELECT' || target.tagName === 'INPUT')) {
@@ -3529,5 +3649,16 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.type === "GET_PAGE_PLAYER_INFO") {
+      const playerId = getMetaContent("ogame-player-id");
+      const universe = getMetaContent("ogame-universe");
+      sendResponse({ playerId, universe });
+      return true;
+    }
+  });
+}
 
 

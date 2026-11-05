@@ -24,7 +24,9 @@ import {
     X,
     Settings,
     Check,
-    Sliders
+    Sliders,
+    ArrowRightLeft,
+    ArrowRight
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -33,7 +35,7 @@ import { renderAnalyticsTab } from '../../content/analytics';
 import { calculateEmpireProduction, safeArray } from '../../utils/amortizationCalc';
 import { calculateTotalEmpireDailyYield, useEmpireYieldConfig } from '../../utils/empireYield';
 import { ThemeIcon } from '../components/ThemeIcon';
-import { isSameUniverse } from '../../utils/universe';
+import { isSameUniverse, cleanUniverseId } from '../../utils/universe';
 import { getPlayerClassName } from '../../i18n/gameData';
 
 import {
@@ -400,6 +402,37 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
         [activeAccount]
     ) || [];
 
+    // Anomaly Missions Data
+    const anomalyMissions = useLiveQuery(
+        async () => {
+            if (!activeAccount) return await db.anomalyMissions.toArray();
+            const strPid = String(activeAccount.playerId || '').trim();
+            const activeUni = activeAccount.universe;
+            const all = await db.anomalyMissions.toArray();
+            return all.filter(m => {
+                const mPid = m.playerId ? String(m.playerId).trim() : '';
+                const mUni = m.universe ? cleanUniverseId(m.universe) : '';
+                if (mPid && mPid !== 'unknown') {
+                    if (mPid !== strPid) return false;
+                }
+                if (mUni && activeUni) {
+                    if (!isSameUniverse(mUni, activeUni)) return false;
+                }
+                if (!mPid || mPid === 'unknown' || !mUni) {
+                    if (m.originCoords) {
+                        const cleanOrigin = m.originCoords.replace(/[\[\]]/g, '').trim();
+                        const planetBelongs = planets.some(p => (p.coords || '').replace(/[\[\]]/g, '').trim() === cleanOrigin);
+                        if (!planetBelongs) return false;
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        },
+        [activeAccount]
+    ) || [];
+
     // Lifeform Discoveries Data
     const lifeformDiscoveries = useLiveQuery(
         () => activeAccount ? db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).toArray() : [],
@@ -651,6 +684,10 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 shipCrystal: 0,
                 shipDeuterium: 0,
                 shipMsu: 0,
+                anomalyMetal: 0,
+                anomalyCrystal: 0,
+                anomalyDeuterium: 0,
+                anomalyMsu: 0,
                 combatMetal: 0,
                 combatCrystal: 0,
                 combatDeuterium: 0,
@@ -697,6 +734,99 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
             }
         });
 
+        anomalyMissions.forEach(m => {
+            const mTs = (m.createdAt || m.spawnedTimestamp || 0) > 1e11 ? (m.createdAt || m.spawnedTimestamp) / 1000 : (m.createdAt || m.spawnedTimestamp || 0);
+
+            // Deduplicate waves
+            const uniqueWavesMap = new Map<number, any>();
+            (m.waves || []).forEach((w: any) => {
+                const cur = uniqueWavesMap.get(w.waveNumber);
+                if (!cur || (w.claimMethod === 'modal_confirmation' && cur.claimMethod !== 'modal_confirmation')) {
+                    uniqueWavesMap.set(w.waveNumber, w);
+                }
+            });
+            const uniqueWaves = Array.from(uniqueWavesMap.values());
+
+            if (uniqueWaves.length > 0) {
+                uniqueWaves.forEach(w => {
+                    const waveTs = w.claimedAt ? (w.claimedAt > 1e11 ? w.claimedAt / 1000 : w.claimedAt) : mTs;
+                    const dIdx = days.findIndex(d => waveTs >= d.timestamp && waveTs < d.timestamp + 86400);
+                    if (dIdx !== -1) {
+                        const met = Number(w.metal) || 0;
+                        const cry = Number(w.crystal) || 0;
+                        const deut = Number(w.deuterium) || 0;
+                        days[dIdx].anomalyMetal += met;
+                        days[dIdx].anomalyCrystal += cry;
+                        days[dIdx].anomalyDeuterium += deut;
+                        days[dIdx].anomalyMsu += (met * mMultiplier) + (cry * cMultiplier) + (deut * dMultiplier);
+
+                        if (w.ships && typeof w.ships === 'object') {
+                            Object.entries(w.ships).forEach(([shipKey, count]: [string, any]) => {
+                                const amt = Number(count) || 0;
+                                if (amt <= 0) return;
+                                const shipObj = SHIP_DATA.find(s => s.name.toLowerCase() === shipKey.toLowerCase() || String(s.id) === shipKey);
+                                const cost = shipObj?.metadata?.cost;
+                                if (cost) {
+                                    const sm = (cost.metal || 0) * amt;
+                                    const sc = (cost.crystal || 0) * amt;
+                                    const sd = (cost.deuterium || 0) * amt;
+                                    days[dIdx].anomalyMetal += sm;
+                                    days[dIdx].anomalyCrystal += sc;
+                                    days[dIdx].anomalyDeuterium += sd;
+                                    days[dIdx].anomalyMsu += (sm * mMultiplier) + (sc * cMultiplier) + (sd * dMultiplier);
+                                }
+                            });
+                        }
+                    }
+                });
+            } else if (m.cumulativeRewards) {
+                const dIdx = days.findIndex(d => mTs >= d.timestamp && mTs < d.timestamp + 86400);
+                if (dIdx !== -1) {
+                    const met = Number(m.cumulativeRewards.metal) || 0;
+                    const cry = Number(m.cumulativeRewards.crystal) || 0;
+                    const deut = Number(m.cumulativeRewards.deuterium) || 0;
+                    days[dIdx].anomalyMetal += met;
+                    days[dIdx].anomalyCrystal += cry;
+                    days[dIdx].anomalyDeuterium += deut;
+                    days[dIdx].anomalyMsu += (met * mMultiplier) + (cry * cMultiplier) + (deut * dMultiplier);
+
+                    if (m.cumulativeRewards.ships && typeof m.cumulativeRewards.ships === 'object') {
+                        Object.entries(m.cumulativeRewards.ships).forEach(([shipKey, count]: [string, any]) => {
+                            const amt = Number(count) || 0;
+                            if (amt <= 0) return;
+                            const shipObj = SHIP_DATA.find(s => s.name.toLowerCase() === shipKey.toLowerCase() || String(s.id) === shipKey);
+                            const cost = shipObj?.metadata?.cost;
+                            if (cost) {
+                                const sm = (cost.metal || 0) * amt;
+                                const sc = (cost.crystal || 0) * amt;
+                                const sd = (cost.deuterium || 0) * amt;
+                                days[dIdx].anomalyMetal += sm;
+                                days[dIdx].anomalyCrystal += sc;
+                                days[dIdx].anomalyDeuterium += sd;
+                                days[dIdx].anomalyMsu += (sm * mMultiplier) + (sc * cMultiplier) + (sd * dMultiplier);
+                            }
+                        });
+                    }
+                }
+            }
+
+            if (m.debrisHarvests && Array.isArray(m.debrisHarvests)) {
+                m.debrisHarvests.forEach((dh: any) => {
+                    const dhTs = dh.timestamp ? (dh.timestamp > 1e11 ? dh.timestamp / 1000 : dh.timestamp) : mTs;
+                    const dIdx = days.findIndex(d => dhTs >= d.timestamp && dhTs < d.timestamp + 86400);
+                    if (dIdx !== -1) {
+                        const met = Number(dh.metal) || 0;
+                        const cry = Number(dh.crystal) || 0;
+                        const deut = Number(dh.deuterium) || 0;
+                        days[dIdx].anomalyMetal += met;
+                        days[dIdx].anomalyCrystal += cry;
+                        days[dIdx].anomalyDeuterium += deut;
+                        days[dIdx].anomalyMsu += (met * mMultiplier) + (cry * cMultiplier) + (deut * dMultiplier);
+                    }
+                });
+            }
+        });
+
         combatReports.forEach(cr => {
             const dIdx = days.findIndex(d => cr.timestamp >= d.timestamp && cr.timestamp < d.timestamp + 86400);
             if (dIdx !== -1) {
@@ -720,14 +850,15 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
         const mineDaily = totalMSUPerHour * 24;
         days.forEach(d => {
             const expMsu = d.msu || 0;
+            const anomalyMsu = d.anomalyMsu || 0;
             const shipMsu = d.shipMsu || 0;
             const combatMsu = (d.combatMetal || 0) + (d.combatCrystal || 0) * 1.5 + (d.combatDeuterium || 0) * 3;
             const debrisMsu = (d.debrisMetal || 0) + (d.debrisCrystal || 0) * 1.5 + (d.debrisDeuterium || 0) * 3;
-            d.totalMsu = mineDaily + expMsu + shipMsu + combatMsu + debrisMsu;
+            d.totalMsu = mineDaily + expMsu + anomalyMsu + shipMsu + combatMsu + debrisMsu;
         });
 
         return days;
-    }, [expeditions, combatReports, debrisHarvests, mMultiplier, cMultiplier, dMultiplier, totalMSUPerHour]);
+    }, [expeditions, combatReports, debrisHarvests, anomalyMissions, mMultiplier, cMultiplier, dMultiplier, totalMSUPerHour]);
 
     const [yieldConfig, setYieldConfig] = useEmpireYieldConfig();
     const [isScrapModalOpen, setIsScrapModalOpen] = useState(false);
@@ -737,8 +868,18 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
         setScrapPercentInput(Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100));
     }, [yieldConfig.scrapMerchantRatio]);
 
-    const [activeModal, setActiveModal] = useState<'mines' | 'expedition' | 'fleet' | 'combats' | 'debris' | 'total' | null>(null);
+    const [activeModal, setActiveModal] = useState<'mines' | 'expedition' | 'anomalies' | 'fleet' | 'combats' | 'debris' | 'total' | null>(null);
     const [isDonateHovered, setIsDonateHovered] = useState(false);
+    const [isMergerBannerDismissed, setIsMergerBannerDismissed] = useState<boolean>(() => {
+        try {
+            const dismissedAt = localStorage.getItem('ogame_nexus_merger_banner_dismissed');
+            if (!dismissedAt) return false;
+            const diffMs = Date.now() - parseInt(dismissedAt, 10);
+            return diffMs < 3 * 24 * 60 * 60 * 1000;
+        } catch {
+            return false;
+        }
+    });
 
 
     return (
@@ -767,6 +908,125 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    {activeAccount && !isMergerBannerDismissed && (
+                        <motion.div
+                            initial={{ opacity: 0, x: -15 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            whileHover={{
+                                scale: 1.015,
+                                borderColor: 'rgba(245, 158, 11, 0.45)',
+                                boxShadow: '0 0 25px rgba(245, 158, 11, 0.22)'
+                            }}
+                            whileTap={{ scale: 0.985 }}
+                            onClick={() => onSelect && onSelect('dataManagement')}
+                            title="Open Universe Merger Backup & Restore"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '14px',
+                                background: 'linear-gradient(135deg, rgba(28, 20, 10, 0.85) 0%, rgba(14, 18, 28, 0.95) 100%)',
+                                padding: '12px 18px',
+                                borderRadius: '20px',
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                backdropFilter: 'blur(16px)',
+                                height: '100px',
+                                boxSizing: 'border-box',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                cursor: 'pointer',
+                                position: 'relative',
+                                boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 15px rgba(245, 158, 11, 0.05)',
+                                maxWidth: '390px'
+                            }}
+                        >
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    try {
+                                        localStorage.setItem('ogame_nexus_merger_banner_dismissed', String(Date.now()));
+                                    } catch {}
+                                    setIsMergerBannerDismissed(true);
+                                }}
+                                title="Dismiss notification for 3 days"
+                                style={{
+                                    position: 'absolute',
+                                    top: '8px',
+                                    right: '8px',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'rgba(255, 255, 255, 0.35)',
+                                    cursor: 'pointer',
+                                    padding: '4px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'color 0.2s'
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = '#fff')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255, 255, 255, 0.35)')}
+                            >
+                                <X size={14} />
+                            </button>
+
+                            <div style={{
+                                width: '42px',
+                                height: '42px',
+                                minWidth: '42px',
+                                borderRadius: '12px',
+                                background: 'rgba(245, 158, 11, 0.15)',
+                                border: '1px solid rgba(245, 158, 11, 0.35)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#f59e0b',
+                                boxShadow: '0 0 14px rgba(245, 158, 11, 0.25)'
+                            }}>
+                                <ArrowRightLeft size={20} />
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingRight: '12px' }}>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 900,
+                                    color: '#f59e0b',
+                                    letterSpacing: '0.08em',
+                                    textTransform: 'uppercase'
+                                }}>
+                                    <span style={{
+                                        width: '6px',
+                                        height: '6px',
+                                        borderRadius: '50%',
+                                        background: '#f59e0b',
+                                        boxShadow: '0 0 8px #f59e0b'
+                                    }} />
+                                    Universe Merger Notice
+                                </div>
+                                <div style={{
+                                    fontSize: '0.76rem',
+                                    color: 'rgba(255, 255, 255, 0.85)',
+                                    lineHeight: 1.35,
+                                    fontWeight: 500
+                                }}>
+                                    Keep your expeditions, combats & debris stats after the merge.
+                                </div>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700,
+                                    color: 'var(--primary)',
+                                    marginTop: '2px'
+                                }}>
+                                    Backup & Restore Guide <ArrowRight size={12} />
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
                     {activeAccount && (
                         <motion.div
                             onMouseEnter={() => setIsDonateHovered(true)}
@@ -1028,11 +1288,13 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                             expeditions,
                             combatReports,
                             debrisHarvests,
+                            anomalyMissions,
                             rates,
                             yieldConfig
                         });
                         const mineDaily = yieldBreakdown.mineDailyMSU;
                         const expResDaily = yieldBreakdown.expResDailyMSU;
+                        const anomalyDaily = yieldBreakdown.anomalyDailyMSU;
                         const expShipDaily = yieldBreakdown.expShipDailyMSU;
                         const combatDaily = yieldBreakdown.combatDailyMSU;
                         const debrisDaily = yieldBreakdown.debrisDailyMSU;
@@ -1040,23 +1302,35 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
 
                         const mineProp = totalRevenue > 0 ? (mineDaily / totalRevenue) * 283 : 0;
                         const expResProp = totalRevenue > 0 ? (expResDaily / totalRevenue) * 283 : 0;
+                        const anomalyProp = totalRevenue > 0 ? (anomalyDaily / totalRevenue) * 283 : 0;
                         const expShipProp = totalRevenue > 0 ? (expShipDaily / totalRevenue) * 283 : 0;
                         const combatProp = totalRevenue > 0 ? (combatDaily / totalRevenue) * 283 : 0;
                         const debrisProp = totalRevenue > 0 ? (debrisDaily / totalRevenue) * 283 : 0;
 
-                        const isExpHeavy = (expResDaily + expShipDaily) > mineDaily;
-                        const dominantLabel = totalRevenue === 0
+                        // Dynamic dominant calculation across all revenue categories
+                        const categoryCandidates = [
+                            { label: 'PRODUCTION DOMINANT', color: THEME_CYAN, amount: mineDaily },
+                            { label: 'EXPEDITION DOMINANT', color: '#22c55e', amount: expResDaily + expShipDaily },
+                            { label: 'ANOMALY DOMINANT', color: '#a855f7', amount: anomalyDaily },
+                            { label: 'COMBAT DOMINANT', color: '#ef4444', amount: combatDaily },
+                            { label: 'DEBRIS DOMINANT', color: '#eab308', amount: debrisDaily }
+                        ].sort((a, b) => b.amount - a.amount);
+
+                        const topCandidate = categoryCandidates[0]?.amount > 0 ? categoryCandidates[0] : null;
+                        const dominantLabel = totalRevenue === 0 || !topCandidate
                             ? "NO ACTIVE SOURCES"
-                            : isExpHeavy ? "EXPEDITION DOMINANT" : "PRODUCTION DOMINANT";
-                        const dominantPercent = totalRevenue > 0
-                            ? (isExpHeavy
-                                ? ((expResDaily + expShipDaily) / totalRevenue * 100).toFixed(1)
-                                : (mineDaily / totalRevenue * 100).toFixed(1))
+                            : topCandidate.label;
+                        const dominantColor = totalRevenue === 0 || !topCandidate
+                            ? "#64748b"
+                            : topCandidate.color;
+                        const dominantPercent = totalRevenue > 0 && topCandidate
+                            ? ((topCandidate.amount / totalRevenue) * 100).toFixed(1)
                             : "0.0";
 
                         const activeCount = [
                             yieldConfig.includeMines,
                             yieldConfig.includeExpeditions,
+                            yieldConfig.includeAnomalies,
                             yieldConfig.includeSalvagedFleet,
                             yieldConfig.includeCombatProfits,
                             yieldConfig.includeDebrisFields
@@ -1085,7 +1359,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
 
                                         <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
                                             <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="8.5" />
-                                            {/* Mine (Cyan) */}
+                                            {/* 1. Planetary Mines (Cyan) */}
                                             {yieldConfig.includeMines && (
                                                 <circle
                                                     cx="50" cy="50" r="45" fill="none" stroke={THEME_CYAN} strokeWidth="8.5"
@@ -1094,7 +1368,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                     style={{ transition: 'all 0.6s ease-out' }}
                                                 />
                                             )}
-                                            {/* Exp Res (Green) */}
+                                            {/* 2. Expedition Resources (Green) */}
                                             {yieldConfig.includeExpeditions && (
                                                 <circle
                                                     cx="50" cy="50" r="45" fill="none" stroke="#22c55e" strokeWidth="8.5"
@@ -1104,32 +1378,42 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                     style={{ transition: 'all 0.6s ease-out' }}
                                                 />
                                             )}
-                                            {/* Salvage (Magenta) */}
-                                            {yieldConfig.includeSalvagedFleet && (
+                                            {/* 3. Anomaly Resources (Purple) */}
+                                            {yieldConfig.includeAnomalies && (
                                                 <circle
-                                                    cx="50" cy="50" r="45" fill="none" stroke={THEME_MAGENTA} strokeWidth="8.5"
-                                                    strokeDasharray={`${expShipProp} 283`}
+                                                    cx="50" cy="50" r="45" fill="none" stroke="#a855f7" strokeWidth="8.5"
+                                                    strokeDasharray={`${anomalyProp} 283`}
                                                     strokeDashoffset={-(mineProp + expResProp)}
                                                     strokeLinecap="round"
                                                     style={{ transition: 'all 0.6s ease-out' }}
                                                 />
                                             )}
-                                            {/* Combat (Red) */}
-                                            {yieldConfig.includeCombatProfits && (
+                                            {/* 4. Salvaged Fleet (Orange) */}
+                                            {yieldConfig.includeSalvagedFleet && (
                                                 <circle
-                                                    cx="50" cy="50" r="45" fill="none" stroke="#ef4444" strokeWidth="8.5"
-                                                    strokeDasharray={`${combatProp} 283`}
-                                                    strokeDashoffset={-(mineProp + expResProp + expShipProp)}
+                                                    cx="50" cy="50" r="45" fill="none" stroke="#f97316" strokeWidth="8.5"
+                                                    strokeDasharray={`${expShipProp} 283`}
+                                                    strokeDashoffset={-(mineProp + expResProp + anomalyProp)}
                                                     strokeLinecap="round"
                                                     style={{ transition: 'all 0.6s ease-out' }}
                                                 />
                                             )}
-                                            {/* Debris (Yellow) */}
+                                            {/* 5. Combat Profits (Red) */}
+                                            {yieldConfig.includeCombatProfits && (
+                                                <circle
+                                                    cx="50" cy="50" r="45" fill="none" stroke="#ef4444" strokeWidth="8.5"
+                                                    strokeDasharray={`${combatProp} 283`}
+                                                    strokeDashoffset={-(mineProp + expResProp + anomalyProp + expShipProp)}
+                                                    strokeLinecap="round"
+                                                    style={{ transition: 'all 0.6s ease-out' }}
+                                                />
+                                            )}
+                                            {/* 6. Debris Fields (Yellow) */}
                                             {yieldConfig.includeDebrisFields && (
                                                 <circle
                                                     cx="50" cy="50" r="45" fill="none" stroke="#eab308" strokeWidth="8.5"
                                                     strokeDasharray={`${debrisProp} 283`}
-                                                    strokeDashoffset={-(mineProp + expResProp + expShipProp + combatProp)}
+                                                    strokeDashoffset={-(mineProp + expResProp + anomalyProp + expShipProp + combatProp)}
                                                     strokeLinecap="round"
                                                     style={{ transition: 'all 0.6s ease-out' }}
                                                 />
@@ -1175,7 +1459,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             </div>
                                             <span
                                                 className="nexus-yield-info-btn"
-                                                data-nexus-tooltip={`Empire Daily Yield Calculation\n\n• Checkboxes: Toggle any revenue category to customize your global empire calculation.\n• Planetary Mines: 24h theoretical output based on live mine levels, plasma tech, lifeforms & active bonuses.\n• Expeditions, Fleet Salvage, Combat & Debris: Rolling daily average calculated over the last 7 days.\n• Salvaged Fleet: Scaled by your average Scrap Merchant recovery rate (${Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100)}%).\n• MSU (Metal Standard Units): Standardized revenue based on your conversion rates (${rates.metal}:${rates.crystal}:${rates.deuterium}).`}
+                                                data-nexus-tooltip={`Empire Daily Yield Calculation\n\n• Checkboxes: Toggle any revenue category to customize your global empire calculation.\n• Planetary Mines: 24h theoretical output based on live mine levels, plasma tech, lifeforms & active bonuses.\n• Expeditions, Anomalies, Fleet Salvage, Combat & Debris: Rolling daily average calculated over the last 7 days.\n• Salvaged Fleet: Scaled by your average Scrap Merchant recovery rate (${Math.round((yieldConfig.scrapMerchantRatio || 0.75) * 100)}%).\n• MSU (Metal Standard Units): Standardized revenue based on your conversion rates (${rates.metal}:${rates.crystal}:${rates.deuterium}).`}
                                             >
                                                 i
                                             </span>
@@ -1215,29 +1499,29 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             alignItems: 'center',
                                             background: totalRevenue === 0
                                                 ? 'rgba(255,255,255,0.03)'
-                                                : isExpHeavy ? 'rgba(189, 0, 255, 0.1)' : 'rgba(0, 242, 255, 0.08)',
-                                            border: `1px solid ${totalRevenue === 0 ? 'rgba(255,255,255,0.08)' : isExpHeavy ? 'rgba(189, 0, 255, 0.3)' : 'rgba(0, 242, 255, 0.25)'}`,
+                                                : `${dominantColor}18`,
+                                            border: `1px solid ${totalRevenue === 0 ? 'rgba(255,255,255,0.08)' : `${dominantColor}45`}`,
                                             padding: '5px 12px',
                                             borderRadius: '8px',
-                                            boxShadow: totalRevenue === 0 ? 'none' : `0 0 14px ${isExpHeavy ? 'rgba(189, 0, 255, 0.18)' : 'rgba(0, 242, 255, 0.15)'}`
+                                            boxShadow: totalRevenue === 0 ? 'none' : `0 0 14px ${dominantColor}25`
                                         }}>
                                             <div style={{
                                                 width: '7px',
                                                 height: '7px',
                                                 borderRadius: '50%',
-                                                background: totalRevenue === 0 ? '#64748b' : isExpHeavy ? THEME_MAGENTA : THEME_CYAN,
-                                                boxShadow: `0 0 8px ${totalRevenue === 0 ? '#64748b' : isExpHeavy ? THEME_MAGENTA : THEME_CYAN}`
+                                                background: dominantColor,
+                                                boxShadow: `0 0 8px ${dominantColor}`
                                             }} />
                                             <div style={{ fontSize: '0.74rem', color: '#fff', fontWeight: 800, letterSpacing: '0.03em' }}>
-                                                {dominantLabel} <span style={{ color: isExpHeavy ? '#e879f9' : THEME_CYAN }}>({dominantPercent}%)</span>
+                                                {dominantLabel} <span style={{ color: dominantColor }}>({dominantPercent}%)</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* DATA SLATS */}
+                                {/* DATA SLATS - 6 CATEGORIES IN 3x2 GRID */}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '18px' }}>
-                                    {/* MINES */}
+                                    {/* 1. PLANETARY MINES */}
                                     <div
                                         className="glass-hover"
                                         onClick={() => setActiveModal('mines')}
@@ -1295,7 +1579,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         </div>
                                     </div>
 
-                                    {/* EXPEDITION RESOURCES */}
+                                    {/* 2. EXPEDITION RESOURCES */}
                                     <div
                                         className="glass-hover"
                                         onClick={() => setActiveModal('expedition')}
@@ -1353,15 +1637,73 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         </div>
                                     </div>
 
-                                    {/* SALVAGED FLEET */}
+                                    {/* 3. ANOMALY RESOURCES (PURPLE) */}
+                                    <div
+                                        className="glass-hover"
+                                        onClick={() => setActiveModal('anomalies')}
+                                        style={{
+                                            padding: '12px 14px',
+                                            background: yieldConfig.includeAnomalies ? 'linear-gradient(135deg, rgba(14, 23, 38, 0.85) 0%, rgba(8, 14, 24, 0.95) 100%)' : 'rgba(255, 255, 255, 0.015)',
+                                            border: yieldConfig.includeAnomalies ? '1px solid rgba(168, 85, 247, 0.28)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                            boxShadow: yieldConfig.includeAnomalies ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(168, 85, 247, 0.05)' : 'none',
+                                            position: 'relative',
+                                            cursor: 'pointer',
+                                            borderRadius: '14px',
+                                            opacity: yieldConfig.includeAnomalies ? 1 : 0.45,
+                                            transition: 'all 0.2s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minHeight: '68px'
+                                        }}
+                                    >
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeAnomalies ? '#a855f7' : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeAnomalies ? '0 0 8px rgba(168, 85, 247, 0.7)' : 'none' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setYieldConfig({ includeAnomalies: !yieldConfig.includeAnomalies });
+                                                    }}
+                                                    title={yieldConfig.includeAnomalies ? "Exclude Anomaly Resources from Empire Daily Yield" : "Include Anomaly Resources in Empire Daily Yield"}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        borderRadius: '4px',
+                                                        border: yieldConfig.includeAnomalies ? '1.5px solid #a855f7' : '1px solid rgba(255,255,255,0.25)',
+                                                        background: yieldConfig.includeAnomalies ? 'rgba(168, 85, 247, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: 'pointer',
+                                                        boxShadow: yieldConfig.includeAnomalies ? '0 0 8px rgba(168, 85, 247, 0.55)' : 'none'
+                                                    }}
+                                                >
+                                                    {yieldConfig.includeAnomalies && <Check size={11} color="#a855f7" strokeWidth={3} />}
+                                                </div>
+                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeAnomalies ? '#a855f7' : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>ANOMALY RESOURCES</span>
+                                            </div>
+                                            {!yieldConfig.includeAnomalies && (
+                                                <span style={{ fontSize: '0.52rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239,68,68,0.15)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.35)', letterSpacing: '0.04em' }}>OFF</span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                            <div style={{ fontSize: '1.22rem', fontWeight: 900, color: yieldConfig.includeAnomalies ? '#fff' : 'rgba(255,255,255,0.4)', letterSpacing: '-0.02em' }}>
+                                                {formatNumber(yieldBreakdown.rawAnomalyDailyMSU)}
+                                            </div>
+                                            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>MSU/d</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 4. SALVAGED FLEET (ORANGE) */}
                                     <div
                                         className="glass-hover"
                                         onClick={() => setActiveModal('fleet')}
                                         style={{
                                             padding: '12px 14px',
                                             background: yieldConfig.includeSalvagedFleet ? 'linear-gradient(135deg, rgba(14, 23, 38, 0.85) 0%, rgba(8, 14, 24, 0.95) 100%)' : 'rgba(255, 255, 255, 0.015)',
-                                            border: yieldConfig.includeSalvagedFleet ? '1px solid rgba(189, 0, 255, 0.28)' : '1px solid rgba(255, 255, 255, 0.06)',
-                                            boxShadow: yieldConfig.includeSalvagedFleet ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(189, 0, 255, 0.05)' : 'none',
+                                            border: yieldConfig.includeSalvagedFleet ? '1px solid rgba(249, 115, 22, 0.28)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                            boxShadow: yieldConfig.includeSalvagedFleet ? '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 16px rgba(249, 115, 22, 0.05)' : 'none',
                                             position: 'relative',
                                             cursor: 'pointer',
                                             borderRadius: '14px',
@@ -1373,7 +1715,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                             minHeight: '68px'
                                         }}
                                     >
-                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeSalvagedFleet ? THEME_MAGENTA : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeSalvagedFleet ? `0 0 8px ${THEME_MAGENTA}88` : 'none' }} />
+                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: yieldConfig.includeSalvagedFleet ? '#f97316' : 'rgba(255,255,255,0.2)', boxShadow: yieldConfig.includeSalvagedFleet ? '0 0 8px rgba(249, 115, 22, 0.7)' : 'none' }} />
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <div
@@ -1386,18 +1728,18 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                         width: '16px',
                                                         height: '16px',
                                                         borderRadius: '4px',
-                                                        border: yieldConfig.includeSalvagedFleet ? `1.5px solid ${THEME_MAGENTA}` : '1px solid rgba(255,255,255,0.25)',
-                                                        background: yieldConfig.includeSalvagedFleet ? 'rgba(189, 0, 255, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                        border: yieldConfig.includeSalvagedFleet ? '1.5px solid #f97316' : '1px solid rgba(255,255,255,0.25)',
+                                                        background: yieldConfig.includeSalvagedFleet ? 'rgba(249, 115, 22, 0.22)' : 'rgba(255,255,255,0.03)',
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
                                                         cursor: 'pointer',
-                                                        boxShadow: yieldConfig.includeSalvagedFleet ? `0 0 8px ${THEME_MAGENTA}55` : 'none'
+                                                        boxShadow: yieldConfig.includeSalvagedFleet ? '0 0 8px rgba(249, 115, 22, 0.55)' : 'none'
                                                     }}
                                                 >
-                                                    {yieldConfig.includeSalvagedFleet && <Check size={11} color={THEME_MAGENTA} strokeWidth={3} />}
+                                                    {yieldConfig.includeSalvagedFleet && <Check size={11} color="#f97316" strokeWidth={3} />}
                                                 </div>
-                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeSalvagedFleet ? THEME_MAGENTA : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>SALVAGED FLEET</span>
+                                                <span style={{ fontSize: '0.64rem', color: yieldConfig.includeSalvagedFleet ? '#f97316' : 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.04em' }}>SALVAGED FLEET</span>
                                             </div>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                 {!yieldConfig.includeSalvagedFleet && (
@@ -1416,9 +1758,9 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                         alignItems: 'center',
                                                         gap: '4px',
                                                         padding: '2px 7px',
-                                                        background: 'rgba(189, 0, 255, 0.18)',
-                                                        border: '1px solid rgba(189, 0, 255, 0.45)',
-                                                        color: '#e879f9',
+                                                        background: 'rgba(249, 115, 22, 0.18)',
+                                                        border: '1px solid rgba(249, 115, 22, 0.45)',
+                                                        color: '#fb923c',
                                                         borderRadius: '5px',
                                                         cursor: 'pointer',
                                                         fontSize: '0.62rem',
@@ -1445,7 +1787,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         </div>
                                     </div>
 
-                                    {/* COMBAT PROFITS */}
+                                    {/* 5. COMBAT PROFITS */}
                                     <div
                                         className="glass-hover"
                                         onClick={() => setActiveModal('combats')}
@@ -1503,7 +1845,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         </div>
                                     </div>
 
-                                    {/* DEBRIS FIELDS */}
+                                    {/* 6. DEBRIS FIELDS */}
                                     <div
                                         className="glass-hover"
                                         onClick={() => setActiveModal('debris')}
@@ -1558,49 +1900,6 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                 {formatNumber(yieldBreakdown.rawDebrisDailyMSU)}
                                             </div>
                                             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>MSU/d</span>
-                                        </div>
-                                    </div>
-
-                                    {/* TOTAL AVG */}
-                                    <div
-                                        className="glass-hover"
-                                        onClick={() => setActiveModal('total')}
-                                        style={{
-                                            padding: '12px 14px',
-                                            background: 'linear-gradient(135deg, rgba(16, 26, 44, 0.9) 0%, rgba(10, 18, 30, 0.95) 100%)',
-                                            border: '1px solid rgba(0, 242, 255, 0.3)',
-                                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 16px rgba(0, 242, 255, 0.08)',
-                                            position: 'relative',
-                                            cursor: 'pointer',
-                                            borderRadius: '14px',
-                                            transition: 'all 0.2s ease',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            justifyContent: 'space-between',
-                                            minHeight: '68px'
-                                        }}
-                                    >
-                                        <div style={{ position: 'absolute', left: 0, top: '15%', height: '70%', width: '3.5px', borderRadius: '0 2px 2px 0', background: '#00f2ff', boxShadow: '0 0 10px rgba(0, 242, 255, 0.8)' }} />
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
-                                            <span style={{ fontSize: '0.64rem', color: '#fff', fontWeight: 900, opacity: 0.95, letterSpacing: '0.05em' }}>TOTAL DAILY</span>
-                                            <span style={{
-                                                fontSize: '0.55rem',
-                                                fontWeight: 900,
-                                                padding: '2px 7px',
-                                                borderRadius: '4px',
-                                                background: activeCount === 5 ? 'rgba(0, 242, 255, 0.16)' : 'rgba(245, 158, 11, 0.16)',
-                                                border: activeCount === 5 ? '1px solid rgba(0, 242, 255, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
-                                                color: activeCount === 5 ? '#00f2ff' : '#fbbf24',
-                                                letterSpacing: '0.04em'
-                                            }}>
-                                                {activeCount}/5 ACTIVE
-                                            </span>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                                            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', textShadow: '0 0 12px rgba(0, 242, 255, 0.3)' }}>
-                                                {formatNumber(totalRevenue)}
-                                            </div>
-                                            <span style={{ fontSize: '0.68rem', fontWeight: 800, color: THEME_CYAN }}>MSU/d</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2066,6 +2365,67 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
             </Modal>
 
             <Modal
+                isOpen={activeModal === 'anomalies'}
+                onClose={() => setActiveModal(null)}
+                title="7-Day Anomaly Resource Extraction"
+                icon={<ThemeIcon name="radar" size={28} />}
+            >
+                <div style={{ height: '500px', minHeight: '400px' }}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                        <AreaChart data={historicalData}>
+                            <defs>
+                                <linearGradient id="colorAnomM" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={RESOURCE_COLORS.metal} stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor={RESOURCE_COLORS.metal} stopOpacity={0} />
+                                </linearGradient>
+                                <linearGradient id="colorAnomC" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={RESOURCE_COLORS.crystal} stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor={RESOURCE_COLORS.crystal} stopOpacity={0} />
+                                </linearGradient>
+                                <linearGradient id="colorAnomD" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={RESOURCE_COLORS.deuterium} stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor={RESOURCE_COLORS.deuterium} stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                            <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" />
+                            <YAxis stroke="rgba(255,255,255,0.3)" tickFormatter={(val) => formatNumber(val)} />
+                            <Tooltip
+                                contentStyle={{ background: '#0a141e', border: '1px solid rgba(168,85,247,0.3)', borderRadius: '12px', fontSize: '0.8rem', color: '#fff' }}
+                                itemStyle={{ color: '#fff' }}
+                                formatter={(val: any, name: any) => [Number(val || 0).toLocaleString(), name]}
+                                itemSorter={(item: any) => {
+                                    const order: Record<string, number> = { 'Metal': 1, 'Crystal': 2, 'Deuterium': 3 };
+                                    return order[item.name as string] || 10;
+                                }}
+                            />
+                            <Area type="monotone" dataKey="anomalyMetal" name="Metal" stroke={RESOURCE_COLORS.metal} fillOpacity={1} fill="url(#colorAnomM)" stackId="anom" />
+                            <Area type="monotone" dataKey="anomalyCrystal" name="Crystal" stroke={RESOURCE_COLORS.crystal} fillOpacity={1} fill="url(#colorAnomC)" stackId="anom" />
+                            <Area type="monotone" dataKey="anomalyDeuterium" name="Deuterium" stroke={RESOURCE_COLORS.deuterium} fillOpacity={1} fill="url(#colorAnomD)" stackId="anom" />
+                            <Legend
+                                content={() => (
+                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginTop: '20px', fontSize: '0.7rem', fontWeight: 900, letterSpacing: '0.05em' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: RESOURCE_COLORS.metal }}>
+                                            <div style={{ width: '10px', height: '10px', background: RESOURCE_COLORS.metal, borderRadius: '2px' }} /> METAL
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: RESOURCE_COLORS.crystal }}>
+                                            <div style={{ width: '10px', height: '10px', background: RESOURCE_COLORS.crystal, borderRadius: '2px' }} /> CRYSTAL
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: RESOURCE_COLORS.deuterium }}>
+                                            <div style={{ width: '10px', height: '10px', background: RESOURCE_COLORS.deuterium, borderRadius: '2px' }} /> DEUTERIUM
+                                        </div>
+                                    </div>
+                                )}
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+                <div style={{ marginTop: '24px', textAlign: 'center', opacity: 0.5, fontSize: '0.8rem' }}>
+                    Visualizes total loot and salvaged ships reclaimed from space anomalies over the last 7 days.
+                </div>
+            </Modal>
+
+            <Modal
                 isOpen={activeModal === 'fleet'}
                 onClose={() => setActiveModal(null)}
                 title="7-Day Expedition Salvage Value"
@@ -2303,6 +2663,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                         expeditions,
                         combatReports,
                         debrisHarvests,
+                        anomalyMissions,
                         rates,
                         yieldConfig
                     });
@@ -2314,15 +2675,15 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '680px', margin: '0 auto', width: '100%' }}>
                             {/* EXPLANATION */}
                             <div style={{
-                                background: 'rgba(189, 0, 255, 0.05)',
-                                border: '1px solid rgba(189, 0, 255, 0.2)',
+                                background: 'rgba(249, 115, 22, 0.05)',
+                                border: '1px solid rgba(249, 115, 22, 0.25)',
                                 borderRadius: '16px',
                                 padding: '16px 20px',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '8px'
                             }}>
-                                <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#e879f9', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fb923c', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <ThemeIcon name="tools" size={18} />
                                     Scrap Merchant Yield Recovery
                                 </div>
@@ -2349,10 +2710,10 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         AVERAGE SCRAP MERCHANT RATE
                                     </span>
                                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                                        <span style={{ fontSize: '1.8rem', fontWeight: 900, color: '#e879f9', letterSpacing: '-0.02em' }}>
+                                        <span style={{ fontSize: '1.8rem', fontWeight: 900, color: '#fb923c', letterSpacing: '-0.02em' }}>
                                             {scrapPercentInput}
                                         </span>
-                                        <span style={{ fontSize: '1rem', fontWeight: 800, color: '#e879f9' }}>%</span>
+                                        <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fb923c' }}>%</span>
                                     </div>
                                 </div>
 
@@ -2373,14 +2734,14 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                                 style={{
                                                     padding: '10px 8px',
                                                     borderRadius: '10px',
-                                                    border: isSelected ? '1px solid #bd00ff' : '1px solid rgba(255, 255, 255, 0.1)',
-                                                    background: isSelected ? 'rgba(189, 0, 255, 0.25)' : 'rgba(255, 255, 255, 0.03)',
+                                                    border: isSelected ? '1px solid #f97316' : '1px solid rgba(255, 255, 255, 0.1)',
+                                                    background: isSelected ? 'rgba(249, 115, 22, 0.25)' : 'rgba(255, 255, 255, 0.03)',
                                                     color: isSelected ? '#fff' : 'rgba(255, 255, 255, 0.7)',
                                                     fontWeight: isSelected ? 800 : 600,
                                                     fontSize: '0.8rem',
                                                     cursor: 'pointer',
                                                     transition: 'all 0.2s ease',
-                                                    boxShadow: isSelected ? '0 0 12px rgba(189, 0, 255, 0.3)' : 'none'
+                                                    boxShadow: isSelected ? '0 0 12px rgba(249, 115, 22, 0.35)' : 'none'
                                                 }}
                                             >
                                                 {preset.label}
@@ -2400,17 +2761,17 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         onChange={(e) => setScrapPercentInput(Number(e.target.value))}
                                         style={{
                                             width: '100%',
-                                            accentColor: '#bd00ff',
+                                            accentColor: '#f97316',
                                             cursor: 'pointer',
                                             height: '6px'
                                         }}
                                     />
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 700 }}>
-                                        <span style={{ color: scrapPercentInput === 35 ? '#e879f9' : 'inherit' }}>35% (Base)</span>
+                                        <span style={{ color: scrapPercentInput === 35 ? '#fb923c' : 'inherit' }}>35% (Base)</span>
                                         <span>50%</span>
-                                        <span style={{ color: scrapPercentInput === 75 ? '#e879f9' : 'inherit' }}>75% (Standard)</span>
-                                        <span style={{ color: scrapPercentInput === 85 ? '#e879f9' : 'inherit' }}>85% (Boosted)</span>
-                                        <span style={{ color: scrapPercentInput === 100 ? '#e879f9' : 'inherit' }}>100% (Event/Max)</span>
+                                        <span style={{ color: scrapPercentInput === 75 ? '#fb923c' : 'inherit' }}>75% (Standard)</span>
+                                        <span style={{ color: scrapPercentInput === 85 ? '#fb923c' : 'inherit' }}>85% (Boosted)</span>
+                                        <span style={{ color: scrapPercentInput === 100 ? '#fb923c' : 'inherit' }}>100% (Event/Max)</span>
                                     </div>
                                 </div>
                             </div>
@@ -2434,7 +2795,7 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
                                     <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Scrap Merchant Multiplier:</span>
-                                    <span style={{ fontWeight: 800, color: '#e879f9' }}>× {scrapPercentInput}%</span>
+                                    <span style={{ fontWeight: 800, color: '#fb923c' }}>× {scrapPercentInput}%</span>
                                 </div>
                                 <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '2px 0' }} />
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem' }}>
@@ -2497,13 +2858,13 @@ const Overview: React.FC<OverviewProps> = ({ onSelect }) => {
                                         style={{
                                             padding: '10px 24px',
                                             borderRadius: '10px',
-                                            border: '1px solid #bd00ff',
-                                            background: 'linear-gradient(135deg, rgba(189, 0, 255, 0.4) 0%, rgba(189, 0, 255, 0.2) 100%)',
+                                            border: '1px solid #f97316',
+                                            background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.4) 0%, rgba(249, 115, 22, 0.2) 100%)',
                                             color: '#fff',
                                             fontWeight: 800,
                                             fontSize: '0.85rem',
                                             cursor: 'pointer',
-                                            boxShadow: '0 0 20px rgba(189, 0, 255, 0.35)',
+                                            boxShadow: '0 0 20px rgba(249, 115, 22, 0.35)',
                                             transition: 'all 0.2s ease'
                                         }}
                                     >

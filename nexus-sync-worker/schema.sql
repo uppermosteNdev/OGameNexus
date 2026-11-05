@@ -408,6 +408,9 @@ CREATE TABLE IF NOT EXISTS alliance_topflop_configs (
     custom_title TEXT DEFAULT 'Top / Flop of the day',
     category INTEGER NOT NULL DEFAULT 0,        -- 0: Total Points, 1: Economy, 3: Fleet
     is_default INTEGER NOT NULL DEFAULT 0,      -- 1 if default for alliance
+    discord_webhook_url TEXT,                   -- Discord webhook for automated daily posting
+    webhook_post_hour INTEGER DEFAULT 0,        -- 0 to 23 UTC
+    last_webhook_sent_at INTEGER,               -- Timestamp ms when webhook was last dispatched
     last_generated_at INTEGER,                  -- Timestamp ms
     updated_at INTEGER NOT NULL
 );

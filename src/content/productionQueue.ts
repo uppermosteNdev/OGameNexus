@@ -54,7 +54,7 @@ const OGAME_TECH_TOKENS: Record<string, number> = {
 
   // Research
   'espionagetechnology': 106, 'computertechnology': 108, 'weaponstechnology': 109,
-  'shieldingtechnology': 110, 'armourtechnology': 111, 'energytechnology': 113,
+  'shieldingtechnology': 110, 'armourtechnology': 111, 'armortechnology': 111, 'energytechnology': 113,
   'hyperspacetechnology': 114, 'combustiondrive': 115, 'impulsedrive': 117,
   'hyperspacedrive': 118, 'lasertechnology': 120, 'iontechnology': 121,
   'plasmatechnology': 122, 'intergalacticresearchnetwork': 123, 'astrophysics': 124,

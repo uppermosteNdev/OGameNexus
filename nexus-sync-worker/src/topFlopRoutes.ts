@@ -137,7 +137,7 @@ export async function handleGetTopFlopImage(req: any, env: Env): Promise<Respons
         return new Response(existing.body, {
           headers: {
             'Content-Type': 'image/png',
-            'Cache-Control': 'public, max-age=300, s-maxage=86400',
+            'Cache-Control': 'public, max-age=60, s-maxage=300, must-revalidate',
             'Access-Control-Allow-Origin': '*',
           },
         });
@@ -164,7 +164,7 @@ export async function handleGetTopFlopImage(req: any, env: Env): Promise<Respons
       await env.VAULT_BUCKET.put(r2Key, pngBuffer, {
         httpMetadata: {
           contentType: 'image/png',
-          cacheControl: 'public, max-age=300, s-maxage=86400',
+          cacheControl: 'public, max-age=60, s-maxage=300, must-revalidate',
         },
         customMetadata: {
           universe: universeId,
@@ -266,6 +266,8 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       customTitle = 'Top / Flop of the day',
       category = 0,
       isDefault = 0,
+      discordWebhookUrl = null,
+      webhookPostHour = 0,
     } = body;
 
     const universeId = cleanUni(rawUni);
@@ -283,9 +285,9 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       INSERT INTO alliance_topflop_configs (
         config_id, universe_id, ogame_alliance_id, alliance_tag, config_name,
         player_id, player_name, scheduled_utc_hour, theme, custom_logo_url,
-        custom_title, category, is_default, updated_at
+        custom_title, category, is_default, discord_webhook_url, webhook_post_hour, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(config_id) DO UPDATE SET
         alliance_tag = excluded.alliance_tag,
         config_name = excluded.config_name,
@@ -296,6 +298,8 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
         custom_title = excluded.custom_title,
         category = excluded.category,
         is_default = excluded.is_default,
+        discord_webhook_url = excluded.discord_webhook_url,
+        webhook_post_hour = excluded.webhook_post_hour,
         updated_at = excluded.updated_at
     `).bind(
       configId,
@@ -311,6 +315,8 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       customTitle,
       parseInt(String(category), 10) || 0,
       isDefault ? 1 : 0,
+      discordWebhookUrl ? String(discordWebhookUrl).trim() : null,
+      parseInt(String(webhookPostHour), 10) || 0,
       now
     ).run();
 
@@ -373,7 +379,7 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
       await env.VAULT_BUCKET.put(r2Key, pngBuffer, {
         httpMetadata: {
           contentType: 'image/png',
-          cacheControl: 'public, max-age=300, s-maxage=86400',
+          cacheControl: 'public, max-age=60, s-maxage=300, must-revalidate',
         },
         customMetadata: {
           universe: universeId,
@@ -390,9 +396,9 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
       INSERT INTO alliance_topflop_configs (
         config_id, universe_id, ogame_alliance_id, alliance_tag, config_name,
         player_id, player_name, scheduled_utc_hour, theme, custom_logo_url,
-        custom_title, category, is_default, last_generated_at, updated_at
+        custom_title, category, is_default, discord_webhook_url, webhook_post_hour, last_generated_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(config_id) DO UPDATE SET
         theme = excluded.theme,
         custom_title = excluded.custom_title,
@@ -400,6 +406,8 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
         category = excluded.category,
         scheduled_utc_hour = excluded.scheduled_utc_hour,
         config_name = COALESCE(excluded.config_name, alliance_topflop_configs.config_name),
+        discord_webhook_url = COALESCE(excluded.discord_webhook_url, alliance_topflop_configs.discord_webhook_url),
+        webhook_post_hour = COALESCE(excluded.webhook_post_hour, alliance_topflop_configs.webhook_post_hour),
         last_generated_at = excluded.last_generated_at,
         updated_at = excluded.updated_at
     `).bind(
@@ -416,6 +424,8 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
       customTitle || 'Top / Flop of the day',
       category,
       1,
+      body.discordWebhookUrl ? String(body.discordWebhookUrl).trim() : null,
+      body.webhookPostHour !== undefined ? parseInt(String(body.webhookPostHour), 10) : 0,
       Date.now(),
       Date.now()
     ).run();
@@ -430,6 +440,169 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
     });
   } catch (err: any) {
     return json({ error: err?.message || 'Failed to generate TopFlop now' }, { status: 500 });
+  }
+}
+
+// ----------------------------------------------------------------------------
+// 4B. DISCORD WEBHOOK DISPATCHER & TESTER
+// ----------------------------------------------------------------------------
+export async function dispatchDiscordWebhook(
+  webhookUrl: string,
+  universeId: string,
+  allianceId: string,
+  playerId: string,
+  category: number,
+  env: Env,
+  imageUrl?: string
+): Promise<{ success: boolean; status?: number; error?: string }> {
+  try {
+    const cleanUrl = webhookUrl.trim();
+    if (!cleanUrl.startsWith('https://discord.com/api/webhooks/') && !cleanUrl.startsWith('https://discordapp.com/api/webhooks/')) {
+      return { success: false, error: 'Invalid Discord webhook URL. It must begin with https://discord.com/api/webhooks/...' };
+    }
+
+    const effectiveImageUrl = imageUrl || `https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/${universeId}/${allianceId}/${playerId}/topflop.png`;
+
+    // 1. Attempt to load the PNG directly from R2 to send as a native file attachment.
+    // Uploading as a direct attachment eliminates Discord's gray embed container frame completely!
+    let imageArrayBuffer: ArrayBuffer | null = null;
+    if (env?.VAULT_BUCKET) {
+      const r2Key = category && category !== 0
+        ? `topflop/${universeId}/${allianceId}/${playerId}/topflop_cat${category}.png`
+        : `topflop/${universeId}/${allianceId}/${playerId}/topflop.png`;
+      let obj = await env.VAULT_BUCKET.get(r2Key);
+      if (!obj) {
+        obj = await env.VAULT_BUCKET.get(`topflop/${universeId}/${allianceId}/topflop.png`);
+      }
+      if (obj) {
+        imageArrayBuffer = await obj.arrayBuffer();
+      }
+    }
+
+    // 2. If image binary is available from R2, send native multipart/form-data file attachment
+    if (imageArrayBuffer && imageArrayBuffer.byteLength > 0) {
+      const form = new FormData();
+      form.append('payload_json', JSON.stringify({
+        username: 'NexusBot',
+        avatar_url: 'https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/assets/nexus_logo.png',
+      }));
+      form.append('files[0]', new Blob([imageArrayBuffer], { type: 'image/png' }), 'topflop.png');
+
+      const res = await fetch(cleanUrl, {
+        method: 'POST',
+        body: form,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        return { success: false, status: res.status, error: `Discord rejected webhook (${res.status}): ${errText}` };
+      }
+
+      return { success: true, status: res.status };
+    }
+
+    // 3. Fallback to embed if R2 object is not yet written
+    const payload = {
+      username: 'NexusBot',
+      avatar_url: 'https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/assets/nexus_logo.png',
+      embeds: [
+        {
+          image: {
+            url: effectiveImageUrl,
+          },
+        },
+      ],
+    };
+
+    const res = await fetch(cleanUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { success: false, status: res.status, error: `Discord rejected webhook (${res.status}): ${errText}` };
+    }
+
+    return { success: true, status: res.status };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed connecting to Discord webhook' };
+  }
+}
+
+export async function handleTestDiscordWebhook(req: any, env: Env): Promise<Response> {
+  try {
+    const body = await req.json();
+    const { webhookUrl, webhookPostHour = 0, universeId: rawUni, allianceId, playerId, category = 0 } = body;
+    const cleanWebhook = (webhookUrl || '').trim();
+
+    if (!cleanWebhook) {
+      return json({ error: 'Missing Discord webhook URL' }, { status: 400 });
+    }
+
+    const universeId = cleanUni(rawUni);
+    const db = getUniverseDb(env, universeId);
+    await ensureTopFlopTables(db);
+
+    const configRow: any = await db.prepare(`
+      SELECT ogame_alliance_id, alliance_tag, player_name, category, scheduled_utc_hour, theme, custom_logo_url, custom_title
+      FROM alliance_topflop_configs
+      WHERE universe_id = ? AND ogame_alliance_id = ? AND player_id = ?
+      LIMIT 1
+    `).bind(universeId, allianceId, playerId).first();
+
+    const allyTag = configRow?.alliance_tag || 'ALLIANCE';
+    const effectiveCategory = category ?? (configRow?.category || 0);
+
+    const imageUrl = `https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/${universeId}/${allianceId}/${playerId}/topflop.png?t=${Date.now()}`;
+    const result = await dispatchDiscordWebhook(cleanWebhook, universeId, allianceId, playerId, effectiveCategory, env, imageUrl);
+
+    if (!result.success) {
+      return json({ error: result.error || 'Failed sending test message to Discord' }, { status: 400 });
+    }
+
+    // Automatically persist the tested webhook settings into D1 so testing immediately saves it!
+    if (allianceId && playerId) {
+      const configId = `${universeId}_${allianceId}_${playerId}`;
+      await db.prepare(`
+        INSERT INTO alliance_topflop_configs (
+          config_id, universe_id, ogame_alliance_id, alliance_tag, config_name,
+          player_id, player_name, scheduled_utc_hour, theme, custom_logo_url,
+          custom_title, category, is_default, discord_webhook_url, webhook_post_hour, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(config_id) DO UPDATE SET
+          discord_webhook_url = excluded.discord_webhook_url,
+          webhook_post_hour = excluded.webhook_post_hour,
+          updated_at = excluded.updated_at
+      `).bind(
+        configId,
+        universeId,
+        allianceId,
+        allyTag,
+        `${allyTag} Daily Top/Flop`,
+        String(playerId),
+        configRow?.player_name || `Player #${playerId}`,
+        configRow?.scheduled_utc_hour ?? 0,
+        configRow?.theme || 'tactical',
+        configRow?.custom_logo_url || null,
+        configRow?.custom_title || 'Top / Flop of the day',
+        effectiveCategory,
+        1,
+        cleanWebhook,
+        parseInt(String(webhookPostHour), 10) || 0,
+        Date.now()
+      ).run();
+    }
+
+    return json({
+      success: true,
+      message: 'Test message sent to Discord and settings saved!',
+      saved: true,
+    });
+  } catch (err: any) {
+    return json({ error: err?.message || 'Failed to dispatch test message' }, { status: 500 });
   }
 }
 
@@ -525,6 +698,55 @@ export async function handleScheduledTopFlopCron(env: Env): Promise<void> {
             console.log(`[TopFlopCron] Daily 24h Top/Flop successfully generated & frozen for ${config.config_id} at cut-off ${currentUtcHour}:05 UTC`);
           } catch (itemErr: any) {
             console.warn(`[TopFlopCron] Error generating daily report for ${config.config_id}:`, itemErr?.message);
+          }
+        }
+      }
+    }
+
+    // ========================================================================
+    // Step 1B: Check for Automated Discord Webhook Dispatches
+    // Executes at :05 past the hour for all configs matching webhook_post_hour
+    // ========================================================================
+    if (currentUtcMinute >= 5 && currentUtcMinute < 15) {
+      const { results: webhookConfigs } = await coreDb.prepare(`
+        SELECT config_id, universe_id, ogame_alliance_id, alliance_tag, player_id,
+               discord_webhook_url, webhook_post_hour, category, last_webhook_sent_at
+        FROM alliance_topflop_configs
+        WHERE discord_webhook_url IS NOT NULL
+          AND LENGTH(TRIM(discord_webhook_url)) > 0
+          AND webhook_post_hour = ?
+      `).bind(currentUtcHour).all();
+
+      if (webhookConfigs && webhookConfigs.length > 0) {
+        for (const config of webhookConfigs as any[]) {
+          const lastSent = config.last_webhook_sent_at || 0;
+          if (Date.now() - lastSent < 45 * 60 * 1000) {
+            continue; // Already dispatched in this 45-minute window
+          }
+
+          try {
+            const uId = cleanUni(config.universe_id);
+            const aId = String(config.ogame_alliance_id).trim();
+            const pId = config.player_id;
+            const targetDb = getUniverseDb(env, uId);
+            const cat = config.category || 0;
+            const webhookUrl = config.discord_webhook_url.trim();
+
+            const imageUrl = `https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/${uId}/${aId}/${pId}/topflop.png?t=${Date.now()}`;
+            const dispatchResult = await dispatchDiscordWebhook(webhookUrl, uId, aId, pId, cat, env, imageUrl);
+
+            if (dispatchResult.success) {
+              await targetDb.prepare(`
+                UPDATE alliance_topflop_configs
+                SET last_webhook_sent_at = ?
+                WHERE config_id = ?
+              `).bind(Date.now(), config.config_id).run();
+              console.log(`[TopFlopCron] Successfully dispatched automated Discord webhook for ${config.config_id} at hour ${currentUtcHour}:05 UTC`);
+            } else {
+              console.warn(`[TopFlopCron] Discord webhook error for ${config.config_id}:`, dispatchResult.error);
+            }
+          } catch (whErr: any) {
+            console.warn(`[TopFlopCron] Exception dispatching webhook for ${config.config_id}:`, whErr?.message);
           }
         }
       }

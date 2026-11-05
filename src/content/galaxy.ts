@@ -556,7 +556,8 @@ function openIntelSidebar() {
 
   // Load cache and render content
   try {
-    chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe } }, (response) => {
+    const playerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute("content") || undefined;
+    chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe, playerId } }, (response) => {
       if (chrome.runtime.lastError) {
         console.warn("OGame Nexus: Extension context invalidated. Please reload the page.");
         return;
@@ -2463,7 +2464,7 @@ export function applyGalaxyRings() {
   if (keysToDelete.length > 0 || coordsToDelete.length > 0) {
     chrome.runtime.sendMessage({
       type: "DELETE_SPIED_PLANETS",
-      data: { planetKeys: keysToDelete, coordsList: coordsToDelete, universe }
+      data: { planetKeys: keysToDelete, coordsList: coordsToDelete, universe, playerId: document.querySelector('meta[name="ogame-player-id"]')?.getAttribute("content") || undefined }
     }, (response) => {
       if (chrome.runtime.lastError) return;
       if (response && response.success) {
@@ -2618,7 +2619,8 @@ export function initGalaxyView() {
             return;
           }
 
-          chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe } }, (response) => {
+          const playerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute("content") || undefined;
+    chrome.runtime.sendMessage({ type: "GET_ALL_SPIED_PLANETS", data: { universe, playerId } }, (response) => {
             isLoadingCache = false;
             if (chrome.runtime.lastError) {
               console.warn("OGame Nexus: Extension context invalidated during cache request callback. Please reload the page.");
@@ -3267,6 +3269,10 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
         }
       }
 
+      // 7. Confirmed Empty Slot Verification
+      const hasColonizeAction = !!row.querySelector('.colonize-active, [data-ipi-hint="ipiGalaxyColonize"], a[href*="mission=7"]');
+      const isConfirmedEmpty = (isEmpty || hasColonizeAction) && !microplanet && !planetId && !playerId && !playerName;
+
       slots.push({
         slot,
         planetId,
@@ -3290,6 +3296,7 @@ export async function syncGalaxyToOverwatch(galaxy: number, system: number, rows
         isIdle,
         activityMarker,
         activityTimestamp,
+        isConfirmedEmpty,
       });
     });
 

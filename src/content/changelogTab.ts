@@ -17,6 +17,21 @@ export interface ChangelogVersion {
 export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]> = {
   en: [
     {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
+    {
       version: 'v1.2.9',
       items: [
         { type: 'Feature', text: 'Note Taking for Coordinates and Players: Click any slot number in Galaxy View to record and view notes for coordinates and players, with category tagging, timeline history, and on-demand Personal Vault sync.' },
@@ -109,6 +124,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   ro: [
+    {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Centru de Comandă Proiectul Orion: Modul complet pentru Proiectul Orion cu urmărirea anomaliilor, clasamentul scanerelor planetare, optimizarea profitului misiunilor și amortizarea clădirilor de Litiu.' },
+        { type: 'Feature', text: 'Simulator de Luptă pe Valuri pentru Anomalii: Simulator tactic pe valuri consecutive care calculează supraviețuirea navelor, pierderile permanente și șansele de victorie, respectând cercetările clasei General.' },
+        { type: 'Feature', text: 'Planificare Inteligentă a Litiului: Scanerul planetar afișează timpul exact de acumulare și producția necesară de Litiu pentru a revendica recompensele, plus costul de Litiu rămas pentru valurile active.' },
+        { type: 'Feature', text: 'Statistici Randament Litiu: Subtab și grafic nou pentru monitorizarea cheltuielilor zilnice de combustibil Litiu și a randamentului mediu obținut zi de zi.' },
+        { type: 'Feature', text: 'Evaluare Dinamică a Navelor Găsite: Calculează automat valoarea medie în MSU a navelor găsite la anomalii pentru toate nivelurile în profitul total al misiunii.' },
+        { type: 'Feature', text: 'Filtrare Jucători în Fluxul Overwatch: Posibilitatea de a filtra evenimentele din univers după numele unui anumit jucător pentru o supraveghere dedicată.' },
+        { type: 'Feature', text: 'Recompense Posibile vs. Colectate: Distincție clară între resursele potențiale care așteaptă să fie revendicate și recompensele deja securizate.' },
+        { type: 'Bugfix', text: 'Capacitate de Transport Sonde de Spionaj: Volumul de transport al sondelor de spionaj este acum luat în considerare la misiunile de livrare la anomalii.' },
+        { type: 'Bugfix', text: 'Izolare Multi-Cont pe Același Univers: Prevenit suprapunerea țintelor din Raid Radar și a anomaliilor între conturi diferite din același univers.' },
+        { type: 'Polishing', text: 'Restilizare Fereastră Misiuni Anomalii: Înlocuit textele tehnice cu pictograme de resurse, costuri simplificate pe val și indicatori clari pentru pierderi.' }
+      ]
+    },
     {
       version: 'v1.2.9',
       items: [
@@ -203,6 +233,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   de: [
     {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
+    {
       version: 'v1.2.7',
       items: [
         { type: 'Feature', text: 'Mehrsprachige Unterstützung: Nexus ist jetzt in 12 Sprachen verfügbar mit einfacher Sprachauswahl in der Navigationsleiste, in den Einstellungen und in den Spielnachrichten.' },
@@ -272,6 +317,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   fr: [
+    {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
     {
       version: 'v1.2.7',
       items: [
@@ -343,6 +403,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ]
 ,
   pl: [
+    {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
     {
       "version": "v1.2.7",
       "items": [
@@ -443,6 +518,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   nl: [
     {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
+    {
       "version": "v1.2.7",
       "items": [
         { "type": "Feature", "text": "Meertalige ondersteuning: Nexus is nu beschikbaar in 12 talen met een handige taalkiezer in de navigatiebalk, instellingen en in-game berichten." },
@@ -541,6 +631,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   es: [
+    {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
     {
       "version": "v1.2.7",
       "items": [
@@ -641,6 +746,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   it: [
     {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
+    {
       "version": "v1.2.7",
       "items": [
         { "type": "Feature", "text": "Supporto multilingue: Nexus è ora disponibile in 12 lingue con un comodo selettore nella barra di navigazione, nelle impostazioni e nei messaggi in gioco." },
@@ -739,6 +859,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   ru: [
+    {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
     {
       "version": "v1.2.7",
       "items": [
@@ -839,6 +974,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   tr: [
     {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
+    {
       "version": "v1.2.7",
       "items": [
         { "type": "Feature", "text": "Çoklu Dil Desteği: Nexus artık kontrol paneli başlığında, ayarlarda ve oyun içi mesajlarda kolay dil seçici ile 12 dilde kullanılabilir." },
@@ -938,6 +1088,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   br: [
     {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
+    {
       "version": "v1.2.7",
       "items": [
         { "type": "Feature", "text": "Suporte Multi-Idioma: O Nexus agora está disponível em 12 idiomas com um seletor fácil no cabeçalho do painel, configurações e mensagens do jogo." },
@@ -1036,6 +1201,21 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   pt: [
+    {
+      version: 'v1.3.0',
+      items: [
+        { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
+        { type: 'Feature', text: 'Anomaly Wave Combat Simulator: Tactical multi-wave battle simulator calculating ship survival, casualties, and victory odds across consecutive enemy encounters with General class research support.' },
+        { type: 'Feature', text: 'Smart Lithium Planning: Planetary scanner now displays exact gather times and generation needed to claim mission rewards, plus real-time remaining fuel calculations for ongoing waves.' },
+        { type: 'Feature', text: 'Lithium Yield Analytics: New analytics subtab and charts tracking daily Lithium fuel expenditure and average return yield day by day.' },
+        { type: 'Feature', text: 'Dynamic Ship Reward Valuation: Accurately calculates the average Metal Standard Unit (MSU) value of random ship discoveries across all anomaly tiers into total mission profits.' },
+        { type: 'Feature', text: 'Overwatch Live Feed Player Filters: Filter live universe events by specific player names for precise surveillance and target tracking.' },
+        { type: 'Feature', text: 'Possible vs. Collected Rewards: Clearly distinguishes prospective anomaly rewards waiting to be gathered from already secured receipts.' },
+        { type: 'Bugfix', text: 'Espionage Probe Cargo Logistics: Factored espionage probe cargo capacity into transport fleet planning for anomaly delivery missions.' },
+        { type: 'Bugfix', text: 'Multi-Account Universe Isolation: Prevented Raid Radar targets and anomaly missions from overlapping between multiple accounts operating in the same universe.' },
+        { type: 'Polishing', text: 'Anomaly Mission Modal Polish: Replaced technical labels with authentic resource icons, simplified wave cost displays, and added clear casualty indicators.' }
+      ]
+    },
     {
       "version": "v1.2.7",
       "items": [
@@ -1501,7 +1681,7 @@ export function injectChangelogTab(): void {
     }
   } catch (e) { }
 
-  const CURRENT_CHANGELOG_VERSION = 'v1.2.9';
+  const CURRENT_CHANGELOG_VERSION = 'v1.3.0';
   const hasSeenChangelog = localStorage.getItem('og-nexus-changelog-seen') === CURRENT_CHANGELOG_VERSION;
 
   div.innerHTML = `

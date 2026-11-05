@@ -629,14 +629,40 @@ export async function fetchLogoAsDataUri(logoUrl?: string | null, r2Bucket?: any
     }
   }
 
-  // 2. Outbound HTTP Fetch for external URLs
+  // 2. Outbound HTTP Fetch for external URLs (with R2 persistent cache fallback)
   if (!cleanUrl.startsWith('http')) {
     return null;
   }
 
+  // Check persistent R2 cache for this external URL
+  let extCacheKey: string | null = null;
+  if (r2Bucket) {
+    let h = 0;
+    for (let i = 0; i < cleanUrl.length; i++) {
+      h = ((h << 5) - h + cleanUrl.charCodeAt(i)) | 0;
+    }
+    const ext = cleanUrl.split('?')[0].match(/\.(png|jpg|jpeg|webp|gif|svg)$/i)?.[1] || 'png';
+    extCacheKey = `topflop/cache/logos/logo_${Math.abs(h)}.${ext}`;
+
+    try {
+      const cachedLogo = await r2Bucket.get(extCacheKey);
+      if (cachedLogo) {
+        const rawMime = cachedLogo.httpMetadata?.contentType || (extCacheKey.endsWith('.jpg') || extCacheKey.endsWith('.jpeg') ? 'image/jpeg' : 'image/png');
+        const buffer = await cachedLogo.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+        }
+        return `data:${rawMime};base64,${btoa(binary)}`;
+      }
+    } catch {}
+  }
+
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(cleanUrl, {
       signal: controller.signal,
       headers: {
@@ -649,6 +675,16 @@ export async function fetchLogoAsDataUri(logoUrl?: string | null, r2Bucket?: any
     const rawMime = res.headers.get('content-type') || 'image/png';
     const mime = rawMime.split(';')[0].trim();
     const buffer = await res.arrayBuffer();
+
+    // Cache the downloaded image to R2 so future runs never fail on third-party timeouts
+    if (r2Bucket && extCacheKey) {
+      try {
+        await r2Bucket.put(extCacheKey, buffer, {
+          httpMetadata: { contentType: mime, cacheControl: 'public, max-age=604800' },
+        });
+      } catch {}
+    }
+
     const bytes = new Uint8Array(buffer);
     let binary = '';
     const chunkSize = 8192;
@@ -897,8 +933,10 @@ export function generateTopFlopSvg(
   <rect x="300" y="24" width="430" height="${height - 62}" rx="10" fill="rgba(0, 0, 0, 0.12)" stroke="rgba(255, 255, 255, 0.04)" stroke-width="1" />
   <rect x="750" y="24" width="430" height="${height - 62}" rx="10" fill="rgba(0, 0, 0, 0.12)" stroke="rgba(255, 255, 255, 0.04)" stroke-width="1" />
 
-  <!-- Outer Border (+5px fatter = 6.5px bold border) -->
-  <rect x="3.25" y="3.25" width="1193.5" height="${height - 6.5}" fill="none" stroke="${borderColor}" stroke-width="6.5" rx="8" />
+  <!-- Outer Border (Omitted if transparent/none) -->
+  ${(borderColor && borderColor !== 'none' && borderColor !== 'transparent' && !borderColor.startsWith('rgba(0,0,0,0)') && !borderColor.startsWith('rgba(0, 0, 0, 0)'))
+    ? `<rect x="3.25" y="3.25" width="1193.5" height="${height - 6.5}" fill="none" stroke="${borderColor}" stroke-width="6.5" rx="8" />`
+    : ''}
 
   <!-- ===================================================================== -->
   <!-- COLUMN 1: ALLIANCE BRANDING & INFO (VERTICALLY CENTERED, NO BOXES)    -->

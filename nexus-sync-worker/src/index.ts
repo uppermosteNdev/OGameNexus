@@ -27,6 +27,7 @@ import {
   handleUploadTopFlopLogo,
   handleGetTopFlopAsset,
   handleGetTopFlopVaultImage,
+  handleTestDiscordWebhook,
 } from './topFlopRoutes';
 
 export interface Env {
@@ -210,6 +211,8 @@ router.post('/api/v1/topflop/upload-logo', handleUploadTopFlopLogo);
 router.post('/api/topflop/upload-logo', handleUploadTopFlopLogo);
 router.get('/api/topflop/backfill-snapshots', handleBackfillHourlySnapshots);
 router.post('/api/topflop/backfill-snapshots', handleBackfillHourlySnapshots);
+router.post('/api/v1/topflop/test-webhook', handleTestDiscordWebhook);
+router.post('/api/topflop/test-webhook', handleTestDiscordWebhook);
 
 
 // ============================================================================

@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { cleanUniverseId } from '../utils/universe';
+import { cleanUniverseId, isSameUniverse } from '../utils/universe';
 import { SHIP_DATA, LIFEFORM_SPECIES_DATA, RESEARCH_DATA, DEFENCE_DATA, BUILDING_DATA, LIFEFORM_RESEARCH_DATA, LIFEFORM_BUILDING_DATA } from './staticData';
 import { LIFEFORM_TECH_DATA } from './lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from './lifeformBonusData';
@@ -220,7 +220,9 @@ export interface Planet {
     naniteFactory?: number;
     terraformer?: number;
     spaceDock?: number;
+    iaScanner?: number;
     facilities?: { id: number, name?: string, level: number }[];
+    controlCenterBuildings?: { id: number, name?: string, level: number }[];
     // Moon Facilities
     lunarBase?: number;
     sensorPhalanx?: number;
@@ -317,10 +319,89 @@ export interface CombatReport {
     isAcs: boolean;
     isExpedition: boolean;
     expeditionAttackType?: "pirates" | "aliens" | null;
+    isAnomaly?: boolean;
+    anomalyId?: number;
+    anomalyName?: string;
     isNew?: boolean; // temporary flag for UI animations
     tracked: boolean;
     rawFleets?: any; // Full participants JSON for detailed view
+    rawCombatRounds?: any; // Full combat rounds JSON for detailed ship loss breakdown
     rawResult?: any; // Full combat result JSON for detailed view
+}
+
+export interface AnomalyWaveReceipt {
+    waveNumber: number;
+    metal: number;
+    crystal: number;
+    deuterium: number;
+    ships: Record<string, number>;
+    artifacts: number;
+    lifeformXp: number;
+    lithiumCost: number;
+    msuValue: number;
+    claimedAt: number;
+    claimMethod: 'modal_confirmation' | 'server_reconciliation';
+}
+
+export interface AnomalyDebrisReceipt {
+    messageId: string;
+    timestamp: number;
+    combatReportId?: string;
+    waveNumber?: number;
+    reaperCount: number;
+    cargoCapacity: number;
+    metal: number;
+    crystal: number;
+    deuterium: number;
+    msuValue: number;
+}
+
+export interface AnomalyMission {
+    id: string; // Primary Key: spaceObjectId (e.g. "33851563" or "33852313")
+    playerId: string;
+    universe: string;
+    name: string;
+    level: number;
+    stars: number;
+    category: 'combat' | 'delivery' | 'other';
+    environment: 'pvp' | 'pve';
+    coords: string;
+    originCoords?: string;
+    originName?: string;
+    originImgUrl?: string;
+    totalWaves: number;
+    currentWave: number;
+    spawnedTimestamp: number;
+    despawnTimestamp?: number;
+    totalLithiumBudget: number;
+    completionLithiumCost?: number;
+    status: 'in_progress' | 'completed' | 'expired' | 'abandoned';
+    createdAt: number;
+    updatedAt: number;
+
+    waves: AnomalyWaveReceipt[];
+    totalClaimedLithium: number;
+    totalClaimedMsu: number;
+
+    debrisHarvests?: AnomalyDebrisReceipt[];
+    totalDebrisHarvestedMsu?: number;
+
+    cumulativeRewards?: {
+        metal: number;
+        crystal: number;
+        deuterium: number;
+        ships: Record<string, number>;
+        artifacts: number;
+        lifeformXp: number;
+        msu: number;
+    };
+
+    combatReportIds: string[];
+    fleetLossesMsu: number;
+    enemyDestroyedMsu: number;
+
+    netProfitMsu: number;
+    msuPerLithium: number;
 }
 
 export interface GameKnowledge {
@@ -423,7 +504,7 @@ export interface LifeformSavedSetup {
 }
 
 export interface SpiedPlanet {
-    planetKey: string; // Primary key: `${universe}_${planetId}`
+    planetKey: string; // Primary key: `${universe}_${userPlayerId}_${planetId}`
     planetId: string;
     playerId: string; // target player ID
     userPlayerId: string; // active account player ID who spied it
@@ -516,6 +597,7 @@ export class OGNexusDB extends Dexie {
     spiedPlanets!: Table<SpiedPlanet>;
     universeBaseline!: Table<UniverseBaselineSystem>;
     tacticalNotes!: Table<TacticalNote, string>;
+    anomalyMissions!: Table<AnomalyMission, string>;
 
     constructor() {
         super('OGNexusDB');
@@ -738,6 +820,27 @@ export class OGNexusDB extends Dexie {
             tacticalNotes: 'noteKey, universe, targetType, targetId, tag, updatedAt'
         });
 
+        // Version 41 adds 'anomalyMissions' table and indexes 'anomalyId' in 'combatReports'
+        this.version(41).stores({
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: 'harvestKey, messageId, playerId, timestamp, coords, universe',
+            combatReports: 'messageId, playerId, timestamp, coords, winner, anomalyId',
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId',
+            universeBaseline: '[universe+galaxy+system], universe',
+            tacticalNotes: 'noteKey, universe, targetType, targetId, tag, updatedAt',
+            anomalyMissions: 'id, playerId, universe, status, category, environment, createdAt, updatedAt'
+        });
+
         // Seed data for new database installations
         this.on('populate', () => {
             this.seedKnowledge();
@@ -806,6 +909,14 @@ export class OGNexusDB extends Dexie {
     private async migrateSpiedPlanets() {
         try {
             const planets = await this.spiedPlanets.toArray();
+            if (planets.length === 0) return;
+            const accounts = await this.accounts.toArray();
+            const universeAccountMap = new Map<string, Account[]>();
+            accounts.forEach(acc => {
+                const u = cleanUniverseId(acc.universe || '');
+                if (!universeAccountMap.has(u)) universeAccountMap.set(u, []);
+                universeAccountMap.get(u)!.push(acc);
+            });
             const updates: any[] = [];
             const keysToDelete: string[] = [];
 
@@ -820,9 +931,27 @@ export class OGNexusDB extends Dexie {
                 const correctDeuteriumCapacity = this.calculateStorageCapacity(deuteriumStorageLevel, hasTraderClass);
 
                 const cleanUni = cleanUniverseId(p.universe || '');
-                const targetKey = p.planetId ? `${cleanUni}_${p.planetId}` : (p.planetKey || `${cleanUni}_${p.coords}`);
+                const candidates = universeAccountMap.get(cleanUni) || [];
+                let resolvedPid = p.userPlayerId;
+                if (!resolvedPid || resolvedPid === 'unknown') {
+                    if (candidates.length === 1) {
+                        resolvedPid = candidates[0].playerId;
+                    } else if (candidates.length > 1) {
+                        const sorted = candidates.slice().sort((a, b) => {
+                            const numA = Number(a.playerId);
+                            const numB = Number(b.playerId);
+                            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                            return (a.lastSeen || 0) - (b.lastSeen || 0);
+                        });
+                        resolvedPid = sorted[0].playerId;
+                    }
+                }
+                const targetKey = resolvedPid
+                    ? `${cleanUni}_${resolvedPid}_${p.planetId || p.coords}`
+                    : (p.planetId ? `${cleanUni}_${p.planetId}` : (p.planetKey || `${cleanUni}_${p.coords}`));
                 const needsKeyUpdate = p.planetKey && p.planetKey !== targetKey;
                 const needsUniUpdate = p.universe !== cleanUni;
+                const needsPidUpdate = p.userPlayerId !== resolvedPid && Boolean(resolvedPid);
 
                 const needsCapacityUpdate =
                     p.metalCapacity !== correctMetalCapacity ||
@@ -830,13 +959,14 @@ export class OGNexusDB extends Dexie {
                     p.deuteriumCapacity !== correctDeuteriumCapacity ||
                     p.metalStorageLevel === undefined;
 
-                if (needsKeyUpdate || needsUniUpdate || needsCapacityUpdate) {
+                if (needsKeyUpdate || needsUniUpdate || needsPidUpdate || needsCapacityUpdate) {
                     if (needsKeyUpdate && p.planetKey) {
                         keysToDelete.push(p.planetKey);
                     }
                     updates.push({
                         ...p,
                         planetKey: targetKey,
+                        userPlayerId: resolvedPid || p.userPlayerId,
                         universe: cleanUni,
                         metalStorageLevel,
                         crystalStorageLevel,

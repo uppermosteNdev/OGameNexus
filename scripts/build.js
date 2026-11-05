@@ -18,6 +18,14 @@ console.log(`Building OGame Nexus extension for ${target.toUpperCase()}...`);
 console.log(`========================================\n`);
 
 try {
+  const outDir = path.join(rootDir, `dist-${target}`);
+  const zipPath = path.join(rootDir, `extension-${target}.zip`);
+
+  // Clean output directory before build
+  if (fs.existsSync(outDir)) {
+    fs.rmSync(outDir, { recursive: true, force: true });
+  }
+
   // 1. Run tsc and vite build
   console.log('Running TypeScript compilation and Vite build...');
   execSync('npx tsc && npx vite build', {
@@ -27,9 +35,6 @@ try {
   });
 
   // 2. Prepare archiving
-  const outDir = path.join(rootDir, `dist-${target}`);
-  const zipPath = path.join(rootDir, `extension-${target}.zip`);
-
   if (!fs.existsSync(outDir)) {
     throw new Error(`Output directory not found: ${outDir}`);
   }

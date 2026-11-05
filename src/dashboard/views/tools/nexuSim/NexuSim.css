@@ -1,797 +1,711 @@
-/* Nexus Battlesim Styling */
+/* ==========================================================================
+   Nexus Battlesim - OGame Combat Simulator Styling
+   Faithful replication of simulator.ogame-tools.com with high-density layout
+   ========================================================================== */
 
-.nexusim-container {
-    max-width: 1560px;
+.ogsim-wrapper {
+    width: 100%;
+    max-width: 1800px;
     margin: 0 auto;
-    padding-bottom: 80px;
-    font-family: var(--font-main);
-    color: var(--text-main);
+    padding: 12px 16px 60px 16px;
+    font-family: var(--font-main, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    color: #ffffff;
+    font-size: 0.82rem;
+    box-sizing: border-box;
 }
 
-/* 1. Header & Hero */
-.nexusim-hero {
-    text-align: center;
-    padding: 24px 16px 20px 16px;
-    position: relative;
-}
-
-.nexusim-hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 12px;
-    background: rgba(0, 242, 255, 0.08);
-    border: 1px solid rgba(0, 242, 255, 0.25);
-    border-radius: 20px;
-    color: var(--primary);
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 12px;
-}
-
-.nexusim-hero-title {
-    font-family: var(--font-title);
-    font-size: 2.2rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    margin: 0 0 8px 0;
-    background: linear-gradient(135deg, #ffffff 0%, var(--primary) 60%, #ffffff 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.nexusim-hero-subtitle {
-    font-size: 0.88rem;
-    color: var(--text-muted);
-    max-width: 680px;
-    margin: 0 auto 18px auto;
-    line-height: 1.5;
-}
-
-/* Quick Action Toolbar */
-.nexusim-quick-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.nexusim-select {
-    background: #080e1a;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #f8fafc;
-    font-family: var(--font-main);
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 8px 14px;
-    border-radius: 10px;
-    outline: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.nexusim-select:hover {
-    border-color: rgba(0, 242, 255, 0.4);
-    background: #0d1728;
-}
-
-.nexusim-select:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 12px var(--primary-glow);
-}
-
-.nexusim-btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text-muted);
-    font-family: var(--font-main);
-    font-size: 0.78rem;
-    font-weight: 600;
-    padding: 8px 14px;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.nexusim-btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: #fff;
-}
-
-/* 2. Runner / Execution Bar */
-.nexusim-runner-bar {
-    background: linear-gradient(180deg, rgba(16, 25, 42, 0.8) 0%, rgba(10, 16, 28, 0.95) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 12px 20px;
+/* ==========================================================================
+   1. TOP CONTROL BAR (WAVES & ACTIONS)
+   ========================================================================== */
+.ogsim-topbar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(12px);
-    margin-bottom: 24px;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    background: #172d42;
+    border: 1px solid #153758;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
-.nexusim-iterations-wrap {
+.ogsim-wave-controls {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
 }
 
-.nexusim-iter-label {
-    font-size: 0.7rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-}
-
-.nexusim-iter-group {
-    display: inline-flex;
-    background: #040812;
-    padding: 3px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    gap: 2px;
-}
-
-.nexusim-iter-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 0.75rem;
-    font-weight: 700;
+.ogsim-wave-badge {
     padding: 5px 12px;
-    border-radius: 7px;
-    cursor: pointer;
-    transition: all 0.2s ease;
+    background: #2b4f71;
+    border: 1px solid #153758;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: #fff;
+    min-width: 75px;
+    text-align: center;
 }
 
-.nexusim-iter-btn:hover {
+.ogsim-quick-loaders {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ogsim-select-quick {
+    background: #0d1e2e;
+    border: 1px solid #2b4f71;
+    color: #f1f5f9;
+    font-size: 0.78rem;
+    padding: 5px 10px;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+    max-width: 200px;
+}
+
+.ogsim-select-quick:focus {
+    border-color: #38bdf8;
+}
+
+.ogsim-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ogsim-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: #2b4f71;
+    border: 1px solid #153758;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    user-select: none;
+    text-decoration: none;
+}
+
+.ogsim-btn:hover:not(:disabled) {
+    background: #38648f;
+    border-color: #2b4f71;
     color: #fff;
 }
 
-.nexusim-iter-btn.active {
-    background: var(--primary);
-    color: #02060c;
-    font-weight: 800;
-    box-shadow: 0 0 14px var(--primary-glow);
-}
-
-.nexusim-runner-actions {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
-.nexusim-benchmark-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
-.nexusim-btn-simulate {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: linear-gradient(135deg, #00f2ff 0%, #00b4d8 100%);
-    border: none;
-    color: #02060c;
-    font-family: var(--font-main);
-    font-size: 0.85rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 10px 24px;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.32, 0.72, 0, 1);
-    box-shadow: 0 0 20px rgba(0, 242, 255, 0.25);
-}
-
-.nexusim-btn-simulate:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 0 28px var(--primary-glow);
-    background: linear-gradient(135deg, #38bdf8 0%, #00f2ff 100%);
-}
-
-.nexusim-btn-simulate:disabled {
-    opacity: 0.6;
+.ogsim-btn:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
 }
 
-/* 3. Duel Layout (Attackers Left, Defenders Right) */
-.nexusim-duel-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
+.ogsim-btn-simulate {
+    padding: 6px 28px;
+    background: #0284c7;
+    border: 1px solid #38bdf8;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
 }
 
-@media (max-width: 1080px) {
-    .nexusim-duel-layout {
+.ogsim-btn-simulate:hover:not(:disabled) {
+    background: #0369a1;
+    border-color: #7dd3fc;
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+}
+
+.ogsim-btn-xs {
+    padding: 2px 7px;
+    font-size: 0.75rem;
+    background: #2b4f71;
+    border: 1px solid #153758;
+    color: #fff;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.ogsim-btn-xs:hover {
+    background: #38648f;
+}
+
+/* ==========================================================================
+   2. MAIN 4-COLUMN RESPONSIVE GRID
+   ========================================================================== */
+.ogsim-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    align-items: start;
+}
+
+@media (max-width: 1400px) {
+    .ogsim-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .ogsim-grid {
         grid-template-columns: 1fr;
     }
 }
 
-.nexusim-faction-card {
-    background: linear-gradient(180deg, rgba(14, 22, 38, 0.7) 0%, rgba(8, 14, 25, 0.85) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(16px);
+/* ==========================================================================
+   3. COLUMN HEADERS & TABS
+   ========================================================================== */
+.ogsim-col {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    min-width: 0;
 }
 
-.nexusim-faction-card.attacker {
-    border-top: 3px solid #00f2ff;
-}
-
-.nexusim-faction-card.defender {
-    border-top: 3px solid #f59e0b;
-}
-
-/* ACS Party Tabs */
-.nexusim-tabs-header {
+.ogsim-title-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-bottom: 12px;
-    margin-bottom: 16px;
-}
-
-.nexusim-tabs-list {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    overflow-x: auto;
-}
-
-.nexusim-faction-title {
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-right: 4px;
-}
-
-.nexusim-faction-title.attacker {
-    color: var(--primary);
-}
-
-.nexusim-faction-title.defender {
-    color: #f59e0b;
-}
-
-.nexusim-tab-pill {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: var(--text-muted);
-    font-size: 0.72rem;
+    background: #153758;
+    color: #ffffff;
+    padding: 6px 10px;
     font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 8px;
+    font-size: 0.92rem;
+    letter-spacing: 0.02em;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-bottom: 0;
+}
+
+.ogsim-ratio {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+/* Tabs styling matching .nav-tabs.ogame */
+.ogsim-tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    background: #122538;
+    padding: 4px 6px 0 6px;
+    border-left: 1px solid #153758;
+    border-right: 1px solid #153758;
+    position: relative;
+}
+
+.ogsim-tab {
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #cbd5e1;
+    background: #153758;
+    border: 1px solid #153758;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
 }
 
-.nexusim-tab-pill:hover {
+.ogsim-tab:hover {
     color: #fff;
-    background: rgba(255, 255, 255, 0.09);
+    background: #23486e;
 }
 
-.nexusim-tab-pill.active.attacker {
-    background: rgba(0, 242, 255, 0.15);
-    border-color: rgba(0, 242, 255, 0.4);
-    color: var(--primary);
+.ogsim-tab.active {
+    color: #ffffff;
+    background: #2b4f71;
+    border-color: #2b4f71;
 }
 
-.nexusim-tab-pill.active.defender {
-    background: rgba(245, 158, 11, 0.15);
-    border-color: rgba(245, 158, 11, 0.4);
-    color: #f59e0b;
-}
-
-.nexusim-add-btn {
-    padding: 4px 7px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
-    border-radius: 6px;
+.ogsim-tab-add {
+    padding: 4px 8px;
+    background: #153758;
+    border: 1px solid #153758;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    color: #38bdf8;
     cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
+    font-weight: 700;
 }
 
-.nexusim-add-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
+.ogsim-tab-add:hover {
+    background: #23486e;
 }
 
-.nexusim-remove-btn {
+.ogsim-tab-close {
+    margin-left: auto;
     background: transparent;
     border: none;
-    color: #ff5f5f;
+    color: #ef4444;
     cursor: pointer;
-    padding: 4px;
-    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 0.9rem;
+    opacity: 0.75;
+    transition: opacity 0.15s;
+}
+
+.ogsim-tab-close:hover {
+    opacity: 1;
+}
+
+/* Scenario tabs in Results */
+.ogsim-scenario-tabs {
     display: flex;
-    align-items: center;
+    background: #122538;
+    border-left: 1px solid #153758;
+    border-right: 1px solid #153758;
+    padding: 4px 4px 0 4px;
+    gap: 2px;
 }
 
-.nexusim-remove-btn:hover {
-    background: rgba(255, 95, 95, 0.15);
-}
-
-/* Research & Class Config Bar */
-.nexusim-meta-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    background: rgba(4, 8, 18, 0.6);
-    padding: 10px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    margin-bottom: 18px;
-}
-
-.nexusim-meta-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.nexusim-meta-label {
-    font-size: 0.62rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-}
-
-.nexusim-input-meta {
-    background: #060b14;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
-    font-size: 0.8rem;
-    font-weight: 700;
-    padding: 4px 8px;
-    border-radius: 6px;
-    width: 100%;
-    box-sizing: border-box;
-    outline: none;
-}
-
-.nexusim-input-meta:focus {
-    border-color: var(--primary);
-}
-
-/* Unit Lists & Sections */
-.nexusim-roster-group {
-    margin-bottom: 16px;
-}
-
-.nexusim-roster-title {
-    font-size: 0.68rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-}
-
-.nexusim-unit-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-}
-
-@media (max-width: 640px) {
-    .nexusim-unit-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.nexusim-unit-pill {
-    background: rgba(4, 8, 18, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 12px;
-    padding: 6px 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    transition: all 0.2s ease;
-}
-
-.nexusim-unit-pill:hover {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: rgba(10, 16, 30, 0.7);
-}
-
-.nexusim-unit-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
+.ogsim-scenario-tab {
     flex: 1;
-}
-
-.nexusim-unit-thumb {
-    width: 32px;
-    height: 32px;
-    border-radius: 7px;
-    object-fit: cover;
-    flex-shrink: 0;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.nexusim-unit-name {
-    font-size: 0.75rem;
+    padding: 5px 4px;
+    font-size: 0.72rem;
     font-weight: 700;
-    color: var(--text-main);
+    text-align: center;
+    background: #153758;
+    border: 1px solid #153758;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    color: #94a3b8;
+    cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.nexusim-unit-input {
-    background: #03060d;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+.ogsim-scenario-tab:hover {
     color: #fff;
-    font-family: monospace;
-    font-size: 0.8rem;
-    font-weight: 700;
-    padding: 5px 8px;
-    border-radius: 6px;
-    width: 74px;
-    text-align: right;
-    outline: none;
-    transition: all 0.2s ease;
+    background: #23486e;
 }
 
-.nexusim-unit-input.attacker {
-    color: var(--primary);
+.ogsim-scenario-tab.active {
+    color: #fff;
+    background: #2b4f71;
+    border-color: #2b4f71;
 }
 
-.nexusim-unit-input.defender {
-    color: #f59e0b;
+/* ==========================================================================
+   4. OGAME CARD & DATA BOXES
+   ========================================================================== */
+.ogsim-card {
+    background: #2b4f71;
+    border: 1px solid #153758;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    padding: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
-.nexusim-unit-input:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 10px var(--primary-glow);
-}
-
-/* Card Bottom Footer */
-.nexusim-faction-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding-top: 12px;
-    margin-top: 14px;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
-.nexusim-lf-link {
-    background: transparent;
-    border: none;
-    color: var(--primary);
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 0;
-}
-
-.nexusim-lf-link:hover {
-    text-decoration: underline;
-}
-
-/* 4. Tri-Grid (Environment, Target Plunder, IPM) */
-.nexusim-tri-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    margin-bottom: 24px;
-}
-
-@media (max-width: 1080px) {
-    .nexusim-tri-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.nexusim-panel {
-    background: linear-gradient(180deg, rgba(14, 22, 38, 0.7) 0%, rgba(8, 14, 25, 0.85) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 18px 20px;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(16px);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-.nexusim-panel-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-bottom: 10px;
-    margin-bottom: 14px;
-}
-
-.nexusim-panel-title {
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-main);
-}
-
-.nexusim-setting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 0.78rem;
-    color: var(--text-muted);
+.ogsim-card.standalone {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
     margin-bottom: 10px;
 }
 
-.nexusim-pill-group {
-    display: inline-flex;
-    gap: 4px;
+.ogsim-data-box {
+    background: rgba(0, 0, 0, 0.22);
+    border-radius: 5px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.nexusim-pill-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: var(--text-muted);
-    font-size: 0.7rem;
+.ogsim-data-box:last-child {
+    margin-bottom: 0;
+}
+
+.ogsim-box-title {
     font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.nexusim-pill-btn:hover {
-    color: #fff;
-}
-
-.nexusim-pill-btn.active {
-    background: var(--primary);
-    color: #02060c;
-    font-weight: 800;
-}
-
-.nexusim-pill-btn.active.amber {
-    background: #f59e0b;
-    color: #02060c;
-}
-
-.nexusim-input-text {
-    background: #03060d;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #fff;
     font-size: 0.8rem;
-    font-weight: 600;
-    padding: 6px 10px;
-    border-radius: 8px;
-    width: 100%;
-    box-sizing: border-box;
-    outline: none;
-}
-
-.nexusim-input-text:focus {
-    border-color: var(--primary);
-}
-
-/* 5. Results Section & Ledger */
-.nexusim-results-card {
-    background: linear-gradient(180deg, rgba(16, 26, 46, 0.85) 0%, rgba(9, 15, 28, 0.95) 100%);
-    border: 1px solid rgba(0, 242, 255, 0.25);
-    border-radius: 24px;
-    padding: 24px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px rgba(0, 242, 255, 0.08);
-    backdrop-filter: blur(20px);
-    margin-top: 12px;
-}
-
-.nexusim-results-top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-bottom: 16px;
-    gap: 16px;
-}
-
-.nexusim-win-rates {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
-.nexusim-rate-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.82rem;
-    font-weight: 700;
-}
-
-.nexusim-rate-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-}
-
-.nexusim-rate-dot.cyan {
-    background: #00f2ff;
-    box-shadow: 0 0 8px #00f2ff;
-}
-
-.nexusim-rate-dot.amber {
-    background: #f59e0b;
-    box-shadow: 0 0 8px #f59e0b;
-}
-
-.nexusim-rate-dot.red {
-    background: #ff5f5f;
-    box-shadow: 0 0 8px #ff5f5f;
-}
-
-/* KPI 4-Card Grid */
-.nexusim-kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-    margin: 20px 0;
-}
-
-@media (max-width: 900px) {
-    .nexusim-kpi-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-.nexusim-kpi-cell {
-    background: rgba(4, 8, 18, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 14px 16px;
-}
-
-.nexusim-kpi-cell.profit {
-    border-color: rgba(0, 242, 255, 0.35);
-    background: linear-gradient(180deg, rgba(0, 242, 255, 0.08) 0%, rgba(4, 8, 18, 0.6) 100%);
-    box-shadow: 0 0 20px rgba(0, 242, 255, 0.1);
-}
-
-.nexusim-kpi-label {
-    font-size: 0.65rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    margin-bottom: 4px;
-}
-
-.nexusim-kpi-val {
-    font-family: var(--font-title);
-    font-size: 1.35rem;
-    font-weight: 800;
-    margin-bottom: 4px;
-}
-
-.nexusim-kpi-val.red { color: #ff5f5f; }
-.nexusim-kpi-val.green { color: #10b981; }
-.nexusim-kpi-val.amber { color: #f59e0b; }
-.nexusim-kpi-val.cyan { color: #00f2ff; }
-
-.nexusim-kpi-sub {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-}
-
-/* 3 Breakdown Cards Row */
-.nexusim-breakdown-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding-top: 18px;
-}
-
-@media (max-width: 900px) {
-    .nexusim-breakdown-row {
-        grid-template-columns: 1fr;
-    }
-}
-
-.nexusim-mini-ledger {
-    background: rgba(4, 8, 18, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    padding: 12px 14px;
-    font-size: 0.76rem;
-}
-
-.nexusim-ledger-title {
-    font-size: 0.7rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-}
-
-.nexusim-ledger-line {
+    color: #e2e8f0;
+    margin-bottom: 6px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 3px 0;
-    color: var(--text-muted);
+    text-transform: capitalize;
 }
 
-.nexusim-ledger-line strong {
-    color: #fff;
+.ogsim-box-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    min-height: 24px;
+    font-size: 0.78rem;
+}
+
+.ogsim-box-row:last-child {
+    margin-bottom: 0;
+}
+
+.ogsim-row-label {
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 6px;
+}
+
+.ogsim-row-ctrls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   5. COMPACT FORM CONTROLS
+   ========================================================================== */
+.ogsim-input-xs {
+    background: #0f2030;
+    border: 1px solid #3d6387;
+    color: #ffffff;
     font-family: monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: right;
+    padding: 2px 4px;
+    border-radius: 3px;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
 }
 
-.nexusim-ledger-line.highlight {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    margin-top: 4px;
-    padding-top: 6px;
-    font-weight: 700;
-    color: #fff;
+.ogsim-input-xs:focus {
+    border-color: #38bdf8;
+    background: #142a3f;
 }
 
-/* Modal */
-.nexusim-modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(8px);
-    z-index: 10000;
+.ogsim-input-xs[size="3"] { width: 44px; }
+.ogsim-input-xs[size="4"] { width: 54px; }
+.ogsim-input-xs[size="8"] { width: 84px; }
+.ogsim-input-xs.w-full { width: 100%; text-align: left; }
+
+.ogsim-select-xs {
+    background: #0f2030;
+    border: 1px solid #3d6387;
+    color: #ffffff;
+    font-size: 0.78rem;
+    padding: 2px 4px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.ogsim-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #38bdf8;
+    cursor: pointer;
+    margin: 0;
+}
+
+.ogsim-ctrl-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 1px 3px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    border-radius: 2px;
+    transition: color 0.15s;
 }
 
-.nexusim-modal-window {
-    background: #090f1c;
-    border: 1px solid rgba(0, 242, 255, 0.3);
-    border-radius: 20px;
-    max-width: 480px;
+.ogsim-ctrl-btn:hover {
+    color: #ffffff;
+}
+
+.ogsim-ctrl-btn.clear:hover {
+    color: #ef4444;
+}
+
+/* Remaining Count Badge */
+.ogsim-remaining-badge {
+    font-family: monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-right: 2px;
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.ogsim-remaining-badge.green {
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.ogsim-remaining-badge.yellow {
+    color: #facc15;
+    border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.ogsim-remaining-badge.red {
+    color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.3);
+}
+
+/* ==========================================================================
+   6. CLASS RADIO ICONS
+   ========================================================================== */
+.ogsim-class-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ogsim-class-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 2px solid transparent;
+    background: #172d42;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.ogsim-class-icon:hover {
+    border-color: #38bdf8;
+    transform: scale(1.05);
+}
+
+.ogsim-class-icon.active {
+    border-color: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+    background: #1e3f60;
+}
+
+/* Specific class badge styling */
+.ogsim-class-icon.none { color: #64748b; font-weight: 700; font-size: 0.75rem; }
+.ogsim-class-icon.collector { color: #f59e0b; }
+.ogsim-class-icon.general { color: #ef4444; }
+.ogsim-class-icon.explorer { color: #06b6d4; }
+.ogsim-class-icon.warriors { color: #f43f5e; }
+.ogsim-class-icon.traders { color: #eab308; }
+.ogsim-class-icon.researchers { color: #3b82f6; }
+
+/* ==========================================================================
+   7. 2-COLUMN TECH GRID
+   ========================================================================== */
+.ogsim-tech-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.ogsim-tech-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Resource 2x2 Grid */
+.ogsim-res-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.ogsim-res-item {
+    display: flex;
+    align-items: center;
+    background: #172d42;
+    border: 1px solid #153758;
+    border-radius: 4px;
+    padding: 3px 6px;
+    gap: 6px;
+}
+
+.ogsim-res-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   8. RESULTS TABLES
+   ========================================================================== */
+.ogsim-table-wrap {
+    margin-bottom: 8px;
+}
+
+.ogsim-table-wrap:last-child {
+    margin-bottom: 0;
+}
+
+.ogsim-table {
     width: 100%;
-    padding: 24px;
-    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.8), 0 0 32px rgba(0, 242, 255, 0.15);
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    color: #ffffff;
+    background: #1e3a55;
+    border: 1px solid #3d6387;
+}
+
+.ogsim-table th,
+.ogsim-table td {
+    border: 1px solid #3d6387;
+    padding: 2.5px 6px;
+}
+
+.ogsim-table thead th,
+.ogsim-table .darker {
+    background: #153758;
+    font-weight: 700;
+}
+
+.ogsim-table .text-center { text-align: center; }
+.ogsim-table .text-end { text-align: right; }
+.ogsim-table .align-middle { vertical-align: middle; }
+
+.ogsim-table .mono {
+    font-family: monospace;
+}
+
+.ogsim-table .profit-pos {
+    color: #4ade80;
+    font-weight: 700;
+}
+
+.ogsim-table .profit-neg {
+    color: #f87171;
+    font-weight: 700;
+}
+
+.ogsim-unit-mini-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: cover;
+    border-radius: 2px;
+}
+
+/* ==========================================================================
+   9. COLLAPSIBLE ACCORDION (SETTINGS)
+   ========================================================================== */
+.ogsim-accordion-header {
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+    color: #38bdf8;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ogsim-accordion-body {
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 4px;
+}
+
+/* ==========================================================================
+   10. MODAL WINDOWS
+   ========================================================================== */
+.ogsim-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    backdrop-filter: blur(4px);
+}
+
+.ogsim-modal {
+    background: #2b4f71;
+    border: 1px solid #153758;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+    color: #ffffff;
+    overflow: hidden;
+}
+
+.ogsim-modal.modal-sm { max-width: 440px; }
+.ogsim-modal.modal-lg { max-width: 1050px; }
+
+.ogsim-modal-header {
+    background: #153758;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #23486e;
+}
+
+.ogsim-modal-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #ffffff;
+}
+
+.ogsim-modal-body {
+    padding: 14px;
+    overflow-y: auto;
+    font-size: 0.8rem;
+}
+
+.ogsim-modal-footer {
+    background: #1e3a55;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    border-top: 1px solid #153758;
+    gap: 8px;
+}
+
+/* WAVES TOTAL SUMMARY */
+.ogsim-waves-total {
+    margin-top: 14px;
+    background: #1f3d59;
+    border: 1px solid #153758;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.ogsim-waves-title {
+    font-weight: 800;
+    font-size: 0.9rem;
+    color: #38bdf8;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }

@@ -476,6 +476,59 @@ const IntelDetectorCell: React.FC<{ detectedBy?: string | null }> = ({ detectedB
   );
 };
 
+export function matchesUniverseEventPlayer(evt: any, query: string): boolean {
+  if (!query) return true;
+  const q = query.trim().toLowerCase();
+  if (q.length < 3) return true;
+
+  // 1. Direct player_name
+  if (evt.player_name && typeof evt.player_name === 'string' && evt.player_name.toLowerCase().includes(q)) {
+    return true;
+  }
+
+  // 2. Direct player_id
+  if (evt.player_id && String(evt.player_id).toLowerCase().includes(q)) {
+    return true;
+  }
+
+  // 3. Parsed old_state_json & new_state_json
+  let oldState: any = null;
+  let newState: any = null;
+  try {
+    if (typeof evt.old_state_json === 'string') oldState = JSON.parse(evt.old_state_json);
+    else oldState = evt.old_state_json;
+  } catch { }
+  try {
+    if (typeof evt.new_state_json === 'string') newState = JSON.parse(evt.new_state_json);
+    else newState = evt.new_state_json;
+  } catch { }
+
+  const oldName = oldState?.playerName || oldState?.player_name;
+  if (oldName && typeof oldName === 'string' && oldName.toLowerCase().includes(q)) {
+    return true;
+  }
+
+  const newName = newState?.playerName || newState?.player_name;
+  if (newName && typeof newName === 'string' && newName.toLowerCase().includes(q)) {
+    return true;
+  }
+
+  // 4. Fallback search inside json payload strings
+  if (typeof evt.old_state_json === 'string' && evt.old_state_json.toLowerCase().includes(q)) {
+    return true;
+  }
+  if (typeof evt.new_state_json === 'string' && evt.new_state_json.toLowerCase().includes(q)) {
+    return true;
+  }
+
+  // 5. Details fallback
+  if (evt.details && typeof evt.details === 'string' && evt.details.toLowerCase().includes(q)) {
+    return true;
+  }
+
+  return false;
+}
+
 const IntelPlayerCell: React.FC<{ evt: any }> = ({ evt }) => {
   let oldState: any = null;
   let newState: any = null;
@@ -1137,6 +1190,23 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     setEventsUnseenCount(0);
   }, []);
 
+  // Player Name search/filter state for Live Universe Feed
+  const [playerFilter, setPlayerFilter] = useState<string>('');
+  const [debouncedPlayerFilter, setDebouncedPlayerFilter] = useState<string>('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedPlayerFilter(playerFilter.trim());
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [playerFilter]);
+
+  // When player filter changes and is active (>= 3 chars) or cleared, reset cursor to page 1
+  useEffect(() => {
+    setEventsPage(1);
+    setEventsUnseenCount(0);
+  }, [debouncedPlayerFilter]);
+
   const filteredEvents = useMemo(() => {
     if (selectedEventTypes.length === 0) return [];
     let base = events;
@@ -1145,7 +1215,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     }
     // Deduplicate any historical duplicate player-level events within the same scan window (e.g. multi-planet scans)
     const seen = new Set<string>();
-    return base.filter((evt) => {
+    const deduplicated = base.filter((evt) => {
       if (evt.event_type === 'status_changed' || evt.event_type === 'player_renamed') {
         const pId = evt.player_id || evt.player_name || 'unknown';
         // 60-second time window bucket for deduplication of multi-slot events from the same scan
@@ -1156,7 +1226,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       }
       return true;
     });
-  }, [events, selectedEventTypes]);
+
+    // When letters >= 3, filter events based on player name too
+    const trimmed = playerFilter.trim();
+    if (trimmed.length >= 3) {
+      return deduplicated.filter(evt => matchesUniverseEventPlayer(evt, trimmed));
+    }
+
+    return deduplicated;
+  }, [events, selectedEventTypes, playerFilter]);
   const [universeStats, setUniverseStats] = useState<{
     totalPlanets: number;
     totalMoons: number;
@@ -1532,7 +1610,11 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       ? `&types=${encodeURIComponent(selectedEventTypes.join(','))}`
       : '';
 
-    fetch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&page=${targetPage}&limit=${targetSize}${typesParam}`, { headers })
+    const playerParam = debouncedPlayerFilter.length >= 3
+      ? `&player=${encodeURIComponent(debouncedPlayerFilter)}`
+      : '';
+
+    fetch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&page=${targetPage}&limit=${targetSize}${typesParam}${playerParam}`, { headers })
       .then(res => res.json())
       .then(data => {
         if (data && data.success && Array.isArray(data.events)) {
@@ -1549,11 +1631,11 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       })
       .catch(() => { })
       .finally(() => setIsLoadingEvents(false));
-  }, [config.authToken, activeUniverse, eventsPage, eventsPageSize, selectedEventTypes]);
+  }, [config.authToken, activeUniverse, eventsPage, eventsPageSize, selectedEventTypes, debouncedPlayerFilter]);
 
   useEffect(() => {
     fetchLiveEvents(eventsPage, eventsPageSize);
-  }, [eventsPage, eventsPageSize, activeUniverse, selectedEventTypes]);
+  }, [eventsPage, eventsPageSize, activeUniverse, selectedEventTypes, debouncedPlayerFilter]);
 
   // Fetch universe status and live events
   useEffect(() => {
@@ -5148,6 +5230,34 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                       </div>
 
                       <div className="ow-feed-filter-actions">
+                        {/* Player Name Search Filter Box */}
+                        <div className="ow-feed-player-search-box">
+                          <Search size={13} className="ow-feed-search-icon" />
+                          <input
+                            type="text"
+                            className={`ow-feed-search-input ${playerFilter.trim().length >= 3 ? 'has-active-filter' : ''}`}
+                            placeholder="Filter player (min. 3 chars)..."
+                            value={playerFilter}
+                            onChange={(e) => setPlayerFilter(e.target.value)}
+                            title="Filter events by player name (applies when 3 or more letters are typed)"
+                          />
+                          {playerFilter ? (
+                            <button
+                              type="button"
+                              className="ow-feed-search-clear"
+                              onClick={() => setPlayerFilter('')}
+                              title="Clear player filter"
+                            >
+                              <X size={12} />
+                            </button>
+                          ) : null}
+                          {playerFilter.trim().length > 0 && playerFilter.trim().length < 3 ? (
+                            <span className="ow-feed-search-char-badge" title="Type at least 3 letters to filter">
+                              {3 - playerFilter.trim().length} more
+                            </span>
+                          ) : null}
+                        </div>
+
                         <span className="ow-feed-filter-count">
                           {selectedEventTypes.length} / {UNIVERSE_FEED_EVENT_TYPES.length} active
                         </span>
@@ -5272,7 +5382,18 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <div className="ow-feed-pagination">
                           <div className="ow-feed-pagination-left">
                             <span className="ow-feed-range-text">
-                              Showing <strong>{eventsTotal === 0 ? 0 : ((eventsPage - 1) * eventsPageSize) + 1}–{Math.min(eventsPage * eventsPageSize, eventsTotal)}</strong> of <strong>{eventsTotal.toLocaleString()}</strong> events
+                              {playerFilter.trim().length >= 3 ? (
+                                <>
+                                  Showing <strong>{filteredEvents.length}</strong> event{filteredEvents.length === 1 ? '' : 's'} matching <strong>"{playerFilter.trim()}"</strong>
+                                  <span style={{ color: '#64748b', marginLeft: 8 }}>
+                                    ({eventsTotal.toLocaleString()} total in feed • Page {eventsPage})
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  Showing <strong>{eventsTotal === 0 ? 0 : ((eventsPage - 1) * eventsPageSize) + 1}–{Math.min(eventsPage * eventsPageSize, eventsTotal)}</strong> of <strong>{eventsTotal.toLocaleString()}</strong> events
+                                </>
+                              )}
                             </span>
                           </div>
 
@@ -5334,21 +5455,33 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                     ) : (
                       <div style={{ padding: '36px 20px', textAlign: 'center', background: '#040712', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
                         <div style={{ color: '#00f2ff', fontSize: '14px', fontWeight: 700, marginBottom: 6 }}>
-                          🛰️ No Events Found for Selected Filters
+                          🛰️ {playerFilter.trim().length >= 3 ? `No Events Found for Player "${playerFilter.trim()}"` : 'No Events Found for Selected Filters'}
                         </div>
                         <p style={{ color: '#94a3b8', fontSize: '12.5px', margin: 0, maxWidth: 540, marginInline: 'auto', lineHeight: 1.5 }}>
-                          No recent events match the active filters ({selectedEventTypes.map(id => UNIVERSE_FEED_EVENT_TYPES.find(t => t.id === id)?.label || id).join(', ')}).
-                          As members scan systems or Gameforge synchronizes, matching events will appear here.
+                          {playerFilter.trim().length >= 3
+                            ? `No recent events matching "${playerFilter.trim()}" were found among the active event types (${selectedEventTypes.map(id => UNIVERSE_FEED_EVENT_TYPES.find(t => t.id === id)?.label || id).join(', ')}).`
+                            : `No recent events match the active filters (${selectedEventTypes.map(id => UNIVERSE_FEED_EVENT_TYPES.find(t => t.id === id)?.label || id).join(', ')}). As members scan systems or Gameforge synchronizes, matching events will appear here.`}
                         </p>
-                        <button
-                          type="button"
-                          className="ow-empty-filter-btn"
-                          style={{ marginTop: 14 }}
-                          onClick={handleSelectAllEventTypes}
-                        >
-                          <Check size={13} strokeWidth={2.6} />
-                          <span>Reset to All Event Types</span>
-                        </button>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 14 }}>
+                          {playerFilter.trim().length >= 3 && (
+                            <button
+                              type="button"
+                              className="ow-empty-filter-btn"
+                              onClick={() => setPlayerFilter('')}
+                            >
+                              <X size={13} strokeWidth={2.6} />
+                              <span>Clear Player Filter</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="ow-empty-filter-btn"
+                            onClick={handleSelectAllEventTypes}
+                          >
+                            <Check size={13} strokeWidth={2.6} />
+                            <span>Reset to All Event Types</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                   </section>

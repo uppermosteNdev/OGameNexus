@@ -253,7 +253,10 @@ export async function sendLocalDataToVault(
     ]);
 
     const filteredProjects = allProjects.filter(p => p.playerId && String(p.playerId).trim() === pidStr);
-    const localRadar = allSpiedPlanets.filter(p => isSameUniverse(p.universe, universe));
+    const localRadar = allSpiedPlanets.filter(p =>
+      isSameUniverse(p.universe, universe) &&
+      (p.userPlayerId === pidStr || (!p.userPlayerId && pidVariants.includes(String(p.userPlayerId || ''))))
+    );
     const localNotes = allTacticalNotes.filter(n => isSameUniverse(n.universe, universe));
 
     let cartItems: any[] = [];
@@ -355,9 +358,10 @@ export async function sendLocalDataToVault(
     const compactedPlanner = [...compactedTodos, ...compactedCart];
 
     const compactedRadar = localRadar.map(r => ({
-      planetKey: r.planetKey || `${cleanUni}_${r.planetId || r.coords}`,
+      planetKey: r.planetKey || `${cleanUni}_${r.userPlayerId || pidStr}_${r.planetId || r.coords}`,
       planetId: r.planetId || r.coords,
       playerId: r.playerId,
+      userPlayerId: r.userPlayerId || pidStr,
       playerName: r.playerName,
       coords: r.coords,
       metalPerHour: r.metalPerHour,
@@ -833,7 +837,7 @@ export async function fetchVaultDataToLocal(
     onProgress?.({ stage: 'Merging Raid Radar Targets...', current: 85, total: 100, percent: 85 });
     let radarUpdatedCount = 0;
     const allLocalRadar = await db.spiedPlanets.toArray();
-    const existingLocalRadar = allLocalRadar.filter(p => isSameUniverse(p.universe, universe));
+    const existingLocalRadar = allLocalRadar.filter(p => isSameUniverse(p.universe, universe) && (p.userPlayerId === pidStr || (!p.userPlayerId && pidVariants.includes(String(p.userPlayerId || '')))));
     const localRadarMap = new Map<string, SpiedPlanet>();
     for (const r of existingLocalRadar) {
       if (r.coords) {
@@ -847,13 +851,14 @@ export async function fetchVaultDataToLocal(
 
     for (const incoming of incomingRadar) {
       if (!incoming.coords) continue;
-      const targetPlanetKey = incoming.planetKey && incoming.planetKey.startsWith(`${cleanUni}_`)
+      const targetPlanetKey = incoming.planetKey && incoming.planetKey.startsWith(`${cleanUni}_${pidStr}_`)
         ? incoming.planetKey
-        : `${cleanUni}_${incoming.planetId || incoming.coords}`;
+        : `${cleanUni}_${pidStr}_${incoming.planetId || incoming.coords}`;
 
       const incomingNormalized: SpiedPlanet = {
         ...incoming,
         universe: cleanUni,
+        userPlayerId: pidStr,
         planetKey: targetPlanetKey,
       };
 
@@ -891,6 +896,7 @@ export async function fetchVaultDataToLocal(
           ...local,
           planetKey: targetPlanetKey,
           universe: cleanUni,
+          userPlayerId: pidStr,
           metalPerHour: resolvedMetalPerHour,
           crystalPerHour: resolvedCrystalPerHour,
           deuteriumPerHour: resolvedDeutPerHour,

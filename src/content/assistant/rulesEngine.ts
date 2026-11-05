@@ -1048,7 +1048,8 @@ async function evaluateAmortization(
       [AmortizationType.LifeformProductionResearches]: true,
       [AmortizationType.LifeformExpeditionResearches]: true,
       [AmortizationType.PlasmaTechnology]: true,
-      [AmortizationType.Astrophysics]: true
+      [AmortizationType.Astrophysics]: true,
+      [AmortizationType.AnomalyBuildings]: true
     };
 
     const items = rankAmortizationItems(validPlanets, account, filters, rates || DEFAULT_RATES, 1, expoAverages);

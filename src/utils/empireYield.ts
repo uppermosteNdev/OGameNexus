@@ -5,6 +5,7 @@ import { calculateEmpireProduction } from './amortizationCalc';
 export interface EmpireYieldConfig {
     includeMines: boolean;
     includeExpeditions: boolean;
+    includeAnomalies: boolean;
     includeSalvagedFleet: boolean;
     includeCombatProfits: boolean;
     includeDebrisFields: boolean;
@@ -14,6 +15,7 @@ export interface EmpireYieldConfig {
 export const DEFAULT_EMPIRE_YIELD_CONFIG: EmpireYieldConfig = {
     includeMines: true,
     includeExpeditions: true,
+    includeAnomalies: true,
     includeSalvagedFleet: true,
     includeCombatProfits: true,
     includeDebrisFields: true,
@@ -30,6 +32,7 @@ export function getEmpireYieldConfig(): EmpireYieldConfig {
             return {
                 includeMines: parsed.includeMines !== undefined ? Boolean(parsed.includeMines) : true,
                 includeExpeditions: parsed.includeExpeditions !== undefined ? Boolean(parsed.includeExpeditions) : true,
+                includeAnomalies: parsed.includeAnomalies !== undefined ? Boolean(parsed.includeAnomalies) : true,
                 includeSalvagedFleet: parsed.includeSalvagedFleet !== undefined ? Boolean(parsed.includeSalvagedFleet) : true,
                 includeCombatProfits: parsed.includeCombatProfits !== undefined ? Boolean(parsed.includeCombatProfits) : true,
                 includeDebrisFields: parsed.includeDebrisFields !== undefined ? Boolean(parsed.includeDebrisFields) : true,
@@ -129,6 +132,7 @@ export interface EmpireDailyYieldBreakdown {
     mineHourlyMSU: number;
     mineDailyMSU: number;
     expResDailyMSU: number;
+    anomalyDailyMSU: number;
     expShipDailyMSU: number;
     combatDailyMSU: number;
     debrisDailyMSU: number;
@@ -137,6 +141,7 @@ export interface EmpireDailyYieldBreakdown {
     // Raw unscaled values (for display/inspection in UI slats & modals)
     rawMineDailyMSU: number;
     rawExpResDailyMSU: number;
+    rawAnomalyDailyMSU: number;
     rawExpShipDailyMSU: number;
     rawCombatDailyMSU: number;
     rawDebrisDailyMSU: number;
@@ -156,6 +161,9 @@ export interface EmpireDailyYieldBreakdown {
     expDailyMetal: number;
     expDailyCrystal: number;
     expDailyDeut: number;
+    anomalyDailyMetal: number;
+    anomalyDailyCrystal: number;
+    anomalyDailyDeut: number;
     combatDailyMetal: number;
     combatDailyCrystal: number;
     combatDailyDeut: number;
@@ -173,10 +181,11 @@ export function calculateTotalEmpireDailyYield(params: {
     expeditions?: any[];
     combatReports?: any[];
     debrisHarvests?: any[];
+    anomalyMissions?: any[];
     rates?: { metal: number; crystal: number; deuterium: number };
     yieldConfig?: EmpireYieldConfig;
 }): EmpireDailyYieldBreakdown {
-    const { activeAccount, planets, expeditions = [], combatReports = [], debrisHarvests = [] } = params;
+    const { activeAccount, planets, expeditions = [], combatReports = [], debrisHarvests = [], anomalyMissions = [] } = params;
     const rates = params.rates || { metal: 3, crystal: 2, deuterium: 1 };
     const config = params.yieldConfig || getEmpireYieldConfig();
     const scrapRatio = typeof config.scrapMerchantRatio === 'number' && !isNaN(config.scrapMerchantRatio) ? config.scrapMerchantRatio : 0.75;
@@ -264,7 +273,120 @@ export function calculateTotalEmpireDailyYield(params: {
     const expDailyCrystal = expRes7dCrystal / expDaysTracked;
     const expDailyDeut = expRes7dDeut / expDaysTracked;
 
-    // 3. Combat Loot (Last 7 Days)
+    // 3. Anomaly Resources & Missions (Last 7 Days)
+    let anomaly7dMSU = 0;
+    let anomaly7dMetal = 0;
+    let anomaly7dCrystal = 0;
+    let anomaly7dDeut = 0;
+    let anomalyDaysTracked = 7;
+
+    if (anomalyMissions.length > 0) {
+        const validTimestamps = anomalyMissions.map(m => {
+            const ts = m.createdAt || m.spawnedTimestamp || 0;
+            return ts > 1e11 ? ts / 1000 : ts;
+        }).filter(t => typeof t === 'number' && !isNaN(t) && t > 0);
+        const minTimestamp = validTimestamps.length > 0 ? Math.min(...validTimestamps) : nowSec;
+        anomalyDaysTracked = Math.min(7, Math.max(1, Math.ceil((nowSec - minTimestamp) / 86400)));
+
+        const shipCostMap: Record<number, any> = {};
+        SHIP_DATA.forEach(s => { shipCostMap[s.id] = s.metadata?.cost || { metal: 0, crystal: 0, deuterium: 0 }; });
+
+        anomalyMissions.forEach(m => {
+            const mTs = (m.createdAt || m.spawnedTimestamp || 0) > 1e11 ? (m.createdAt || m.spawnedTimestamp) / 1000 : (m.createdAt || m.spawnedTimestamp || 0);
+
+            // Deduplicate waves: preference to modal_confirmation
+            const uniqueWavesMap = new Map<number, any>();
+            (m.waves || []).forEach((w: any) => {
+                const cur = uniqueWavesMap.get(w.waveNumber);
+                if (!cur || (w.claimMethod === 'modal_confirmation' && cur.claimMethod !== 'modal_confirmation')) {
+                    uniqueWavesMap.set(w.waveNumber, w);
+                }
+            });
+            const uniqueWaves = Array.from(uniqueWavesMap.values());
+
+            if (uniqueWaves.length > 0) {
+                uniqueWaves.forEach(w => {
+                    const waveTs = w.claimedAt ? (w.claimedAt > 1e11 ? w.claimedAt / 1000 : w.claimedAt) : mTs;
+                    if (waveTs >= last7Days) {
+                        const met = Number(w.metal) || 0;
+                        const cry = Number(w.crystal) || 0;
+                        const deut = Number(w.deuterium) || 0;
+                        anomaly7dMetal += met;
+                        anomaly7dCrystal += cry;
+                        anomaly7dDeut += deut;
+                        anomaly7dMSU += (met * mMultiplier) + (cry * cMultiplier) + (deut * dMultiplier);
+
+                        if (w.ships && typeof w.ships === 'object') {
+                            Object.entries(w.ships).forEach(([shipKey, count]: [string, any]) => {
+                                const amt = Number(count) || 0;
+                                if (amt <= 0) return;
+                                const shipObj = SHIP_DATA.find(s => s.name.toLowerCase() === shipKey.toLowerCase() || String(s.id) === shipKey);
+                                const cost = shipObj?.metadata?.cost;
+                                if (cost) {
+                                    const sm = (cost.metal || 0) * amt;
+                                    const sc = (cost.crystal || 0) * amt;
+                                    const sd = (cost.deuterium || 0) * amt;
+                                    anomaly7dMetal += sm;
+                                    anomaly7dCrystal += sc;
+                                    anomaly7dDeut += sd;
+                                    anomaly7dMSU += (sm * mMultiplier) + (sc * cMultiplier) + (sd * dMultiplier);
+                                }
+                            });
+                        }
+                    }
+                });
+            } else if (m.cumulativeRewards && mTs >= last7Days) {
+                const met = Number(m.cumulativeRewards.metal) || 0;
+                const cry = Number(m.cumulativeRewards.crystal) || 0;
+                const deut = Number(m.cumulativeRewards.deuterium) || 0;
+                anomaly7dMetal += met;
+                anomaly7dCrystal += cry;
+                anomaly7dDeut += deut;
+                anomaly7dMSU += (met * mMultiplier) + (cry * cMultiplier) + (deut * dMultiplier);
+
+                if (m.cumulativeRewards.ships && typeof m.cumulativeRewards.ships === 'object') {
+                    Object.entries(m.cumulativeRewards.ships).forEach(([shipKey, count]: [string, any]) => {
+                        const amt = Number(count) || 0;
+                        if (amt <= 0) return;
+                        const shipObj = SHIP_DATA.find(s => s.name.toLowerCase() === shipKey.toLowerCase() || String(s.id) === shipKey);
+                        const cost = shipObj?.metadata?.cost;
+                        if (cost) {
+                            const sm = (cost.metal || 0) * amt;
+                            const sc = (cost.crystal || 0) * amt;
+                            const sd = (cost.deuterium || 0) * amt;
+                            anomaly7dMetal += sm;
+                            anomaly7dCrystal += sc;
+                            anomaly7dDeut += sd;
+                            anomaly7dMSU += (sm * mMultiplier) + (sc * cMultiplier) + (sd * dMultiplier);
+                        }
+                    });
+                }
+            }
+
+            // Debris harvests linked to anomaly missions
+            if (m.debrisHarvests && Array.isArray(m.debrisHarvests)) {
+                m.debrisHarvests.forEach((dh: any) => {
+                    const dhTs = dh.timestamp ? (dh.timestamp > 1e11 ? dh.timestamp / 1000 : dh.timestamp) : mTs;
+                    if (dhTs >= last7Days) {
+                        const met = Number(dh.metal) || 0;
+                        const cry = Number(dh.crystal) || 0;
+                        const deut = Number(dh.deuterium) || 0;
+                        anomaly7dMetal += met;
+                        anomaly7dCrystal += cry;
+                        anomaly7dDeut += deut;
+                        anomaly7dMSU += (met * mMultiplier) + (cry * cMultiplier) + (deut * dMultiplier);
+                    }
+                });
+            }
+        });
+    }
+
+    const anomalyDailyMSU = anomaly7dMSU / anomalyDaysTracked;
+    const anomalyDailyMetal = anomaly7dMetal / anomalyDaysTracked;
+    const anomalyDailyCrystal = anomaly7dCrystal / anomalyDaysTracked;
+    const anomalyDailyDeut = anomaly7dDeut / anomalyDaysTracked;
+
+    // 4. Combat Loot (Last 7 Days)
     let combat7dMSU = 0;
     let combat7dMetal = 0;
     let combat7dCrystal = 0;
@@ -293,7 +415,7 @@ export function calculateTotalEmpireDailyYield(params: {
     const combatDailyCrystal = combat7dCrystal / combatDaysTracked;
     const combatDailyDeut = combat7dDeut / combatDaysTracked;
 
-    // 4. Debris Harvests (Last 7 Days)
+    // 5. Debris Harvests (Last 7 Days)
     let debris7dMSU = 0;
     let debris7dMetal = 0;
     let debris7dCrystal = 0;
@@ -323,31 +445,36 @@ export function calculateTotalEmpireDailyYield(params: {
     // Raw calculated values (unscaled, 100%)
     const rawMineDailyMSU = mineDailyMSU;
     const rawExpResDailyMSU = expResDailyMSU;
+    const rawAnomalyDailyMSU = anomalyDailyMSU;
     const rawExpShipDailyMSU = expShipDailyMSU;
     const rawCombatDailyMSU = combatDailyMSU;
     const rawDebrisDailyMSU = debrisDailyMSU;
-    const rawTotalDailyMSU = rawMineDailyMSU + rawExpResDailyMSU + rawExpShipDailyMSU + rawCombatDailyMSU + rawDebrisDailyMSU;
+    const rawTotalDailyMSU = rawMineDailyMSU + rawExpResDailyMSU + rawAnomalyDailyMSU + rawExpShipDailyMSU + rawCombatDailyMSU + rawDebrisDailyMSU;
 
     // Effective values factoring in global category toggles & scrap merchant ratio
     const effectiveMineDailyMSU = config.includeMines ? rawMineDailyMSU : 0;
     const effectiveExpResDailyMSU = config.includeExpeditions ? rawExpResDailyMSU : 0;
+    const effectiveAnomalyDailyMSU = config.includeAnomalies ? rawAnomalyDailyMSU : 0;
     const effectiveExpShipDailyMSU = config.includeSalvagedFleet ? (rawExpShipDailyMSU * scrapRatio) : 0;
     const effectiveCombatDailyMSU = config.includeCombatProfits ? rawCombatDailyMSU : 0;
     const effectiveDebrisDailyMSU = config.includeDebrisFields ? rawDebrisDailyMSU : 0;
 
-    const totalDailyYieldMSU = effectiveMineDailyMSU + effectiveExpResDailyMSU + effectiveExpShipDailyMSU + effectiveCombatDailyMSU + effectiveDebrisDailyMSU;
+    const totalDailyYieldMSU = effectiveMineDailyMSU + effectiveExpResDailyMSU + effectiveAnomalyDailyMSU + effectiveExpShipDailyMSU + effectiveCombatDailyMSU + effectiveDebrisDailyMSU;
 
     // Per-resource totals factoring in included categories
     const dailyMetal = (config.includeMines ? mineDailyMetal : 0)
         + (config.includeExpeditions ? expDailyMetal : 0)
+        + (config.includeAnomalies ? anomalyDailyMetal : 0)
         + (config.includeCombatProfits ? combatDailyMetal : 0)
         + (config.includeDebrisFields ? debrisDailyMetal : 0);
     const dailyCrystal = (config.includeMines ? mineDailyCrystal : 0)
         + (config.includeExpeditions ? expDailyCrystal : 0)
+        + (config.includeAnomalies ? anomalyDailyCrystal : 0)
         + (config.includeCombatProfits ? combatDailyCrystal : 0)
         + (config.includeDebrisFields ? debrisDailyCrystal : 0);
     const dailyDeuterium = (config.includeMines ? mineDailyDeut : 0)
         + (config.includeExpeditions ? expDailyDeut : 0)
+        + (config.includeAnomalies ? anomalyDailyDeut : 0)
         + (config.includeCombatProfits ? combatDailyDeut : 0)
         + (config.includeDebrisFields ? debrisDailyDeut : 0);
 
@@ -355,6 +482,7 @@ export function calculateTotalEmpireDailyYield(params: {
         mineHourlyMSU: config.includeMines ? mineHourlyMSU : 0,
         mineDailyMSU: effectiveMineDailyMSU,
         expResDailyMSU: effectiveExpResDailyMSU,
+        anomalyDailyMSU: effectiveAnomalyDailyMSU,
         expShipDailyMSU: effectiveExpShipDailyMSU,
         combatDailyMSU: effectiveCombatDailyMSU,
         debrisDailyMSU: effectiveDebrisDailyMSU,
@@ -362,6 +490,7 @@ export function calculateTotalEmpireDailyYield(params: {
 
         rawMineDailyMSU,
         rawExpResDailyMSU,
+        rawAnomalyDailyMSU,
         rawExpShipDailyMSU,
         rawCombatDailyMSU,
         rawDebrisDailyMSU,
@@ -378,6 +507,9 @@ export function calculateTotalEmpireDailyYield(params: {
         expDailyMetal,
         expDailyCrystal,
         expDailyDeut,
+        anomalyDailyMetal,
+        anomalyDailyCrystal,
+        anomalyDailyDeut,
         combatDailyMetal,
         combatDailyCrystal,
         combatDailyDeut,

@@ -1777,6 +1777,104 @@
   align-items: center;
   gap: 10px;
   margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* Live Universe Feed - Player Search Filter Box */
+.ow-feed-player-search-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 195px;
+  max-width: 250px;
+}
+
+.ow-feed-player-search-box .ow-feed-search-icon {
+  position: absolute;
+  left: 9px;
+  color: #64748b;
+  pointer-events: none;
+  transition: color 0.18s ease;
+  flex-shrink: 0;
+}
+
+.ow-feed-player-search-box:focus-within .ow-feed-search-icon {
+  color: #00f2ff;
+}
+
+.ow-feed-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 26px 5px 28px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ow-feed-search-input::placeholder {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.ow-feed-search-input:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.ow-feed-search-input:focus {
+  border-color: rgba(0, 242, 255, 0.45);
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.14);
+  background: rgba(4, 7, 18, 0.7);
+}
+
+.ow-feed-search-input.has-active-filter {
+  border-color: rgba(0, 242, 255, 0.5);
+  background: rgba(0, 242, 255, 0.05);
+  color: #00f2ff;
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.12);
+}
+
+.ow-feed-search-clear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.ow-feed-search-clear:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.ow-feed-search-char-badge {
+  position: absolute;
+  right: 24px;
+  font-size: 9.5px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+  letter-spacing: 0.02em;
 }
 
 .ow-feed-filter-count {

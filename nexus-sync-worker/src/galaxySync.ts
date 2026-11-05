@@ -41,6 +41,7 @@ export const GalaxySlotSchema = z.object({
   isIdle: z.boolean().nullable().optional(),
   activityMarker: z.string().nullable().optional(), // '*', '15m', '35m', etc.
   activityTimestamp: z.number().nullable().optional(),
+  isConfirmedEmpty: z.boolean().nullable().optional(),
 });
 
 // Zod Schema for the full system payload
@@ -124,6 +125,25 @@ export function isVacationPlayer(status?: string | null, playerName?: string | n
   if (playerName) {
     const n = playerName.toLowerCase();
     if (n.includes('(v') || n.includes(' v)') || n.includes('(v,')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks whether a player is inactive based on status code or name annotation
+ */
+export function isInactivePlayer(status?: string | null, playerName?: string | null): boolean {
+  if (status) {
+    const s = status.toLowerCase();
+    if (s.includes('i') || normalizePlayerStatus(status).includes('i')) {
+      return true;
+    }
+  }
+  if (playerName) {
+    const n = playerName.toLowerCase();
+    if (n.includes('(i') || n.includes('(I') || n.includes(' i)') || n.includes(' I)') || n.includes('(i,') || n.includes('(I,')) {
       return true;
     }
   }
@@ -367,13 +387,24 @@ export async function handleGalaxySync(req: Request, env: Env) {
     // Guard against mass-abandonment artifacts from outdated extensions or partial DOM parses:
     // Count how many occupied slots are being reported as vacant in this single survey
     let claimedVacanciesCount = 0;
+    const vacatedPlayerIds = new Set<string>();
+    let allVacatedWereInactive = true;
+
     for (const s of slots) {
       const old = existingMap.get(s.slot);
       if (old && old.player_id && !s.playerId) {
         claimedVacanciesCount++;
+        vacatedPlayerIds.add(String(old.player_id));
+        const wasInactive = isInactivePlayer(old.player_status, old.player_name);
+        if (!wasInactive) {
+          allVacatedWereInactive = false;
+        }
       }
     }
-    const isMassAbandonmentGlitch = claimedVacanciesCount >= 3;
+    // Mass abandonment across multiple distinct active players indicates a broken scrape.
+    // If all vacated slots belonged to the same player (single account deletion) or all were inactive (Gameforge maintenance purge), it is legitimate!
+    const isSingleAccountOrInactivePurge = claimedVacanciesCount > 0 && (vacatedPlayerIds.size === 1 || allVacatedWereInactive);
+    const isMassAbandonmentGlitch = claimedVacanciesCount >= 3 && !isSingleAccountOrInactivePurge;
 
     // 2. Diff incoming slots against existing slots
     for (const newSlot of slots) {
@@ -404,22 +435,31 @@ export async function handleGalaxySync(req: Request, env: Env) {
 
       const oldPlayerNameClean = (oldSlot?.player_name || '').toLowerCase().trim();
       const isKnownAdmin = oldSlot && ['legor', 'gameadmin', 'ogameteam', 'comagf'].includes(oldPlayerNameClean);
+      const isOldSlotInactive = oldSlot && isInactivePlayer(oldSlot.player_status, oldSlot.player_name);
       const hasPreexistingMoon = oldSlot && (oldSlot.has_moon === 1);
       const isSystemOriginProtected = galaxy === 1 && system === 1;
+      const isConfirmedEmpty = Boolean(newSlot.isConfirmedEmpty);
 
       // SAFETY LATCH 1: Zero-Trust Vacancy Rejection.
       // In OGame, occupied slots cannot disappear into empty space under the following physical laws:
       // - Vacation accounts are frozen and cannot abandon colonies or delete accounts.
-      // - Planets with moons cannot be abandoned (OGame physically enforces moon destruction first).
       // - Permanent admin accounts (Legor, GameAdmin, comagf, OGameTeam) in origin system 1:1 are immutable.
-      // - Mass-abandonment (3+ slots simultaneously vanishing in one scan of an established system) is an extension glitch.
+      // - Mass-abandonment (3+ slots simultaneously vanishing across different active players) is an extension glitch.
       // - Slots where a playerName is visible can never be empty.
+      // NOTE ON MOONS: Planets with moons CAN disappear when:
+      // 1) An inactive account (i/I) is deleted during daily maintenance (~03:00 server time).
+      // 2) The account is manually deleted or transferred to graveyard.
+      // 3) Moon was destroyed and colony abandoned prior to scan.
+      // 4) Planet was relocated with Dark Matter.
+      // Therefore, hasPreexistingMoon only blocks vacancy if the player was active and the slot wasn't confirmed empty.
+      const shouldRejectMoonVacancy = hasPreexistingMoon && !isOldSlotInactive && !isConfirmedEmpty;
+
       const shouldRejectVacancy = Boolean(
         oldSlot && oldSlot.player_id && !newSlot.playerId && (
           isOldSlotVacation ||
           isKnownAdmin ||
           isSystemOriginProtected ||
-          hasPreexistingMoon ||
+          shouldRejectMoonVacancy ||
           isMassAbandonmentGlitch ||
           Boolean(newSlot.playerName)
         )
@@ -802,8 +842,8 @@ export async function handleGalaxySync(req: Request, env: Env) {
         }
       } else {
         // If slot became completely empty (abandoned), delete from sparse storage
-        // Guard: NEVER delete if slot was occupied by a vacation player, moon owner, admin, or during mass-abandonment
-        if (!isOldSlotVacation && !hasPreexistingMoon && !isSystemOriginProtected && !isKnownAdmin && !isMassAbandonmentGlitch) {
+        // Guard: NEVER delete if slot was occupied by a vacation player, admin, or during mass-abandonment
+        if (!isOldSlotVacation && !isSystemOriginProtected && !isKnownAdmin && !isMassAbandonmentGlitch) {
           statements.push(
             db.prepare(
               `DELETE FROM alliance_galaxy_slots
@@ -1256,6 +1296,7 @@ export async function handleGetGalaxyEvents(req: Request, env: Env) {
     const allianceId = (member && !('error' in member)) ? member.alliance_id : 'public';
     const typesParam = url.searchParams.get('types');
     const singleTypeParam = url.searchParams.get('type');
+    const playerParam = url.searchParams.get('player') || url.searchParams.get('q');
     const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
     const limit = Math.min(Math.max(1, parseInt(url.searchParams.get('limit') || '25', 10)), 100);
     const offset = Math.max(0, parseInt(url.searchParams.get('offset') || `${(page - 1) * limit}`, 10));
@@ -1326,19 +1367,32 @@ export async function handleGetGalaxyEvents(req: Request, env: Env) {
       timeParams.push(sinceTimestamp);
     }
 
+    let playerCountFilter = '';
+    const playerCountParams: any[] = [];
+    let playerQueryFilter = '';
+    const playerQueryParams: any[] = [];
+    if (playerParam && playerParam.trim().length >= 3) {
+      const q = `%${playerParam.trim().toLowerCase()}%`;
+      playerCountFilter = ` AND (LOWER(player_name) LIKE ? OR LOWER(old_state_json) LIKE ? OR LOWER(new_state_json) LIKE ?)`;
+      playerCountParams.push(q, q, q);
+
+      playerQueryFilter = ` AND (LOWER(e.player_name) LIKE ? OR LOWER(s.player_name) LIKE ? OR LOWER(b.player_name) LIKE ? OR LOWER(e.old_state_json) LIKE ? OR LOWER(e.new_state_json) LIKE ?)`;
+      playerQueryParams.push(q, q, q, q, q);
+    }
+
     let countQuery: string;
     let countParams: any[];
     if (allianceId === 'public') {
-      countQuery = `SELECT COUNT(*) as count FROM universe_events WHERE alliance_id = 'public' AND universe_id = ?${typeFilter}${timeFilter}`;
-      countParams = [universeId, ...extraParams, ...timeParams];
+      countQuery = `SELECT COUNT(*) as count FROM universe_events WHERE alliance_id = 'public' AND universe_id = ?${typeFilter}${timeFilter}${playerCountFilter}`;
+      countParams = [universeId, ...extraParams, ...timeParams, ...playerCountParams];
     } else {
       countQuery = `
         SELECT (
-          (SELECT COUNT(*) FROM universe_events WHERE alliance_id = ? AND universe_id = ?${typeFilter}${timeFilter}) +
-          (SELECT COUNT(*) FROM universe_events WHERE alliance_id = 'public' AND universe_id = ?${typeFilter}${timeFilter})
+          (SELECT COUNT(*) FROM universe_events WHERE alliance_id = ? AND universe_id = ?${typeFilter}${timeFilter}${playerCountFilter}) +
+          (SELECT COUNT(*) FROM universe_events WHERE alliance_id = 'public' AND universe_id = ?${typeFilter}${timeFilter}${playerCountFilter})
         ) as count
       `;
-      countParams = [allianceId, universeId, ...extraParams, ...timeParams, universeId, ...extraParams, ...timeParams];
+      countParams = [allianceId, universeId, ...extraParams, ...timeParams, ...playerCountParams, universeId, ...extraParams, ...timeParams, ...playerCountParams];
     }
     const countRow: any = await db.prepare(countQuery).bind(...countParams).first();
     const totalCount = countRow?.count ? Number(countRow.count) : 0;
@@ -1377,6 +1431,11 @@ export async function handleGetGalaxyEvents(req: Request, env: Env) {
     if (sinceTimestamp && !isNaN(sinceTimestamp)) {
       query += ` AND e.detected_at > ?`;
       params.push(sinceTimestamp);
+    }
+
+    if (playerQueryFilter) {
+      query += playerQueryFilter;
+      params.push(...playerQueryParams);
     }
 
     query += ` ORDER BY e.detected_at DESC LIMIT ? OFFSET ?`;

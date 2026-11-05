@@ -63,7 +63,8 @@ export enum AmortizationType {
     LifeformProductionResearches = 4,
     LifeformExpeditionResearches = 5,
     PlasmaTechnology = 6,
-    Astrophysics = 7
+    Astrophysics = 7,
+    AnomalyBuildings = 8
 }
 
 export const DEFAULT_RATES = {
@@ -171,8 +172,75 @@ export const AMORTIZATION_TABLE = [
         baseCost: { metal: 4000, crystal: 8000, deuterium: 4000 },
         costFormula: (level: number) => getAstrophysicsCost(level),
         effect: { type: "colony_expansion", value: 1 }
+    },
+
+    // Anomaly Buildings (Project Orion)
+    {
+        name: "Interstellar Anomaly Scanner",
+        id: 45,
+        type: AmortizationType.AnomalyBuildings,
+        baseCost: { metal: 90, crystal: 45, deuterium: 15 },
+        costFormula: (level: number) => ({
+            metal: Math.floor(90 * Math.pow(1.5, level - 1)),
+            crystal: Math.floor(45 * Math.pow(1.5, level - 1)),
+            deuterium: Math.floor(15 * Math.pow(1.5, level - 1))
+        }),
+        effect: { type: "lithium", value: 15.36 }
+    },
+    {
+        name: "Intergalactic Recovery Centre",
+        id: 4001,
+        type: AmortizationType.AnomalyBuildings,
+        baseCost: { metal: 75000, crystal: 52500, deuterium: 22500 },
+        costFormula: (level: number) => ({
+            metal: Math.floor(75000 * Math.pow(1.5, level - 1)),
+            crystal: Math.floor(52500 * Math.pow(1.5, level - 1)),
+            deuterium: Math.floor(22500 * Math.pow(1.5, level - 1))
+        }),
+        effect: { type: "anomaly_ships", value: 0.002 }
+    },
+    {
+        name: "Metal Recycling Unit",
+        id: 4003,
+        type: AmortizationType.AnomalyBuildings,
+        baseCost: { metal: 112500, crystal: 37500, deuterium: 18000 },
+        costFormula: (level: number) => ({
+            metal: Math.floor(112500 * Math.pow(1.5, level - 1)),
+            crystal: Math.floor(37500 * Math.pow(1.5, level - 1)),
+            deuterium: Math.floor(18000 * Math.pow(1.5, level - 1))
+        }),
+        effect: { type: "anomaly_metal", value: 0.002 }
+    },
+    {
+        name: "Crystal Finishing Station",
+        id: 4004,
+        type: AmortizationType.AnomalyBuildings,
+        baseCost: { metal: 37500, crystal: 67500, deuterium: 27000 },
+        costFormula: (level: number) => ({
+            metal: Math.floor(37500 * Math.pow(1.5, level - 1)),
+            crystal: Math.floor(67500 * Math.pow(1.5, level - 1)),
+            deuterium: Math.floor(27000 * Math.pow(1.5, level - 1))
+        }),
+        effect: { type: "anomaly_crystal", value: 0.002 }
+    },
+    {
+        name: "High-Pressure Deuterium Tanks",
+        id: 4006,
+        type: AmortizationType.AnomalyBuildings,
+        baseCost: { metal: 30000, crystal: 37500, deuterium: 45000 },
+        costFormula: (level: number) => ({
+            metal: Math.floor(30000 * Math.pow(1.5, level - 1)),
+            crystal: Math.floor(37500 * Math.pow(1.5, level - 1)),
+            deuterium: Math.floor(45000 * Math.pow(1.5, level - 1))
+        }),
+        effect: { type: "anomaly_deuterium", value: 0.002 }
     }
 ];
+
+export function calculateLithiumProduction(level: number, economySpeed: number = 1): number {
+    if (level <= 0) return 0;
+    return Math.floor(15.36 * economySpeed * level * Math.pow(1.1, level));
+}
 
 export function getAstrophysicsCost(level: number): Cost {
     if (level <= 0) return { metal: 0, crystal: 0, deuterium: 0 };
@@ -219,6 +287,17 @@ export function getItemIcon(item: AmortizationItem): string {
     if (item.type === AmortizationType.Astrophysics || (item.name && item.name.toLowerCase().includes('astrophysics'))) {
         return 'icons/research/expedition-tech-research-large.jpg';
     }
+    if (item.type === AmortizationType.AnomalyBuildings) {
+        const id = item.techId ?? item.id;
+        if (id === 45) return 'icons/facilities/interstellar_anomaly_scanner_large.jpg';
+        if (id === 4001) return 'icons/facilities/intergalactic_recovery_centre_large.jpg';
+        if (id === 4002) return 'icons/facilities/lithium_electrolysis_lab_large.jpg';
+        if (id === 4003) return 'icons/facilities/metal_recycling_unit_large.jpg';
+        if (id === 4004) return 'icons/facilities/crystal_finishing_station_large.jpg';
+        if (id === 4005) return 'icons/facilities/anomaly_analysis_centre_large.jpg';
+        if (id === 4006) return 'icons/facilities/high-pressure_deuterium_tanks_large.jpg';
+        if (id === 4007) return 'icons/facilities/catalytic_convertor_large.jpg';
+    }
 
     const staticEntry = AMORTIZATION_TABLE.find(e => e.name === item.name);
     if (staticEntry && staticEntry.lifeformId) {
@@ -251,6 +330,12 @@ export function getAmortizationTechId(item: { id?: number | null, name?: string,
     }
     if (item.type === AmortizationType.Astrophysics || typeStr === 'Astrophysics' || typeStr === '7' || item.id === 124 || (item.name && item.name.toLowerCase().includes('astrophysics'))) {
         return 124;
+    }
+    if (item.type === AmortizationType.AnomalyBuildings || typeStr === 'AnomalyBuildings' || typeStr === '8') {
+        if (typeof item.id === 'number') return item.id;
+        const entry = AMORTIZATION_TABLE.find(e => e.name === item.name);
+        if (entry?.id) return entry.id;
+        return typeof item.id === 'number' ? item.id : undefined;
     }
     if (
         item.type === AmortizationType.LifeformResearchBuildings ||
@@ -687,10 +772,36 @@ export function calculateEmpireProduction(state: EmpireState): ProductionResults
     return results;
 }
 
-export function rankAmortizationItems(planets: any[], account: any, filters: { [key in AmortizationType]: boolean }, rates: any = DEFAULT_RATES, limit: number = 25, expoAverages?: { resources: Cost, ships: Cost, totals: { resources: Cost, ships: Cost } }, selectedPlanetIds?: string[], targetResource: AmortizationResourceTarget = 'all'): AmortizationItem[] {
+export interface AnomalyAverages {
+    metal: number;
+    crystal: number;
+    deuterium: number;
+    ships: number; // in MSU/h
+    msuPerLithium: number;
+    rewardMix: { metal: number; crystal: number; deuterium: number; ships: number };
+}
+
+export function rankAmortizationItems(
+    planets: any[],
+    account: any,
+    filters: { [key in AmortizationType]: boolean },
+    rates: any = DEFAULT_RATES,
+    limit: number = 25,
+    expoAverages?: { resources: Cost, ships: Cost, totals: { resources: Cost, ships: Cost } },
+    selectedPlanetIds?: string[],
+    targetResource: AmortizationResourceTarget = 'all',
+    anomalyAverages?: AnomalyAverages
+): AmortizationItem[] {
     // Deep clone only valid planets (moons have no mines or amortization production)
     const cleanPlanets = (planets || []).filter((p: any) => p && p.type !== 'moon');
-    const state: EmpireState = JSON.parse(JSON.stringify({ planets: cleanPlanets, account }));
+    const safeAccount = account ? JSON.parse(JSON.stringify(account)) : {};
+    if (!Array.isArray(safeAccount.researches)) {
+        safeAccount.researches = safeArray(safeAccount.researches);
+    }
+    const state: EmpireState = {
+        planets: JSON.parse(JSON.stringify(cleanPlanets)),
+        account: safeAccount
+    };
     const resultItems: AmortizationItem[] = [];
 
     const REDUCTION_IDS = {
@@ -897,6 +1008,12 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                 } else if (entry.id && (entry.type === AmortizationType.LifeformProductionResearches || entry.type === AmortizationType.LifeformExpeditionResearches)) {
                     currentLevel = getLifeformTechLevel(p, entry.id);
                     if (currentLevel === 0) return;
+                } else if (entry.type === AmortizationType.AnomalyBuildings) {
+                    if (entry.id === 45) {
+                        currentLevel = p.iaScanner ?? p.facilities?.find((f: any) => f.id === 45)?.level ?? 0;
+                    } else if (entry.id && entry.id >= 4001 && entry.id <= 4007) {
+                        currentLevel = p.controlCenterBuildings?.find((b: any) => b.id === entry.id)?.level ?? 0;
+                    }
                 }
 
                 const nextLevel = currentLevel + 1;
@@ -965,6 +1082,44 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             deuterium: prodData.empireBase.deuterium * 0.0033
                         };
                         prodIncrease = calculateMSU(prodDelta, rates);
+                    } else if (effect.type === 'lithium') {
+                        const curLithium = calculateLithiumProduction(currentLevel, universeSpeed);
+                        const nextLithium = calculateLithiumProduction(nextLevel, universeSpeed);
+                        const deltaLithium = Math.max(0, nextLithium - curLithium);
+                        const msuRate = (anomalyAverages && anomalyAverages.msuPerLithium > 0) ? anomalyAverages.msuPerLithium : 1.0;
+                        const deltaMsu = deltaLithium * msuRate;
+                        const mix = anomalyAverages?.rewardMix || { metal: 0.5, crystal: 0.33, deuterium: 0.17, ships: 0 };
+
+                        prodDelta = {
+                            metal: (deltaMsu * (mix.metal || 0.5)) / (rates.metal || 1),
+                            crystal: (deltaMsu * (mix.crystal || 0.33)) / (rates.crystal || 1),
+                            deuterium: (deltaMsu * (mix.deuterium || 0.17)) / (rates.deuterium || 1)
+                        };
+                        prodIncrease = deltaMsu;
+                    } else if (effect.type === 'anomaly_metal') {
+                        const baseMetal = anomalyAverages?.metal || 100000;
+                        const dM = baseMetal * (effect.value || 0.002);
+                        prodDelta = { metal: dM, crystal: 0, deuterium: 0 };
+                        prodIncrease = calculateMSU(prodDelta, rates);
+                    } else if (effect.type === 'anomaly_crystal') {
+                        const baseCrystal = anomalyAverages?.crystal || 50000;
+                        const dC = baseCrystal * (effect.value || 0.002);
+                        prodDelta = { metal: 0, crystal: dC, deuterium: 0 };
+                        prodIncrease = calculateMSU(prodDelta, rates);
+                    } else if (effect.type === 'anomaly_deuterium') {
+                        const baseDeut = anomalyAverages?.deuterium || 20000;
+                        const dD = baseDeut * (effect.value || 0.002);
+                        prodDelta = { metal: 0, crystal: 0, deuterium: dD };
+                        prodIncrease = calculateMSU(prodDelta, rates);
+                    } else if (effect.type === 'anomaly_ships') {
+                        const baseShipMsu = anomalyAverages?.ships || 50000;
+                        const dShipMsu = baseShipMsu * (effect.value || 0.002);
+                        prodDelta = {
+                            metal: (dShipMsu * 0.5) / (rates.metal || 1),
+                            crystal: (dShipMsu * 0.33) / (rates.crystal || 1),
+                            deuterium: (dShipMsu * 0.17) / (rates.deuterium || 1)
+                        };
+                        prodIncrease = dShipMsu;
                     } else if (effect.type === 'tech_bonus') {
                         // ROI for Tech Boosters (Metropolis, Transformer, Chip Mass Production): 
                         // Increase in production for all OTHER techs on this planet.
@@ -1231,7 +1386,9 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                 let effectiveIncrease = 0;
                 let targetCost = 0;
                 if (targetResource === 'all') {
-                    effectiveIncrease = calculateMSU(prodDelta, rates);
+                    effectiveIncrease = (entry.type === AmortizationType.AnomalyBuildings && (entry.id === 45 || entry.id === 4001))
+                        ? prodIncrease
+                        : calculateMSU(prodDelta, rates);
                     targetCost = calculateMSU(cost, rates);
                 } else if (targetResource === 'metal') {
                     effectiveIncrease = prodDelta.metal;
@@ -1276,12 +1433,12 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             });
 
                             const techB = prodData.globalBonuses[resKey as keyof typeof prodData.globalBonuses];
-                            const classB = (state.account.playerClass === 1) ? 0.25 * (1 + collectorClassBoost) : 0;
+                            const classB = (state.account?.playerClass === 1) ? 0.25 * (1 + collectorClassBoost) : 0;
 
                             const mVal = p.metalMine || 0;
                             const cVal = p.crystalMine || 0;
                             const dVal = p.deuteriumMine || 0;
-                            const isColl = state.account.playerClass === 1;
+                            const isColl = state.account?.playerClass === 1;
                             const effCollFactor = isColl ? (1.5 + collectorClassBoost) : 1.0;
                             const pStg = p.productionSettings || {};
                             const crSettings = (pStg.crawlers !== undefined ? pStg.crawlers : (isColl ? 150 : 100)) / 100;
@@ -1414,6 +1571,16 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                             const factor = (entry.effect as any).value;
                             breakdownStr = `\n                            - Mine Cost Reduction Bonus: -${(factor * 100).toFixed(2)}% cost discount on future mine upgrades
                             - Effective Production Boost: +${prodIncrease.toFixed(2)} MSU/h`;
+                        } else if (entry.type === AmortizationType.AnomalyBuildings) {
+                            if (entry.id === 45) {
+                                const dLithium = Math.max(0, calculateLithiumProduction(nextLevel, universeSpeed) - calculateLithiumProduction(currentLevel, universeSpeed));
+                                breakdownStr = `\n                            - Interstellar Anomaly Scanner (Lvl ${nextLevel})
+                            - Lithium Harvest Increase: +${dLithium.toLocaleString()} Lithium/h
+                            - Valuation: ${(anomalyAverages?.msuPerLithium || 1.0).toFixed(2)} MSU per Lithium`;
+                            } else {
+                                breakdownStr = `\n                            - Anomaly Mission Booster (+0.2% per level)
+                            - Empire-wide Cumulative Bonus on lowest level planet`;
+                            }
                         }
 
                         if (DEBUG_AMORTIZATION) {
@@ -1642,14 +1809,21 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
             }
         }
 
-        // Deduplicate Plasma and Astrophysics in candidates
-        const uniqueCandidates = candidates.filter((item, index, self) =>
-            (item.type !== AmortizationType.PlasmaTechnology && item.type !== AmortizationType.Astrophysics) ||
-            index === self.findIndex(t => t.type === item.type)
-        );
+        // Sort candidates first so that deduplication keeps the optimal candidate
+        candidates.sort((a, b) => a.roiHours - b.roiHours);
+
+        // Deduplicate Plasma, Astrophysics, and Empire-Wide Anomaly Boosters in candidates
+        const uniqueCandidates = candidates.filter((item, index, self) => {
+            if (item.type === AmortizationType.PlasmaTechnology || item.type === AmortizationType.Astrophysics) {
+                return index === self.findIndex(t => t.type === item.type);
+            }
+            if (item.type === AmortizationType.AnomalyBuildings && item.id && item.id >= 4001 && item.id <= 4007) {
+                return index === self.findIndex(t => t.id === item.id);
+            }
+            return true;
+        });
 
         if (uniqueCandidates.length === 0) break;
-        uniqueCandidates.sort((a, b) => a.roiHours - b.roiHours);
         const best = uniqueCandidates[0];
         if (!best || !isFinite(best.roiHours) || best.roiHours <= 0) break;
 
@@ -1666,17 +1840,19 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                 else if (best.name === "Deuterium Mine") state.planets[pIdx].deuteriumMine = (state.planets[pIdx].deuteriumMine || 0) + 1;
             }
         } else if (best.type === AmortizationType.PlasmaTechnology) {
+            if (!state.account) state.account = { researches: [] };
             if (!Array.isArray(state.account.researches)) {
                 state.account.researches = safeArray(state.account.researches);
             }
-            const tech = state.account.researches.find((r: any) => r.id === 122);
+            const tech = state.account.researches.find((r: any) => r && r.id === 122);
             if (tech) tech.level++;
             else state.account.researches.push({ id: 122, level: 1 });
         } else if (best.type === AmortizationType.Astrophysics) {
+            if (!state.account) state.account = { researches: [] };
             if (!Array.isArray(state.account.researches)) {
                 state.account.researches = safeArray(state.account.researches);
             }
-            const tech = state.account.researches.find((r: any) => r.id === 124);
+            const tech = state.account.researches.find((r: any) => r && r.id === 124);
             const targetLvl = best.targetLevel || (best.currentLevel + 1);
             if (tech) tech.level = targetLvl;
             else state.account.researches.push({ id: 124, level: targetLvl });
@@ -1738,6 +1914,36 @@ export function rankAmortizationItems(planets: any[], account: any, filters: { [
                         level: 1,
                         slotNumber: 0
                     });
+                }
+            }
+        } else if (best.type === AmortizationType.AnomalyBuildings) {
+            const pIdx = state.planets.findIndex(pl => pl.id === best.planetId);
+            if (pIdx !== -1) {
+                if (best.id === 45) {
+                    state.planets[pIdx].iaScanner = (state.planets[pIdx].iaScanner || 0) + 1;
+                    if (!Array.isArray(state.planets[pIdx].facilities)) {
+                        state.planets[pIdx].facilities = safeArray(state.planets[pIdx].facilities);
+                    }
+                    const fIdx = state.planets[pIdx].facilities.findIndex((f: any) => f.id === 45);
+                    if (fIdx !== -1) {
+                        state.planets[pIdx].facilities[fIdx].level++;
+                    } else {
+                        state.planets[pIdx].facilities.push({ id: 45, level: state.planets[pIdx].iaScanner });
+                    }
+                } else if (best.id && best.id >= 4001 && best.id <= 4007) {
+                    if (!Array.isArray(state.planets[pIdx].controlCenterBuildings)) {
+                        state.planets[pIdx].controlCenterBuildings = safeArray(state.planets[pIdx].controlCenterBuildings);
+                    }
+                    const bIdx = state.planets[pIdx].controlCenterBuildings.findIndex((b: any) => b.id === best.id);
+                    if (bIdx !== -1) {
+                        state.planets[pIdx].controlCenterBuildings[bIdx].level++;
+                    } else {
+                        state.planets[pIdx].controlCenterBuildings.push({
+                            id: best.id,
+                            name: best.name,
+                            level: (best.currentLevel || 0) + 1
+                        });
+                    }
                 }
             }
         }

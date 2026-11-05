@@ -33,6 +33,7 @@ import {
   Image as ImageIcon,
   X,
   SlidersHorizontal,
+  Send,
 } from 'lucide-react';
 import './AllianceTopFlop.css';
 
@@ -51,6 +52,9 @@ interface TopFlopConfig {
   category?: number;
   is_default?: number;
   last_generated_at?: number;
+  discord_webhook_url?: string | null;
+  webhook_post_hour?: number | null;
+  last_webhook_sent_at?: number | null;
 }
 
 type TabType = 'info' | 'customization' | 'preview';
@@ -297,6 +301,21 @@ export const AllianceTopFlop: React.FC = () => {
   const [scheduledUtcHour, setScheduledUtcHour] = useState<number>(0);
   const [category, setCategory] = useState<number>(0);
 
+  // Automated Discord Webhook State
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState<string>('');
+  const [webhookPostHour, setWebhookPostHour] = useState<number>(0);
+  const [isTestingWebhook, setIsTestingWebhook] = useState<boolean>(false);
+  const [webhookStatus, setWebhookStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Helper: Format UTC hour with user's local time preview
+  const formatUtcOption = (hour: number) => {
+    const d = new Date();
+    d.setUTCHours(hour, 0, 0, 0);
+    const localStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isCurrent = hour === new Date().getUTCHours();
+    return `${String(hour).padStart(2, '0')}:00 UTC (${localStr} Local)${isCurrent ? ' • Current' : ''}`;
+  };
+
   // Tab 2: Customization Form State
   const [customTitle, setCustomTitle] = useState<string>('Top / Flop of the day');
   const [themePreset, setThemePreset] = useState<string>('tactical');
@@ -378,6 +397,8 @@ export const AllianceTopFlop: React.FC = () => {
     setScheduledUtcHour(p.scheduled_utc_hour ?? 0);
     setCategory(p.category ?? 0);
     setCustomTitle(p.custom_title || 'Top / Flop of the day');
+    setDiscordWebhookUrl(p.discord_webhook_url || '');
+    setWebhookPostHour(p.webhook_post_hour ?? (p.scheduled_utc_hour ?? 0));
 
     if (p.theme && p.theme.startsWith('{')) {
       try {
@@ -403,9 +424,14 @@ export const AllianceTopFlop: React.FC = () => {
     return category !== 0 ? `${baseUrl}?type=${category}` : baseUrl;
   }, [universeId, allianceId, myPlayerId, category]);
 
-  // Image Preview URL (with cache-bust timestamp for live refreshing)
+  // Image Preview & Discord URL (with cache-bust timestamp for live refreshing & Discord CDN bypass)
   const [imageTimestamp, setImageTimestamp] = useState<number>(Date.now());
-  const previewImageUrl = `${canonicalDiscordUrl}${canonicalDiscordUrl.includes('?') ? '&' : '?'}t=${imageTimestamp}`;
+  const timestampedDiscordUrl = useMemo(() => {
+    const sep = canonicalDiscordUrl.includes('?') ? '&' : '?';
+    return `${canonicalDiscordUrl}${sep}t=${imageTimestamp}`;
+  }, [canonicalDiscordUrl, imageTimestamp]);
+
+  const previewImageUrl = timestampedDiscordUrl;
 
   // Fetch Alliance Configuration from Cloudflare Worker
   const fetchConfig = async () => {
@@ -438,9 +464,13 @@ export const AllianceTopFlop: React.FC = () => {
     fetchConfig();
   }, [universeId, allianceId]);
 
-  // Copy to clipboard with visual feedback
+  // Copy to clipboard with fresh timestamp and visual feedback
   const handleCopyDiscordUrl = () => {
-    navigator.clipboard.writeText(canonicalDiscordUrl);
+    const freshTs = Date.now();
+    setImageTimestamp(freshTs);
+    const sep = canonicalDiscordUrl.includes('?') ? '&' : '?';
+    const copyUrl = `${canonicalDiscordUrl}${sep}t=${freshTs}`;
+    navigator.clipboard.writeText(copyUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -464,6 +494,8 @@ export const AllianceTopFlop: React.FC = () => {
         customTitle,
         category,
         isDefault: 1,
+        discordWebhookUrl: discordWebhookUrl.trim() || null,
+        webhookPostHour,
       };
 
       const res = await fetch('https://nexus-sync-worker.nexus-overwatch.workers.dev/api/topflop/preset', {
@@ -487,6 +519,48 @@ export const AllianceTopFlop: React.FC = () => {
     }
   };
 
+  // Test Discord Webhook by sending an immediate embed card
+  const handleTestWebhook = async () => {
+    const cleanUrl = discordWebhookUrl.trim();
+    if (!cleanUrl) {
+      setWebhookStatus({ success: false, message: 'Please enter a Discord Webhook URL first.' });
+      return;
+    }
+    if (!cleanUrl.startsWith('https://discord.com/api/webhooks/') && !cleanUrl.startsWith('https://discordapp.com/api/webhooks/')) {
+      setWebhookStatus({ success: false, message: 'Invalid URL. Webhook must start with https://discord.com/api/webhooks/...' });
+      return;
+    }
+
+    setIsTestingWebhook(true);
+    setWebhookStatus(null);
+    try {
+      const res = await fetch('https://nexus-sync-worker.nexus-overwatch.workers.dev/api/topflop/test-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhookUrl: cleanUrl,
+          webhookPostHour,
+          universeId,
+          allianceId,
+          playerId: myPlayerId,
+          category,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setWebhookStatus({ success: true, message: '✓ Test card posted to Discord & Webhook saved!' });
+        await fetchConfig();
+      } else {
+        setWebhookStatus({ success: false, message: data.error || 'Failed sending test webhook.' });
+      }
+    } catch (err: any) {
+      setWebhookStatus({ success: false, message: err?.message || 'Connection failed' });
+    } finally {
+      setIsTestingWebhook(false);
+      setTimeout(() => setWebhookStatus(null), 5000);
+    }
+  };
+
   // Trigger Immediate "Generate Now" on Edge
   const handleGenerateNow = async () => {
     if (!allianceId) return;
@@ -505,6 +579,8 @@ export const AllianceTopFlop: React.FC = () => {
         customLogoUrl: null,
         category,
         scheduledUtcHour,
+        discordWebhookUrl: discordWebhookUrl.trim() || null,
+        webhookPostHour,
       };
 
       const res = await fetch('https://nexus-sync-worker.nexus-overwatch.workers.dev/api/topflop/generate-now', {
@@ -708,6 +784,81 @@ export const AllianceTopFlop: React.FC = () => {
                       </span>
                     </div>
 
+                    {/* Discord Webhook URL (Automated Daily Posting) */}
+                    <div className="atf-form-group" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                      <label className="atf-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>Discord Webhook URL</span>
+                        <span style={{ fontSize: '11px', color: '#818cf8', fontWeight: 600 }}>Automated Daily Post</span>
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://discord.com/api/webhooks/..."
+                        value={discordWebhookUrl}
+                        onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                        className="atf-input"
+                        style={{ fontSize: '12px', fontFamily: 'monospace' }}
+                      />
+                      <span className="atf-hint">
+                        Paste your channel webhook URL (e.g. from Discord channel settings $\rightarrow$ Integrations $\rightarrow$ Webhooks). NexusBot will automatically post the fresh 24h card to your channel.
+                      </span>
+                    </div>
+
+                    {/* Time to Post */}
+                    <div className="atf-form-group">
+                      <label className="atf-label">
+                        Time to Post (UTC & Local Time)
+                      </label>
+                      <div className="atf-select-wrapper">
+                        <select
+                          value={webhookPostHour}
+                          onChange={(e) => setWebhookPostHour(parseInt(e.target.value, 10))}
+                          className="atf-select"
+                        >
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <option key={i} value={i}>
+                              {formatUtcOption(i)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <span className="atf-hint">
+                        The exact time every day when NexusBot automatically dispatches the card into Discord.
+                      </span>
+                    </div>
+
+                    {/* Webhook Action Buttons & Status */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="atf-btn-primary"
+                        onClick={handleSaveConfig}
+                        disabled={isSaving}
+                        style={{ padding: '8px 14px', fontSize: '12px' }}
+                      >
+                        {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        <span>Save Webhook Settings</span>
+                      </button>
+
+                      {discordWebhookUrl && (
+                        <button
+                          type="button"
+                          className="atf-btn-action"
+                          onClick={handleTestWebhook}
+                          disabled={isTestingWebhook}
+                          style={{ padding: '8px 14px', fontSize: '12px' }}
+                        >
+                          <Send className={`w-3.5 h-3.5 ${isTestingWebhook ? 'animate-spin' : ''}`} />
+                          <span>{isTestingWebhook ? 'Sending Test...' : 'Send Test Card to Discord'}</span>
+                        </button>
+                      )}
+
+                      {webhookStatus && (
+                        <span style={{ fontSize: '12px', color: webhookStatus.success ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+                          {webhookStatus.message}
+                        </span>
+                      )}
+                    </div>
+
                     {/* Alliance Context Pill */}
                     <div className="atf-info-box">
                       <Shield className="w-4 h-4 text-amber-400 flex-shrink-0" />
@@ -759,7 +910,7 @@ export const AllianceTopFlop: React.FC = () => {
                     disabled={isSaving}
                   >
                     {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    <span>Save Schedule</span>
+                    <span>Save Settings</span>
                   </button>
                   <button
                     type="button"
@@ -1053,7 +1204,7 @@ export const AllianceTopFlop: React.FC = () => {
                     <input
                       type="text"
                       readOnly
-                      value={canonicalDiscordUrl}
+                      value={timestampedDiscordUrl}
                       className="atf-discord-url-input"
                       onClick={(e) => (e.target as HTMLInputElement).select()}
                     />
@@ -1066,6 +1217,37 @@ export const AllianceTopFlop: React.FC = () => {
                       <span>{copied ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
+
+                  {discordWebhookUrl && (
+                    <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(88, 101, 242, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#86efac' }}>
+                        <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                        <span>Automated daily post configured for <strong>{formatUtcOption(webhookPostHour)}</strong></span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleTestWebhook}
+                        disabled={isTestingWebhook}
+                        style={{
+                          background: 'rgba(88, 101, 242, 0.2)',
+                          border: '1px solid rgba(88, 101, 242, 0.4)',
+                          color: '#e0e7ff',
+                          borderRadius: '6px',
+                          padding: '5px 12px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Send className="w-3 h-3" />
+                        <span>{isTestingWebhook ? 'Sending...' : 'Test Post to Discord'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Preview Footer Navigation */}
@@ -1192,12 +1374,23 @@ export const AllianceTopFlop: React.FC = () => {
                 </div>
               </div>
 
-              <div className="atf-hex-manual-row">
+              <div className="atf-hex-manual-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {activeColorProp === 'borderColor' && (
+                  <button
+                    type="button"
+                    className="atf-btn-secondary"
+                    onClick={() => setBorderColor(borderColor === 'none' ? '#00d4ff' : 'none')}
+                    style={{ padding: '6px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                  >
+                    {borderColor === 'none' ? '✓ Border Disabled' : 'Remove Card Border'}
+                  </button>
+                )}
                 <span className="atf-hex-prefix">#</span>
                 <input
                   type="text"
                   maxLength={7}
-                  value={getCurrentColorForProp(activeColorProp).replace('#', '')}
+                  value={getCurrentColorForProp(activeColorProp) === 'none' ? 'NONE' : getCurrentColorForProp(activeColorProp).replace('#', '')}
+                  disabled={getCurrentColorForProp(activeColorProp) === 'none'}
                   onChange={(e) => {
                     const raw = e.target.value.replace(/[^0-9a-fA-F]/g, '');
                     setCurrentColorForProp(activeColorProp, `#${raw}`);

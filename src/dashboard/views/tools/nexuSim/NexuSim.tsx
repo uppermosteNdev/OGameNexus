@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Crosshair,
     RotateCcw,
     Play,
-    SlidersHorizontal,
-    Globe,
     Plus,
-    Trash2,
-    Flame,
-    Coins
+    X,
+    Share2,
+    ChevronLeft,
+    ChevronRight,
+    ChevronDown,
+    ChevronUp,
+    Crosshair
 } from 'lucide-react';
 import { db } from '../../../../db';
+import { isSameUniverse } from '../../../../utils/universe';
 import {
     FleetParty,
     ServerSettings,
@@ -22,9 +23,6 @@ import {
 } from './types';
 import {
     UNITS,
-    CIVIL_SHIP_IDS,
-    WAR_SHIP_IDS,
-    DEFENSE_IDS,
     DEFAULT_SERVER_SETTINGS,
     DEFAULT_ATTACKER_PARTY,
     DEFAULT_DEFENDER_PARTY
@@ -32,7 +30,19 @@ import {
 import { NexuSimEngine } from './engine';
 import './NexuSim.css';
 
-// Thumbnail mapping for ships & defense structures
+// Ordered ship list for simulator
+const SIM_SHIP_IDS = [202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 213, 214, 215, 218, 219];
+
+// Ordered defense list for defender planet
+const SIM_DEFENSE_IDS = [401, 402, 403, 404, 405, 406, 407, 408, 502, 212, 217];
+
+const RESOURCE_ICONS: Record<string, string> = {
+    metal: 'icons/resources/metal-icon-medium.jpg',
+    crystal: 'icons/resources/crystal-icon-medium.jpg',
+    deuterium: 'icons/resources/deuterium-icon-medium.jpg',
+    food: 'icons/resources/food-icon-medium.jpg'
+};
+
 const UNIT_ICONS: Record<number, string> = {
     202: 'icons/ships/small-cargo-large.jpg',
     203: 'icons/ships/large-cargo-large.jpg',
@@ -59,9 +69,21 @@ const UNIT_ICONS: Record<number, string> = {
     406: 'icons/ships/plasma-turret-large.jpg',
     407: 'icons/ships/small-shield-dome-large.jpg',
     408: 'icons/ships/large-shield-dome-large.jpg',
-    502: 'icons/ships/anti-ballistic-missiles-large.jpg',
-    503: 'icons/ships/interplanetary-missiles-large.jpg'
+    502: 'icons/ships/anti-ballistic-missiles-large.jpg'
 };
+
+interface WaveState {
+    attackers: FleetParty[];
+    defenders: FleetParty[];
+    targetResources: { metal: number; crystal: number; deuterium: number; food: number };
+    plunderRate: number;
+    results: SimulationAggregateResult | null;
+    selectedScenario: 'average' | 'bestAtk' | 'worstAtk' | 'bestDef' | 'worstDef' | 'moreDebris';
+    preSimSnapshots: {
+        attackers: Record<number, Record<number, number>>;
+        defenders: Record<number, Record<number, number>>;
+    };
+}
 
 export const NexuSim: React.FC = () => {
     // 1. Dexie DB queries
@@ -70,16 +92,92 @@ export const NexuSim: React.FC = () => {
         () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).toArray() : [],
         [activeAccount]
     ) || [];
-    const spiedPlanets = useLiveQuery(() => db.spiedPlanets.toArray()) || [];
+    const spiedPlanets = useLiveQuery(async () => {
+        if (!activeAccount) return [];
+        const all = await db.spiedPlanets.toArray();
+        return all.filter(s => isSameUniverse(s.universe, activeAccount.universe) && s.userPlayerId === activeAccount.playerId);
+    }, [activeAccount]) || [];
 
     // 2. Server Settings State
     const [serverSettings, setServerSettings] = useState<ServerSettings>(DEFAULT_SERVER_SETTINGS);
+    const [simIterations, setSimIterations] = useState<number>(50);
+    const [isSimulating, setIsSimulating] = useState<boolean>(false);
 
+    // Collapsible accordion in settings
+    const [openGeneralBonus, setOpenGeneralBonus] = useState<boolean>(false);
+    const [openCollectorBonus, setOpenCollectorBonus] = useState<boolean>(false);
+
+    // 3. Multi-Wave Simulation State
+    const [waves, setWaves] = useState<WaveState[]>([{
+        attackers: [JSON.parse(JSON.stringify(DEFAULT_ATTACKER_PARTY))],
+        defenders: [JSON.parse(JSON.stringify(DEFAULT_DEFENDER_PARTY))],
+        targetResources: { metal: 10000000, crystal: 5000000, deuterium: 2000000, food: 0 },
+        plunderRate: 50,
+        results: null,
+        selectedScenario: 'average',
+        preSimSnapshots: {
+            attackers: { 0: { ...DEFAULT_ATTACKER_PARTY.units } },
+            defenders: { 0: { ...DEFAULT_DEFENDER_PARTY.units } }
+        }
+    }]);
+    const [currentWaveIdx, setCurrentWaveIdx] = useState<number>(0);
+    const currentWave = waves[currentWaveIdx] || waves[0];
+
+    // Navigation tabs inside current wave
+    const [activeAtkTab, setActiveAtkTab] = useState<number>(0);
+    const [activeDefTab, setActiveDefTab] = useState<number>(0);
+
+    // API key inputs
+    const [atkApiKey, setAtkApiKey] = useState<string>('');
+    const [defApiKey, setDefApiKey] = useState<string>('');
+
+    // Modals
+    const [lfModalSide, setLfModalSide] = useState<'atk' | 'def' | null>(null);
+    const [recyclersModalSide, setRecyclersModalSide] = useState<'atk' | 'def' | null>(null);
+    const [ipmModalOpen, setIpmModalOpen] = useState<boolean>(false);
+    const [shipStatsModalSide, setShipStatsModalSide] = useState<'atk' | 'def' | null>(null);
+    const [wreckfieldModalOpen, setWreckfieldModalOpen] = useState<boolean>(false);
+
+    // IPM modal state
+    const [ipmAttackerIdx, setIpmAttackerIdx] = useState<number>(0);
+    const [ipmTargets, setIpmTargets] = useState<Record<number, number>>({});
+    const [ipmResult, setIpmResult] = useState<IpmStrikeResult | null>(null);
+
+    // Recycler sender in Results
+    const [recyclerSender, setRecyclerSender] = useState<'atk' | 'def'>('atk');
+    const [cargoSender, setCargoSender] = useState<number>(0);
+
+    // Sync primary attacker research with player account
     useEffect(() => {
-        if (!activeAccount) return;
+        if (!activeAccount?.researches || !waves[0]) return;
+        const resMap: Record<number, number> = {};
+        activeAccount.researches.forEach(r => { resMap[r.id] = r.level; });
+
+        setWaves(prev => {
+            const next = [...prev];
+            const wave0 = { ...next[0] };
+            const atk0 = { ...wave0.attackers[0] };
+            atk0.playerClass = activeAccount.playerClass ?? atk0.playerClass;
+            atk0.allianceClass = activeAccount.allianceClass ?? atk0.allianceClass;
+            atk0.engineer = Boolean(activeAccount.hasEngineer);
+            atk0.techs = {
+                weapons: resMap[109] ?? atk0.techs.weapons,
+                shielding: resMap[110] ?? atk0.techs.shielding,
+                armour: resMap[111] ?? atk0.techs.armour,
+                combustion: resMap[115] ?? atk0.techs.combustion,
+                impulse: resMap[117] ?? atk0.techs.impulse,
+                hyperspace: resMap[118] ?? atk0.techs.hyperspace,
+                hyperspaceTech: resMap[114] ?? atk0.techs.hyperspaceTech
+            };
+            wave0.attackers = [atk0, ...wave0.attackers.slice(1)];
+            next[0] = wave0;
+            return next;
+        });
+
         setServerSettings(prev => ({
             ...prev,
             universeSpeedWar: activeAccount.speedFleetWar || activeAccount.universeSpeed || prev.universeSpeedWar,
+            speedFleetWar: activeAccount.speedFleetWar || activeAccount.universeSpeed || prev.speedFleetWar,
             galaxies: activeAccount.galaxies || prev.galaxies,
             systems: activeAccount.systems || prev.systems,
             donutGalaxy: activeAccount.donutGalaxy !== undefined ? Boolean(activeAccount.donutGalaxy) : prev.donutGalaxy,
@@ -87,67 +185,113 @@ export const NexuSim: React.FC = () => {
         }));
     }, [activeAccount]);
 
-    // 3. Attackers & Defenders Parties (ACS Support)
-    const [attackers, setAttackers] = useState<FleetParty[]>([JSON.parse(JSON.stringify(DEFAULT_ATTACKER_PARTY))]);
-    const [defenders, setDefenders] = useState<FleetParty[]>([JSON.parse(JSON.stringify(DEFAULT_DEFENDER_PARTY))]);
-    const [activeAtkTab, setActiveAtkTab] = useState<number>(0);
-    const [activeDefTab, setActiveDefTab] = useState<number>(0);
+    // Active attacker & defender
+    const currentAtk = currentWave.attackers[activeAtkTab] || currentWave.attackers[0];
+    const currentDef = currentWave.defenders[activeDefTab] || currentWave.defenders[0];
+    const primaryDef = currentWave.defenders[0];
 
-    // Auto-sync primary attacker research with player account
-    useEffect(() => {
-        if (!activeAccount?.researches || attackers.length === 0) return;
-        const resMap: Record<number, number> = {};
-        activeAccount.researches.forEach(r => { resMap[r.id] = r.level; });
+    // Active Results scenario
+    const activeScenario: ParsedScenario | null = useMemo(() => {
+        if (!currentWave.results) return null;
+        return currentWave.results.scenarios[currentWave.selectedScenario];
+    }, [currentWave.results, currentWave.selectedScenario]);
 
-        setAttackers(prev => {
+    // Update current wave helper
+    const updateCurrentWave = (fn: (wave: WaveState) => WaveState) => {
+        setWaves(prev => {
             const next = [...prev];
-            next[0] = {
-                ...next[0],
-                playerClass: activeAccount.playerClass || next[0].playerClass,
-                allianceClass: activeAccount.allianceClass || next[0].allianceClass,
-                engineer: Boolean(activeAccount.hasEngineer),
-                techs: {
-                    weapons: resMap[109] ?? next[0].techs.weapons,
-                    shielding: resMap[110] ?? next[0].techs.shielding,
-                    armour: resMap[111] ?? next[0].techs.armour,
-                    combustion: resMap[115] ?? next[0].techs.combustion,
-                    impulse: resMap[117] ?? next[0].techs.impulse,
-                    hyperspace: resMap[118] ?? next[0].techs.hyperspace,
-                    hyperspaceTech: resMap[114] ?? next[0].techs.hyperspaceTech
-                }
-            };
+            next[currentWaveIdx] = fn(next[currentWaveIdx]);
             return next;
         });
-    }, [activeAccount]);
+    };
 
-    // 4. Target Planetary Resources & Plunder
-    const [targetResources, setTargetResources] = useState<{ metal: number; crystal: number; deuterium: number }>({
-        metal: 10000000,
-        crystal: 5000000,
-        deuterium: 2000000
-    });
-    const [plunderRate, setPlunderRate] = useState<number>(50);
+    // Fleet & Unit Updates
+    const updateUnit = (side: 'atk' | 'def', partyIdx: number, unitId: number, count: number) => {
+        const sanitized = Math.max(0, isNaN(count) ? 0 : Math.floor(count));
+        updateCurrentWave(wave => {
+            const list = side === 'atk' ? [...wave.attackers] : [...wave.defenders];
+            if (!list[partyIdx]) return wave;
+            const units = { ...list[partyIdx].units };
+            if (sanitized === 0) delete units[unitId];
+            else units[unitId] = sanitized;
+            list[partyIdx] = { ...list[partyIdx], units };
 
-    // 5. IPM Pre-Strike Subsystem State
-    const [ipmLaunched, setIpmLaunched] = useState<number>(0);
-    const [ipmPrimaryTarget, setIpmPrimaryTarget] = useState<number>(406); // Plasma Turret default
-    const [ipmResult, setIpmResult] = useState<IpmStrikeResult | null>(null);
+            return side === 'atk' ? { ...wave, attackers: list } : { ...wave, defenders: list };
+        });
+    };
 
-    // 6. Simulation Execution State
-    const [simIterations, setSimIterations] = useState<number>(100);
-    const [isSimulating, setIsSimulating] = useState<boolean>(false);
-    const [results, setResults] = useState<SimulationAggregateResult | null>(null);
-    const [selectedScenarioKey, setSelectedScenarioKey] = useState<'average' | 'bestCase' | 'worstCase' | 'maxDebris'>('average');
+    const restoreUnit = (side: 'atk' | 'def', partyIdx: number, unitId: number) => {
+        const prevCount = side === 'atk'
+            ? currentWave.preSimSnapshots.attackers[partyIdx]?.[unitId] || 0
+            : currentWave.preSimSnapshots.defenders[partyIdx]?.[unitId] || 0;
+        updateUnit(side, partyIdx, unitId, prevCount);
+    };
 
-    // 7. Lifeforms Overrides Modal State
-    const [editingLfParty, setEditingLfParty] = useState<{ side: 'atk' | 'def'; index: number } | null>(null);
+    const clearUnits = (side: 'atk' | 'def', partyIdx: number) => {
+        updateCurrentWave(wave => {
+            const list = side === 'atk' ? [...wave.attackers] : [...wave.defenders];
+            if (!list[partyIdx]) return wave;
+            list[partyIdx] = { ...list[partyIdx], units: {} };
+            return side === 'atk' ? { ...wave, attackers: list } : { ...wave, defenders: list };
+        });
+    };
 
-    const activeScenario: ParsedScenario | null = useMemo(() => {
-        if (!results) return null;
-        return results.scenarios[selectedScenarioKey];
-    }, [results, selectedScenarioKey]);
+    const clearPlayer = (side: 'atk' | 'def', partyIdx: number) => {
+        updateCurrentWave(wave => {
+            const list = side === 'atk' ? [...wave.attackers] : [...wave.defenders];
+            if (!list[partyIdx]) return wave;
+            const defParty = side === 'atk' ? DEFAULT_ATTACKER_PARTY : DEFAULT_DEFENDER_PARTY;
+            list[partyIdx] = {
+                ...JSON.parse(JSON.stringify(defParty)),
+                id: partyIdx,
+                name: `${side === 'atk' ? 'A' : 'D'}${partyIdx + 1}`,
+                units: {}
+            };
+            return side === 'atk' ? { ...wave, attackers: list } : { ...wave, defenders: list };
+        });
+    };
 
-    // Auto-fill from player planets
+    // ACS Participant Management
+    const addParticipant = (side: 'atk' | 'def') => {
+        updateCurrentWave(wave => {
+            const list = side === 'atk' ? [...wave.attackers] : [...wave.defenders];
+            if (list.length >= 16) return wave;
+            const newId = list.length;
+            const clone = JSON.parse(JSON.stringify(list[0]));
+            clone.id = newId;
+            clone.name = `${side === 'atk' ? 'A' : 'D'}${newId + 1}`;
+            clone.units = {};
+            list.push(clone);
+            if (side === 'atk') {
+                setActiveAtkTab(newId);
+                return { ...wave, attackers: list };
+            } else {
+                setActiveDefTab(newId);
+                return { ...wave, defenders: list };
+            }
+        });
+    };
+
+    const removeParticipant = (side: 'atk' | 'def', index: number) => {
+        updateCurrentWave(wave => {
+            const list = side === 'atk' ? [...wave.attackers] : [...wave.defenders];
+            if (list.length <= 1) return wave;
+            const filtered = list.filter((_, i) => i !== index).map((p, i) => ({
+                ...p,
+                id: i,
+                name: `${side === 'atk' ? 'A' : 'D'}${i + 1}`
+            }));
+            if (side === 'atk') {
+                setActiveAtkTab(Math.max(0, index - 1));
+                return { ...wave, attackers: filtered };
+            } else {
+                setActiveDefTab(Math.max(0, index - 1));
+                return { ...wave, defenders: filtered };
+            }
+        });
+    };
+
+    // Quick Select from Player Planets
     const handleSelectOwnPlanet = (planetId: string) => {
         const planet = playerPlanets.find(p => p.id === planetId);
         if (!planet) return;
@@ -162,27 +306,30 @@ export const NexuSim: React.FC = () => {
         const importedUnits: Record<number, number> = {};
         if (planet.ships) {
             for (const [idStr, count] of Object.entries(planet.ships)) {
-                importedUnits[parseInt(idStr)] = count;
+                if (count > 0) importedUnits[parseInt(idStr)] = count;
             }
         }
 
-        setAttackers(prev => {
-            const next = [...prev];
-            next[activeAtkTab] = {
-                ...next[activeAtkTab],
-                name: `${planet.name || 'Planet'} (${planet.coords})`,
+        updateCurrentWave(wave => {
+            const atks = [...wave.attackers];
+            atks[activeAtkTab] = {
+                ...atks[activeAtkTab],
                 coords: parsedCoords,
-                spaceDock: planet.spaceDock || next[activeAtkTab].spaceDock,
+                spaceDock: planet.spaceDock || atks[activeAtkTab].spaceDock,
                 units: importedUnits
             };
-            return next;
+            return { ...wave, attackers: atks };
         });
     };
 
-    // Auto-fill from spy reports
+    // Quick Select from Spy Reports
     const handleSelectSpyReport = (planetKey: string) => {
         const spied = spiedPlanets.find(s => s.planetKey === planetKey);
         if (!spied) return;
+
+        if (spied.lastHashCode) {
+            setDefApiKey(spied.lastHashCode);
+        }
 
         const coordsParts = (spied.coords || '').split(':').map(Number);
         const parsedCoords = {
@@ -191,36 +338,87 @@ export const NexuSim: React.FC = () => {
             position: coordsParts[2] || 1
         };
 
-        setDefenders(prev => {
-            const next = [...prev];
-            next[activeDefTab] = {
-                ...next[activeDefTab],
-                name: `${spied.playerName || 'Defender'} (${spied.coords})`,
-                coords: parsedCoords
+        const spiedAny = spied as any;
+        const importedUnits: Record<number, number> = {};
+        if (spiedAny.ships && typeof spiedAny.ships === 'object') {
+            for (const [idStr, count] of Object.entries(spiedAny.ships)) {
+                const num = Number(count);
+                if (num > 0) importedUnits[parseInt(idStr)] = num;
+            }
+        }
+        if (spiedAny.defense && typeof spiedAny.defense === 'object') {
+            for (const [idStr, count] of Object.entries(spiedAny.defense)) {
+                const num = Number(count);
+                if (num > 0) importedUnits[parseInt(idStr)] = num;
+            }
+        }
+
+        updateCurrentWave(wave => {
+            const defs = [...wave.defenders];
+            defs[0] = {
+                ...defs[0],
+                coords: parsedCoords,
+                units: importedUnits,
+                techs: {
+                    ...defs[0].techs,
+                    weapons: spiedAny.weaponsTech ?? defs[0].techs.weapons,
+                    shielding: spiedAny.shieldingTech ?? defs[0].techs.shielding,
+                    armour: spiedAny.armourTech ?? defs[0].techs.armour
+                }
             };
-            return next;
+            return {
+                ...wave,
+                defenders: defs,
+                targetResources: {
+                    metal: spied.lastSpiedMetal || 0,
+                    crystal: spied.lastSpiedCrystal || 0,
+                    deuterium: spied.lastSpiedDeuterium || 0,
+                    food: 0
+                },
+                plunderRate: spied.lootPercentage || 50
+            };
         });
+    };
 
-        setTargetResources({
-            metal: spied.lastSpiedMetal || 0,
-            crystal: spied.lastSpiedCrystal || 0,
-            deuterium: spied.lastSpiedDeuterium || 0
-        });
+    // API Key Loader
+    const handleLoadApi = (side: 'atk' | 'def') => {
+        const key = side === 'atk' ? atkApiKey.trim() : defApiKey.trim();
+        if (!key) return;
 
-        if (spied.lootPercentage) {
-            setPlunderRate(spied.lootPercentage);
+        // Check if key matches a known spy report
+        const found = spiedPlanets.find(s => s.planetKey === key || s.coords === key);
+        if (found) {
+            handleSelectSpyReport(found.planetKey);
+            return;
+        }
+
+        try {
+            // Check if JSON
+            if (key.startsWith('{')) {
+                const parsed = JSON.parse(key);
+                if (parsed.units) {
+                    updateCurrentWave(wave => {
+                        const list = side === 'atk' ? [...wave.attackers] : [...wave.defenders];
+                        const idx = side === 'atk' ? activeAtkTab : activeDefTab;
+                        list[idx] = { ...list[idx], ...parsed };
+                        return side === 'atk' ? { ...wave, attackers: list } : { ...wave, defenders: list };
+                    });
+                }
+            }
+        } catch {
+            // ignore
         }
     };
 
-    // Run Combat Simulation
+    // Run Simulation
     const handleRunSimulation = () => {
         setIsSimulating(true);
 
         setTimeout(() => {
             const startTime = performance.now();
             const rawRuns = NexuSimEngine.runSimulations(
-                attackers,
-                defenders,
+                currentWave.attackers,
+                currentWave.defenders,
                 serverSettings,
                 simIterations
             );
@@ -228,144 +426,239 @@ export const NexuSim: React.FC = () => {
 
             const processed = NexuSimEngine.processSimulationResults(
                 rawRuns,
-                attackers,
-                defenders,
+                currentWave.attackers,
+                currentWave.defenders,
                 serverSettings,
-                targetResources,
-                plunderRate,
+                currentWave.targetResources,
+                currentWave.plunderRate,
                 execTime
             );
 
-            setResults(processed);
+            // Record snapshot before simulation for restore button
+            const snapAtk: Record<number, Record<number, number>> = {};
+            currentWave.attackers.forEach((a, i) => { snapAtk[i] = { ...a.units }; });
+            const snapDef: Record<number, Record<number, number>> = {};
+            currentWave.defenders.forEach((d, i) => { snapDef[i] = { ...d.units }; });
+
+            updateCurrentWave(wave => ({
+                ...wave,
+                results: processed,
+                preSimSnapshots: {
+                    attackers: snapAtk,
+                    defenders: snapDef
+                }
+            }));
             setIsSimulating(false);
-        }, 30);
+        }, 25);
     };
 
-    // IPM Strike Calculations
-    const handleCalculateIpm = () => {
-        const primaryDef = defenders[0];
-        const primaryAtk = attackers[0];
-        const res = NexuSimEngine.calculateIpmStrike(
-            ipmLaunched,
-            ipmPrimaryTarget,
-            primaryDef.units,
-            { armour: primaryDef.techs.armour },
-            { weapons: primaryAtk.techs.weapons }
-        );
-        setIpmResult(res);
-    };
+    // Wave Management
+    const handleNextWave = () => {
+        if (!activeScenario) return;
 
-    const handleApplyIpmToDefender = () => {
-        if (!ipmResult) return;
-        setDefenders(prev => {
-            const next = [...prev];
-            next[0] = {
-                ...next[0],
-                units: { ...ipmResult.remainingDefenses }
+        // If next wave already exists, just switch to it
+        if (waves[currentWaveIdx + 1]) {
+            setCurrentWaveIdx(currentWaveIdx + 1);
+            return;
+        }
+
+        // Create new wave from surviving attacker and defender units + repaired defenses
+        const nextAttackers: FleetParty[] = currentWave.attackers.map((atk, i) => {
+            const survivingUnits: Record<number, number> = {};
+            const runRem = currentWave.results?.scenarios.average.remainingUnits.attackers || {};
+            for (const [idStr, count] of Object.entries(runRem)) {
+                const id = parseInt(idStr);
+                if (count > 0 && atk.units[id]) {
+                    survivingUnits[id] = count;
+                }
+            }
+            return {
+                ...JSON.parse(JSON.stringify(atk)),
+                units: survivingUnits
             };
-            return next;
         });
-        setIpmResult(null);
-        setIpmLaunched(0);
+
+        const nextDefenders: FleetParty[] = currentWave.defenders.map((def, i) => {
+            const survivingUnits: Record<number, number> = {};
+            const runRem = currentWave.results?.scenarios.average.remainingUnits.defenders || {};
+            for (const [idStr, count] of Object.entries(runRem)) {
+                const id = parseInt(idStr);
+                if (count > 0 && def.units[id]) {
+                    survivingUnits[id] = count;
+                }
+            }
+
+            // Restore planetary defenses by repair factor (70%, or 85% with engineer)
+            if (i === 0) {
+                const repairFrac = def.engineer ? 0.85 : (serverSettings.repairFactor || 0.7);
+                const lostDef = currentWave.results?.scenarios.average.lostUnits.defenders || {};
+                for (const [idStr, count] of Object.entries(lostDef)) {
+                    const id = parseInt(idStr);
+                    if (id >= 400 && id < 500) {
+                        const repaired = Math.floor(count * repairFrac);
+                        survivingUnits[id] = (survivingUnits[id] || 0) + repaired;
+                    }
+                }
+            }
+
+            return {
+                ...JSON.parse(JSON.stringify(def)),
+                units: survivingUnits
+            };
+        });
+
+        // Plunder subtracts looted resources
+        const remResources = {
+            metal: Math.max(0, currentWave.targetResources.metal - activeScenario.plunder.captured.metal),
+            crystal: Math.max(0, currentWave.targetResources.crystal - activeScenario.plunder.captured.crystal),
+            deuterium: Math.max(0, currentWave.targetResources.deuterium - activeScenario.plunder.captured.deuterium),
+            food: 0
+        };
+
+        const snapAtk: Record<number, Record<number, number>> = {};
+        nextAttackers.forEach((a, i) => { snapAtk[i] = { ...a.units }; });
+        const snapDef: Record<number, Record<number, number>> = {};
+        nextDefenders.forEach((d, i) => { snapDef[i] = { ...d.units }; });
+
+        const newWave: WaveState = {
+            attackers: nextAttackers,
+            defenders: nextDefenders,
+            targetResources: remResources,
+            plunderRate: currentWave.plunderRate,
+            results: null,
+            selectedScenario: 'average',
+            preSimSnapshots: {
+                attackers: snapAtk,
+                defenders: snapDef
+            }
+        };
+
+        setWaves(prev => [...prev, newWave]);
+        setCurrentWaveIdx(waves.length);
     };
 
-    const updateUnit = (side: 'atk' | 'def', partyIdx: number, unitId: number, count: number) => {
-        const sanitized = Math.max(0, isNaN(count) ? 0 : Math.floor(count));
-        if (side === 'atk') {
-            setAttackers(prev => {
-                const next = [...prev];
-                const u = { ...next[partyIdx].units };
-                if (sanitized === 0) delete u[unitId];
-                else u[unitId] = sanitized;
-                next[partyIdx] = { ...next[partyIdx], units: u };
-                return next;
-            });
-        } else {
-            setDefenders(prev => {
-                const next = [...prev];
-                const u = { ...next[partyIdx].units };
-                if (sanitized === 0) delete u[unitId];
-                else u[unitId] = sanitized;
-                next[partyIdx] = { ...next[partyIdx], units: u };
-                return next;
-            });
+    const handlePrevWave = () => {
+        if (currentWaveIdx > 0) {
+            setCurrentWaveIdx(currentWaveIdx - 1);
         }
     };
 
-    const clearPartyUnits = (side: 'atk' | 'def', partyIdx: number) => {
-        if (side === 'atk') {
-            setAttackers(prev => {
-                const next = [...prev];
-                next[partyIdx] = { ...next[partyIdx], units: {} };
-                return next;
-            });
-        } else {
-            setDefenders(prev => {
-                const next = [...prev];
-                next[partyIdx] = { ...next[partyIdx], units: {} };
-                return next;
-            });
-        }
-    };
+    // Calculate flight stats
+    const atkDistance = useMemo(() => {
+        return NexuSimEngine.calculateDistance(currentAtk.coords, primaryDef.coords, serverSettings);
+    }, [currentAtk.coords, primaryDef.coords, serverSettings]);
 
-    const addParticipant = (side: 'atk' | 'def') => {
-        if (side === 'atk') {
-            if (attackers.length >= 16) return;
-            const newId = attackers.length;
-            const clone = JSON.parse(JSON.stringify(attackers[0]));
-            clone.id = newId;
-            clone.name = `Attacker ${newId + 1}`;
-            clone.units = {};
-            setAttackers(prev => [...prev, clone]);
-            setActiveAtkTab(newId);
-        } else {
-            const newId = defenders.length;
-            const clone = JSON.parse(JSON.stringify(defenders[0]));
-            clone.id = newId;
-            clone.name = `Defender ${newId + 1}`;
-            clone.units = {};
-            setDefenders(prev => [...prev, clone]);
-            setActiveDefTab(newId);
-        }
-    };
+    const atkSlowestSpeed = useMemo(() => {
+        return NexuSimEngine.calculateSlowestSpeed(currentAtk, serverSettings);
+    }, [currentAtk, serverSettings]);
 
-    const removeParticipant = (side: 'atk' | 'def', index: number) => {
-        if (side === 'atk') {
-            if (attackers.length <= 1) return;
-            setAttackers(prev => prev.filter((_, i) => i !== index));
-            setActiveAtkTab(Math.max(0, index - 1));
-        } else {
-            if (defenders.length <= 1) return;
-            setDefenders(prev => prev.filter((_, i) => i !== index));
-            setActiveDefTab(Math.max(0, index - 1));
-        }
-    };
+    const atkFlightTime = useMemo(() => {
+        return NexuSimEngine.calculateFlightDuration(
+            atkDistance,
+            atkSlowestSpeed,
+            currentAtk.speedPercent || 100,
+            serverSettings.universeSpeedWar
+        );
+    }, [atkDistance, atkSlowestSpeed, currentAtk.speedPercent, serverSettings.universeSpeedWar]);
 
-    const currentAtk = attackers[activeAtkTab] || attackers[0];
-    const currentDef = defenders[activeDefTab] || defenders[0];
+    const atkFuel = useMemo(() => {
+        return NexuSimEngine.calculateFleetConsumption(
+            atkDistance,
+            currentAtk.speedPercent || 100,
+            atkSlowestSpeed,
+            serverSettings.universeSpeedWar,
+            currentAtk,
+            serverSettings
+        );
+    }, [atkDistance, currentAtk, atkSlowestSpeed, serverSettings]);
+
+    const atkCargo = useMemo(() => {
+        return NexuSimEngine.calculateFleetCargo(currentAtk, serverSettings);
+    }, [currentAtk, serverSettings]);
+
+    const defDistance = useMemo(() => {
+        return NexuSimEngine.calculateDistance(currentDef.coords, primaryDef.coords, serverSettings);
+    }, [currentDef.coords, primaryDef.coords, serverSettings]);
+
+    const defSlowestSpeed = useMemo(() => {
+        return NexuSimEngine.calculateSlowestSpeed(currentDef, serverSettings);
+    }, [currentDef, serverSettings]);
+
+    const defFlightTime = useMemo(() => {
+        return NexuSimEngine.calculateFlightDuration(
+            defDistance,
+            defSlowestSpeed,
+            currentDef.speedPercent || 100,
+            serverSettings.universeSpeedWar
+        );
+    }, [defDistance, defSlowestSpeed, currentDef.speedPercent, serverSettings.universeSpeedWar]);
+
+    const defFuel = useMemo(() => {
+        return NexuSimEngine.calculateFleetConsumption(
+            defDistance,
+            currentDef.speedPercent || 100,
+            defSlowestSpeed,
+            serverSettings.universeSpeedWar,
+            currentDef,
+            serverSettings
+        );
+    }, [defDistance, currentDef, defSlowestSpeed, serverSettings]);
+
+    const defCargo = useMemo(() => {
+        return NexuSimEngine.calculateFleetCargo(currentDef, serverSettings);
+    }, [currentDef, serverSettings]);
+
+    // Format helper
+    const fmt = (num: number | undefined) => (num || 0).toLocaleString();
+
+    // Share simulation to clipboard
+    const handleShare = () => {
+        const text = `Nexus Battlesim - Wave #${currentWaveIdx + 1}\n` +
+            `Attackers: ${currentWave.attackers.map(a => `${a.name} [${a.coords.galaxy}:${a.coords.system}:${a.coords.position}]`).join(', ')}\n` +
+            `Defenders: ${currentWave.defenders.map(d => `${d.name} [${d.coords.galaxy}:${d.coords.system}:${d.coords.position}]`).join(', ')}\n` +
+            (activeScenario
+                ? `Win Rate: Atk ${currentWave.results?.winRates.attackers.toFixed(1)}% | Def ${currentWave.results?.winRates.defenders.toFixed(1)}% | Draw ${currentWave.results?.winRates.draw.toFixed(1)}%\n` +
+                  `Profit: ${fmt(activeScenario.profit.total)} (MSU: ${fmt(Math.round(activeScenario.profit.msu))})\n` +
+                  `Debris: ${fmt(activeScenario.debris.total)} (Moon: ${activeScenario.moonChance}%)`
+                : 'Not simulated yet.');
+        navigator.clipboard.writeText(text);
+        alert('Simulation summary copied to clipboard!');
+    };
 
     return (
-        <div className="nexusim-container">
-            {/* 1. HERO BANNER */}
-            <header className="nexusim-hero">
-                <div className="nexusim-hero-badge">
-                    <Crosshair size={14} />
-                    Combat Simulator
-                </div>
-                <h1 className="nexusim-hero-title">
-                    Nexus Battlesim
-                </h1>
-                <p className="nexusim-hero-subtitle">
-                    Simulate battles with Lifeforms, ACS fleets, debris fields, and Space Dock repair.
-                </p>
+        <div className="ogsim-wrapper">
+            {/* 1. TOP CONTROL BAR */}
+            <header className="ogsim-topbar">
+                <div className="ogsim-wave-controls">
+                    <button
+                        onClick={handlePrevWave}
+                        disabled={currentWaveIdx === 0}
+                        className="ogsim-btn"
+                    >
+                        <ChevronLeft size={14} />
+                        Prev wave
+                    </button>
 
-                {/* Quick Action Bar */}
-                <div className="nexusim-quick-toolbar">
+                    <div className="ogsim-wave-badge">
+                        Wave #{currentWaveIdx + 1}
+                    </div>
+
+                    <button
+                        onClick={handleNextWave}
+                        disabled={!currentWave.results}
+                        className="ogsim-btn"
+                    >
+                        Next wave
+                        <ChevronRight size={14} />
+                    </button>
+                </div>
+
+                <div className="ogsim-quick-loaders">
                     {playerPlanets.length > 0 && (
                         <select
                             onChange={(e) => handleSelectOwnPlanet(e.target.value)}
                             defaultValue=""
-                            className="nexusim-select"
+                            className="ogsim-select-quick"
                         >
                             <option value="" disabled>Load My Fleet...</option>
                             {playerPlanets.map(p => (
@@ -380,7 +673,7 @@ export const NexuSim: React.FC = () => {
                         <select
                             onChange={(e) => handleSelectSpyReport(e.target.value)}
                             defaultValue=""
-                            className="nexusim-select"
+                            className="ogsim-select-quick"
                         >
                             <option value="" disabled>Load Spy Report...</option>
                             {spiedPlanets.map(s => (
@@ -390,981 +683,2488 @@ export const NexuSim: React.FC = () => {
                             ))}
                         </select>
                     )}
+                </div>
 
-                    <button
-                        onClick={() => {
-                            clearPartyUnits('atk', activeAtkTab);
-                            clearPartyUnits('def', activeDefTab);
-                        }}
-                        className="nexusim-btn-secondary"
-                    >
-                        <RotateCcw size={14} />
-                        Clear Ships
+                <div className="ogsim-actions">
+                    <button onClick={handleShare} className="ogsim-btn">
+                        <Share2 size={13} />
+                        Share
                     </button>
-                </div>
-            </header>
 
-            {/* 2. EXECUTION / RUNNER BAR */}
-            <div className="nexusim-runner-bar">
-                <div className="nexusim-iterations-wrap">
-                    <span className="nexusim-iter-label">Simulations</span>
-                    <div className="nexusim-iter-group">
-                        {[10, 50, 100, 500, 1000].map(count => (
-                            <button
-                                key={count}
-                                onClick={() => setSimIterations(count)}
-                                className={`nexusim-iter-btn ${simIterations === count ? 'active' : ''}`}
-                            >
-                                {count}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="nexusim-runner-actions">
                     <button
                         onClick={handleRunSimulation}
                         disabled={isSimulating}
-                        className="nexusim-btn-simulate"
+                        className="ogsim-btn ogsim-btn-simulate"
                     >
                         {isSimulating ? (
                             <>
-                                <RotateCcw size={16} className="animate-spin" />
+                                <RotateCcw size={14} className="animate-spin" />
                                 Simulating...
                             </>
                         ) : (
                             <>
-                                <Play size={16} />
-                                Simulate Battle
+                                <Play size={14} fill="#fff" />
+                                Simulate
                             </>
                         )}
                     </button>
                 </div>
-            </div>
+            </header>
 
-            {/* 3. DUEL MATRIX (ATTACKERS VS DEFENDERS) */}
-            <div className="nexusim-duel-layout">
-                {/* ATTACKERS COLUMN */}
-                <div className="nexusim-faction-card attacker">
-                    <div>
-                        {/* Tabs */}
-                        <div className="nexusim-tabs-header">
-                            <div className="nexusim-tabs-list">
-                                <span className="nexusim-faction-title attacker">Attackers</span>
-                                {attackers.map((atk, idx) => (
-                                    <button
-                                        key={atk.id}
-                                        onClick={() => setActiveAtkTab(idx)}
-                                        className={`nexusim-tab-pill ${activeAtkTab === idx ? 'active attacker' : ''}`}
-                                    >
-                                        {atk.name}
-                                    </button>
-                                ))}
-                                {attackers.length < 16 && (
-                                    <button
-                                        onClick={() => addParticipant('atk')}
-                                        title="Add Attacker"
-                                        className="nexusim-add-btn"
-                                    >
-                                        <Plus size={14} />
-                                    </button>
-                                )}
-                            </div>
-
-                            {attackers.length > 1 && (
-                                <button
-                                    onClick={() => removeParticipant('atk', activeAtkTab)}
-                                    title="Remove Attacker"
-                                    className="nexusim-remove-btn"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Research Bar */}
-                        <div className="nexusim-meta-grid">
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Class</label>
-                                <select
-                                    value={currentAtk.playerClass}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value);
-                                        setAttackers(prev => {
-                                            const next = [...prev];
-                                            next[activeAtkTab] = { ...next[activeAtkTab], playerClass: val };
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                >
-                                    <option value={0}>None</option>
-                                    <option value={1}>Collector</option>
-                                    <option value={2}>General</option>
-                                    <option value={3}>Discoverer</option>
-                                </select>
-                            </div>
-
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Weapons</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={currentAtk.techs.weapons}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setAttackers(prev => {
-                                            const next = [...prev];
-                                            next[activeAtkTab].techs.weapons = val;
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                />
-                            </div>
-
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Shielding</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={currentAtk.techs.shielding}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setAttackers(prev => {
-                                            const next = [...prev];
-                                            next[activeAtkTab].techs.shielding = val;
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                />
-                            </div>
-
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Armour</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={currentAtk.techs.armour}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setAttackers(prev => {
-                                            const next = [...prev];
-                                            next[activeAtkTab].techs.armour = val;
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                />
-                            </div>
-                        </div>
-
-                        {/* War Ships */}
-                        <div className="nexusim-roster-group">
-                            <div className="nexusim-roster-title">Warships</div>
-                            <div className="nexusim-unit-grid">
-                                {WAR_SHIP_IDS.map(id => {
-                                    const unit = UNITS[id];
-                                    const count = currentAtk.units[id] || 0;
-                                    return (
-                                        <div key={id} className="nexusim-unit-pill">
-                                            <div className="nexusim-unit-info">
-                                                <img src={UNIT_ICONS[id]} alt={unit.name} className="nexusim-unit-thumb" />
-                                                <span className="nexusim-unit-name">{unit.name}</span>
-                                            </div>
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={count === 0 ? '' : count}
-                                                placeholder="0"
-                                                onChange={(e) => updateUnit('atk', activeAtkTab, id, parseInt(e.target.value))}
-                                                className="nexusim-unit-input attacker"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Civil Ships */}
-                        <div className="nexusim-roster-group">
-                            <div className="nexusim-roster-title">Civil Ships</div>
-                            <div className="nexusim-unit-grid">
-                                {CIVIL_SHIP_IDS.map(id => {
-                                    const unit = UNITS[id];
-                                    const count = currentAtk.units[id] || 0;
-                                    return (
-                                        <div key={id} className="nexusim-unit-pill">
-                                            <div className="nexusim-unit-info">
-                                                <img src={UNIT_ICONS[id]} alt={unit.name} className="nexusim-unit-thumb" />
-                                                <span className="nexusim-unit-name">{unit.name}</span>
-                                            </div>
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={count === 0 ? '' : count}
-                                                placeholder="0"
-                                                onChange={(e) => updateUnit('atk', activeAtkTab, id, parseInt(e.target.value))}
-                                                className="nexusim-unit-input attacker"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
+            {/* 2. MAIN 4-COLUMN GRID */}
+            <div className="ogsim-grid">
+                {/* ========================================================
+                   COLUMN 1: ATTACKERS
+                   ======================================================== */}
+                <div className="ogsim-col">
+                    <div className="ogsim-title-bar">
+                        <span>Attackers</span>
+                        <span className="ogsim-ratio">-</span>
                     </div>
 
-                    <div className="nexusim-faction-footer">
-                        <button
-                            onClick={() => setEditingLfParty({ side: 'atk', index: activeAtkTab })}
-                            className="nexusim-lf-link"
-                        >
-                            <SlidersHorizontal size={13} />
-                            Lifeform Bonuses
-                        </button>
-                        <span>
-                            Total Ships:{' '}
-                            <strong style={{ color: '#fff', fontFamily: 'monospace' }}>
-                                {Object.values(currentAtk.units).reduce((a, b) => a + b, 0).toLocaleString()}
-                            </strong>
-                        </span>
-                    </div>
-                </div>
-
-                {/* DEFENDERS COLUMN */}
-                <div className="nexusim-faction-card defender">
-                    <div>
-                        {/* Tabs */}
-                        <div className="nexusim-tabs-header">
-                            <div className="nexusim-tabs-list">
-                                <span className="nexusim-faction-title defender">Defenders</span>
-                                {defenders.map((def, idx) => (
-                                    <button
-                                        key={def.id}
-                                        onClick={() => setActiveDefTab(idx)}
-                                        className={`nexusim-tab-pill ${activeDefTab === idx ? 'active defender' : ''}`}
-                                    >
-                                        {def.name}
-                                    </button>
-                                ))}
-                                {defenders.length < 16 && (
-                                    <button
-                                        onClick={() => addParticipant('def')}
-                                        title="Add Defender"
-                                        className="nexusim-add-btn"
-                                    >
-                                        <Plus size={14} />
-                                    </button>
-                                )}
-                            </div>
-
-                            {defenders.length > 1 && (
-                                <button
-                                    onClick={() => removeParticipant('def', activeDefTab)}
-                                    title="Remove Defender"
-                                    className="nexusim-remove-btn"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Research Bar */}
-                        <div className="nexusim-meta-grid">
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Space Dock</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={currentDef.spaceDock}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setDefenders(prev => {
-                                            const next = [...prev];
-                                            next[activeDefTab].spaceDock = val;
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                />
-                            </div>
-
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Weapons</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={currentDef.techs.weapons}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setDefenders(prev => {
-                                            const next = [...prev];
-                                            next[activeDefTab].techs.weapons = val;
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                />
-                            </div>
-
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Shielding</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={currentDef.techs.shielding}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setDefenders(prev => {
-                                            const next = [...prev];
-                                            next[activeDefTab].techs.shielding = val;
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                />
-                            </div>
-
-                            <div className="nexusim-meta-cell">
-                                <label className="nexusim-meta-label">Armour</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={currentDef.techs.armour}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setDefenders(prev => {
-                                            const next = [...prev];
-                                            next[activeDefTab].techs.armour = val;
-                                            return next;
-                                        });
-                                    }}
-                                    className="nexusim-input-meta"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Defenses */}
-                        <div className="nexusim-roster-group">
-                            <div className="nexusim-roster-title">Defenses</div>
-                            <div className="nexusim-unit-grid">
-                                {DEFENSE_IDS.map(id => {
-                                    const unit = UNITS[id];
-                                    const count = currentDef.units[id] || 0;
-                                    return (
-                                        <div key={id} className="nexusim-unit-pill">
-                                            <div className="nexusim-unit-info">
-                                                <img src={UNIT_ICONS[id]} alt={unit.name} className="nexusim-unit-thumb" />
-                                                <span className="nexusim-unit-name">{unit.name}</span>
-                                            </div>
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={count === 0 ? '' : count}
-                                                placeholder="0"
-                                                onChange={(e) => updateUnit('def', activeDefTab, id, parseInt(e.target.value))}
-                                                className="nexusim-unit-input defender"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Grounded Fleet */}
-                        <div className="nexusim-roster-group">
-                            <div className="nexusim-roster-title">Ships</div>
-                            <div className="nexusim-unit-grid">
-                                {[...WAR_SHIP_IDS, ...CIVIL_SHIP_IDS].slice(0, 8).map(id => {
-                                    const unit = UNITS[id];
-                                    const count = currentDef.units[id] || 0;
-                                    return (
-                                        <div key={id} className="nexusim-unit-pill">
-                                            <div className="nexusim-unit-info">
-                                                <img src={UNIT_ICONS[id]} alt={unit.name} className="nexusim-unit-thumb" />
-                                                <span className="nexusim-unit-name">{unit.name}</span>
-                                            </div>
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={count === 0 ? '' : count}
-                                                placeholder="0"
-                                                onChange={(e) => updateUnit('def', activeDefTab, id, parseInt(e.target.value))}
-                                                className="nexusim-unit-input defender"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="nexusim-faction-footer">
-                        <button
-                            onClick={() => setEditingLfParty({ side: 'def', index: activeDefTab })}
-                            className="nexusim-lf-link"
-                            style={{ color: '#f59e0b' }}
-                        >
-                            <SlidersHorizontal size={13} />
-                            Lifeform Bonuses
-                        </button>
-                        <span>
-                            Total Units:{' '}
-                            <strong style={{ color: '#fff', fontFamily: 'monospace' }}>
-                                {Object.values(currentDef.units).reduce((a, b) => a + b, 0).toLocaleString()}
-                            </strong>
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            {/* 4. TRI-GRID: ENVIRONMENT, PLUNDER, IPM */}
-            <div className="nexusim-tri-grid">
-                {/* Panel 1: Environment */}
-                <div className="nexusim-panel">
-                    <div>
-                        <div className="nexusim-panel-header">
-                            <Globe size={16} color="var(--primary)" />
-                            <span className="nexusim-panel-title">Server Settings</span>
-                        </div>
-
-                        <div className="nexusim-setting-row">
-                            <span>Fleet Speed (War)</span>
-                            <div className="nexusim-pill-group">
-                                {[1, 2, 4, 6, 8].map(s => (
-                                    <button
-                                        key={s}
-                                        onClick={() => setServerSettings(prev => ({ ...prev, universeSpeedWar: s }))}
-                                        className={`nexusim-pill-btn ${serverSettings.universeSpeedWar === s ? 'active' : ''}`}
-                                    >
-                                        {s}x
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="nexusim-setting-row">
-                            <span>Fleet into Debris</span>
-                            <div className="nexusim-pill-group">
-                                {[0.3, 0.5, 0.7, 0.8].map(d => (
-                                    <button
-                                        key={d}
-                                        onClick={() => setServerSettings(prev => ({ ...prev, debrisFactor: d }))}
-                                        className={`nexusim-pill-btn ${serverSettings.debrisFactor === d ? 'active' : ''}`}
-                                    >
-                                        {Math.round(d * 100)}%
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="nexusim-setting-row">
-                            <span>Defense into Debris</span>
-                            <input
-                                type="number"
-                                min={0}
-                                max={50}
-                                value={Math.round(serverSettings.debrisFactorDef * 100)}
-                                onChange={(e) => {
-                                    const val = (parseInt(e.target.value) || 0) / 100;
-                                    setServerSettings(prev => ({ ...prev, debrisFactorDef: Math.min(0.5, Math.max(0, val)) }));
-                                }}
-                                style={{ width: '60px', textAlign: 'right', background: '#03060d', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', padding: '3px 6px' }}
-                            />
-                        </div>
-
-                        <div className="nexusim-setting-row" style={{ paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                            <span>Deuterium in Debris</span>
-                            <input
-                                type="checkbox"
-                                checked={serverSettings.deuteriumInDebris}
-                                onChange={(e) => setServerSettings(prev => ({ ...prev, deuteriumInDebris: e.target.checked }))}
-                            />
-                        </div>
-
-                        <div className="nexusim-setting-row">
-                            <span>Lifeforms Enabled</span>
-                            <input
-                                type="checkbox"
-                                checked={serverSettings.lifeforms}
-                                onChange={(e) => setServerSettings(prev => ({ ...prev, lifeforms: e.target.checked }))}
-                            />
-                        </div>
-
-                        <div className="nexusim-setting-row">
-                            <span>Rapid Fire Enabled</span>
-                            <input
-                                type="checkbox"
-                                checked={serverSettings.rapidFire}
-                                onChange={(e) => setServerSettings(prev => ({ ...prev, rapidFire: e.target.checked }))}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Panel 2: Target Plunder */}
-                <div className="nexusim-panel">
-                    <div>
-                        <div className="nexusim-panel-header">
-                            <Coins size={16} color="#f59e0b" />
-                            <span className="nexusim-panel-title">Target Resources & Loot</span>
-                        </div>
-
-                        <div style={{ marginBottom: '10px' }}>
-                            <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                                Metal
-                            </label>
-                            <input
-                                type="number"
-                                min={0}
-                                value={targetResources.metal}
-                                onChange={(e) => setTargetResources(prev => ({ ...prev, metal: Math.max(0, parseInt(e.target.value) || 0) }))}
-                                className="nexusim-input-text"
-                            />
-                        </div>
-
-                        <div style={{ marginBottom: '10px' }}>
-                            <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                                Crystal
-                            </label>
-                            <input
-                                type="number"
-                                min={0}
-                                value={targetResources.crystal}
-                                onChange={(e) => setTargetResources(prev => ({ ...prev, crystal: Math.max(0, parseInt(e.target.value) || 0) }))}
-                                className="nexusim-input-text"
-                            />
-                        </div>
-
-                        <div style={{ marginBottom: '10px' }}>
-                            <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                                Deuterium
-                            </label>
-                            <input
-                                type="number"
-                                min={0}
-                                value={targetResources.deuterium}
-                                onChange={(e) => setTargetResources(prev => ({ ...prev, deuterium: Math.max(0, parseInt(e.target.value) || 0) }))}
-                                className="nexusim-input-text"
-                            />
-                        </div>
-
-                        <div className="nexusim-setting-row" style={{ paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                            <span style={{ fontWeight: 700 }}>Loot Percentage</span>
-                            <div className="nexusim-pill-group">
-                                {[50, 75, 100].map(r => (
-                                    <button
-                                        key={r}
-                                        onClick={() => setPlunderRate(r)}
-                                        className={`nexusim-pill-btn ${plunderRate === r ? 'active amber' : ''}`}
-                                    >
-                                        {r}%
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Panel 3: IPM Pre-Strike */}
-                <div className="nexusim-panel">
-                    <div>
-                        <div className="nexusim-panel-header">
-                            <Flame size={16} color="#ff5f5f" />
-                            <span className="nexusim-panel-title">Missile Attack (IPM)</span>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-                            <div>
-                                <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                                    Number of IPMs
-                                </label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={ipmLaunched}
-                                    onChange={(e) => setIpmLaunched(Math.max(0, parseInt(e.target.value) || 0))}
-                                    className="nexusim-input-text"
-                                />
-                            </div>
-
-                            <div>
-                                <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                                    Primary Target
-                                </label>
-                                <select
-                                    value={ipmPrimaryTarget}
-                                    onChange={(e) => setIpmPrimaryTarget(parseInt(e.target.value))}
-                                    className="nexusim-input-text"
-                                >
-                                    {DEFENSE_IDS.map(id => (
-                                        <option key={id} value={id}>{UNITS[id]?.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={handleCalculateIpm}
-                            disabled={ipmLaunched <= 0}
-                            style={{
-                                width: '100%',
-                                padding: '8px',
-                                background: 'rgba(255,255,255,0.06)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                color: '#fff',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontWeight: 700,
-                                fontSize: '0.75rem',
-                                marginBottom: '10px'
-                            }}
-                        >
-                            Calculate Missile Damage
-                        </button>
-
-                        {ipmResult && (
-                            <div style={{ background: 'rgba(255, 95, 95, 0.08)', border: '1px solid rgba(255, 95, 95, 0.25)', borderRadius: '10px', padding: '10px', fontSize: '0.75rem', marginBottom: '10px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                                    <span style={{ color: 'var(--text-muted)' }}>ABMs Intercepted:</span>
-                                    <strong style={{ color: '#f59e0b', fontFamily: 'monospace' }}>{ipmResult.abmIntercepted}</strong>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                                    <span style={{ color: 'var(--text-muted)' }}>Hits:</span>
-                                    <strong style={{ color: '#ff5f5f', fontFamily: 'monospace' }}>{ipmResult.effectiveIpm}</strong>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ color: 'var(--text-muted)' }}>Defenses Destroyed:</span>
-                                    <strong style={{ color: '#fff', fontFamily: 'monospace' }}>
-                                        {Object.values(ipmResult.neutralizedDefenses).reduce((a, b) => a + b, 0).toLocaleString()}
-                                    </strong>
-                                </div>
-                            </div>
+                    <div className="ogsim-tabs">
+                        {currentWave.attackers.map((atk, idx) => (
+                            <button
+                                key={atk.id}
+                                onClick={() => setActiveAtkTab(idx)}
+                                className={`ogsim-tab ${activeAtkTab === idx ? 'active' : ''}`}
+                            >
+                                {atk.name}
+                            </button>
+                        ))}
+                        {currentWave.attackers.length < 16 && (
+                            <button
+                                onClick={() => addParticipant('atk')}
+                                className="ogsim-tab-add"
+                                title="Add ACS Attacker"
+                            >
+                                +
+                            </button>
+                        )}
+                        {currentWave.attackers.length > 1 && (
+                            <button
+                                onClick={() => removeParticipant('atk', activeAtkTab)}
+                                className="ogsim-tab-close"
+                                title="Remove Active Attacker"
+                            >
+                                ✕
+                            </button>
                         )}
                     </div>
 
-                    {ipmResult && ipmResult.effectiveIpm > 0 && (
-                        <button
-                            onClick={handleApplyIpmToDefender}
-                            style={{
-                                width: '100%',
-                                padding: '10px',
-                                background: '#dc2626',
-                                border: 'none',
-                                color: '#fff',
-                                borderRadius: '10px',
-                                cursor: 'pointer',
-                                fontWeight: 800,
-                                fontSize: '0.75rem',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.05em'
-                            }}
-                        >
-                            Apply Damage to Defender
-                        </button>
-                    )}
+                    <div className="ogsim-card">
+                        {/* API Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-row">
+                                <strong style={{ fontSize: '0.78rem' }}>API</strong>
+                                <input
+                                    type="text"
+                                    value={atkApiKey}
+                                    onChange={(e) => setAtkApiKey(e.target.value)}
+                                    placeholder="Paste API or Spy Key"
+                                    className="ogsim-input-xs w-full"
+                                    style={{ margin: '0 6px' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                                <button
+                                    onClick={() => handleLoadApi('atk')}
+                                    className="ogsim-btn-xs"
+                                    style={{ width: '100%' }}
+                                >
+                                    Load from API
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Classes Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Classes</div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Player</span>
+                                <div className="ogsim-class-group">
+                                    {[
+                                        { val: 0, label: '—', cls: 'none' },
+                                        { val: 1, label: 'C', cls: 'collector' },
+                                        { val: 2, label: 'G', cls: 'general' },
+                                        { val: 3, label: 'D', cls: 'explorer' }
+                                    ].map(c => (
+                                        <div
+                                            key={c.val}
+                                            onClick={() => updateCurrentWave(w => {
+                                                const atks = [...w.attackers];
+                                                atks[activeAtkTab] = { ...atks[activeAtkTab], playerClass: c.val };
+                                                return { ...w, attackers: atks };
+                                            })}
+                                            className={`ogsim-class-icon ${c.cls} ${currentAtk.playerClass === c.val ? 'active' : ''}`}
+                                            title={c.cls}
+                                        >
+                                            {c.label}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Alliance</span>
+                                <div className="ogsim-class-group">
+                                    {[
+                                        { val: 0, label: '—', cls: 'none' },
+                                        { val: 1, label: 'W', cls: 'warriors' },
+                                        { val: 2, label: 'T', cls: 'traders' },
+                                        { val: 3, label: 'R', cls: 'researchers' }
+                                    ].map(c => (
+                                        <div
+                                            key={c.val}
+                                            onClick={() => updateCurrentWave(w => {
+                                                const atks = [...w.attackers];
+                                                atks[activeAtkTab] = { ...atks[activeAtkTab], allianceClass: c.val };
+                                                return { ...w, attackers: atks };
+                                            })}
+                                            className={`ogsim-class-icon ${c.cls} ${currentAtk.allianceClass === c.val ? 'active' : ''}`}
+                                            title={c.cls}
+                                        >
+                                            {c.label}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Wreckfield (General Class) */}
+                        {currentAtk.playerClass === 2 && (
+                            <div className="ogsim-data-box">
+                                <div className="ogsim-box-title">Wreckfield</div>
+                                <div className="ogsim-box-row">
+                                    <span className="ogsim-row-label">Space Dock</span>
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        min={0}
+                                        value={currentAtk.spaceDock}
+                                        onChange={(e) => {
+                                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                                            updateCurrentWave(w => {
+                                                const atks = [...w.attackers];
+                                                atks[activeAtkTab] = { ...atks[activeAtkTab], spaceDock: val };
+                                                return { ...w, attackers: atks };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                </div>
+                                <div className="ogsim-box-row">
+                                    <span className="ogsim-row-label">Nano Repair Bots</span>
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        min={0}
+                                        value={currentAtk.nanoRepairBots}
+                                        onChange={(e) => {
+                                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                                            updateCurrentWave(w => {
+                                                const atks = [...w.attackers];
+                                                atks[activeAtkTab] = { ...atks[activeAtkTab], nanoRepairBots: val };
+                                                return { ...w, attackers: atks };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Technologies Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Technologies</div>
+                            <div className="ogsim-tech-grid">
+                                <div className="ogsim-tech-col">
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Weapons</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentAtk.techs.weapons}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const atks = [...w.attackers];
+                                                    atks[activeAtkTab].techs.weapons = val;
+                                                    return { ...w, attackers: atks };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Shielding</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentAtk.techs.shielding}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const atks = [...w.attackers];
+                                                    atks[activeAtkTab].techs.shielding = val;
+                                                    return { ...w, attackers: atks };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Armour</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentAtk.techs.armour}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const atks = [...w.attackers];
+                                                    atks[activeAtkTab].techs.armour = val;
+                                                    return { ...w, attackers: atks };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="ogsim-tech-col">
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Combustion</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentAtk.techs.combustion}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const atks = [...w.attackers];
+                                                    atks[activeAtkTab].techs.combustion = val;
+                                                    return { ...w, attackers: atks };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Impulse</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentAtk.techs.impulse}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const atks = [...w.attackers];
+                                                    atks[activeAtkTab].techs.impulse = val;
+                                                    return { ...w, attackers: atks };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Hyperspace</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentAtk.techs.hyperspace}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const atks = [...w.attackers];
+                                                    atks[activeAtkTab].techs.hyperspace = val;
+                                                    return { ...w, attackers: atks };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Hyperspace Technology</span>
+                                <input
+                                    type="number"
+                                    size={4}
+                                    min={0}
+                                    value={currentAtk.techs.hyperspaceTech}
+                                    onChange={(e) => {
+                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                        updateCurrentWave(w => {
+                                            const atks = [...w.attackers];
+                                            atks[activeAtkTab].techs.hyperspaceTech = val;
+                                            return { ...w, attackers: atks };
+                                        });
+                                    }}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Bonuses / Recyclers */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Bonuses / Recyclers</div>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                    onClick={() => setLfModalSide('atk')}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    LF Bonuses
+                                </button>
+                                <button
+                                    onClick={() => setRecyclersModalSide('atk')}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    Recyclers
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Ships Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">
+                                <span>Ships</span>
+                                <button
+                                    onClick={() => setShipStatsModalSide('atk')}
+                                    className="ogsim-btn-xs"
+                                >
+                                    View stats
+                                </button>
+                            </div>
+
+                            {SIM_SHIP_IDS.map(id => {
+                                const unit = UNITS[id];
+                                const count = currentAtk.units[id] || 0;
+                                const rem = activeScenario?.remainingUnits.attackers[id];
+                                const hasRem = rem !== undefined;
+
+                                return (
+                                    <div key={id} className="ogsim-box-row">
+                                        <span className="ogsim-row-label" title={unit.name}>{unit.name}</span>
+                                        <div className="ogsim-row-ctrls">
+                                            {hasRem && (
+                                                <span className={`ogsim-remaining-badge ${rem === count ? 'green' : rem > 0 ? 'yellow' : 'red'}`}>
+                                                    {rem.toLocaleString()}
+                                                </span>
+                                            )}
+                                            <input
+                                                type="number"
+                                                size={8}
+                                                min={0}
+                                                value={count === 0 ? '' : count}
+                                                placeholder="0"
+                                                onChange={(e) => updateUnit('atk', activeAtkTab, id, parseInt(e.target.value))}
+                                                className="ogsim-input-xs"
+                                            />
+                                            <button
+                                                onClick={() => restoreUnit('atk', activeAtkTab, id)}
+                                                className="ogsim-ctrl-btn"
+                                                title="Restore"
+                                            >
+                                                <RotateCcw size={12} />
+                                            </button>
+                                            <button
+                                                onClick={() => updateUnit('atk', activeAtkTab, id, 0)}
+                                                className="ogsim-ctrl-btn clear"
+                                                title="Clear"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Infos Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Infos</div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Coordinates</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <input
+                                        type="number"
+                                        size={3}
+                                        value={currentAtk.coords.galaxy}
+                                        onChange={(e) => {
+                                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                                            updateCurrentWave(w => {
+                                                const atks = [...w.attackers];
+                                                atks[activeAtkTab].coords.galaxy = val;
+                                                return { ...w, attackers: atks };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                    <span>:</span>
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        value={currentAtk.coords.system}
+                                        onChange={(e) => {
+                                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                                            updateCurrentWave(w => {
+                                                const atks = [...w.attackers];
+                                                atks[activeAtkTab].coords.system = val;
+                                                return { ...w, attackers: atks };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                    <span>:</span>
+                                    <input
+                                        type="number"
+                                        size={3}
+                                        value={currentAtk.coords.position}
+                                        onChange={(e) => {
+                                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                                            updateCurrentWave(w => {
+                                                const atks = [...w.attackers];
+                                                atks[activeAtkTab].coords.position = val;
+                                                return { ...w, attackers: atks };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                </div>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Speed</span>
+                                <select
+                                    value={currentAtk.speedPercent || 100}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        updateCurrentWave(w => {
+                                            const atks = [...w.attackers];
+                                            atks[activeAtkTab].speedPercent = val;
+                                            return { ...w, attackers: atks };
+                                        });
+                                    }}
+                                    className="ogsim-select-xs"
+                                >
+                                    {[100, 90, 80, 70, 60, 50, 40, 30, 20, 10].map(s => (
+                                        <option key={s} value={s}>{s}%</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Flight time</span>
+                                <span className="mono">{NexuSimEngine.formatDuration(atkFlightTime)}</span>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Consumption</span>
+                                <span className="mono">{fmt(atkFuel)}</span>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Cargo capacity</span>
+                                <span className="mono">{fmt(atkCargo)}</span>
+                            </div>
+                        </div>
+
+                        {/* Footer Clear Buttons */}
+                        <div className="ogsim-data-box">
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                    onClick={() => clearUnits('atk', activeAtkTab)}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    Clear ships
+                                </button>
+                                <button
+                                    onClick={() => clearPlayer('atk', activeAtkTab)}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    Clear player
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ========================================================
+                   COLUMN 2: DEFENDERS
+                   ======================================================== */}
+                <div className="ogsim-col">
+                    <div className="ogsim-title-bar">
+                        <span>Defenders</span>
+                        <span className="ogsim-ratio">-</span>
+                    </div>
+
+                    <div className="ogsim-tabs">
+                        {currentWave.defenders.map((def, idx) => (
+                            <button
+                                key={def.id}
+                                onClick={() => setActiveDefTab(idx)}
+                                className={`ogsim-tab ${activeDefTab === idx ? 'active' : ''}`}
+                            >
+                                {def.name}
+                            </button>
+                        ))}
+                        {currentWave.defenders.length < 16 && (
+                            <button
+                                onClick={() => addParticipant('def')}
+                                className="ogsim-tab-add"
+                                title="Add ACS Defender"
+                            >
+                                +
+                            </button>
+                        )}
+                        {currentWave.defenders.length > 1 && (
+                            <button
+                                onClick={() => removeParticipant('def', activeDefTab)}
+                                className="ogsim-tab-close"
+                                title="Remove Active Defender"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="ogsim-card">
+                        {/* API Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-row">
+                                <strong style={{ fontSize: '0.78rem' }}>API</strong>
+                                <input
+                                    type="text"
+                                    value={defApiKey}
+                                    onChange={(e) => setDefApiKey(e.target.value)}
+                                    placeholder="Paste API or Spy Key"
+                                    className="ogsim-input-xs w-full"
+                                    style={{ margin: '0 6px' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                                <button
+                                    onClick={() => handleLoadApi('def')}
+                                    className="ogsim-btn-xs"
+                                    style={{ width: '100%' }}
+                                >
+                                    Load from API
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Classes Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Classes</div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Player</span>
+                                <div className="ogsim-class-group">
+                                    {[
+                                        { val: 0, label: '—', cls: 'none' },
+                                        { val: 1, label: 'C', cls: 'collector' },
+                                        { val: 2, label: 'G', cls: 'general' },
+                                        { val: 3, label: 'D', cls: 'explorer' }
+                                    ].map(c => (
+                                        <div
+                                            key={c.val}
+                                            onClick={() => updateCurrentWave(w => {
+                                                const defs = [...w.defenders];
+                                                defs[activeDefTab] = { ...defs[activeDefTab], playerClass: c.val };
+                                                return { ...w, defenders: defs };
+                                            })}
+                                            className={`ogsim-class-icon ${c.cls} ${currentDef.playerClass === c.val ? 'active' : ''}`}
+                                            title={c.cls}
+                                        >
+                                            {c.label}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Alliance</span>
+                                <div className="ogsim-class-group">
+                                    {[
+                                        { val: 0, label: '—', cls: 'none' },
+                                        { val: 1, label: 'W', cls: 'warriors' },
+                                        { val: 2, label: 'T', cls: 'traders' },
+                                        { val: 3, label: 'R', cls: 'researchers' }
+                                    ].map(c => (
+                                        <div
+                                            key={c.val}
+                                            onClick={() => updateCurrentWave(w => {
+                                                const defs = [...w.defenders];
+                                                defs[activeDefTab] = { ...defs[activeDefTab], allianceClass: c.val };
+                                                return { ...w, defenders: defs };
+                                            })}
+                                            className={`ogsim-class-icon ${c.cls} ${currentDef.allianceClass === c.val ? 'active' : ''}`}
+                                            title={c.cls}
+                                        >
+                                            {c.label}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Technologies Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Technologies</div>
+                            <div className="ogsim-tech-grid">
+                                <div className="ogsim-tech-col">
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Weapons</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentDef.techs.weapons}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const defs = [...w.defenders];
+                                                    defs[activeDefTab].techs.weapons = val;
+                                                    return { ...w, defenders: defs };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Shielding</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentDef.techs.shielding}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const defs = [...w.defenders];
+                                                    defs[activeDefTab].techs.shielding = val;
+                                                    return { ...w, defenders: defs };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Armour</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentDef.techs.armour}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const defs = [...w.defenders];
+                                                    defs[activeDefTab].techs.armour = val;
+                                                    return { ...w, defenders: defs };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="ogsim-tech-col">
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Combustion</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentDef.techs.combustion}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const defs = [...w.defenders];
+                                                    defs[activeDefTab].techs.combustion = val;
+                                                    return { ...w, defenders: defs };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Impulse</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentDef.techs.impulse}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const defs = [...w.defenders];
+                                                    defs[activeDefTab].techs.impulse = val;
+                                                    return { ...w, defenders: defs };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Hyperspace</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={currentDef.techs.hyperspace}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                updateCurrentWave(w => {
+                                                    const defs = [...w.defenders];
+                                                    defs[activeDefTab].techs.hyperspace = val;
+                                                    return { ...w, defenders: defs };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Hyperspace Technology</span>
+                                <input
+                                    type="number"
+                                    size={4}
+                                    min={0}
+                                    value={currentDef.techs.hyperspaceTech}
+                                    onChange={(e) => {
+                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                        updateCurrentWave(w => {
+                                            const defs = [...w.defenders];
+                                            defs[activeDefTab].techs.hyperspaceTech = val;
+                                            return { ...w, defenders: defs };
+                                        });
+                                    }}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Bonuses / Recyclers */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Bonuses / Recyclers</div>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                    onClick={() => setLfModalSide('def')}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    LF Bonuses
+                                </button>
+                                <button
+                                    onClick={() => setRecyclersModalSide('def')}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    Recyclers
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Ships Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">
+                                <span>Ships</span>
+                                <button
+                                    onClick={() => setShipStatsModalSide('def')}
+                                    className="ogsim-btn-xs"
+                                >
+                                    View stats
+                                </button>
+                            </div>
+
+                            {SIM_SHIP_IDS.map(id => {
+                                const unit = UNITS[id];
+                                const count = currentDef.units[id] || 0;
+                                const rem = activeScenario?.remainingUnits.defenders[id];
+                                const hasRem = rem !== undefined;
+
+                                return (
+                                    <div key={id} className="ogsim-box-row">
+                                        <span className="ogsim-row-label" title={unit.name}>{unit.name}</span>
+                                        <div className="ogsim-row-ctrls">
+                                            {hasRem && (
+                                                <span className={`ogsim-remaining-badge ${rem === count ? 'green' : rem > 0 ? 'yellow' : 'red'}`}>
+                                                    {rem.toLocaleString()}
+                                                </span>
+                                            )}
+                                            <input
+                                                type="number"
+                                                size={8}
+                                                min={0}
+                                                value={count === 0 ? '' : count}
+                                                placeholder="0"
+                                                onChange={(e) => updateUnit('def', activeDefTab, id, parseInt(e.target.value))}
+                                                className="ogsim-input-xs"
+                                            />
+                                            <button
+                                                onClick={() => restoreUnit('def', activeDefTab, id)}
+                                                className="ogsim-ctrl-btn"
+                                                title="Restore"
+                                            >
+                                                <RotateCcw size={12} />
+                                            </button>
+                                            <button
+                                                onClick={() => updateUnit('def', activeDefTab, id, 0)}
+                                                className="ogsim-ctrl-btn clear"
+                                                title="Clear"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Infos Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Infos</div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Coordinates</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <input
+                                        type="number"
+                                        size={3}
+                                        value={currentDef.coords.galaxy}
+                                        onChange={(e) => {
+                                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                                            updateCurrentWave(w => {
+                                                const defs = [...w.defenders];
+                                                defs[activeDefTab].coords.galaxy = val;
+                                                return { ...w, defenders: defs };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                    <span>:</span>
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        value={currentDef.coords.system}
+                                        onChange={(e) => {
+                                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                                            updateCurrentWave(w => {
+                                                const defs = [...w.defenders];
+                                                defs[activeDefTab].coords.system = val;
+                                                return { ...w, defenders: defs };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                    <span>:</span>
+                                    <input
+                                        type="number"
+                                        size={3}
+                                        value={currentDef.coords.position}
+                                        onChange={(e) => {
+                                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                                            updateCurrentWave(w => {
+                                                const defs = [...w.defenders];
+                                                defs[activeDefTab].coords.position = val;
+                                                return { ...w, defenders: defs };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                </div>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Speed</span>
+                                <select
+                                    value={currentDef.speedPercent || 100}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        updateCurrentWave(w => {
+                                            const defs = [...w.defenders];
+                                            defs[activeDefTab].speedPercent = val;
+                                            return { ...w, defenders: defs };
+                                        });
+                                    }}
+                                    className="ogsim-select-xs"
+                                >
+                                    {[100, 90, 80, 70, 60, 50, 40, 30, 20, 10].map(s => (
+                                        <option key={s} value={s}>{s}%</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Flight time</span>
+                                <span className="mono">{NexuSimEngine.formatDuration(defFlightTime)}</span>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Consumption</span>
+                                <span className="mono">{fmt(defFuel)}</span>
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Cargo capacity</span>
+                                <span className="mono">{fmt(defCargo)}</span>
+                            </div>
+                        </div>
+
+                        {/* Footer Clear Buttons */}
+                        <div className="ogsim-data-box">
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                    onClick={() => clearUnits('def', activeDefTab)}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    Clear ships
+                                </button>
+                                <button
+                                    onClick={() => clearPlayer('def', activeDefTab)}
+                                    className="ogsim-btn-xs"
+                                    style={{ flex: 1 }}
+                                >
+                                    Clear player
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ========================================================
+                   COLUMN 3: DEFENDER PLANET/MOON & SETTINGS
+                   ======================================================== */}
+                <div className="ogsim-col">
+                    {/* Card 1: Defender planet/moon */}
+                    <div className="ogsim-title-bar">
+                        <span>Defender planet/moon</span>
+                    </div>
+
+                    <div className="ogsim-card standalone">
+                        {/* Resources Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Resources</div>
+                            <div className="ogsim-res-grid">
+                                <div className="ogsim-res-item">
+                                    <img src={RESOURCE_ICONS.metal} alt="Metal" className="ogsim-res-icon" />
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        min={0}
+                                        value={currentWave.targetResources.metal}
+                                        onChange={(e) => {
+                                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                                            updateCurrentWave(w => ({
+                                                ...w,
+                                                targetResources: { ...w.targetResources, metal: val }
+                                            }));
+                                        }}
+                                        className="ogsim-input-xs"
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                                <div className="ogsim-res-item">
+                                    <img src={RESOURCE_ICONS.crystal} alt="Crystal" className="ogsim-res-icon" />
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        min={0}
+                                        value={currentWave.targetResources.crystal}
+                                        onChange={(e) => {
+                                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                                            updateCurrentWave(w => ({
+                                                ...w,
+                                                targetResources: { ...w.targetResources, crystal: val }
+                                            }));
+                                        }}
+                                        className="ogsim-input-xs"
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                                <div className="ogsim-res-item">
+                                    <img src={RESOURCE_ICONS.deuterium} alt="Deuterium" className="ogsim-res-icon" />
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        min={0}
+                                        value={currentWave.targetResources.deuterium}
+                                        onChange={(e) => {
+                                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                                            updateCurrentWave(w => ({
+                                                ...w,
+                                                targetResources: { ...w.targetResources, deuterium: val }
+                                            }));
+                                        }}
+                                        className="ogsim-input-xs"
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                                <div className="ogsim-res-item">
+                                    <img src={RESOURCE_ICONS.food} alt="Food" className="ogsim-res-icon" />
+                                    <input
+                                        type="number"
+                                        size={4}
+                                        min={0}
+                                        value={currentWave.targetResources.food}
+                                        onChange={(e) => {
+                                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                                            updateCurrentWave(w => ({
+                                                ...w,
+                                                targetResources: { ...w.targetResources, food: val }
+                                            }));
+                                        }}
+                                        className="ogsim-input-xs"
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Defence Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">
+                                <span>Defence</span>
+                                <button
+                                    onClick={() => setIpmModalOpen(true)}
+                                    className="ogsim-btn-xs"
+                                >
+                                    IPM simulator
+                                </button>
+                            </div>
+
+                            {SIM_DEFENSE_IDS.map(id => {
+                                const unit = UNITS[id];
+                                const count = primaryDef.units[id] || 0;
+                                const rem = activeScenario?.remainingUnits.defenders[id];
+                                const hasRem = rem !== undefined;
+                                const isDome = id === 407 || id === 408;
+
+                                return (
+                                    <div key={id} className="ogsim-box-row">
+                                        <span className="ogsim-row-label" title={unit.name}>{unit.name}</span>
+                                        <div className="ogsim-row-ctrls">
+                                            {hasRem && (
+                                                <span className={`ogsim-remaining-badge ${rem === count ? 'green' : rem > 0 ? 'yellow' : 'red'}`}>
+                                                    {rem.toLocaleString()}
+                                                </span>
+                                            )}
+
+                                            {isDome ? (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={count > 0}
+                                                    onChange={(e) => updateUnit('def', 0, id, e.target.checked ? 1 : 0)}
+                                                    className="ogsim-checkbox"
+                                                />
+                                            ) : (
+                                                <>
+                                                    <input
+                                                        type="number"
+                                                        size={8}
+                                                        min={0}
+                                                        value={count === 0 ? '' : count}
+                                                        placeholder="0"
+                                                        onChange={(e) => updateUnit('def', 0, id, parseInt(e.target.value))}
+                                                        className="ogsim-input-xs"
+                                                    />
+                                                    <button
+                                                        onClick={() => restoreUnit('def', 0, id)}
+                                                        className="ogsim-ctrl-btn"
+                                                        title="Restore"
+                                                    >
+                                                        <RotateCcw size={12} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => updateUnit('def', 0, id, 0)}
+                                                        className="ogsim-ctrl-btn clear"
+                                                        title="Clear"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Extra Box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Extra</div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Engineer</span>
+                                <input
+                                    type="checkbox"
+                                    checked={primaryDef.engineer}
+                                    onChange={(e) => updateCurrentWave(w => {
+                                        const defs = [...w.defenders];
+                                        defs[0] = { ...defs[0], engineer: e.target.checked };
+                                        return { ...w, defenders: defs };
+                                    })}
+                                    className="ogsim-checkbox"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Space Dock</span>
+                                <input
+                                    type="number"
+                                    size={4}
+                                    min={0}
+                                    value={primaryDef.spaceDock}
+                                    onChange={(e) => {
+                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                        updateCurrentWave(w => {
+                                            const defs = [...w.defenders];
+                                            defs[0] = { ...defs[0], spaceDock: val };
+                                            return { ...w, defenders: defs };
+                                        });
+                                    }}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Advanced Recycling Plant</span>
+                                <input
+                                    type="number"
+                                    size={4}
+                                    min={0}
+                                    value={primaryDef.advancedRecyclingPlant || 0}
+                                    onChange={(e) => {
+                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                        updateCurrentWave(w => {
+                                            const defs = [...w.defenders];
+                                            defs[0] = { ...defs[0], advancedRecyclingPlant: val };
+                                            return { ...w, defenders: defs };
+                                        });
+                                    }}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Nano Repair Bots</span>
+                                <input
+                                    type="number"
+                                    size={4}
+                                    min={0}
+                                    value={primaryDef.nanoRepairBots}
+                                    onChange={(e) => {
+                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                        updateCurrentWave(w => {
+                                            const defs = [...w.defenders];
+                                            defs[0] = { ...defs[0], nanoRepairBots: val };
+                                            return { ...w, defenders: defs };
+                                        });
+                                    }}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card 2: Settings */}
+                    <div className="ogsim-title-bar">
+                        <span>Settings</span>
+                    </div>
+
+                    <div className="ogsim-card">
+                        {/* Simulation Settings */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Simulation</div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Simulations</span>
+                                <input
+                                    type="number"
+                                    size={4}
+                                    min={1}
+                                    value={simIterations}
+                                    onChange={(e) => setSimIterations(Math.max(1, parseInt(e.target.value) || 50))}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Plunder</span>
+                                <select
+                                    value={currentWave.plunderRate}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        updateCurrentWave(w => ({ ...w, plunderRate: val }));
+                                    }}
+                                    className="ogsim-select-xs"
+                                >
+                                    <option value={50}>50%</option>
+                                    <option value={75}>75%</option>
+                                    <option value={100}>100%</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Server Settings */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-box-title">Server</div>
+                            <div className="ogsim-tech-grid">
+                                <div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Galaxies</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={1}
+                                            value={serverSettings.galaxies}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, galaxies: parseInt(e.target.value) || 9 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Systems</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={1}
+                                            value={serverSettings.systems}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, systems: parseInt(e.target.value) || 499 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Donut Galaxy</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={serverSettings.donutGalaxy}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, donutGalaxy: e.target.checked }))}
+                                            className="ogsim-checkbox"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Donut Systems</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={serverSettings.donutSystem}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, donutSystem: e.target.checked }))}
+                                            className="ogsim-checkbox"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Ignore empty systems</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(serverSettings.ignoreEmptySystems)}
+                                    onChange={(e) => setServerSettings(prev => ({ ...prev, ignoreEmptySystems: e.target.checked }))}
+                                    className="ogsim-checkbox"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Ignore inactive systems</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(serverSettings.ignoreInactiveSystems)}
+                                    onChange={(e) => setServerSettings(prev => ({ ...prev, ignoreInactiveSystems: e.target.checked }))}
+                                    className="ogsim-checkbox"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Deuterium save factor</span>
+                                <input
+                                    type="number"
+                                    size={3}
+                                    step="0.05"
+                                    min={0}
+                                    value={serverSettings.globalDeuteriumSaveFactor ?? 1}
+                                    onChange={(e) => setServerSettings(prev => ({ ...prev, globalDeuteriumSaveFactor: parseFloat(e.target.value) || 1 }))}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Reaper debris (%)</span>
+                                <input
+                                    type="number"
+                                    size={3}
+                                    min={0}
+                                    value={Math.round((serverSettings.combatDebrisFieldLimit || 0.25) * 100)}
+                                    onChange={(e) => setServerSettings(prev => ({ ...prev, combatDebrisFieldLimit: (parseInt(e.target.value) || 25) / 100 }))}
+                                    className="ogsim-input-xs"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Probe cargo enabled</span>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(serverSettings.probeCargo)}
+                                    onChange={(e) => setServerSettings(prev => ({ ...prev, probeCargo: e.target.checked }))}
+                                    className="ogsim-checkbox"
+                                />
+                            </div>
+                            <div className="ogsim-box-row">
+                                <span className="ogsim-row-label">Rapidfire enabled</span>
+                                <input
+                                    type="checkbox"
+                                    checked={serverSettings.rapidFire}
+                                    onChange={(e) => setServerSettings(prev => ({ ...prev, rapidFire: e.target.checked }))}
+                                    className="ogsim-checkbox"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Fleet speed & Debris sub-box */}
+                        <div className="ogsim-data-box">
+                            <div className="ogsim-tech-grid">
+                                <div>
+                                    <div className="ogsim-box-title">Fleet speed</div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">War</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={1}
+                                            value={serverSettings.universeSpeedWar}
+                                            onChange={(e) => setServerSettings(prev => ({
+                                                ...prev,
+                                                universeSpeedWar: parseInt(e.target.value) || 1,
+                                                speedFleetWar: parseInt(e.target.value) || 1
+                                            }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Holding</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={1}
+                                            value={serverSettings.speedFleetHolding || 1}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, speedFleetHolding: parseInt(e.target.value) || 1 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Peaceful</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={1}
+                                            value={serverSettings.speedFleetPeaceful || 1}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, speedFleetPeaceful: parseInt(e.target.value) || 1 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="ogsim-box-title">Debris</div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Fleet (%)</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={Math.round(serverSettings.debrisFactor * 100)}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, debrisFactor: (parseInt(e.target.value) || 30) / 100 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Defence (%)</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            min={0}
+                                            value={Math.round(serverSettings.debrisFactorDef * 100)}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, debrisFactorDef: (parseInt(e.target.value) || 0) / 100 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Deuterium</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={serverSettings.deuteriumInDebris}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, deuteriumInDebris: e.target.checked }))}
+                                            className="ogsim-checkbox"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Accordion: General Class */}
+                        <div className="ogsim-data-box">
+                            <button
+                                onClick={() => setOpenGeneralBonus(!openGeneralBonus)}
+                                className="ogsim-accordion-header"
+                            >
+                                <span>General class</span>
+                                {openGeneralBonus ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                            {openGeneralBonus && (
+                                <div className="ogsim-accordion-body">
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Faster combat ships (%)</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={0}
+                                            value={serverSettings.warriorBonusFasterCombatShips ?? 100}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, warriorBonusFasterCombatShips: parseInt(e.target.value) || 0 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Faster recyclers (%)</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={0}
+                                            value={serverSettings.warriorBonusFasterRecyclers ?? 100}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, warriorBonusFasterRecyclers: parseInt(e.target.value) || 0 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Fuel consumption (%)</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={0}
+                                            value={serverSettings.warriorBonusFuelConsumption ?? 25}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, warriorBonusFuelConsumption: parseInt(e.target.value) || 0 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Recyclers fuel consumption (%)</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={0}
+                                            value={serverSettings.warriorBonusRecyclerFuelConsumption ?? 0}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, warriorBonusRecyclerFuelConsumption: parseInt(e.target.value) || 0 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Recyclers cargo (%)</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={0}
+                                            value={serverSettings.warriorBonusRecyclerCargoCapacity ?? 25}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, warriorBonusRecyclerCargoCapacity: parseInt(e.target.value) || 0 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Accordion: Collector Class */}
+                        <div className="ogsim-data-box">
+                            <button
+                                onClick={() => setOpenCollectorBonus(!openCollectorBonus)}
+                                className="ogsim-accordion-header"
+                            >
+                                <span>Collector class</span>
+                                {openCollectorBonus ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                            {openCollectorBonus && (
+                                <div className="ogsim-accordion-body">
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Faster trading ships (%)</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={0}
+                                            value={serverSettings.minerBonusFasterTradingShips ?? 100}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, minerBonusFasterTradingShips: parseInt(e.target.value) || 0 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Cargo bay bonus (%)</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            min={0}
+                                            value={serverSettings.minerBonusIncreasedCargoCapacityForTradingShips ?? 25}
+                                            onChange={(e) => setServerSettings(prev => ({ ...prev, minerBonusIncreasedCargoCapacityForTradingShips: parseInt(e.target.value) || 0 }))}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* ========================================================
+                   COLUMN 4: RESULTS
+                   ======================================================== */}
+                <div className="ogsim-col">
+                    <div className="ogsim-title-bar">
+                        <span>Results</span>
+                    </div>
+
+                    <div className="ogsim-scenario-tabs">
+                        {[
+                            { key: 'average', label: 'Average' },
+                            { key: 'bestAtk', label: 'Best Atk' },
+                            { key: 'worstAtk', label: 'Worst Atk' },
+                            { key: 'bestDef', label: 'Best Def' },
+                            { key: 'worstDef', label: 'Worst Def' },
+                            { key: 'moreDebris', label: 'More Debris' }
+                        ].map(s => (
+                            <button
+                                key={s.key}
+                                onClick={() => updateCurrentWave(w => ({ ...w, selectedScenario: s.key as any }))}
+                                className={`ogsim-scenario-tab ${currentWave.selectedScenario === s.key ? 'active' : ''}`}
+                            >
+                                {s.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="ogsim-card">
+                        {/* Outcome & Remaining Debris Sub-grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: '6px', marginBottom: '8px' }}>
+                            {/* Outcome Table */}
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th colSpan={2} className="text-center">Outcome</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Attackers win</td>
+                                        <td className="text-center mono">
+                                            {currentWave.results ? `${currentWave.results.winRates.attackers.toFixed(1)}%` : '--'}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Defenders win</td>
+                                        <td className="text-center mono">
+                                            {currentWave.results ? `${currentWave.results.winRates.defenders.toFixed(1)}%` : '--'}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Draw</td>
+                                        <td className="text-center mono">
+                                            {currentWave.results ? `${currentWave.results.winRates.draw.toFixed(1)}%` : '--'}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">Rounds</td>
+                                        <td className="darker text-center mono">
+                                            {currentWave.results ? currentWave.results.averageRounds.toFixed(1) : '0'}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">Tactical retreat</td>
+                                        <td className="darker text-center mono">--</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            {/* Remaining Debris Table */}
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th colSpan={2} className="text-center">Remaining debris</th>
+                                        <th className="text-center">Moonchance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ width: '22px', textAlign: 'center' }}>
+                                            <img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} />
+                                        </td>
+                                        <td className="text-end mono">{fmt(activeScenario?.debris.metal)}</td>
+                                        <td rowSpan={3} className="text-center align-middle mono" style={{ width: '60px', fontWeight: 700, color: '#f59e0b' }}>
+                                            {activeScenario ? `${activeScenario.moonChance}%` : '--'}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} />
+                                        </td>
+                                        <td className="text-end mono">{fmt(activeScenario?.debris.crystal)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} />
+                                        </td>
+                                        <td className="text-end mono">{fmt(activeScenario?.debris.deuterium)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.debris.total)}</td>
+                                        <td className="darker">
+                                            <select
+                                                value={recyclerSender}
+                                                onChange={(e) => setRecyclerSender(e.target.value as any)}
+                                                className="ogsim-select-xs"
+                                                style={{ width: '100%' }}
+                                            >
+                                                <option value="atk">A1</option>
+                                                <option value="def">D1</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td colSpan={2} className="text-end mono">{fmt(activeScenario?.recyclersNeeded)}</td>
+                                        <td className="darker text-center"><strong>Recyclers</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Attackers Losses & Profit Table */}
+                        <div className="ogsim-table-wrap">
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th colSpan={4} className="text-center">Attackers</th>
+                                    </tr>
+                                    <tr>
+                                        <th colSpan={2} style={{ width: '50%' }}>Losses</th>
+                                        <th colSpan={2} style={{ width: '50%' }}>Profit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.losses.attackers.metal)}</td>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className={`text-end mono ${(activeScenario?.profit.metal || 0) >= 0 ? 'profit-pos' : 'profit-neg'}`}>
+                                            {fmt(activeScenario?.profit.metal)}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.losses.attackers.crystal)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className={`text-end mono ${(activeScenario?.profit.crystal || 0) >= 0 ? 'profit-pos' : 'profit-neg'}`}>
+                                            {fmt(activeScenario?.profit.crystal)}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.losses.attackers.deuterium)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className={`text-end mono ${(activeScenario?.profit.deuterium || 0) >= 0 ? 'profit-pos' : 'profit-neg'}`}>
+                                            {fmt(activeScenario?.profit.deuterium)}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.losses.attackers.total)}</td>
+                                        <td className="darker text-center">=</td>
+                                        <td className={`darker text-end mono ${(activeScenario?.profit.total || 0) >= 0 ? 'profit-pos' : 'profit-neg'}`}>
+                                            {fmt(activeScenario?.profit.total)}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Defenders Losses & Profit Table */}
+                        <div className="ogsim-table-wrap">
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th colSpan={4} className="text-center">Defenders</th>
+                                    </tr>
+                                    <tr>
+                                        <th colSpan={2} style={{ width: '50%' }}>Losses</th>
+                                        <th colSpan={2} style={{ width: '50%' }}>Profit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.losses.defenders.metal)}</td>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono profit-neg">
+                                            {fmt(-(activeScenario?.losses.defenders.metal || 0))}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.losses.defenders.crystal)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono profit-neg">
+                                            {fmt(-(activeScenario?.losses.defenders.crystal || 0))}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.losses.defenders.deuterium)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono profit-neg">
+                                            {fmt(-(activeScenario?.losses.defenders.deuterium || 0))}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.losses.defenders.total)}</td>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono profit-neg">
+                                            {fmt(-(activeScenario?.losses.defenders.total || 0))}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Plunder Table */}
+                        <div className="ogsim-table-wrap">
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th colSpan={6} className="text-center">Plunder</th>
+                                    </tr>
+                                    <tr>
+                                        <th colSpan={2} style={{ width: '33%' }}>Captured</th>
+                                        <th colSpan={2} style={{ width: '33%' }}>Possible</th>
+                                        <th colSpan={2} style={{ width: '34%' }}>Cargo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.plunder.captured.metal)}</td>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.plunder.possible.metal)}</td>
+                                        <td style={{ width: '24px', textAlign: 'center' }}>
+                                            <img src={UNIT_ICONS[202]} alt="SC" className="ogsim-unit-mini-icon" />
+                                        </td>
+                                        <td className="text-end mono">{fmt(activeScenario?.cargoNeeded.smallCargo)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.plunder.captured.crystal)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.plunder.possible.crystal)}</td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <img src={UNIT_ICONS[203]} alt="LC" className="ogsim-unit-mini-icon" />
+                                        </td>
+                                        <td className="text-end mono">{fmt(activeScenario?.cargoNeeded.largeCargo)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.plunder.captured.deuterium)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.plunder.possible.deuterium)}</td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <img src={UNIT_ICONS[219]} alt="PF" className="ogsim-unit-mini-icon" />
+                                        </td>
+                                        <td className="text-end mono">{fmt(activeScenario?.cargoNeeded.pathfinder)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.food} alt="F" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.food} alt="F" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                        <td colSpan={2}>
+                                            <select
+                                                value={cargoSender}
+                                                onChange={(e) => setCargoSender(parseInt(e.target.value))}
+                                                className="ogsim-select-xs"
+                                                style={{ width: '100%' }}
+                                            >
+                                                {currentWave.attackers.map((a, i) => (
+                                                    <option key={i} value={i}>{a.name}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.plunder.captured.total)}</td>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.plunder.possible.total)}</td>
+                                        <td colSpan={2} className="darker text-center mono">
+                                            {activeScenario && activeScenario.plunder.possible.total > 0
+                                                ? `${Math.round((activeScenario.plunder.captured.total / activeScenario.plunder.possible.total) * 100)}% Captured`
+                                                : '-- Captured'}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Debris harvested (Reapers + ARP) Table */}
+                        <div className="ogsim-table-wrap">
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th colSpan={6} className="text-center">Debris harvested (Reapers + ARP)</th>
+                                    </tr>
+                                    <tr>
+                                        <th colSpan={2} style={{ width: '33%' }}>Initial</th>
+                                        <th colSpan={2} style={{ width: '33%' }}>Attackers</th>
+                                        <th colSpan={2} style={{ width: '34%' }}>Defenders</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.debris.metal)}</td>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.reaperHarvest.metal)}</td>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.debris.crystal)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.reaperHarvest.crystal)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.debris.deuterium)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.reaperHarvest.deuterium)}</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.debris.total)}</td>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.reaperHarvest.total)}</td>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td colSpan={2} className="darker text-end mono">{fmt(activeScenario?.recyclersNeeded)}</td>
+                                        <td colSpan={4} className="darker text-start"><strong>Recyclers</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Wreckfield Table */}
+                        <div className="ogsim-table-wrap">
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th colSpan={4} className="text-center">Wreckfield</th>
+                                    </tr>
+                                    <tr>
+                                        <th colSpan={2} style={{ width: '50%' }}>Attackers</th>
+                                        <th colSpan={2} style={{ width: '50%' }}>Defenders</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                        <td style={{ width: '22px', textAlign: 'center' }}><img src={RESOURCE_ICONS.metal} alt="M" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.wreckfield.resources.metal)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.crystal} alt="C" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.wreckfield.resources.crystal)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">0</td>
+                                        <td style={{ textAlign: 'center' }}><img src={RESOURCE_ICONS.deuterium} alt="D" style={{ width: '16px' }} /></td>
+                                        <td className="text-end mono">{fmt(activeScenario?.wreckfield.resources.deuterium)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">0</td>
+                                        <td className="darker text-center">=</td>
+                                        <td className="darker text-end mono">{fmt(activeScenario?.wreckfield.resources.total)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colSpan={4} className="darker text-center" style={{ padding: '4px' }}>
+                                            <button
+                                                onClick={() => setWreckfieldModalOpen(true)}
+                                                className="ogsim-btn-xs"
+                                                style={{ width: '100%' }}
+                                            >
+                                                Detailed view
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* 5. RESULTS */}
-            {results && activeScenario && (
-                <div className="nexusim-results-card">
-                    <div className="nexusim-results-top">
+            {/* 3. MULTI-WAVE TOTAL SUMMARY */}
+            {waves.length > 1 && (
+                <div className="ogsim-waves-total">
+                    <div className="ogsim-waves-title">Waves Total Summary ({waves.length} Waves)</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
                         <div>
-                            <span style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: '6px' }}>
-                                Battle Results ({results.totalRuns} simulations, average {results.averageRounds.toFixed(1)} rounds)
-                            </span>
-                            <div className="nexusim-win-rates">
-                                <div className="nexusim-rate-item">
-                                    <span className="nexusim-rate-dot cyan"></span>
-                                    <span>Attacker Win {results.winRates.attackers.toFixed(1)}%</span>
-                                </div>
-                                <div className="nexusim-rate-item">
-                                    <span className="nexusim-rate-dot amber"></span>
-                                    <span>Draw {results.winRates.draw.toFixed(1)}%</span>
-                                </div>
-                                <div className="nexusim-rate-item">
-                                    <span className="nexusim-rate-dot red"></span>
-                                    <span>Defender Win {results.winRates.defenders.toFixed(1)}%</span>
-                                </div>
-                            </div>
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr><th colSpan={2} className="text-center">Attackers Total Losses</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Losses</td><td className="text-end mono">{fmt(waves.reduce((acc, w) => acc + (w.results?.scenarios.average.losses.attackers.total || 0), 0))}</td></tr>
+                                    <tr><td>Net Profit</td><td className={`text-end mono ${waves.reduce((acc, w) => acc + (w.results?.scenarios.average.profit.total || 0), 0) >= 0 ? 'profit-pos' : 'profit-neg'}`}>{fmt(waves.reduce((acc, w) => acc + (w.results?.scenarios.average.profit.total || 0), 0))}</td></tr>
+                                </tbody>
+                            </table>
                         </div>
-
-                        {/* Scenario Pills */}
-                        <div className="nexusim-pill-group">
-                            {(
-                                [
-                                    ['average', 'Average'],
-                                    ['bestCase', 'Best Case'],
-                                    ['worstCase', 'Worst Case'],
-                                    ['maxDebris', 'Max Debris']
-                                ] as const
-                            ).map(([key, label]) => (
-                                <button
-                                    key={key}
-                                    onClick={() => setSelectedScenarioKey(key)}
-                                    className={`nexusim-pill-btn ${selectedScenarioKey === key ? 'active' : ''}`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
+                        <div>
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr><th colSpan={2} className="text-center">Defenders Total Losses</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Losses</td><td className="text-end mono">{fmt(waves.reduce((acc, w) => acc + (w.results?.scenarios.average.losses.defenders.total || 0), 0))}</td></tr>
+                                    <tr><td>Net Profit</td><td className="text-end mono profit-neg">{fmt(-waves.reduce((acc, w) => acc + (w.results?.scenarios.average.losses.defenders.total || 0), 0))}</td></tr>
+                                </tbody>
+                            </table>
                         </div>
-                    </div>
-
-                    {/* KPI Grid */}
-                    <div className="nexusim-kpi-grid">
-                        <div className="nexusim-kpi-cell">
-                            <div className="nexusim-kpi-label">Attacker Losses</div>
-                            <div className="nexusim-kpi-val red">
-                                {activeScenario.losses.attackers.total.toLocaleString()}
-                            </div>
-                            <div className="nexusim-kpi-sub">
-                                MSU: <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{Math.round(activeScenario.losses.attackers.msu).toLocaleString()}</strong>
-                            </div>
+                        <div>
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr><th colSpan={2} className="text-center">Total Debris</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Debris</td><td className="text-end mono">{fmt(waves.reduce((acc, w) => acc + (w.results?.scenarios.average.debris.total || 0), 0))}</td></tr>
+                                    <tr><td>Recyclers</td><td className="text-end mono">{fmt(waves.reduce((acc, w) => acc + (w.results?.scenarios.average.recyclersNeeded || 0), 0))}</td></tr>
+                                </tbody>
+                            </table>
                         </div>
-
-                        <div className="nexusim-kpi-cell">
-                            <div className="nexusim-kpi-label">Defender Losses</div>
-                            <div className="nexusim-kpi-val green">
-                                {activeScenario.losses.defenders.total.toLocaleString()}
-                            </div>
-                            <div className="nexusim-kpi-sub">
-                                MSU: <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{Math.round(activeScenario.losses.defenders.msu).toLocaleString()}</strong>
-                            </div>
-                        </div>
-
-                        <div className="nexusim-kpi-cell">
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <div className="nexusim-kpi-label">Debris Field</div>
-                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#f59e0b' }}>Moon {activeScenario.moonChance}%</div>
-                            </div>
-                            <div className="nexusim-kpi-val amber">
-                                {activeScenario.debris.total.toLocaleString()}
-                            </div>
-                            <div className="nexusim-kpi-sub">
-                                Recyclers: <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{activeScenario.recyclersNeeded.toLocaleString()}</strong>
-                            </div>
-                        </div>
-
-                        <div className="nexusim-kpi-cell profit">
-                            <div className="nexusim-kpi-label" style={{ color: 'var(--primary)' }}>Net Profit</div>
-                            <div className="nexusim-kpi-val cyan">
-                                {activeScenario.profit.msu >= 0 ? '+' : ''}
-                                {Math.round(activeScenario.profit.msu).toLocaleString()} MSU
-                            </div>
-                            <div className="nexusim-kpi-sub">
-                                Cargos: <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{activeScenario.cargoNeeded.largeCargo.toLocaleString()} Large Cargo</strong>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 3 Detailed Breakdown Columns */}
-                    <div className="nexusim-breakdown-row">
-                        <div className="nexusim-mini-ledger">
-                            <div className="nexusim-ledger-title">Loot ({plunderRate}%)</div>
-                            <div className="nexusim-ledger-line">
-                                <span>Metal:</span>
-                                <strong>{activeScenario.plunder.captured.metal.toLocaleString()}</strong>
-                            </div>
-                            <div className="nexusim-ledger-line">
-                                <span>Crystal:</span>
-                                <strong style={{ color: 'var(--primary)' }}>{activeScenario.plunder.captured.crystal.toLocaleString()}</strong>
-                            </div>
-                            <div className="nexusim-ledger-line">
-                                <span>Deuterium:</span>
-                                <strong style={{ color: '#10b981' }}>{activeScenario.plunder.captured.deuterium.toLocaleString()}</strong>
-                            </div>
-                            <div className="nexusim-ledger-line highlight">
-                                <span>Total Loot:</span>
-                                <strong style={{ color: '#f59e0b' }}>{activeScenario.plunder.captured.total.toLocaleString()}</strong>
-                            </div>
-                        </div>
-
-                        <div className="nexusim-mini-ledger">
-                            <div className="nexusim-ledger-title">Debris Field</div>
-                            <div className="nexusim-ledger-line">
-                                <span>Metal in DF:</span>
-                                <strong>{activeScenario.debris.metal.toLocaleString()}</strong>
-                            </div>
-                            <div className="nexusim-ledger-line">
-                                <span>Crystal in DF:</span>
-                                <strong style={{ color: 'var(--primary)' }}>{activeScenario.debris.crystal.toLocaleString()}</strong>
-                            </div>
-                            {serverSettings.deuteriumInDebris && (
-                                <div className="nexusim-ledger-line">
-                                    <span>Deuterium in DF:</span>
-                                    <strong style={{ color: '#10b981' }}>{activeScenario.debris.deuterium.toLocaleString()}</strong>
-                                </div>
-                            )}
-                            {activeScenario.reaperHarvest.total > 0 && (
-                                <div className="nexusim-ledger-line highlight">
-                                    <span style={{ color: 'var(--primary)' }}>Reaper Harvest:</span>
-                                    <strong style={{ color: 'var(--primary)' }}>{activeScenario.reaperHarvest.total.toLocaleString()}</strong>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="nexusim-mini-ledger">
-                            <div className="nexusim-ledger-title">Space Dock (Wreckfield)</div>
-                            <div className="nexusim-ledger-line">
-                                <span>Repaired Ships:</span>
-                                <strong>{Object.values(activeScenario.wreckfield.defenders).reduce((a, b) => a + b, 0).toLocaleString()}</strong>
-                            </div>
-                            <div className="nexusim-ledger-line">
-                                <span>Metal Recovered:</span>
-                                <strong>{activeScenario.wreckfield.resources.metal.toLocaleString()}</strong>
-                            </div>
-                            <div className="nexusim-ledger-line">
-                                <span>Crystal Recovered:</span>
-                                <strong style={{ color: 'var(--primary)' }}>{activeScenario.wreckfield.resources.crystal.toLocaleString()}</strong>
-                            </div>
-                            <div className="nexusim-ledger-line highlight">
-                                <span>Deuterium Recovered:</span>
-                                <strong style={{ color: '#10b981' }}>{activeScenario.wreckfield.resources.deuterium.toLocaleString()}</strong>
-                            </div>
+                        <div>
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr><th colSpan={2} className="text-center">Total Plunder</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Captured</td><td className="text-end mono">{fmt(waves.reduce((acc, w) => acc + (w.results?.scenarios.average.plunder.captured.total || 0), 0))}</td></tr>
+                                    <tr><td>Possible</td><td className="text-end mono">{fmt(waves.reduce((acc, w) => acc + (w.results?.scenarios.average.plunder.possible.total || 0), 0))}</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* 6. LIFEFORMS OVERRIDE MODAL */}
-            <AnimatePresence>
-                {editingLfParty && (
-                    <div className="nexusim-modal-backdrop">
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.95, opacity: 0 }}
-                            className="nexusim-modal-window"
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', marginBottom: '14px' }}>
-                                <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--primary)' }}>
-                                    Lifeform Tech Bonuses (%)
-                                </span>
-                                <button
-                                    onClick={() => setEditingLfParty(null)}
-                                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem' }}
-                                >
-                                    ✕
-                                </button>
+            {/* ========================================================
+               MODAL 1: LIFEFORM BONUSES MODAL
+               ======================================================== */}
+            {lfModalSide && (
+                <div className="ogsim-modal-backdrop" onClick={() => setLfModalSide(null)}>
+                    <div className="ogsim-modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                        <div className="ogsim-modal-header">
+                            <span className="ogsim-modal-title">Lifeform Bonuses ({lfModalSide === 'atk' ? 'Attacker' : 'Defender'})</span>
+                            <button onClick={() => setLfModalSide(null)} className="ogsim-ctrl-btn"><X size={18} /></button>
+                        </div>
+                        <div className="ogsim-modal-body">
+                            <div className="ogsim-data-box">
+                                <div className="ogsim-box-title">Global Lifeform Tech Bonuses (%)</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Weapons %</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            value={currentAtk.lifeformBonuses.globalWeapon}
+                                            onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                updateCurrentWave(w => {
+                                                    const list = lfModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                    const idx = lfModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                    list[idx].lifeformBonuses.globalWeapon = val;
+                                                    return lfModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Shielding %</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            value={currentAtk.lifeformBonuses.globalShield}
+                                            onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                updateCurrentWave(w => {
+                                                    const list = lfModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                    const idx = lfModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                    list[idx].lifeformBonuses.globalShield = val;
+                                                    return lfModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span className="ogsim-row-label">Armour %</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            value={currentAtk.lifeformBonuses.globalArmour}
+                                            onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                updateCurrentWave(w => {
+                                                    const list = lfModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                    const idx = lfModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                    list[idx].lifeformBonuses.globalArmour = val;
+                                                    return lfModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
-                            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
-                                Enter your Lifeform combat bonuses in percent. These increase weapons, shielding, and armour.
-                            </p>
-
-                            {(() => {
-                                const party = editingLfParty.side === 'atk'
-                                    ? attackers[editingLfParty.index]
-                                    : defenders[editingLfParty.index];
-                                const lf = party?.lifeformBonuses || {
-                                    globalWeapon: 0,
-                                    globalShield: 0,
-                                    globalArmour: 0,
-                                    perShipWeapon: {},
-                                    perShipShield: {},
-                                    perShipArmour: {}
-                                };
-
-                                return (
-                                    <div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '18px' }}>
-                                            <div>
-                                                <label className="nexusim-meta-label">Weapons %</label>
-                                                <input
-                                                    type="number"
-                                                    value={lf.globalWeapon}
-                                                    onChange={(e) => {
-                                                        const val = parseFloat(e.target.value) || 0;
-                                                        const updated = { ...lf, globalWeapon: val };
-                                                        if (editingLfParty.side === 'atk') {
-                                                            setAttackers(prev => {
-                                                                const next = [...prev];
-                                                                next[editingLfParty.index].lifeformBonuses = updated;
-                                                                return next;
-                                                            });
-                                                        } else {
-                                                            setDefenders(prev => {
-                                                                const next = [...prev];
-                                                                next[editingLfParty.index].lifeformBonuses = updated;
-                                                                return next;
-                                                            });
-                                                        }
-                                                    }}
-                                                    className="nexusim-input-text"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="nexusim-meta-label">Shielding %</label>
-                                                <input
-                                                    type="number"
-                                                    value={lf.globalShield}
-                                                    onChange={(e) => {
-                                                        const val = parseFloat(e.target.value) || 0;
-                                                        const updated = { ...lf, globalShield: val };
-                                                        if (editingLfParty.side === 'atk') {
-                                                            setAttackers(prev => {
-                                                                const next = [...prev];
-                                                                next[editingLfParty.index].lifeformBonuses = updated;
-                                                                return next;
-                                                            });
-                                                        } else {
-                                                            setDefenders(prev => {
-                                                                const next = [...prev];
-                                                                next[editingLfParty.index].lifeformBonuses = updated;
-                                                                return next;
-                                                            });
-                                                        }
-                                                    }}
-                                                    className="nexusim-input-text"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="nexusim-meta-label">Armour %</label>
-                                                <input
-                                                    type="number"
-                                                    value={lf.globalArmour}
-                                                    onChange={(e) => {
-                                                        const val = parseFloat(e.target.value) || 0;
-                                                        const updated = { ...lf, globalArmour: val };
-                                                        if (editingLfParty.side === 'atk') {
-                                                            setAttackers(prev => {
-                                                                const next = [...prev];
-                                                                next[editingLfParty.index].lifeformBonuses = updated;
-                                                                return next;
-                                                            });
-                                                        } else {
-                                                            setDefenders(prev => {
-                                                                const next = [...prev];
-                                                                next[editingLfParty.index].lifeformBonuses = updated;
-                                                                return next;
-                                                            });
-                                                        }
-                                                    }}
-                                                    className="nexusim-input-text"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px' }}>
-                                            <button
-                                                onClick={() => setEditingLfParty(null)}
-                                                className="nexusim-btn-simulate"
-                                                style={{ padding: '8px 18px', fontSize: '0.78rem' }}
-                                            >
-                                                Done
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                        </motion.div>
+                            <div className="ogsim-data-box">
+                                <div className="ogsim-box-title">Per-Ship Combat Bonuses (%)</div>
+                                <table className="ogsim-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Unit</th>
+                                            <th className="text-center">Armour %</th>
+                                            <th className="text-center">Shield %</th>
+                                            <th className="text-center">Weapon %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {SIM_SHIP_IDS.map(id => {
+                                            const u = UNITS[id];
+                                            const party = lfModalSide === 'atk' ? currentAtk : currentDef;
+                                            return (
+                                                <tr key={id}>
+                                                    <td>{u.name}</td>
+                                                    <td className="text-center">
+                                                        <input
+                                                            type="number"
+                                                            size={4}
+                                                            value={party.lifeformBonuses.perShipArmour[id] || 0}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value) || 0;
+                                                                updateCurrentWave(w => {
+                                                                    const list = lfModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                                    const idx = lfModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                                    list[idx].lifeformBonuses.perShipArmour[id] = val;
+                                                                    return lfModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                                });
+                                                            }}
+                                                            className="ogsim-input-xs"
+                                                        />
+                                                    </td>
+                                                    <td className="text-center">
+                                                        <input
+                                                            type="number"
+                                                            size={4}
+                                                            value={party.lifeformBonuses.perShipShield[id] || 0}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value) || 0;
+                                                                updateCurrentWave(w => {
+                                                                    const list = lfModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                                    const idx = lfModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                                    list[idx].lifeformBonuses.perShipShield[id] = val;
+                                                                    return lfModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                                });
+                                                            }}
+                                                            className="ogsim-input-xs"
+                                                        />
+                                                    </td>
+                                                    <td className="text-center">
+                                                        <input
+                                                            type="number"
+                                                            size={4}
+                                                            value={party.lifeformBonuses.perShipWeapon[id] || 0}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value) || 0;
+                                                                updateCurrentWave(w => {
+                                                                    const list = lfModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                                    const idx = lfModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                                    list[idx].lifeformBonuses.perShipWeapon[id] = val;
+                                                                    return lfModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                                });
+                                                            }}
+                                                            className="ogsim-input-xs"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div className="ogsim-modal-footer">
+                            <button onClick={() => setLfModalSide(null)} className="ogsim-btn">Close</button>
+                        </div>
                     </div>
-                )}
-            </AnimatePresence>
+                </div>
+            )}
+
+            {/* ========================================================
+               MODAL 2: RECYCLERS SET-UP MODAL
+               ======================================================== */}
+            {recyclersModalSide && (
+                <div className="ogsim-modal-backdrop" onClick={() => setRecyclersModalSide(null)}>
+                    <div className="ogsim-modal modal-sm" onClick={(e) => e.stopPropagation()}>
+                        <div className="ogsim-modal-header">
+                            <span className="ogsim-modal-title">Recyclers Set-Up</span>
+                            <button onClick={() => setRecyclersModalSide(null)} className="ogsim-ctrl-btn"><X size={18} /></button>
+                        </div>
+                        <div className="ogsim-modal-body">
+                            <div className="ogsim-data-box">
+                                <div className="ogsim-box-row">
+                                    <span className="ogsim-row-label">Recyclers</span>
+                                    <input
+                                        type="number"
+                                        size={8}
+                                        min={0}
+                                        value={currentAtk.recyclersConfig?.count || 0}
+                                        onChange={(e) => {
+                                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                                            updateCurrentWave(w => {
+                                                const list = recyclersModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                const idx = recyclersModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                const cfg = list[idx].recyclersConfig || { count: 0, coords: { ...list[idx].coords }, speedPercent: 100 };
+                                                cfg.count = val;
+                                                list[idx].recyclersConfig = cfg;
+                                                return recyclersModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                            });
+                                        }}
+                                        className="ogsim-input-xs"
+                                    />
+                                </div>
+                                <div className="ogsim-box-row">
+                                    <span className="ogsim-row-label">Coordinates</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            value={currentAtk.recyclersConfig?.coords.galaxy || currentAtk.coords.galaxy}
+                                            onChange={(e) => {
+                                                const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                updateCurrentWave(w => {
+                                                    const list = recyclersModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                    const idx = recyclersModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                    const cfg = list[idx].recyclersConfig || { count: 0, coords: { ...list[idx].coords }, speedPercent: 100 };
+                                                    cfg.coords.galaxy = val;
+                                                    list[idx].recyclersConfig = cfg;
+                                                    return recyclersModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                        <span>:</span>
+                                        <input
+                                            type="number"
+                                            size={4}
+                                            value={currentAtk.recyclersConfig?.coords.system || currentAtk.coords.system}
+                                            onChange={(e) => {
+                                                const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                updateCurrentWave(w => {
+                                                    const list = recyclersModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                    const idx = recyclersModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                    const cfg = list[idx].recyclersConfig || { count: 0, coords: { ...list[idx].coords }, speedPercent: 100 };
+                                                    cfg.coords.system = val;
+                                                    list[idx].recyclersConfig = cfg;
+                                                    return recyclersModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                        <span>:</span>
+                                        <input
+                                            type="number"
+                                            size={3}
+                                            value={currentAtk.recyclersConfig?.coords.position || currentAtk.coords.position}
+                                            onChange={(e) => {
+                                                const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                updateCurrentWave(w => {
+                                                    const list = recyclersModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                    const idx = recyclersModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                    const cfg = list[idx].recyclersConfig || { count: 0, coords: { ...list[idx].coords }, speedPercent: 100 };
+                                                    cfg.coords.position = val;
+                                                    list[idx].recyclersConfig = cfg;
+                                                    return recyclersModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                                });
+                                            }}
+                                            className="ogsim-input-xs"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="ogsim-box-row">
+                                    <span className="ogsim-row-label">Speed</span>
+                                    <select
+                                        value={currentAtk.recyclersConfig?.speedPercent || 100}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            updateCurrentWave(w => {
+                                                const list = recyclersModalSide === 'atk' ? [...w.attackers] : [...w.defenders];
+                                                const idx = recyclersModalSide === 'atk' ? activeAtkTab : activeDefTab;
+                                                const cfg = list[idx].recyclersConfig || { count: 0, coords: { ...list[idx].coords }, speedPercent: 100 };
+                                                cfg.speedPercent = val;
+                                                list[idx].recyclersConfig = cfg;
+                                                return recyclersModalSide === 'atk' ? { ...w, attackers: list } : { ...w, defenders: list };
+                                            });
+                                        }}
+                                        className="ogsim-select-xs"
+                                    >
+                                        {[100, 90, 80, 70, 60, 50, 40, 30, 20, 10].map(s => (
+                                            <option key={s} value={s}>{s}%</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="ogsim-modal-footer">
+                            <button onClick={() => setRecyclersModalSide(null)} className="ogsim-btn">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================
+               MODAL 3: IPM SIMULATOR MODAL
+               ======================================================== */}
+            {ipmModalOpen && (
+                <div className="ogsim-modal-backdrop" onClick={() => setIpmModalOpen(false)}>
+                    <div className="ogsim-modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                        <div className="ogsim-modal-header">
+                            <span className="ogsim-modal-title">IPM Simulator</span>
+                            <button onClick={() => setIpmModalOpen(false)} className="ogsim-ctrl-btn"><X size={18} /></button>
+                        </div>
+                        <div className="ogsim-modal-body">
+                            <div className="ogsim-data-box">
+                                <div className="ogsim-box-title">Attacker</div>
+                                <div className="ogsim-box-row">
+                                    <span className="ogsim-row-label">Select attacker</span>
+                                    <select
+                                        value={ipmAttackerIdx}
+                                        onChange={(e) => setIpmAttackerIdx(parseInt(e.target.value))}
+                                        className="ogsim-select-xs"
+                                    >
+                                        {currentWave.attackers.map((a, i) => (
+                                            <option key={i} value={i}>{a.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="ogsim-box-row">
+                                    <span className="ogsim-row-label">Flight time</span>
+                                    <span className="mono">{NexuSimEngine.formatDuration(atkFlightTime)}</span>
+                                </div>
+                            </div>
+
+                            <div className="ogsim-data-box">
+                                <div className="ogsim-box-title">Defence Targets & Interplanetary Missiles</div>
+                                <table className="ogsim-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Structure</th>
+                                            <th className="text-center">Current</th>
+                                            <th className="text-center">Target Missiles</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {SIM_DEFENSE_IDS.map(id => {
+                                            const u = UNITS[id];
+                                            const count = primaryDef.units[id] || 0;
+                                            return (
+                                                <tr key={id}>
+                                                    <td>{u.name}</td>
+                                                    <td className="text-center mono">{count.toLocaleString()}</td>
+                                                    <td className="text-center">
+                                                        <input
+                                                            type="number"
+                                                            size={6}
+                                                            min={0}
+                                                            value={ipmTargets[id] || 0}
+                                                            onChange={(e) => {
+                                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                                setIpmTargets(prev => ({ ...prev, [id]: val }));
+                                                            }}
+                                                            className="ogsim-input-xs"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+
+                                <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>
+                                        <strong>Total missiles needed:</strong>{' '}
+                                        <span className="mono" style={{ color: '#38bdf8', fontWeight: 700 }}>
+                                            {Object.values(ipmTargets).reduce((a, b) => a + b, 0).toLocaleString()}
+                                        </span>
+                                    </span>
+                                    <button
+                                        onClick={() => {
+                                            const totalMissiles = Object.values(ipmTargets).reduce((a, b) => a + b, 0);
+                                            const primaryTarget = Object.keys(ipmTargets).map(Number).find(id => ipmTargets[id] > 0) || 401;
+                                            const res = NexuSimEngine.calculateIpmStrike(
+                                                totalMissiles,
+                                                primaryTarget,
+                                                primaryDef.units,
+                                                { armour: primaryDef.techs.armour },
+                                                { weapons: currentWave.attackers[ipmAttackerIdx]?.techs.weapons || 0 }
+                                            );
+                                            setIpmResult(res);
+                                        }}
+                                        className="ogsim-btn-xs"
+                                    >
+                                        Calculate Impact
+                                    </button>
+                                </div>
+                            </div>
+
+                            {ipmResult && (
+                                <div className="ogsim-data-box" style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+                                    <div className="ogsim-box-title" style={{ color: '#f87171' }}>Strike Results</div>
+                                    <div className="ogsim-box-row">
+                                        <span>ABMs Intercepted:</span>
+                                        <strong className="mono">{ipmResult.abmIntercepted}</strong>
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span>Effective Hits:</span>
+                                        <strong className="mono">{ipmResult.effectiveIpm}</strong>
+                                    </div>
+                                    <div className="ogsim-box-row">
+                                        <span>Defenses Destroyed:</span>
+                                        <strong className="mono">
+                                            {Object.values(ipmResult.neutralizedDefenses).reduce((a, b) => a + b, 0).toLocaleString()}
+                                        </strong>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            updateCurrentWave(w => {
+                                                const defs = [...w.defenders];
+                                                defs[0] = { ...defs[0], units: { ...ipmResult.remainingDefenses } };
+                                                return { ...w, defenders: defs };
+                                            });
+                                            setIpmModalOpen(false);
+                                        }}
+                                        className="ogsim-btn"
+                                        style={{ width: '100%', marginTop: '6px', background: '#dc2626' }}
+                                    >
+                                        Apply Damage to Defender
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <div className="ogsim-modal-footer">
+                            <button onClick={() => setIpmModalOpen(false)} className="ogsim-btn">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================
+               MODAL 4: SHIP STATS MODAL
+               ======================================================== */}
+            {shipStatsModalSide && (
+                <div className="ogsim-modal-backdrop" onClick={() => setShipStatsModalSide(null)}>
+                    <div className="ogsim-modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                        <div className="ogsim-modal-header">
+                            <span className="ogsim-modal-title">Ships Stats ({shipStatsModalSide === 'atk' ? 'Attacker' : 'Defender'})</span>
+                            <button onClick={() => setShipStatsModalSide(null)} className="ogsim-ctrl-btn"><X size={18} /></button>
+                        </div>
+                        <div className="ogsim-modal-body">
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                                {SIM_SHIP_IDS.map(id => {
+                                    const u = UNITS[id];
+                                    const party = shipStatsModalSide === 'atk' ? currentAtk : currentDef;
+                                    const stats = NexuSimEngine.calculateUnitStats(id, party, serverSettings);
+                                    const speed = NexuSimEngine.calculateShipSpeed(id, party, serverSettings);
+
+                                    return (
+                                        <div key={id} className="ogsim-data-box">
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                                <img src={UNIT_ICONS[id]} alt={u.name} className="ogsim-unit-mini-icon" style={{ width: '32px', height: '32px' }} />
+                                                <strong style={{ fontSize: '0.82rem' }}>{u.name}</strong>
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '0.75rem' }}>
+                                                <div>Weapon: <strong className="mono">{stats.weapon.toLocaleString()}</strong></div>
+                                                <div>Cargo: <strong className="mono">{stats.cargo.toLocaleString()}</strong></div>
+                                                <div>Shield: <strong className="mono">{stats.shield.toLocaleString()}</strong></div>
+                                                <div>Speed: <strong className="mono">{speed.toLocaleString()}</strong></div>
+                                                <div>Armour: <strong className="mono">{stats.armour.toLocaleString()}</strong></div>
+                                                <div>Fuel: <strong className="mono">{stats.fuel.toLocaleString()}</strong></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <div className="ogsim-modal-footer">
+                            <button onClick={() => setShipStatsModalSide(null)} className="ogsim-btn">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================
+               MODAL 5: WRECKFIELD DETAILED VIEW MODAL
+               ======================================================== */}
+            {wreckfieldModalOpen && (
+                <div className="ogsim-modal-backdrop" onClick={() => setWreckfieldModalOpen(false)}>
+                    <div className="ogsim-modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                        <div className="ogsim-modal-header">
+                            <span className="ogsim-modal-title">Wreckfield Details (Space Dock Recovery)</span>
+                            <button onClick={() => setWreckfieldModalOpen(false)} className="ogsim-ctrl-btn"><X size={18} /></button>
+                        </div>
+                        <div className="ogsim-modal-body">
+                            <table className="ogsim-table">
+                                <thead>
+                                    <tr>
+                                        <th>Unit</th>
+                                        <th className="text-center">Attacker Repaired</th>
+                                        <th className="text-center">Defender Repaired</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {SIM_SHIP_IDS.map(id => {
+                                        const u = UNITS[id];
+                                        const atkCount = activeScenario?.wreckfield.attackers[id] || 0;
+                                        const defCount = activeScenario?.wreckfield.defenders[id] || 0;
+                                        if (atkCount === 0 && defCount === 0) return null;
+
+                                        return (
+                                            <tr key={id}>
+                                                <td>{u.name}</td>
+                                                <td className="text-center mono">{atkCount.toLocaleString()}</td>
+                                                <td className="text-center mono" style={{ color: '#4ade80', fontWeight: 700 }}>
+                                                    {defCount.toLocaleString()}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                            {(!activeScenario || Object.values(activeScenario.wreckfield.defenders).every(v => v === 0)) && (
+                                <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: '12px' }}>
+                                    No ships were recovered in this combat scenario (minimum 150,000 lost resources required).
+                                </p>
+                            )}
+                        </div>
+                        <div className="ogsim-modal-footer">
+                            <button onClick={() => setWreckfieldModalOpen(false)} className="ogsim-btn">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

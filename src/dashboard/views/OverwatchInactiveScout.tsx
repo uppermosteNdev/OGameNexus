@@ -62,7 +62,7 @@ export const OverwatchInactiveScout: React.FC<OverwatchInactiveScoutProps> = ({
       const allSpied = await db.spiedPlanets.toArray();
       const set = new Set<string>();
       allSpied
-        .filter(p => isSameUniverse(p.universe, cleanUni))
+        .filter(p => isSameUniverse(p.universe, cleanUni) && p.userPlayerId === playerId)
         .forEach(p => {
           if (p.coords) {
             set.add(p.coords.trim());
@@ -72,7 +72,7 @@ export const OverwatchInactiveScout: React.FC<OverwatchInactiveScoutProps> = ({
         });
       return set;
     },
-    [cleanUni],
+    [cleanUni, playerId],
     new Set<string>()
   );
 
@@ -80,9 +80,9 @@ export const OverwatchInactiveScout: React.FC<OverwatchInactiveScoutProps> = ({
   const totalRadarTargetsCount = useLiveQuery(
     async () => {
       const allSpied = await db.spiedPlanets.toArray();
-      return allSpied.filter(p => isSameUniverse(p.universe, cleanUni)).length;
+      return allSpied.filter(p => isSameUniverse(p.universe, cleanUni) && p.userPlayerId === playerId).length;
     },
-    [cleanUni],
+    [cleanUni, playerId],
     0
   );
 

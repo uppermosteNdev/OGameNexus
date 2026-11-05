@@ -5,7 +5,7 @@ import {
     Calculator, CheckCircle2, Circle,
     Filter, LayoutList, Rocket, Compass,
     TrendingUp, ArrowDownToLine,
-    Globe, Zap, Box, Dna, Activity,
+    Globe, Zap, Box, Dna, Activity, Radio,
     Clock, DollarSign, ListOrdered, ArrowRight
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -62,6 +62,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
         [AmortizationType.LifeformExpeditionResearches]: true,
         [AmortizationType.PlasmaTechnology]: true,
         [AmortizationType.Astrophysics]: true,
+        [AmortizationType.AnomalyBuildings]: true,
     });
     const [limit, setLimit] = useState<number>(25);
     const [resourceTarget, setResourceTarget] = useState<AmortizationResourceTarget>('all');
@@ -72,13 +73,43 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     const [notification, setNotification] = useState<{ key: string, text: string, type: 'add' | 'remove' } | null>(null);
     const settings = useLiveQuery(() => db.settings.get('conversion_rates'));
     const liveAccount = useLiveQuery(
-        () => account?.playerId ? db.accounts.get(account.playerId) : undefined,
+        () => account?.playerId ? db.accounts.get(account.playerId) : db.accounts.orderBy('lastSeen').reverse().first(),
         [account?.playerId]
     );
 
     const [cachedQueue, setCachedQueue] = useState<EmpireProductionQueueData | null>(null);
     const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
     const [currentTime, setCurrentTime] = useState(Date.now());
+    const [anomaliesSupported, setAnomaliesSupported] = useState<boolean>(true);
+
+    // Detect if server/universe supports Orion / Anomaly update
+    useEffect(() => {
+        const checkAnomalySupport = async () => {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                const playerKey = account?.playerId ? `ognexus_has_anomalies_${account.playerId}` : 'ognexus_has_anomalies';
+                const res = await chrome.storage.local.get([playerKey, 'ognexus_has_anomalies']);
+                const supported = res[playerKey] !== undefined ? res[playerKey] : res['ognexus_has_anomalies'];
+                if (supported !== undefined) {
+                    setAnomaliesSupported(!!supported);
+                    return;
+                }
+            }
+            try {
+                const val = localStorage.getItem('ognexus_has_anomalies');
+                if (val !== null) {
+                    setAnomaliesSupported(val === 'true');
+                    return;
+                }
+            } catch (e) {}
+            if (onlyPlanets.length > 0) {
+                const hasDbAnomalies = onlyPlanets.some((p: any) =>
+                    p.iaScanner !== undefined || (Array.isArray(p.controlCenterBuildings) && p.controlCenterBuildings.length > 0)
+                );
+                setAnomaliesSupported(hasDbAnomalies);
+            }
+        };
+        checkAnomalySupport();
+    }, [account?.playerId, onlyPlanets]);
 
     // 1-second interval to keep live queue countdowns updating
     useEffect(() => {
@@ -239,15 +270,132 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
         };
     }, [planets, account, settings]);
 
+    const anomalyAverages = useLiveQuery(async () => {
+        if (!account?.playerId) return undefined;
+        const now = Date.now();
+        const startTS = now - (60 * 24 * 60 * 60 * 1000); // 60 days in ms
+
+        const missions = await db.anomalyMissions
+            .where('playerId')
+            .equals(account.playerId)
+            .filter(m => (m.createdAt || 0) >= startTS)
+            .toArray();
+
+        const rates = settings || DEFAULT_RATES;
+        const shipCosts: Record<number, any> = {};
+        SHIP_DATA.forEach(s => shipCosts[s.id] = s.metadata?.cost);
+
+        let totalClaimedM = 0;
+        let totalClaimedC = 0;
+        let totalClaimedD = 0;
+        let totalClaimedShipMsu = 0;
+        let totalSpentLithium = 0;
+
+        const dailyYields: Record<number, { metal: number; crystal: number; deuterium: number; shipMsu: number; totalMsu: number }> = {};
+
+        missions.forEach(m => {
+            const waves = m.waves || [];
+            waves.forEach(w => {
+                const ts = w.claimedAt || m.updatedAt || m.createdAt || 0;
+                const dayKey = Math.floor(ts / (24 * 3600 * 1000));
+                if (!dailyYields[dayKey]) {
+                    dailyYields[dayKey] = { metal: 0, crystal: 0, deuterium: 0, shipMsu: 0, totalMsu: 0 };
+                }
+
+                const met = Number(w.metal) || 0;
+                const cry = Number(w.crystal) || 0;
+                const deut = Number(w.deuterium) || 0;
+                let shipMsu = 0;
+                if (w.ships) {
+                    Object.entries(w.ships).forEach(([sidStr, count]) => {
+                        const sid = parseInt(sidStr);
+                        const cost = shipCosts[sid];
+                        const num = Number(count) || 0;
+                        if (cost && num > 0) {
+                            const sCost = {
+                                metal: (Number(cost.metal) || 0) * num,
+                                crystal: (Number(cost.crystal) || 0) * num,
+                                deuterium: (Number(cost.deuterium) || 0) * num
+                            };
+                            shipMsu += calculateMSU(sCost, rates);
+                        }
+                    });
+                }
+
+                const resMsu = calculateMSU({ metal: met, crystal: cry, deuterium: deut }, rates);
+                const waveMsu = resMsu + shipMsu;
+
+                dailyYields[dayKey].metal += met;
+                dailyYields[dayKey].crystal += cry;
+                dailyYields[dayKey].deuterium += deut;
+                dailyYields[dayKey].shipMsu += shipMsu;
+                dailyYields[dayKey].totalMsu += waveMsu;
+
+                totalClaimedM += met;
+                totalClaimedC += cry;
+                totalClaimedD += deut;
+                totalClaimedShipMsu += shipMsu;
+                totalSpentLithium += (Number(w.lithiumCost) || 0);
+            });
+        });
+
+        const allDays = Object.values(dailyYields);
+        const bestDays = [...allDays].sort((a, b) => b.totalMsu - a.totalMsu).slice(0, 7);
+        const activeHours = Math.max(24, (bestDays.length || 1) * 24);
+
+        let sumMetal = 0, sumCrystal = 0, sumDeut = 0, sumShips = 0;
+        bestDays.forEach(d => {
+            sumMetal += d.metal;
+            sumCrystal += d.crystal;
+            sumDeut += d.deuterium;
+            sumShips += d.shipMsu;
+        });
+
+        const totalClaimedMsu = calculateMSU({ metal: totalClaimedM, crystal: totalClaimedC, deuterium: totalClaimedD }, rates) + totalClaimedShipMsu;
+        const msuPerLithium = totalSpentLithium > 0 ? totalClaimedMsu / totalSpentLithium : 1.0;
+
+        const basketTotal = totalClaimedMsu > 0 ? totalClaimedMsu : 1;
+        const rewardMix = {
+            metal: (calculateMSU({ metal: totalClaimedM, crystal: 0, deuterium: 0 }, rates)) / basketTotal,
+            crystal: (calculateMSU({ metal: 0, crystal: totalClaimedC, deuterium: 0 }, rates)) / basketTotal,
+            deuterium: (calculateMSU({ metal: 0, crystal: 0, deuterium: totalClaimedD }, rates)) / basketTotal,
+            ships: totalClaimedShipMsu / basketTotal
+        };
+
+        return {
+            metal: sumMetal / activeHours,
+            crystal: sumCrystal / activeHours,
+            deuterium: sumDeut / activeHours,
+            ships: sumShips / activeHours,
+            msuPerLithium,
+            rewardMix
+        };
+    }, [account?.playerId, settings]);
+
     useEffect(() => {
         const calculate = async () => {
             setLoading(true);
-            const items = await rankAmortizationItems(onlyPlanets, account, filters, settings || DEFAULT_RATES, limit, expoAverages, selectedPlanets, resourceTarget);
+            const effectiveFilters = anomaliesSupported
+                ? filters
+                : { ...filters, [AmortizationType.AnomalyBuildings]: false };
+
+            const effectiveAccount = liveAccount || account;
+            const items = await rankAmortizationItems(
+                onlyPlanets,
+                effectiveAccount,
+                effectiveFilters,
+                settings || DEFAULT_RATES,
+                limit,
+                expoAverages,
+                selectedPlanets,
+                resourceTarget,
+                anomalyAverages
+            );
             setResults(items);
             setLoading(false);
         };
         calculate();
-    }, [selectedPlanets, filters, limit, onlyPlanets, account, settings, expoAverages, resourceTarget]);
+    }, [selectedPlanets, filters, limit, onlyPlanets, account, liveAccount, settings, expoAverages, resourceTarget, anomalyAverages, anomaliesSupported]);
 
     // Update existing todos with new calculated values
     useEffect(() => {
@@ -738,6 +886,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                             { id: AmortizationType.LifeformExpeditionResearches, label: 'LF Techs (Research)', sub: 'Exploration & Discovery', icon: <Compass size={16} /> },
                             { id: AmortizationType.PlasmaTechnology, label: 'Plasma Technology', sub: 'Global Empire Bonus', icon: <Zap size={16} /> },
                             { id: AmortizationType.Astrophysics, label: 'Astrophysics (New Colony)', sub: 'Colony Expansion & Expeditions', icon: <Rocket size={16} /> },
+                            ...(anomaliesSupported ? [{ id: AmortizationType.AnomalyBuildings, label: 'Anomaly Buildings', sub: 'Scanner & Orion Control Centre', icon: <Radio size={16} /> }] : []),
                         ].map(f => (
                             <motion.button
                                 whileHover={{ scale: 1.01, background: 'rgba(255,255,255,0.05)' }}
@@ -997,6 +1146,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                                                     )}
                                                                 </div>
                                                             )}
+
                                                         </div>
 
                                                         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', fontWeight: 800, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -1024,7 +1174,7 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                                                             </span>
                                                         </div>
 
-                                                        {ongoingQueue && (
+                                                        {ongoingQueue && (remainingMs > 0 || ongoingQueue.endTimestamp === 0) && (
                                                             <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center' }}>
                                                                 <div style={{
                                                                     display: 'inline-flex',

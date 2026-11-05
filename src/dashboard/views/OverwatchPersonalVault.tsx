@@ -137,9 +137,9 @@ export const OverwatchPersonalVault: React.FC<OverwatchPersonalVaultProps> = ({
   const localRadarCount = useLiveQuery(
     async () => {
       const all = await db.spiedPlanets.toArray();
-      return all.filter(p => isSameUniverse(p.universe, universeId)).length;
+      return all.filter(p => isSameUniverse(p.universe, universeId) && p.userPlayerId === playerId).length;
     },
-    [universeId]
+    [universeId, playerId]
   ) ?? 0;
 
   const localNotesCount = useLiveQuery(
