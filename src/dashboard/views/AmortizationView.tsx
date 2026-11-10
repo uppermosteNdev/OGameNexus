@@ -85,8 +85,13 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
     // Detect if server/universe supports Orion / Anomaly update
     useEffect(() => {
         const checkAnomalySupport = async () => {
+            const effAcc = liveAccount || account;
+            if (effAcc?.hasAnomalies !== undefined) {
+                setAnomaliesSupported(Boolean(effAcc.hasAnomalies));
+                return;
+            }
             if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-                const playerKey = account?.playerId ? `ognexus_has_anomalies_${account.playerId}` : 'ognexus_has_anomalies';
+                const playerKey = effAcc?.playerId ? `ognexus_has_anomalies_${effAcc.playerId}` : 'ognexus_has_anomalies';
                 const res = await chrome.storage.local.get([playerKey, 'ognexus_has_anomalies']);
                 const supported = res[playerKey] !== undefined ? res[playerKey] : res['ognexus_has_anomalies'];
                 if (supported !== undefined) {
@@ -106,10 +111,12 @@ const AmortizationView: React.FC<AmortizationViewProps> = ({ planets, account })
                     p.iaScanner !== undefined || (Array.isArray(p.controlCenterBuildings) && p.controlCenterBuildings.length > 0)
                 );
                 setAnomaliesSupported(hasDbAnomalies);
+                return;
             }
+            setAnomaliesSupported(false);
         };
         checkAnomalySupport();
-    }, [account?.playerId, onlyPlanets]);
+    }, [account?.playerId, account?.hasAnomalies, liveAccount?.hasAnomalies, onlyPlanets]);
 
     // 1-second interval to keep live queue countdowns updating
     useEffect(() => {

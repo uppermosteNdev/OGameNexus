@@ -40,29 +40,39 @@ export function initOrionNativeTooltipEngine(): void {
       target.removeAttribute('title');
     }
 
-    const rawTitle = target.getAttribute('data-nexus-tooltip-title') ||
-                     target.getAttribute('data-tooltip-title') ||
-                     '';
-    if (!rawTitle) return;
+    let titleText = '';
+    let bodyText = '';
+
+    if (target.hasAttribute('data-nexus-tooltip-body')) {
+      titleText = target.getAttribute('data-nexus-tooltip-title') || '';
+      bodyText = target.getAttribute('data-nexus-tooltip-body') || '';
+    } else {
+      const rawTitle = target.getAttribute('data-nexus-tooltip-title') ||
+                       target.getAttribute('data-tooltip-title') ||
+                       '';
+      if (!rawTitle) return;
+      const parts = rawTitle.split('|').map((s) => s.trim());
+      titleText = parts.length > 1 ? parts[0] : '';
+      bodyText = parts.length > 1 ? parts.slice(1).join(' | ') : parts[0];
+    }
+
+    if (!titleText && !bodyText) return;
 
     // Suppress any stray cluetip or OGLight tooltip containers in the DOM
     document.querySelectorAll('#cluetip, .ogl_tooltip, .ui-tooltip, #ogl_tooltip').forEach((ct) => {
       (ct as HTMLElement).style.setProperty('display', 'none', 'important');
     });
 
-    // Split on pipe " | " matching OGame native format
-    const parts = rawTitle.split('|').map((s) => s.trim());
-    const titleText = parts.length > 1 ? parts[0] : '';
-    const bodyText = parts.length > 1 ? parts.slice(1).join(' | ') : parts[0];
-
     // Remove any existing active tooltip
     activeNexusTooltipEl?.remove();
 
+    const isHtml = target.getAttribute('data-nexus-tooltip-html') === 'true';
+
     const tip = document.createElement('div');
-    tip.className = 'nexus-native-tooltip-popup';
+    tip.className = `nexus-native-tooltip-popup ${isHtml ? 'nexus-tooltip-rich' : ''}`;
     tip.innerHTML = `
       ${titleText ? `<div class="nexus-native-tooltip-title">${escapeHtml(titleText)}</div>` : ''}
-      <div class="nexus-native-tooltip-body">${escapeHtml(bodyText)}</div>
+      <div class="nexus-native-tooltip-body">${isHtml ? bodyText : escapeHtml(bodyText)}</div>
       <div class="nexus-native-tooltip-arrow"></div>
     `;
 
@@ -116,11 +126,23 @@ export function triggerSiteTooltips(): void {
  * Perfectly integrates into OGame's DOM hierarchy without obstructing flight routes or canvases.
  */
 
-import { db, AnomalyMission, AnomalyWaveReceipt } from '../db';
+import {
+  db,
+  AnomalyMission,
+  AnomalyWaveReceipt,
+  ScannedAnomalyRecord,
+  saveScannedAnomalyToDB,
+  exportScannedAnomaliesAsCsv,
+  exportScannedAnomaliesAsJson,
+  cleanRewardString,
+  migrateScannedAnomaliesPureStatus
+} from '../db';
 import { SHIP_DATA } from '../db/staticData';
 import { OFFICIAL_GAME_ENTITIES } from '../i18n/gameData';
 import { openAnomalyWaveSimModal } from './orionWaveSimModal';
 import { isSameUniverse, cleanUniverseId } from '../utils/universe';
+import { getPlanetTechMultiplier } from '../utils/amortizationCalc';
+import { getLfTech } from '../db/lifeformTechData';
 
 // Pre-computed map: normalized ship name -> base resource costs & 3:2:1 MSU
 interface ShipCostInfo {
@@ -513,6 +535,7 @@ export interface CumulativeRewardData {
   totalCrystal: number;
   totalDeut: number;
   totalMsu: number;
+  claimedLithium?: number;
   dbMission?: AnomalyMission;
 }
 
@@ -795,6 +818,7 @@ interface ParsedRewards {
   metal: number;
   crystal: number;
   deut: number;
+  shipsMsu?: number;
   items: string[];
   msu: number;
   summaryText: string;
@@ -928,7 +952,7 @@ function parseMissionRewards(el: HTMLElement): ParsedRewards {
       const rawAmountStr = amtEl?.getAttribute('data-tooltip-title') ||
                            amtEl?.getAttribute('title') ||
                            amtEl?.textContent?.trim();
-      const cleanAmt = rawAmountStr ? rawAmountStr.replace(/&nbsp;/g, ' ').trim() : '';
+      const cleanAmt = cleanRewardString(rawAmountStr);
       const displayLabel = cleanAmt && !baseName.includes(cleanAmt) ? `${baseName} (${cleanAmt})` : baseName;
       if (displayLabel && !items.includes(displayLabel)) {
         items.push(displayLabel);
@@ -947,7 +971,7 @@ function parseMissionRewards(el: HTMLElement): ParsedRewards {
 
   const summaryText = parts.length > 0 ? `+${parts.join(' / ')}` : '';
 
-  return { metal, crystal, deut, items, msu, summaryText };
+  return { metal, crystal, deut, shipsMsu, items, msu, summaryText };
 }
 
 /**
@@ -1257,11 +1281,14 @@ export function extractMissionCoords(el: Element): { galaxy?: number; system?: n
  * Builds the generic fleet dispatch URL for an anomaly destination with pre-filled ships.
  * Compatible with any OGame universe (e.g. s808-en.ogame.gameforge.com).
  * Mission type for anomalies is 14; Target type is 4 (Anomaly body).
+ * Supports single ship (shipId, amount) or multiple ships (Record<number, number>).
+ * Supports optional origin planet/moon ID (cp parameter).
  */
 export function buildAnomalyFleetDispatchUrl(
   coords: { galaxy?: number; system?: number; position?: number },
-  shipId: number,
-  amount: number
+  shipIdOrShips: number | Record<number, number>,
+  amount?: number,
+  planetId?: string
 ): string {
   const host = window.location.host;
   const params = new URLSearchParams();
@@ -1272,19 +1299,60 @@ export function buildAnomalyFleetDispatchUrl(
   if (coords.position) params.set('position', String(coords.position));
   params.set('type', '4');
   params.set('mission', '14');
-  params.set(`am${shipId}`, String(amount));
+  if (planetId) params.set('cp', String(planetId));
+
+  if (typeof shipIdOrShips === 'number') {
+    if (amount !== undefined && amount > 0) {
+      params.set(`am${shipIdOrShips}`, String(amount));
+    }
+  } else if (shipIdOrShips && typeof shipIdOrShips === 'object') {
+    for (const [sId, amt] of Object.entries(shipIdOrShips)) {
+      const parsedAmt = typeof amt === 'number' ? amt : parseInt(String(amt), 10);
+      if (!isNaN(parsedAmt) && parsedAmt > 0) {
+        params.set(`am${sId}`, String(parsedAmt));
+      }
+    }
+  }
+
   return `https://${host}/game/index.php?${params.toString()}`;
 }
 
 /**
  * Dispatches the player to the fleet dispatch screen with pre-filled ships and coordinates.
  * Persists payload in sessionStorage as fallback and navigates to the generic URL.
+ * Supports single ship dispatch (coords, 203, neededLC) or multi-ship dispatch (coords, ships, planetId).
  */
 export function dispatchFleetToAnomaly(
   coords: { galaxy?: number; system?: number; position?: number },
-  shipId: number,
-  amount: number
+  shipIdOrShips: number | Record<number, number>,
+  amountOrPlanetId?: number | string,
+  planetId?: string
 ): void {
+  const shipsMap: Record<number, number> = {};
+  let targetPlanetId: string | undefined = planetId;
+
+  if (typeof shipIdOrShips === 'number') {
+    if (typeof amountOrPlanetId === 'number' && amountOrPlanetId > 0) {
+      shipsMap[shipIdOrShips] = amountOrPlanetId;
+    }
+  } else if (shipIdOrShips && typeof shipIdOrShips === 'object') {
+    for (const [idStr, val] of Object.entries(shipIdOrShips)) {
+      const amt = Number(val);
+      const sid = parseInt(idStr, 10);
+      if (!isNaN(sid) && !isNaN(amt) && amt > 0) {
+        shipsMap[sid] = amt;
+      }
+    }
+    if (typeof amountOrPlanetId === 'string' && !targetPlanetId) {
+      targetPlanetId = amountOrPlanetId;
+    }
+  }
+
+  const primaryShipId = typeof shipIdOrShips === 'number' ? shipIdOrShips : (Object.keys(shipsMap).map(Number)[0] || 0);
+  const primaryAmount = typeof shipIdOrShips === 'number' && typeof amountOrPlanetId === 'number'
+    ? amountOrPlanetId
+    : (Object.values(shipsMap)[0] || 0);
+
   try {
     sessionStorage.setItem(
       'ognexus_orion_auto_fleet',
@@ -1294,8 +1362,10 @@ export function dispatchFleetToAnomaly(
         position: coords.position,
         type: 4,
         mission: 14,
-        shipId,
-        amount,
+        planetId: targetPlanetId,
+        ships: shipsMap,
+        shipId: primaryShipId,
+        amount: primaryAmount,
         timestamp: Date.now(),
       })
     );
@@ -1303,8 +1373,19 @@ export function dispatchFleetToAnomaly(
     console.debug('[OGameNexus Orion] Failed to set auto fleet sessionStorage:', err);
   }
 
-  const targetUrl = buildAnomalyFleetDispatchUrl(coords, shipId, amount);
+  const targetUrl = buildAnomalyFleetDispatchUrl(coords, shipsMap, undefined, targetPlanetId);
   window.location.href = targetUrl;
+}
+
+/**
+ * Convenience helper to dispatch multiple ships to an anomaly from a specific origin planet/moon.
+ */
+export function dispatchMultiFleetToAnomaly(
+  coords: { galaxy?: number; system?: number; position?: number },
+  ships: Record<number, number>,
+  planetId?: string
+): void {
+  dispatchFleetToAnomaly(coords, ships, planetId);
 }
 
 /**
@@ -1668,20 +1749,58 @@ async function showClaimedRewardsTooltip(e: MouseEvent, el: HTMLElement, mission
     (completedWavesCount >= totalWaves && totalWaves >= 1 && !hasActiveWaveElement)) && !hasCollectAction;
 
   let waveLabel: string;
+  let wavesDoneCount = 0;
   if (isTrulyCompleted) {
     waveLabel = 'All Waves Completed';
+    wavesDoneCount = totalWaves;
   } else if (totalWaves > 1) {
-    const wavesDone = Math.min(totalWaves - 1, completedWavesCount);
-    waveLabel = `Wave ${wavesDone} / ${totalWaves}`;
+    wavesDoneCount = Math.min(totalWaves - 1, completedWavesCount);
+    waveLabel = `Wave ${wavesDoneCount} / ${totalWaves}`;
   } else {
+    wavesDoneCount = completedWavesCount > 0 ? 1 : 0;
     waveLabel = completedWavesCount > 0 ? 'Wave 1 / 1' : 'Wave 0 / 1';
   }
+
+  // Calculate claimed Lithium fuel spent across confirmed waves
+  const collectSub = el.querySelector('.collectRewards .btnSub, .actionCenter .btnSub, [class*="collect"] .btnSub');
+  const activeCollectCost = parseOgameAmount(collectSub?.textContent);
+
+  const canonicalWaveCost =
+    confirmedWaves.find((w) => (w.lithiumCost || 0) >= 1000)?.lithiumCost ||
+    (cumul.dbMission?.waves || []).find((w) => (w.lithiumCost || 0) >= 1000)?.lithiumCost ||
+    (activeCollectCost >= 1000 ? activeCollectCost : 0) ||
+    (cumul.dbMission?.completionLithiumCost && totalWaves > 0 ? Math.round(cumul.dbMission.completionLithiumCost / totalWaves) : 0) ||
+    (cumul.dbMission?.totalLithiumBudget && totalWaves > 0 ? Math.round(cumul.dbMission.totalLithiumBudget / totalWaves) : 0) ||
+    (mission.lithiumCost > 0 && totalWaves > 0 ? (totalWaves > 1 && mission.lithiumCost > 10000000 ? Math.round(mission.lithiumCost / totalWaves) : mission.lithiumCost) : 0);
+
+  let claimedLithium = cumul.claimedLithium || 0;
+  if (claimedLithium === 0 && confirmedWaves.length > 0) {
+    claimedLithium = confirmedWaves.reduce((sum, w) => {
+      const c = (w.lithiumCost && w.lithiumCost >= 1000) ? w.lithiumCost : canonicalWaveCost;
+      return sum + c;
+    }, 0);
+  }
+
+  if (cumul.dbMission?.totalClaimedLithium && cumul.dbMission.totalClaimedLithium > claimedLithium) {
+    claimedLithium = cumul.dbMission.totalClaimedLithium;
+  }
+
+  if (claimedLithium === 0 && wavesDoneCount > 0 && canonicalWaveCost > 0) {
+    claimedLithium = wavesDoneCount * canonicalWaveCost;
+  }
+
+  // Compute claimed yield ratio: (MSU Claimed / Lithium)
+  let claimedYield = (claimedLithium > 0 && totalMsu > 0) ? (totalMsu / claimedLithium) : 0;
+  if (claimedYield === 0 && totalMsu > 0 && mission.efficiencyRatio > 0) {
+    claimedYield = mission.efficiencyRatio;
+  }
+
+  const yieldBadgeText = claimedYield > 0 ? `${claimedYield.toFixed(1)} MSU / Lithium` : '0.0 MSU / Lithium';
+  const yieldTooltipTitle = `Claimed Yield | ${totalMsu > 0 ? `+${formatHuman(totalMsu)} MSU Claimed` : '0 MSU'}${claimedLithium > 0 ? ` vs ${formatHuman(claimedLithium)} Lithium spent` : ''} (${claimedYield > 0 ? `${claimedYield.toFixed(1)} MSU per Lithium` : '0.0'})`;
 
   // Pending collection notice
   let pendingNoticeHtml = '';
   if (hasCollectAction) {
-    const collectSub = el.querySelector('.collectRewards .btnSub, .actionCenter .btnSub, [class*="collect"] .btnSub');
-    const collectCost = parseOgameAmount(collectSub?.textContent);
     const pendingWaveNum = currentWave > 1 ? currentWave - 1 : currentWave;
     pendingNoticeHtml = `
       <div style="margin-top: 8px; padding: 5px 8px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.28); border-radius: 4px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
@@ -1689,7 +1808,7 @@ async function showClaimedRewardsTooltip(e: MouseEvent, el: HTMLElement, mission
           <span style="font-size: 11px;">⏳</span>
           <span style="font-size: 10px; color: #fbbf24; font-weight: 700;">Wave ${pendingWaveNum} Awaiting Collection</span>
         </div>
-        ${collectCost > 0 ? `<span style="font-size: 9.5px; color: #cbd5e1; font-family: monospace; font-weight: 600;">${formatHuman(collectCost)} Lithium</span>` : ''}
+        ${activeCollectCost > 0 ? `<span style="font-size: 9.5px; color: #cbd5e1; font-family: monospace; font-weight: 600;">${formatHuman(activeCollectCost)} Lithium</span>` : ''}
       </div>
     `;
   }
@@ -1704,7 +1823,7 @@ async function showClaimedRewardsTooltip(e: MouseEvent, el: HTMLElement, mission
         <span style="font-weight: 700; color: #e2e8f0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Claimed Rewards</span>
         <span style="font-size: 10px; color: #94a3b8; font-weight: 600;">(${waveLabel})</span>
       </div>
-      <span style="font-size: 10px; color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.15); padding: 1px 6px; border-radius: 3px; border: 1px solid rgba(16, 185, 129, 0.35);">${totalMsu > 0 ? `+${formatHuman(totalMsu)} MSU` : '0 MSU'}</span>
+      <span class="nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(yieldTooltipTitle)}" title="${escapeHtml(yieldTooltipTitle)}" style="font-size: 10px; color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.15); padding: 1px 6px; border-radius: 3px; border: 1px solid rgba(16, 185, 129, 0.35); white-space: nowrap;">${yieldBadgeText}</span>
     </div>
 
     <div class="nexus-mission-rewards-summary" style="margin: 0 !important; background: transparent !important; border: none !important; padding: 0 !important;">
@@ -1798,6 +1917,7 @@ async function extractClaimedRewardData(el: HTMLElement, mission: OrionMissionDa
   let rawDeut = 0;
   let artifacts = 0;
   let lifeformXp = 0;
+  let claimedLithium = 0;
   const shipsMap: Record<string, number> = {};
 
   // 1. Query Dexie DB for authoritative historical receipts across all waves
@@ -1825,6 +1945,7 @@ async function extractClaimedRewardData(el: HTMLElement, mission: OrionMissionDa
       rawDeut += (w.deuterium || 0);
       artifacts += (w.artifacts || 0);
       lifeformXp += (w.lifeformXp || 0);
+      claimedLithium += (w.lithiumCost || 0);
       if (w.ships && typeof w.ships === 'object') {
         for (const [sName, sCount] of Object.entries(w.ships)) {
           if (typeof sCount === 'number' && sCount > 0) {
@@ -1926,6 +2047,10 @@ async function extractClaimedRewardData(el: HTMLElement, mission: OrionMissionDa
     totalMsu = dbMission.totalClaimedMsu;
   }
 
+  if (dbMission?.totalClaimedLithium && dbMission.totalClaimedLithium > claimedLithium) {
+    claimedLithium = dbMission.totalClaimedLithium;
+  }
+
   return {
     rawMetal,
     rawCrystal,
@@ -1941,6 +2066,7 @@ async function extractClaimedRewardData(el: HTMLElement, mission: OrionMissionDa
     totalCrystal,
     totalDeut,
     totalMsu,
+    claimedLithium,
     dbMission
   };
 }
@@ -3527,7 +3653,7 @@ export async function initOrionMissionEnhancer(): Promise<void> {
   }
 }
 
-export type ScannerRankingMode = 'recommended' | 'yield' | 'speed' | 'lithium';
+export type ScannerRankingMode = 'recommended' | 'yield' | 'speed';
 
 function escapeHtml(str: string): string {
   return str
@@ -3536,6 +3662,401 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+export interface OrionFleetDeduction {
+  maxShips: number;
+  minShips: number;
+  shipBudgetMsu: number;
+  avgMsuPerShip: number;
+  fleetTier: string;
+  eligibleHulls: string;
+  upperBounds: string;
+}
+
+export interface TacticalTooltipStat {
+  label: string;
+  value: string;
+  colorClass?: string;
+}
+
+export interface TacticalTooltipHotbar {
+  filled: number; // 0.0 to 5.0 (supports fractional bar fills)
+  scoreText: string;
+  colorClass?: 'emerald' | 'amber' | 'sky' | 'purple' | 'coral' | 'teal' | 'slate' | 'common' | 'rare' | 'epic' | 'legendary';
+}
+
+export interface TacticalTooltipVerdict {
+  text: string;
+  type?: 'success' | 'warning' | 'info' | 'purple' | 'coral';
+  icon?: string;
+}
+
+export interface TacticalTooltipConfig {
+  pillText: string;
+  pillClass?: 'emerald' | 'amber' | 'sky' | 'purple' | 'teal' | 'coral' | 'slate' | 'pink';
+  hotbar?: TacticalTooltipHotbar;
+  verdict?: TacticalTooltipVerdict;
+  stats?: TacticalTooltipStat[];
+  formula?: string;
+  callout?: { text: string; type: 'success' | 'warning' | 'info' };
+  description?: string;
+}
+
+export function buildTacticalTooltipHtml(config: TacticalTooltipConfig): string {
+  const pillCls = config.pillClass || 'sky';
+
+  // 1. Quality Hotbar (Supports partial/fractional bar fills)
+  let hotbarHtml = '';
+  if (config.hotbar) {
+    const filledVal = Math.max(0, Math.min(5, config.hotbar.filled));
+    const segColor = config.hotbar.colorClass || pillCls;
+    const segs = [1, 2, 3, 4, 5].map(i => {
+      let pct = 0;
+      if (filledVal >= i) {
+        pct = 100;
+      } else if (filledVal <= i - 1) {
+        pct = 0;
+      } else {
+        pct = Math.round((filledVal - (i - 1)) * 100);
+      }
+
+      if (pct <= 0) {
+        return `<span class="nexus-hotbar-seg"></span>`;
+      }
+      return `<span class="nexus-hotbar-seg ${pct === 100 ? 'active ' + segColor : ''}"><span class="nexus-hotbar-seg-fill ${segColor}" style="width: ${pct}%;"></span></span>`;
+    }).join('');
+
+    hotbarHtml = `
+      <div class="nexus-tip-hotbar">
+        <div class="nexus-hotbar-meter">${segs}</div>
+        <span class="nexus-hotbar-score ${segColor}">${escapeHtml(config.hotbar.scoreText)}</span>
+      </div>
+    `;
+  }
+
+  // 2. Verdict / Directive
+  let verdictHtml = '';
+  if (config.verdict) {
+    const vType = config.verdict.type || 'info';
+    const vIcon = config.verdict.icon || (vType === 'coral' ? '⚔️' : vType === 'success' ? '⚡' : vType === 'warning' ? '⚠️' : vType === 'purple' ? '🧬' : '🛡️');
+    verdictHtml = `<div class="nexus-tip-verdict ${vType}"><span class="nexus-verdict-icon">${vIcon}</span><span class="nexus-verdict-text">${escapeHtml(config.verdict.text)}</span></div>`;
+  } else if (config.callout) {
+    verdictHtml = `<div class="nexus-tip-verdict ${config.callout.type}"><span class="nexus-verdict-text">${escapeHtml(config.callout.text)}</span></div>`;
+  }
+
+  // 3. Compact 2-3 Stat Strip
+  let statsHtml = '';
+  if (config.stats && config.stats.length > 0) {
+    statsHtml = `<div class="nexus-tip-stat-strip">${config.stats.map(s => `
+      <div class="nexus-tip-stat-chip">
+        <span class="nexus-tip-stat-k">${escapeHtml(s.label)}</span>
+        <span class="nexus-tip-stat-v ${s.colorClass || ''}">${escapeHtml(s.value)}</span>
+      </div>
+    `).join('')}</div>`;
+  }
+
+  const formulaHtml = config.formula
+    ? `<div class="nexus-tip-formula-box"><span class="nexus-tip-formula-label">Formula</span><code class="nexus-tip-formula">${escapeHtml(config.formula)}</code></div>`
+    : '';
+
+  const descHtml = config.description
+    ? `<div class="nexus-tip-footnote">${escapeHtml(config.description)}</div>`
+    : '';
+
+  return `<div class="nexus-tip-card">` +
+    `<div class="nexus-tip-topbar"><span class="nexus-tip-pill ${pillCls}">${escapeHtml(config.pillText)}</span>${hotbarHtml}</div>` +
+    verdictHtml +
+    statsHtml +
+    formulaHtml +
+    descHtml +
+    `</div>`;
+}
+
+export interface PlayerClassIntel {
+  playerClass: number; // 1: Collector, 2: Warrior (General), 3: Discoverer
+  className: string;
+  isGeneral: boolean;
+  t18BonusPct: number; // Mechan General Enhancement bonus (e.g. 50%)
+  pveMultiplier: number;
+  pvpMultiplier: number;
+  pveBoostPct: number;
+  pvpBoostPct: number;
+}
+
+function getInitialPlayerClassIntel(): PlayerClassIntel {
+  try {
+    const raw = localStorage.getItem('ognexus_player_class_intel');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.t18BonusPct === 'number') {
+        // Sanity guard: Real Mechan T18 tech bonus is 0.2% per level, rarely exceeding 10-15%.
+        // Discard any inflated/stale cache values from previous sandbox runs (>20%).
+        if (parsed.t18BonusPct > 20) {
+          parsed.t18BonusPct = 0;
+          parsed.pvpMultiplier = 4.0;
+          parsed.pveMultiplier = 1.5;
+          parsed.pvpBoostPct = 100;
+          parsed.pveBoostPct = 50;
+        }
+        return parsed;
+      }
+    }
+  } catch {}
+  return {
+    playerClass: 2, // Assume General by default in Orion combat context
+    className: 'General',
+    isGeneral: true,
+    t18BonusPct: 0,
+    pveMultiplier: 1.5,
+    pvpMultiplier: 4.0,
+    pveBoostPct: 50,
+    pvpBoostPct: 100,
+  };
+}
+
+let cachedPlayerClassIntel: PlayerClassIntel = getInitialPlayerClassIntel();
+
+if (typeof window !== 'undefined') {
+  syncPlayerClassAndT18Bonus().catch(() => {});
+}
+
+export function detectPlayerClassFromDom(): number {
+  try {
+    const classContainer = document.querySelector('#characterclass, .characterclass');
+    if (classContainer) {
+      const sprite = classContainer.querySelector('.sprite');
+      if (sprite) {
+        if (sprite.classList.contains('warrior') || sprite.classList.contains('general')) return 2;
+        if (sprite.classList.contains('miner') || sprite.classList.contains('collector')) return 1;
+        if (sprite.classList.contains('explorer') || sprite.classList.contains('discoverer')) return 3;
+      }
+      if (classContainer.querySelector('.warrior, .general') || classContainer.classList.contains('warrior') || classContainer.classList.contains('general')) {
+        return 2;
+      }
+      if (classContainer.querySelector('.miner, .collector') || classContainer.classList.contains('miner') || classContainer.classList.contains('collector')) {
+        return 1;
+      }
+      if (classContainer.querySelector('.explorer, .discoverer') || classContainer.classList.contains('explorer') || classContainer.classList.contains('discoverer')) {
+        return 3;
+      }
+    }
+  } catch {
+    // Ignore DOM query errors
+  }
+  return 2; // Default to General
+}
+
+export async function syncPlayerClassAndT18Bonus(): Promise<PlayerClassIntel> {
+  const domClass = detectPlayerClassFromDom();
+  let playerClass = domClass;
+  let t18BonusPct = cachedPlayerClassIntel.t18BonusPct || 0;
+  if (t18BonusPct > 20) t18BonusPct = 0;
+
+  try {
+    const metaPlayerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+
+    // 1. First, ask the background worker (which holds the extension's authoritative Dexie database)
+    let syncedFromBackground = false;
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.sendMessage) {
+      try {
+        const bgRes = await new Promise<any>((resolve) => {
+          chrome.runtime.sendMessage({ type: "GET_PLAYER_CLASS_INTEL", playerId: metaPlayerId }, (res) => {
+            if (chrome.runtime.lastError || !res) {
+              resolve(null);
+            } else {
+              resolve(res);
+            }
+          });
+        });
+
+        if (bgRes && bgRes.success) {
+          if (typeof bgRes.playerClass === 'number') {
+            playerClass = bgRes.playerClass;
+          }
+          if (typeof bgRes.t18BonusPct === 'number') {
+            t18BonusPct = bgRes.t18BonusPct;
+          }
+          syncedFromBackground = true;
+        }
+      } catch (err) {
+        console.debug('[Orion] Background class intel query failed, attempting local fallback:', err);
+      }
+    }
+
+    // 2. Fallback to local IndexedDB if background query did not respond
+    if (!syncedFromBackground) {
+      let account = null;
+      if (metaPlayerId) {
+        account = (await db.accounts.get(String(metaPlayerId))) || (await db.accounts.get(Number(metaPlayerId) as any));
+      }
+      if (!account) {
+        account = (await db.accounts.orderBy('lastSeen').reverse().first()) || (await db.accounts.toCollection().last());
+      }
+      if (!account) {
+        const allAccs = await db.accounts.toArray();
+        account = allAccs[0] || null;
+      }
+      if (account && typeof account.playerClass === 'number') {
+        playerClass = account.playerClass;
+      }
+
+      const allPlanets = await db.planets.toArray();
+      const targetPlayerId = String(account?.playerId || metaPlayerId || '').trim();
+      let planets: any[] = [];
+      if (targetPlayerId) {
+        planets = allPlanets.filter((p) => String(p.playerId).trim() === targetPlayerId && p.type !== 'moon');
+      }
+      if (!planets || planets.length === 0) {
+        planets = allPlanets.filter(p => p.type !== 'moon');
+      }
+
+      if (planets && planets.length > 0) {
+        let calculatedBonus = 0;
+        for (const p of planets) {
+          const techMult = getPlanetTechMultiplier(p, account);
+          const setups = p.lifeformSetup;
+          if (Array.isArray(setups)) {
+            for (const s of setups) {
+              if (!s) continue;
+              const rawId = Number(s?.selectedTechId ?? s?.techId ?? s?.id);
+              const lvl = Number(s?.level ?? 0);
+              if (lvl <= 0) continue;
+
+              const tech = getLfTech(rawId);
+              if (tech && (tech.id === 71 || tech.gkId === 13218)) {
+                calculatedBonus += 0.2 * lvl * techMult;
+              }
+            }
+          }
+        }
+        if (calculatedBonus > 0 || !syncedFromBackground) {
+          t18BonusPct = Math.round(calculatedBonus * 100) / 100;
+        }
+      }
+    }
+  } catch (err) {
+    console.debug('[Orion] Failed to sync player class & T18 tech bonus:', err);
+  }
+
+  const isGeneral = playerClass === 2;
+  const t18Factor = 1 + (t18BonusPct / 100);
+
+  // Discoverer / Collector: PvE = 1.0x, PvP = 2.0x (0% combat boost)
+  // General: PvE = 1.0 * (1 + 0.50 * t18Factor), PvP = 2.0 * (1 + 1.00 * t18Factor)
+  const pveBoostPct = isGeneral ? 50 * t18Factor : 0;
+  const pvpBoostPct = isGeneral ? 100 * t18Factor : 0;
+  const pveMultiplier = isGeneral ? 1.0 * (1 + pveBoostPct / 100) : 1.0;
+  const pvpMultiplier = isGeneral ? 2.0 * (1 + pvpBoostPct / 100) : 2.0;
+
+  const className = playerClass === 1 ? 'Collector' : playerClass === 3 ? 'Discoverer' : 'General';
+
+  const prevBonus = cachedPlayerClassIntel.t18BonusPct;
+  const prevClass = cachedPlayerClassIntel.playerClass;
+
+  cachedPlayerClassIntel = {
+    playerClass,
+    className,
+    isGeneral,
+    t18BonusPct,
+    pveMultiplier,
+    pvpMultiplier,
+    pveBoostPct,
+    pvpBoostPct,
+  };
+
+  try {
+    localStorage.setItem('ognexus_player_class_intel', JSON.stringify(cachedPlayerClassIntel));
+  } catch {}
+
+  // If the intel changed (e.g. T18 bonus resolved from DB or class changed), re-render scanner cards with updated tooltips!
+  if (prevBonus !== t18BonusPct || prevClass !== playerClass) {
+    const scannerContainer = document.querySelector<HTMLElement>(
+      '#scanner, #scannerResult, #orionscanner, .scannerHolder, #scannerResultHolder, #content'
+    );
+    if (scannerContainer) {
+      initOrionScannerEnhancer(true, false);
+    }
+  }
+
+  return cachedPlayerClassIntel;
+}
+
+export const ORION_MISSION_MULTIPLIERS: Record<string, { multiplier: number; tier: 'S+' | 'S' | 'A' | 'B' | 'U'; isDelivery: boolean }> = {
+  'Pirate Hideout': { multiplier: 20.0, tier: 'S', isDelivery: false },
+  'Pirate Ambush': { multiplier: 20.0, tier: 'S', isDelivery: false },
+  'Alien Encounter': { multiplier: 18.0, tier: 'S', isDelivery: false },
+  'Small Pirate Encounter': { multiplier: 18.0, tier: 'S', isDelivery: false },
+  'Lost Deliveries': { multiplier: 14.0, tier: 'S', isDelivery: true },
+  'Medium Pirate Encounter': { multiplier: 14.0, tier: 'S', isDelivery: false },
+  'Delivery: Metal': { multiplier: 13.0, tier: 'A', isDelivery: true },
+  'Delivery: Crystal': { multiplier: 13.0, tier: 'A', isDelivery: true },
+  'Delivery: Deuterium': { multiplier: 13.0, tier: 'A', isDelivery: true },
+  'Small Resource Delivery': { multiplier: 13.0, tier: 'A', isDelivery: true },
+  'Mysterious Cloud Nebula': { multiplier: 13.0, tier: 'A', isDelivery: true },
+  'Medium Alien Encounter': { multiplier: 13.0, tier: 'A', isDelivery: false },
+  'Resource: Metal': { multiplier: 13.0, tier: 'A', isDelivery: false },
+  'Resource: Crystal': { multiplier: 13.0, tier: 'A', isDelivery: false },
+  'Resource: Deuterium': { multiplier: 13.0, tier: 'A', isDelivery: false },
+  'Chaos Mission': { multiplier: 32.0, tier: 'S+', isDelivery: false },
+  'Small Alien Encounter': { multiplier: 12.0, tier: 'A', isDelivery: false },
+  'Valuable Delivery': { multiplier: 11.0, tier: 'A', isDelivery: true },
+  'Defend': { multiplier: 9.0, tier: 'B', isDelivery: false },
+  'Rescue': { multiplier: 10.0, tier: 'B', isDelivery: false },
+  'Lost Wreckage': { multiplier: 10.0, tier: 'B', isDelivery: false },
+  'Lifeform Rescue': { multiplier: 9.75, tier: 'U', isDelivery: false },
+  'Lifeform Discovery': { multiplier: 9.75, tier: 'U', isDelivery: false },
+  'Lifeform Encounter': { multiplier: 9.75, tier: 'U', isDelivery: false },
+};
+
+export function deduceFleetFromBudget(shipBudgetMsu: number, shipsText: string): OrionFleetDeduction | null {
+  if (!shipsText || shipBudgetMsu <= 0) return null;
+
+  const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+  if (parts.length === 0) return null;
+  const minShips = parts[0];
+  const maxShips = parts[parts.length - 1];
+  if (maxShips <= 0) return null;
+
+  const avgMsu = shipBudgetMsu / maxShips;
+  const baseLf = 4500;
+  const excess = Math.max(0, shipBudgetMsu - (baseLf * maxShips));
+
+  const maxBattleships = Math.floor(excess / (67500 - baseLf));
+  const maxCruisers = Math.floor(excess / (36500 - baseLf));
+  const maxHeavyFighters = Math.floor(excess / (12000 - baseLf));
+
+  let fleetTier = 'Light Escort Fleet';
+  let eligibleHulls = 'Light Fighters & Small Cargos';
+  let upperBounds = 'Pure Light Screen';
+
+  if (avgMsu < 7500) {
+    fleetTier = 'Light Escort Fleet';
+    eligibleHulls = 'Light Fighters & Small Cargos (95%+)';
+    upperBounds = maxCruisers > 0 ? `Max ${maxCruisers} Cruisers or ${maxHeavyFighters} HF` : 'Pure Light Screen';
+  } else if (avgMsu < 24000) {
+    fleetTier = 'Medium Strike Fleet';
+    eligibleHulls = 'Heavy Fighters, Large Cargos, Cruisers';
+    upperBounds = `Max ${maxBattleships} Battleships, ${maxCruisers} Cruisers`;
+  } else if (avgMsu < 55000) {
+    fleetTier = 'Heavy Cruiser Fleet';
+    eligibleHulls = 'Cruisers, Battleships with Fighter screen';
+    upperBounds = `Max ${maxBattleships} Battleships, ${maxCruisers} Cruisers`;
+  } else {
+    fleetTier = 'Capital Warfleet';
+    eligibleHulls = 'Battleships, Battlecruisers, Destroyers, Reapers';
+    upperBounds = `Max ${maxBattleships} Battleships, ${maxCruisers} Cruisers`;
+  }
+
+  return {
+    maxShips,
+    minShips,
+    shipBudgetMsu,
+    avgMsuPerShip: avgMsu,
+    fleetTier,
+    eligibleHulls,
+    upperBounds,
+  };
 }
 
 export interface ScannedAnomalyData {
@@ -3562,6 +4083,15 @@ export interface ScannedAnomalyData {
   hourlyLithium: number;
   recommendedScore: number;
   rank: number;
+  // Reverse-engineered tactical intelligence
+  rollStatus: 'high_roll' | 'low_roll' | 'guaranteed' | 'utility';
+  rollTierLabel: string;
+  rollAuditSummary: string;
+  archetypeTier: 'S+' | 'S' | 'A' | 'B' | 'U';
+  archetypeMultiplier: number;
+  waveBonusPct: number;
+  shipBudgetMsu: number;
+  fleetDeduction: OrionFleetDeduction | null;
 }
 
 /**
@@ -3590,9 +4120,10 @@ function parseScannedAnomalyCard(card: HTMLElement): ScannedAnomalyData | null {
 
   const stars = card.querySelectorAll('.scannerResultStars img').length;
 
-  const isPvp = card.querySelector('.scannerResultTypeIcon.pvp') !== null ||
-                card.textContent?.includes('PvP');
-  const environment = isPvp ? 'pvp' : 'pve';
+  const titleEnvBadge = card.querySelector('.scannerResultTitle .scannerResultTypeIcon, .scannerResultTypeIcon:not(.titleTypeIcon)');
+  const envText = titleEnvBadge?.textContent?.trim().toLowerCase() || '';
+  const isPvp = envText === 'pvp' || (!!titleEnvBadge?.classList.contains('pvp') && !titleEnvBadge?.classList.contains('pve'));
+  const environment: 'pvp' | 'pve' = isPvp ? 'pvp' : 'pve';
 
   const row = card.querySelector('.scannerResultTable .scannerResultRow:not(.header)');
   if (!row) return null;
@@ -3626,29 +4157,163 @@ function parseScannedAnomalyCard(card: HTMLElement): ScannedAnomalyData | null {
   const lithiumCost = parseOgameAmount(costTooltip);
 
   const rewards = parseMissionRewards(card);
-  const msu = rewards.msu;
+
+  // 1. Reverse-Engineered Wave Scaling
+  const waveFactor = (waves + 50) / 51;
+  const waveBonusPct = Math.round((waveFactor - 1) * 1000) / 10;
+
+  // 2. Mission Archetype & Multipliers
+  const missionMeta = ORION_MISSION_MULTIPLIERS[name];
+  const archetypeMultiplier = missionMeta?.multiplier || (isDelivery ? 13.0 : 12.0);
+  let archetypeTier: 'S+' | 'S' | 'A' | 'B' | 'U';
+  if (missionMeta) {
+    archetypeTier = missionMeta.tier;
+  } else if (name.toLowerCase().includes('lifeform') || name.toLowerCase().includes('artifact')) {
+    archetypeTier = 'U';
+  } else if (name === 'Chaos Mission' || archetypeMultiplier >= 30.0) {
+    archetypeTier = 'S+';
+  } else if (archetypeMultiplier >= 14.0) {
+    archetypeTier = 'S';
+  } else if (archetypeMultiplier >= 11.0) {
+    archetypeTier = 'A';
+  } else {
+    archetypeTier = 'B';
+  }
+  const isDeliveryMission = missionMeta?.isDelivery ?? isDelivery;
+
+  // 3. Environment Multiplier (General class: PvP 4.0x, PvE 1.5x, augmented by Mechan T18)
+  const intel = cachedPlayerClassIntel;
+  const envMult = environment === 'pvp' ? (intel?.pvpMultiplier || 4.0) : (intel?.pveMultiplier || 1.5);
+
+  // 4. Theoretical High-Tier Budget (Raw MSU)
+  const highTierBaseBudget = lithiumCost * 0.306 * waveFactor * archetypeMultiplier * envMult;
+  const lowTierBaseBudget = highTierBaseBudget * 0.375;
+
+  // 5. Parse displayed extras for ships
+  const extras = parseScannedExtras(card);
+  const rawShipText = extras.shipAmount ||
+    (rewards.items || []).filter((it) => /ship|vessel|fighter|cruiser|battleship|battlecruiser|bomber|destroyer|deathstar|reaper|pathfinder/i.test(it)).join('; ') ||
+    (extras.hasShips ? 'Random Ships' : '');
+  const shipsText = cleanRewardString(rawShipText);
+
+  // 6. Determine Roll Tier Status (Strictly: Guaranteed, High Roll, Low Roll, or Utility)
+  let rollStatus: 'high_roll' | 'low_roll' | 'guaranteed' | 'utility' = 'high_roll';
+  let rollTierLabel = 'High Roll';
+  let rollAuditSummary = '100% High Tier Jackpot';
+  let shipBudgetMsu = 0;
+
+  const rawMsuDisplayed = rewards.msu > 0 ? rewards.msu / 1.43 : 0;
+  const hasLifeformRewards = extras.hasArtifacts || extras.hasExperience || name.toLowerCase().includes('lifeform');
+
+  if (hasLifeformRewards) {
+    // Artifact / Lifeform XP missions: Display "Utility" instead of High Roll / Low Roll / Guaranteed
+    rollStatus = 'utility';
+    rollTierLabel = 'Utility';
+    rollAuditSummary = 'Lifeform Tech & Species Progression (Artifacts / XP)';
+    shipBudgetMsu = 0; // Omit phantom ship MSU on Artifact/XP runs
+  } else if (isDeliveryMission) {
+    rollStatus = 'guaranteed';
+    rollTierLabel = 'Guaranteed';
+    rollAuditSummary = 'Guaranteed 100% (Zero Risk, Zero Combat Loss)';
+  } else if (shipsText && rewards.msu === 0) {
+    // Pure fleet drop (Rescue, Lost Wreckage without resources)
+    const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+    const maxShips = parts.length > 0 ? parts[parts.length - 1] : 0;
+    const scale = level * stars * waves;
+    // High roll if maxShips is proportional to High Tier (> 1.0x scale or maxShips * 4500 > lowTierBaseBudget)
+    const isHigh = maxShips * 4500 > lowTierBaseBudget * 1.05 || maxShips > scale * 1.1;
+    if (isHigh) {
+      rollStatus = 'high_roll';
+      rollTierLabel = 'High Roll';
+      rollAuditSummary = '100% High Tier Fleet Jackpot';
+      shipBudgetMsu = Math.round(highTierBaseBudget * 1.43);
+    } else {
+      rollStatus = 'low_roll';
+      rollTierLabel = 'Low Roll';
+      rollAuditSummary = '37.5% Low Tier Fleet Penalty';
+      shipBudgetMsu = Math.round(lowTierBaseBudget * 1.43);
+    }
+  } else if (shipsText && rewards.msu > 0) {
+    // Mixed resources + fleet (e.g. Chaos Mission, Defend, or Encounters with ships)
+    const highTierEffective = highTierBaseBudget * 1.43;
+    const lowTierEffective = lowTierBaseBudget * 1.43;
+
+    // In mixed missions, resources typically represent 35% to 70% of the total budget.
+    // If the displayed resource MSU is higher than 75% of the ENTIRE low-tier budget,
+    // or if the resource ratio vs high tier is >= 0.28, it mathematically cannot be a low roll.
+    const isHigh = rewards.msu >= lowTierEffective * 0.75 ||
+                   (highTierBaseBudget > 0 && (rawMsuDisplayed / highTierBaseBudget) >= 0.28) ||
+                   (rewards.msu / lithiumCost >= (environment === 'pvp' ? 10.0 : 3.8));
+
+    if (isHigh) {
+      rollStatus = 'high_roll';
+      rollTierLabel = 'High Roll';
+      rollAuditSummary = '100% High Tier (Split: Resources + Fleet)';
+      const remainingBudgetRaw = highTierBaseBudget - rawMsuDisplayed;
+      if (remainingBudgetRaw > 0) {
+        shipBudgetMsu = Math.round(remainingBudgetRaw * 1.43);
+      } else {
+        const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+        const avgShips = parts.length > 0 ? (parts[0] + parts[parts.length - 1]) / 2 : 0;
+        shipBudgetMsu = Math.round(avgShips * 6000);
+      }
+    } else {
+      rollStatus = 'low_roll';
+      rollTierLabel = 'Low Roll';
+      rollAuditSummary = '37.5% Low Tier (Split: Resources + Fleet)';
+      const remainingBudgetRaw = lowTierBaseBudget - rawMsuDisplayed;
+      if (remainingBudgetRaw > 0) {
+        shipBudgetMsu = Math.round(remainingBudgetRaw * 1.43);
+      } else {
+        const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+        const avgShips = parts.length > 0 ? (parts[0] + parts[parts.length - 1]) / 2 : 0;
+        shipBudgetMsu = Math.round(avgShips * 4500 * 0.375);
+      }
+    }
+  } else {
+    // Pure resource combat
+    const ratio = highTierBaseBudget > 0 ? rawMsuDisplayed / highTierBaseBudget : 0;
+    if (Math.abs(ratio - 1.0) < 0.18 || ratio >= 0.75) {
+      rollStatus = 'high_roll';
+      rollTierLabel = 'High Roll';
+      rollAuditSummary = '100% High Tier Jackpot';
+    } else {
+      rollStatus = 'low_roll';
+      rollTierLabel = 'Low Roll';
+      rollAuditSummary = '37.5% Low Tier Penalty (62.5% loss)';
+    }
+  }
+
+  // 7. Fleet deduction if ships are present
+  const fleetDeduction = deduceFleetFromBudget(shipBudgetMsu, shipsText);
+
+  // 8. Total Effective MSU (Resources + Estimated Fleet)
+  const totalEffectiveMsu = rewards.msu + shipBudgetMsu;
 
   let yieldRatio = 0;
-  if (lithiumCost > 0 && msu > 0) {
-    const raw = msu / lithiumCost;
+  if (lithiumCost > 0 && totalEffectiveMsu > 0) {
+    const raw = totalEffectiveMsu / lithiumCost;
     if (isFinite(raw) && raw >= 0.05 && raw <= 1000.0) {
       yieldRatio = raw;
     }
   }
 
-  const hourlyMsu = durationHours > 0 && msu > 0 ? msu / durationHours : 0;
+  const hourlyMsu = durationHours > 0 && totalEffectiveMsu > 0 ? totalEffectiveMsu / durationHours : 0;
   const hourlyLithium = durationHours > 0 && lithiumCost > 0 ? Math.round(lithiumCost / durationHours) : 0;
-  // Composite Resource Power Index (Excludes Artifacts & Lifeform XP):
-  // Formula: (MSU / Lith) * (MSU / h) = (MSU / h)^2 / (Lith / h) = R^2 / (L * T)
-  // Rewards fuel yield and progression velocity while penalizing high hourly fuel burn.
+  // Composite Resource Power Index (Balances fuel yield and progression velocity)
   const recommendedScore = lithiumCost > 0 && durationHours > 0
     ? Math.round(yieldRatio * hourlyMsu)
     : Math.round(hourlyMsu);
 
-  const discoverBtn = card.querySelector<HTMLElement>('button.discoverButton');
-  const onclickStr = discoverBtn?.getAttribute('onclick') || '';
-  const idMatch = onclickStr.match(/discoverAnomaly\([^,]+,\s*(\d+)\)/);
-  const id = idMatch ? idMatch[1] : `scanned_${level}_${targetCoords}`;
+  const actionBtn = card.querySelector<HTMLElement>('button.discoverButton, button.investigateButton, .scannerResultButton button, button');
+  const onclickStr = actionBtn?.getAttribute('onclick') || '';
+  const idMatch = onclickStr.match(/(?:discover|investigate)?Anomaly\([^,]+,\s*(\d+)\)/i) ||
+                  onclickStr.match(/id\s*=\s*(\d+)/i) ||
+                  card.id?.match(/(\d+)/) ||
+                  card.getAttribute('data-anomaly-id')?.match(/(\d+)/) ||
+                  card.getAttribute('data-id')?.match(/(\d+)/);
+  const cleanTarget = targetCoords.replace(/[\[\]\s]/g, '');
+  const id = idMatch ? idMatch[1] : `scanned_${level}_${cleanTarget || 'unknown'}_${waves}_${Math.round(lithiumCost)}`;
 
   return {
     element: card,
@@ -3668,13 +4333,36 @@ function parseScannedAnomalyCard(card: HTMLElement): ScannedAnomalyData | null {
     category,
     lithiumCost,
     rewards,
-    msu,
+    msu: totalEffectiveMsu,
     yieldRatio,
     hourlyMsu,
     hourlyLithium,
     recommendedScore,
     rank: 0,
+    rollStatus,
+    rollTierLabel,
+    rollAuditSummary,
+    archetypeTier,
+    archetypeMultiplier,
+    waveBonusPct,
+    shipBudgetMsu,
+    fleetDeduction,
   };
+}
+
+/**
+ * Triggers a native browser file download for exported dataset.
+ */
+function triggerFileDownload(content: string, filename: string, mimeType: string = 'text/csv;charset=utf-8;'): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -3736,17 +4424,6 @@ function injectScannerRankingSwitcher(
           </div>
         </div>
 
-        <div class="nexus-ranking-switch-btn ${mode === 'lithium' ? 'active' : ''}" role="button" tabindex="0" data-mode="lithium">
-          <div class="nexus-switch-row-title">
-            <span class="nexus-switch-icon"><lithium-icon sq16 icon-blue class="ogl_ready" style="pointer-events: none; vertical-align: middle; display: inline-block; width: 14px; height: 14px;"></lithium-icon></span>
-            <span class="nexus-switch-text">Lithium Costs</span>
-          </div>
-          <div class="nexus-switch-row-desc">
-            <span class="nexus-switch-metric">(Lith / h)</span>
-            <div class="infoIcon nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Lithium Costs | Sorts anomalies by lowest hourly Lithium consumption rate (cheapest fuel burn). Best for conserving fuel when Lithium reserves are limited.">🛈</div>
-          </div>
-        </div>
-
         <div class="nexus-ranking-switch-btn ${mode === 'recommended' ? 'active' : ''}" role="button" tabindex="0" data-mode="recommended">
           <div class="nexus-switch-row-title">
             <span class="nexus-switch-icon"><img src="${nexusIconUrl}" class="nexus-switch-icon-img" alt="Nexus" style="width: 14px; height: 14px; vertical-align: middle; display: inline-block; object-fit: contain;" /></span>
@@ -3754,10 +4431,22 @@ function injectScannerRankingSwitcher(
           </div>
           <div class="nexus-switch-row-desc">
             <span class="nexus-switch-metric">(Optimal Balance)</span>
-            <div class="infoIcon nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Nexus Recommended | Pure resource economy power index: (MSU / Lith) × (MSU / h) = (MSU/h)² / (Lith/h). Strikes the mathematical sweet spot balancing high yield, fast progression, and fuel economy.">🛈</div>
+            <div class="infoIcon nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Nexus Recommended" data-nexus-tooltip-body="${escapeHtml(
+              `<div style="font-size: 11px; line-height: 1.45; color: #cbd5e1; margin-bottom: 6px;">Ranks missions by the optimal balance between fuel efficiency (MSU / Lith) and progression speed (MSU / h).</div>` +
+              `<div style="font-weight: 700; color: #38bdf8; margin-bottom: 4px; text-transform: uppercase; font-size: 9px; letter-spacing: 0.04em;">Key Ranking Factors:</div>` +
+              `<div style="display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: #94a3b8; line-height: 1.35;">` +
+              `<div>• <strong style="color: #f1f5f9;">Mission Multiplier:</strong> S+ Chaos (32x) and S-Tier (20x) missions have the highest base payouts.</div>` +
+              `<div>• <strong style="color: #f1f5f9;">Wave Count:</strong> Multi-wave missions yield up to +17.6% compound bonus loot in a single flight.</div>` +
+              `<div>• <strong style="color: #f1f5f9;">Loot Roll:</strong> 100% High Rolls beat cut Low Rolls (37.5%).</div>` +
+              `<div>• <strong style="color: #f1f5f9;">Combat Sector:</strong> PvP sectors grant 4.0x loot for Generals vs 1.5x in PvE.</div>` +
+              `<div>• <strong style="color: #f1f5f9;">Flight Duration:</strong> Shorter flights yield higher hourly progression.</div>` +
+              `</div>`
+            )}" data-nexus-tooltip-html="true">🛈</div>
           </div>
         </div>
       </div>
+
+
     </div>
   `;
 
@@ -3783,6 +4472,19 @@ function injectScannerRankingSwitcher(
     });
   });
 
+  // Attach export button listener
+  rankingCard.querySelector('.nexus-btn-export-dataset')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const metaUniverse = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content') || '';
+    const csv = await exportScannedAnomaliesAsCsv(metaUniverse);
+    if (!csv) {
+      alert('No pure resource scanned anomalies recorded yet.');
+      return;
+    }
+    const dateStr = new Date().toISOString().slice(0, 10);
+    triggerFileDownload(csv, `orion_scanned_anomalies_${metaUniverse || 'all'}_${dateStr}.csv`, 'text/csv');
+  });
+
   initOrionNativeTooltipEngine();
   return rankingCard;
 }
@@ -3794,6 +4496,44 @@ interface ScannedExtras {
   artifactAmount: string;
   hasExperience: boolean;
   experienceAmount: string;
+}
+
+/**
+ * Formats a reward interval string (e.g. "102 - 1,020" or "5000 - 5000" or "5000")
+ * into a clean, human-readable format. Collapses identical min/max into a single number.
+ */
+function formatRewardInterval(raw: string | number | undefined, defaultUnit: string = ''): string {
+  if (raw === undefined || raw === null || raw === '') {
+    return defaultUnit ? `Drop (${defaultUnit})` : 'Drop';
+  }
+  let str = String(raw).trim();
+  // Strip units if already present in text
+  str = str.replace(/(artefacts?|artifacts?|species\s*experience|experience|xp|ships?|vessels?)/gi, '').trim();
+
+  // Match range: two numbers separated by dash, hyphen, en-dash, or tilde
+  const parts = str.split(/\s*[-–—~]\s*/);
+  if (parts.length === 2) {
+    const minClean = parts[0].replace(/[^\d.]/g, '');
+    const maxClean = parts[1].replace(/[^\d.]/g, '');
+    const minVal = parseFloat(minClean);
+    const maxVal = parseFloat(maxClean);
+    if (!isNaN(minVal) && !isNaN(maxVal)) {
+      if (minVal === maxVal) {
+        return defaultUnit ? `${minVal.toLocaleString()} ${defaultUnit}` : minVal.toLocaleString();
+      }
+      const range = `${minVal.toLocaleString()} – ${maxVal.toLocaleString()}`;
+      return defaultUnit ? `${range} ${defaultUnit}` : range;
+    }
+  }
+
+  // Single number
+  const singleClean = str.replace(/[^\d.]/g, '');
+  const singleVal = parseFloat(singleClean);
+  if (!isNaN(singleVal)) {
+    return defaultUnit ? `${singleVal.toLocaleString()} ${defaultUnit}` : singleVal.toLocaleString();
+  }
+
+  return defaultUnit ? `${str} ${defaultUnit}` : str;
 }
 
 function parseScannedExtras(card: HTMLElement): ScannedExtras {
@@ -3810,7 +4550,7 @@ function parseScannedExtras(card: HTMLElement): ScannedExtras {
   lines.forEach((line) => {
     const text = (line.textContent || '').toLowerCase();
     const tooltip = (line.getAttribute('data-tooltip-title') || line.getAttribute('title') || '').toLowerCase();
-    const rawAmt = line.querySelector('.rewardAmount')?.textContent?.replace(/&nbsp;/g, ' ').trim() || '';
+    const rawAmt = cleanRewardString(line.querySelector('.rewardAmount')?.textContent || '');
 
     // 1. Random Ships (look for .randomShips or technology-icon or ship text, excluding pure resources)
     const isResource = line.querySelector('.metal, .crystal, .deuterium, [class*="metal"], [class*="crystal"], [class*="deuterium"]') !== null;
@@ -3854,15 +4594,143 @@ function parseScannedExtras(card: HTMLElement): ScannedExtras {
 }
 
 /**
+ * Extracts current scan parameters from the top scanner bar.
+ */
+function parseCurrentScannerSettings(): {
+  scanLevelSetting?: number;
+  scanRangeSystems?: number;
+  scanCostLithium?: number;
+  originCoords?: string;
+} {
+  try {
+    const scanner = document.querySelector<HTMLElement>('#scanner, #orionscanner, .scannerHolder, #scannerWrapper, #content');
+    if (!scanner) return {};
+
+    // 1. Scan level setting
+    let scanLevelSetting: number | undefined;
+    const levelInput = scanner.querySelector<HTMLInputElement>(
+      'input[name*="level"], input#level, input#anomalyLevel, .anomalyLevel input, .scannerInputLevel input'
+    );
+    if (levelInput && levelInput.value) {
+      const val = parseInt(levelInput.value, 10);
+      if (!isNaN(val) && val > 0) scanLevelSetting = val;
+    }
+    if (!scanLevelSetting) {
+      const levelEl = scanner.querySelector('.anomalyLevel, .levelHolder, [class*="level"]');
+      const lvlMatch = levelEl?.textContent?.match(/(\d{2,4})/);
+      if (lvlMatch) {
+        const val = parseInt(lvlMatch[1], 10);
+        if (!isNaN(val) && val > 0) scanLevelSetting = val;
+      }
+    }
+
+    // 2. Scan range systems
+    let scanRangeSystems: number | undefined;
+    const rangeSelect = scanner.querySelector<HTMLSelectElement>(
+      'select[name*="range"], select#range, .rangeSelect'
+    );
+    if (rangeSelect && rangeSelect.value) {
+      const val = parseInt(rangeSelect.value, 10);
+      if (!isNaN(val) && val > 0) scanRangeSystems = val;
+    }
+    if (!scanRangeSystems) {
+      const rangeEl = scanner.querySelector('.range, .scannerRange, [class*="range"]');
+      const rangeMatch = rangeEl?.textContent?.match(/(\d+)\s*(?:systems?|sys)?/i);
+      if (rangeMatch) {
+        const val = parseInt(rangeMatch[1], 10);
+        if (!isNaN(val) && val > 0) scanRangeSystems = val;
+      }
+    }
+
+    // 3. Scan cost in Lithium
+    let scanCostLithium: number | undefined;
+    const scanCostEl = scanner.querySelector('.scanCosts, .scannerCosts, [class*="scanCost"], [class*="Costs"]');
+    if (scanCostEl) {
+      const tip = scanCostEl.getAttribute('data-tooltip-title') || scanCostEl.getAttribute('title') || scanCostEl.textContent;
+      const parsedCost = parseOgameAmount(tip);
+      if (parsedCost > 0) scanCostLithium = parsedCost;
+    }
+
+    // 4. Origin Coords (From)
+    let originCoords: string | undefined;
+    const fromEl = scanner.querySelector('.from, .scannerFrom, [class*="fromSystem"], [class*="fromCoords"]');
+    const fromMatch = fromEl?.textContent?.match(/(\d+:\d+(?::\d+)?)/);
+    if (fromMatch) {
+      originCoords = fromMatch[1];
+    } else {
+      originCoords = document.querySelector('meta[name="ogame-planet-coordinates"]')?.getAttribute('content') || undefined;
+    }
+
+    return {
+      scanLevelSetting,
+      scanRangeSystems,
+      scanCostLithium,
+      originCoords,
+    };
+  } catch (err) {
+    console.warn('[OGame Nexus] Error parsing scanner settings', err);
+    return {};
+  }
+}
+
+/**
+ * Validates whether a mission yields exclusively pure resources (Metal, Crystal, Deuterium),
+ * rigorously excluding missions containing random ships, artifacts, or lifeform experience
+ * so reverse-engineering datasets remain mathematically clean.
+ */
+function isPureResourceMission(c: ScannedAnomalyData, card: HTMLElement): boolean {
+  const extras = parseScannedExtras(card);
+  if (extras.hasShips || extras.hasArtifacts || extras.hasExperience) {
+    return false;
+  }
+  if (c.rewards.items && c.rewards.items.length > 0) {
+    return false;
+  }
+  if (c.rewards.shipsMsu && c.rewards.shipsMsu > 0) {
+    return false;
+  }
+
+  const hasResources = (c.rewards.metal > 0 || c.rewards.crystal > 0 || c.rewards.deut > 0);
+  if (!hasResources) {
+    return false;
+  }
+
+  const pureMsu = c.rewards.metal * 1.0 + c.rewards.crystal * 1.5 + c.rewards.deut * 3.0;
+  if (Math.abs(c.msu - pureMsu) >= 1) {
+    return false;
+  }
+
+  // Extra check on reward text/tooltips
+  const rewardsEl = card.querySelector('.scannerResultRewards, .possibleRewardsList, .rewardsCell');
+  if (rewardsEl) {
+    const rawText = (rewardsEl.textContent || '').toLowerCase();
+    if (
+      rawText.includes('artifact') ||
+      rawText.includes('artefact') ||
+      rawText.includes('experience') ||
+      rawText.includes('vessel') ||
+      rawText.includes('ship')
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Enhances a scanned card with inline badges and tactical summary.
  */
 function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, totalCards: number): void {
   const card = c.element;
 
+  const isPure = isPureResourceMission(c, card);
+
   // Guard against DOM thrashing on hover
-  const cardStateKey = `${mode}_${c.rank}_${c.yieldRatio.toFixed(1)}_${c.hourlyLithium}_${c.recommendedScore}`;
+  const cardStateKey = `${mode}_${c.rank}_${c.yieldRatio.toFixed(1)}_${c.hourlyLithium}_${c.recommendedScore}_${cachedPlayerClassIntel.t18BonusPct}_${isPure ? 'pure' : 'mixed'}_v4`;
   const existingCardState = card.getAttribute('data-nexus-card-state');
-  if (existingCardState === cardStateKey && card.querySelector('.nexus-briefing-intel-bar')) {
+  const hasIntelBar = card.querySelector('.nexus-briefing-intel-bar') !== null;
+  if (existingCardState === cardStateKey && hasIntelBar) {
     return;
   }
   card.setAttribute('data-nexus-card-state', cardStateKey);
@@ -3872,7 +4740,6 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
   const isTopPick = c.rank === 1 && (
     (mode === 'yield' && c.yieldRatio >= 7.0) ||
     (mode === 'speed' && c.hourlyMsu >= 10_000_000) ||
-    (mode === 'lithium' && c.hourlyLithium > 0) ||
     (mode === 'recommended' && c.recommendedScore > 0)
   );
   if (isTopPick) {
@@ -3938,63 +4805,408 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
     const extraBadges: string[] = [];
 
     if (extras.hasShips) {
-      const tip = extras.shipAmount ? `Random Ships | ${escapeHtml(extras.shipAmount)}` : 'Random Ships | Vessel Fleet';
+      const shipTitle = 'Fleet Finds';
+      const shipVal = c.fleetDeduction?.shipBudgetMsu || c.shipBudgetMsu || c.rewards?.shipsMsu || 0;
+      const shipCountText = c.fleetDeduction
+        ? (c.fleetDeduction.minShips === c.fleetDeduction.maxShips
+            ? `${c.fleetDeduction.maxShips.toLocaleString()} ships`
+            : `${c.fleetDeduction.minShips.toLocaleString()} – ${c.fleetDeduction.maxShips.toLocaleString()} ships`)
+        : formatRewardInterval(extras.shipAmount, 'ships');
+      const shipValText = shipVal > 0 ? `+${formatHuman(shipVal)} MSU` : 'Unknown';
+
+      const extrasShipHtml = `
+        <div class="nexus-extra-tooltip cyan">
+          <div class="nexus-extra-grid dual">
+            <div class="nexus-extra-cell">
+              <span class="nexus-extra-label">Fleet Value</span>
+              <span class="nexus-extra-val text-cyan">${escapeHtml(shipValText)}</span>
+            </div>
+            <div class="nexus-extra-cell">
+              <span class="nexus-extra-label">Ship Count</span>
+              <span class="nexus-extra-val">${escapeHtml(shipCountText)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+
       extraBadges.push(
-        `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${tip}"><technology-icon regular="" interceptor="" bordered=""></technology-icon></span>`
+        `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(shipTitle)}" data-nexus-tooltip-body="${escapeHtml(extrasShipHtml)}" data-nexus-tooltip-html="true">` +
+        `<technology-icon regular="" interceptor="" bordered=""></technology-icon>` +
+        `</span>`
       );
     }
 
     if (extras.hasArtifacts) {
-      const tip = extras.artifactAmount ? `Artefacts | ${escapeHtml(extras.artifactAmount)}` : 'Artefacts | Alien artefacts found';
+      const artTitle = 'Lifeform Artefacts';
+      const artInterval = formatRewardInterval(extras.artifactAmount, 'Artefacts');
+      const artHtml = `
+        <div class="nexus-extra-tooltip purple">
+          <div class="nexus-extra-grid single">
+            <div class="nexus-extra-cell">
+              <span class="nexus-extra-label">Artefacts Reward</span>
+              <span class="nexus-extra-val text-purple">${escapeHtml(artInterval)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+
       extraBadges.push(
-        `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${tip}"><resource-icon class="artifact" style="pointer-events: none; vertical-align: middle; width: 16px; height: 16px; display: inline-block;"></resource-icon></span>`
+        `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(artTitle)}" data-nexus-tooltip-body="${escapeHtml(artHtml)}" data-nexus-tooltip-html="true">` +
+        `<resource-icon class="artifact"></resource-icon>` +
+        `</span>`
       );
     }
 
     if (extras.hasExperience) {
-      const tip = extras.experienceAmount ? `Lifeform Experience | ${escapeHtml(extras.experienceAmount)}` : 'Lifeform Experience | Species XP';
+      const xpTitle = 'Species Experience';
+      const xpInterval = formatRewardInterval(extras.experienceAmount, 'XP');
+      const xpHtml = `
+        <div class="nexus-extra-tooltip purple">
+          <div class="nexus-extra-grid single">
+            <div class="nexus-extra-cell">
+              <span class="nexus-extra-label">Species Experience</span>
+              <span class="nexus-extra-val text-purple">${escapeHtml(xpInterval)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+
       extraBadges.push(
-        `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${tip}"><resource-icon class="speciesExperience" style="pointer-events: none; vertical-align: middle; width: 16px; height: 16px; display: inline-block;"></resource-icon></span>`
+        `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(xpTitle)}" data-nexus-tooltip-body="${escapeHtml(xpHtml)}" data-nexus-tooltip-html="true">` +
+        `<resource-icon class="speciesExperience"></resource-icon>` +
+        `</span>`
       );
     }
 
     const extrasHtml = extraBadges.length > 0 ? extraBadges.join('') : '<span class="text-dim">-</span>';
     const yieldText = c.yieldRatio > 0 ? `${c.yieldRatio.toFixed(1)}x` : '-';
     const speedText = c.hourlyMsu > 0 ? `${formatHuman(c.hourlyMsu)}/h` : '-';
-    const lithText = c.hourlyLithium > 0 ? `${formatHuman(c.hourlyLithium)}/h` : '-';
     const netText = c.msu > 0 ? `+${formatHuman(c.msu)} MSU` : '-';
 
-    const modeLabel =
-      mode === 'yield'
-        ? 'Resource Yield'
-        : mode === 'speed'
-        ? 'Hourly Yield'
-        : mode === 'lithium'
-        ? 'Lithium Costs'
-        : 'Nexus Recommended';
+    // 1. Tactical Roll Badges & Tooltips (Strictly: High Roll, Low Roll, Guaranteed, or Utility)
+    const rollBadgeClass =
+      c.rollStatus === 'utility'
+        ? 'badge-utility'
+        : c.rollStatus === 'high_roll'
+        ? 'badge-high-roll'
+        : c.rollStatus === 'low_roll'
+        ? 'badge-low-roll'
+        : 'badge-guaranteed';
 
-    const rankTitle = mode === 'recommended'
-      ? `Rank #${c.rank} | Nexus Recommended: ${formatHuman(c.recommendedScore)} pts (Yield ${c.yieldRatio.toFixed(1)}x × ${formatHuman(c.hourlyMsu)}/h)`
-      : `Rank #${c.rank} | Sorted by ${modeLabel}`;
+    let rollTitle = 'Loot Roll Summary';
+    let rollTooltipHtml = '';
+    if (c.rollStatus === 'utility') {
+      rollTitle = 'Lifeform Tech & Utility';
+      rollTooltipHtml = buildTacticalTooltipHtml({
+        pillText: 'Lifeform Utility',
+        pillClass: 'purple',
+        hotbar: {
+          filled: 5,
+          scoreText: 'Tech Utility',
+          colorClass: 'purple',
+        },
+        verdict: {
+          text: 'Lifeform mission. Rewards Artefacts/Species Experience.',
+          type: 'purple',
+        },
+      });
+    } else if (c.rollStatus === 'high_roll') {
+      rollTitle = 'Loot Roll Summary';
+      rollTooltipHtml = buildTacticalTooltipHtml({
+        pillText: 'High Roll',
+        pillClass: 'emerald',
+        hotbar: {
+          filled: 5,
+          scoreText: '100%',
+          colorClass: 'legendary',
+        },
+        verdict: {
+          text: 'Jackpot! The mission rolled the maximum possible loot pool with zero penalties.',
+          type: 'success',
+        },
+        description: 'Full loot haul unlocked. Highest reward return for your fuel.',
+      });
+    } else if (c.rollStatus === 'low_roll') {
+      rollTitle = 'Loot Roll Summary';
+      rollTooltipHtml = buildTacticalTooltipHtml({
+        pillText: 'Low Roll',
+        pillClass: 'amber',
+        hotbar: {
+          filled: 1.875, // 37.5% of 5 bars
+          scoreText: '37.5%',
+          colorClass: 'amber',
+        },
+        verdict: {
+          text: 'Bad luck roll. Server cut loot to 37.5% of max. Still profitable, but lower priority.',
+          type: 'warning',
+        },
+        description: 'Reduced payout roll. Deprioritize unless clearing your scan queue.',
+      });
+    } else {
+      rollTitle = 'Loot Roll Summary';
+      rollTooltipHtml = buildTacticalTooltipHtml({
+        pillText: 'Guaranteed',
+        pillClass: 'sky',
+        hotbar: {
+          filled: 5,
+          scoreText: '100%',
+          colorClass: 'sky',
+        },
+        verdict: {
+          text: 'Safe delivery mission. 100% fixed reward with no combat and zero risk of loss.',
+          type: 'info',
+        },
+        description: 'Guaranteed fixed reward with zero random chance. Reliable and predictable.',
+      });
+    }
 
-    // 5. Render 2x5 Template Table
+    // 2. Mission Multiplier Hotbar (5 bars filled based on master catalog, common to legendary)
+    const m = c.archetypeMultiplier;
+    const multBars = Math.min(5.0, Math.max(0.5, ((m - 8.0) / (20.0 - 8.0)) * 5.0));
+    const multColor: 'common' | 'rare' | 'epic' | 'legendary' =
+      m >= 20.0 ? 'legendary' : m >= 14.0 ? 'epic' : m >= 11.0 ? 'rare' : 'common';
+    const multTierName =
+      multColor === 'legendary' ? 'Legendary' : multColor === 'epic' ? 'Epic' : multColor === 'rare' ? 'Rare' : 'Common';
+    const isSPlus = c.archetypeTier === 'S+';
+    const archBadgeClass = isSPlus ? 'badge-tier-s-plus' : `badge-tier-${c.archetypeTier.toLowerCase()}`;
+    const archBadgeText = isSPlus ? '🌟 S+' : `${c.archetypeTier}-Tier`;
+    const archTitle = isSPlus ? '🌟 Mythic S+ Mission' : 'Mission Multiplier';
+    const archPillClass = isSPlus ? 'amber' : multColor === 'legendary' ? 'amber' : multColor === 'epic' ? 'purple' : multColor === 'rare' ? 'sky' : 'slate';
+    const archTooltipHtml = buildTacticalTooltipHtml({
+      pillText: isSPlus ? `🌟 S+ Tier · ${c.name}` : `${c.archetypeTier}-Tier · ${c.name}`,
+      pillClass: archPillClass,
+      hotbar: {
+        filled: multBars,
+        scoreText: `${m.toFixed(1)}x`,
+        colorClass: isSPlus ? 'legendary' : multColor,
+      },
+      verdict: {
+        text: isSPlus
+          ? 'Top jackpot in the galaxy! Massive 32.0x multiplier unlocks supreme loot.'
+          : m >= 20.0
+          ? 'Top-tier jackpot mission! Highest loot multiplier in the catalog.'
+          : m >= 14.0
+          ? 'Rare high-yield mission with heavy loot multiplier.'
+          : m >= 11.0
+          ? 'Great mission with above-average loot return.'
+          : 'Standard mission with basic baseline loot multiplier.',
+        type: m >= 14.0 ? 'success' : 'info',
+      },
+      description: isSPlus
+        ? 'Chaos Mission is the singular S+ anomaly with the highest reward multiplier discovered in Project Orion.'
+        : 'Determined by the mission name catalog. Higher multiplier missions produce significantly more loot.',
+    });
+
+    // 3. Waves Hotbar (5 bars filled based on 1 to 10 waves, common to legendary)
+    const waveBars = Math.min(5.0, Math.max(0.5, c.waves / 2));
+    const waveColor: 'common' | 'rare' | 'epic' | 'legendary' =
+      c.waves >= 9 ? 'legendary' : c.waves >= 6 ? 'epic' : c.waves >= 3 ? 'rare' : 'common';
+    const waveTierName =
+      waveColor === 'legendary' ? 'Legendary' : waveColor === 'epic' ? 'Epic' : waveColor === 'rare' ? 'Rare' : 'Common';
+    const waveTitle = 'Mission Waves Bonus';
+    const wavePillClass = waveColor === 'legendary' ? 'amber' : waveColor === 'epic' ? 'purple' : waveColor === 'rare' ? 'sky' : 'slate';
+    const waveTooltipHtml = buildTacticalTooltipHtml({
+      pillText: `${c.waves} Waves · ${waveTierName}`,
+      pillClass: wavePillClass,
+      hotbar: {
+        filled: waveBars,
+        scoreText: `+${c.waveBonusPct}%`,
+        colorClass: waveColor,
+      },
+      verdict: {
+        text: c.waves >= 9
+          ? `Jackpot wave count! Grants huge +${c.waveBonusPct}% extra loot in a single flight.`
+          : c.waves >= 6
+          ? `Epic multi-wave mission! Grants +${c.waveBonusPct}% extra loot in a single flight.`
+          : c.waves >= 3
+          ? `Great wave count! Grants +${c.waveBonusPct}% extra loot in a single flight.`
+          : 'Quick mission with base single-flight loot.',
+        type: c.waves >= 3 ? 'success' : 'info',
+      },
+      description: 'Higher wave counts multiply your total mission loot in a single fleet flight.',
+    });
+
+    // 4. Sector Hotbar (PvP / PvE with General Class & Mechan T18 Tech)
+    const isPvp = c.environment === 'pvp';
+    const envClass = isPvp ? 'badge-env-pvp' : 'badge-env-pve';
+    const intel = cachedPlayerClassIntel;
+    const sectorMult = isPvp ? intel.pvpMultiplier : intel.pveMultiplier;
+    // Scale against 4.0x base General maximum so 4.0x fills all 5 bars
+    const sectorBars = Math.min(5.0, Math.max(1.0, (sectorMult / 4.0) * 5.0));
+
+    const sectorMultText = sectorMult >= 4.0
+      ? (sectorMult > 4.0 ? `${sectorMult.toFixed(2)}x` : '4.0x')
+      : (sectorMult > 1.5 ? `${sectorMult.toFixed(2)}x` : `${sectorMult.toFixed(1)}x`);
+
+    const envTitle = `${c.environment.toUpperCase()} Sector Loot`;
+    const envTooltipHtml = isPvp
+      ? buildTacticalTooltipHtml({
+          pillText: 'PvP Sector',
+          pillClass: 'coral',
+          hotbar: {
+            filled: sectorBars,
+            scoreText: sectorMultText,
+            colorClass: 'coral',
+          },
+          verdict: {
+            text: 'High-risk combat sector. Other players can intercept.',
+            type: 'coral',
+            icon: '⚡',
+          },
+          stats: [
+            { label: 'Sector Multiplier', value: sectorMultText, colorClass: 'text-coral' },
+            { label: 'General Boost', value: intel.isGeneral ? `+${intel.t18BonusPct > 0 ? (100 * (1 + intel.t18BonusPct / 100)).toFixed(1) : '100'}% Boost` : 'None (Base Class)' },
+            { label: 'Mechan T18 Tech', value: intel.t18BonusPct > 0 ? `+${intel.t18BonusPct.toFixed(2)}%` : '0%' },
+          ],
+          description: 'Combat sector where enemy players can attack your fleet. High risk, highest loot rewards.',
+        })
+      : buildTacticalTooltipHtml({
+          pillText: 'PvE Sector',
+          pillClass: 'emerald',
+          hotbar: {
+            filled: sectorBars,
+            scoreText: sectorMultText,
+            colorClass: 'emerald',
+          },
+          verdict: {
+            text: 'Safe protected sector. No players can intercept.',
+            type: 'success',
+            icon: '🛡️',
+          },
+          stats: [
+            { label: 'Sector Multiplier', value: sectorMultText, colorClass: 'text-emerald' },
+            { label: 'General Boost', value: intel.isGeneral ? `+${intel.t18BonusPct > 0 ? (50 * (1 + intel.t18BonusPct / 100)).toFixed(1) : '50'}% Boost` : 'None (Base Class)' },
+            { label: 'Mechan T18 Tech', value: intel.t18BonusPct > 0 ? `+${intel.t18BonusPct.toFixed(2)}%` : '0%' },
+          ],
+          description: 'Protected peaceful space. No players can attack your fleets.',
+        });
+
+    const wavesBadgeText = c.waves === 1 ? '1 Wave' : `${c.waves} Waves`;
+    const envBadgeText = isPvp ? 'PvP' : 'PvE';
+
+    // 5. Render Option B: Tactical Cockpit Layout
     intelBar.innerHTML = `
-      <span class="nexus-briefing-rank nexus-rank-tier-${tierIndex} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(rankTitle)}">#${c.rank}</span>
-      <div class="nexus-briefing-grid">
-        <div class="nexus-grid-header ${mode === 'yield' ? 'active-header' : ''} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="MSU / Lith | Resource return multiplier per Lithium fuel spent">MSU / Lith</div>
-        <div class="nexus-grid-header ${mode === 'speed' ? 'active-header' : ''} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="MSU / h | MSU resource progression rate per hour">MSU / h</div>
-        <div class="nexus-grid-header ${mode === 'lithium' ? 'active-header' : ''} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Lith / h | Lithium fuel cost rate per hour (Reward Costs / Duration)">Lith / h</div>
-        <div class="nexus-grid-header nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Extras | Special drops: Random Ships, Artefacts, Lifeform Experience">Extras</div>
-        <div class="nexus-grid-header nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Net Gain | Estimated Net Resource Gain in MSU equivalent (3:2:1 standard)">Net Gain</div>
-
-        <div class="nexus-grid-cell ${c.yieldRatio > 0 ? 'text-sky' : 'text-dim'} ${mode === 'yield' ? 'active-metric' : ''}">${yieldText}</div>
-        <div class="nexus-grid-cell ${c.hourlyMsu > 0 ? 'text-gold' : 'text-dim'} ${mode === 'speed' ? 'active-metric' : ''}">${speedText}</div>
-        <div class="nexus-grid-cell ${c.hourlyLithium > 0 ? 'text-sky' : 'text-dim'} ${mode === 'lithium' ? 'active-metric' : ''}">${lithText}</div>
-        <div class="nexus-grid-cell nexus-grid-extras">${extrasHtml}</div>
-        <div class="nexus-grid-cell ${c.msu > 0 ? 'text-emerald' : 'text-dim'}">${netText}</div>
+      <span class="nexus-briefing-rank nexus-rank-tier-${tierIndex}">#${c.rank}</span>
+      <div class="nexus-briefing-body">
+        <div class="nexus-briefing-tactical-ribbon">
+          <span class="nexus-ribbon-badge ${rollBadgeClass} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(rollTitle)}" data-nexus-tooltip-body="${escapeHtml(rollTooltipHtml)}" data-nexus-tooltip-html="true">${c.rollTierLabel}</span>
+          <span class="nexus-ribbon-badge ${archBadgeClass} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(archTitle)}" data-nexus-tooltip-body="${escapeHtml(archTooltipHtml)}" data-nexus-tooltip-html="true">${archBadgeText}</span>
+          <span class="nexus-ribbon-badge badge-wave nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(waveTitle)}" data-nexus-tooltip-body="${escapeHtml(waveTooltipHtml)}" data-nexus-tooltip-html="true">${wavesBadgeText}</span>
+          <span class="nexus-ribbon-badge ${envClass} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(envTitle)}" data-nexus-tooltip-body="${escapeHtml(envTooltipHtml)}" data-nexus-tooltip-html="true">${envBadgeText}</span>
+        </div>
+        <div class="nexus-briefing-stats">
+          <div class="nexus-stat-capsule ${mode === 'yield' ? 'active-capsule' : ''} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="MSU / Lith | Resource return multiplier per Lithium fuel spent">
+            <span class="nexus-stat-label">MSU / Lith</span>
+            <span class="nexus-stat-value ${c.yieldRatio > 0 ? 'text-sky' : 'text-dim'}">${yieldText}</span>
+          </div>
+          <div class="nexus-stat-capsule ${mode === 'speed' ? 'active-capsule' : ''} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="MSU / h | MSU resource progression rate per hour">
+            <span class="nexus-stat-label">MSU / h</span>
+            <span class="nexus-stat-value ${c.hourlyMsu > 0 ? 'text-gold' : 'text-dim'}">${speedText}</span>
+          </div>
+          <div class="nexus-stat-capsule nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Extras | Special drops: Random Ships, Artefacts, Lifeform Experience">
+            <span class="nexus-stat-label">Extras</span>
+            <span class="nexus-stat-value nexus-stat-extras">${extrasHtml}</span>
+          </div>
+          <div class="nexus-stat-capsule nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="Net Gain | Estimated Net Resource Gain in MSU equivalent (3:2:1 standard)">
+            <span class="nexus-stat-label">Net Gain</span>
+            <span class="nexus-stat-value ${c.msu > 0 ? 'text-emerald' : 'text-dim'}">${netText}</span>
+          </div>
+        </div>
       </div>
     `;
+
+    // 6. Enhance Parameter Grid (Display Wave Compound Bonus on Waves Cell)
+    const gridItems = card.querySelectorAll<HTMLElement>('.scannerResultGrid .scannerResultGridItem, .scannerResultGridItem');
+    if (gridItems.length >= 4) {
+      const waveItem = gridItems[3];
+      if (!waveItem.querySelector('.nexus-wave-bonus-tag')) {
+        const bonusTag = document.createElement('span');
+        bonusTag.className = 'nexus-wave-bonus-tag text-teal nexus-tooltip-trigger ogl_ready';
+        bonusTag.style.cssText = 'font-size: 10px; font-weight: 700; margin-left: 4px;';
+        bonusTag.setAttribute('data-nexus-tooltip-title', escapeHtml(waveTitle));
+        bonusTag.setAttribute('data-nexus-tooltip-body', escapeHtml(waveTooltipHtml));
+        bonusTag.setAttribute('data-nexus-tooltip-html', 'true');
+        bonusTag.textContent = `(+${c.waveBonusPct}%)`;
+        waveItem.appendChild(bonusTag);
+      }
+    }
   }
+
+  // 6. Dataset Logging & Visual Confirmation Badge for All Scanned Missions
+  const extras = parseScannedExtras(card);
+  const metaUniverse = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content') || '';
+  const metaPlayerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+  const scannerSettings = parseCurrentScannerSettings();
+  const durationSeconds = Math.round(c.durationHours * 3600);
+
+  const hasShips = extras.hasShips || (c.rewards.shipsMsu !== undefined && c.rewards.shipsMsu > 0);
+  const rawShipText = extras.shipAmount ||
+    (c.rewards.items || []).filter((it) => /ship|vessel|fighter|cruiser|battleship|battlecruiser|bomber|destroyer|deathstar|reaper|pathfinder/i.test(it)).join('; ') ||
+    (hasShips ? 'Random Ships' : '');
+  const shipsText = cleanRewardString(rawShipText);
+  const shipsMsu = c.rewards.shipsMsu || 0;
+  const hasArtifacts = extras.hasArtifacts;
+  const artifactsAmount = cleanRewardString(extras.artifactAmount);
+  const hasExperience = extras.hasExperience;
+  const experienceAmount = cleanRewardString(extras.experienceAmount);
+
+  // Filter out redundant artifacts, experience, and ships from generic items column
+  const nonResourceItems = (c.rewards.items || []).filter((it) => {
+    const lower = it.toLowerCase();
+    return !lower.includes('experience') &&
+           !lower.includes('lifeform') &&
+           !lower.includes('artifact') &&
+           !lower.includes('artefact') &&
+           !/ship|vessel|fighter|cruiser|battleship|battlecruiser|bomber|destroyer|deathstar|reaper|pathfinder/i.test(it);
+  });
+  const items = cleanRewardString(nonResourceItems.join('; '));
+
+  const record: ScannedAnomalyRecord = {
+    anomalyId: c.id,
+    universe: metaUniverse,
+    playerId: metaPlayerId,
+    scannedAt: Date.now(),
+    name: c.name,
+    stars: c.stars,
+    level: c.level,
+    category: c.category,
+    environment: c.environment,
+    targetCoords: c.targetCoords,
+    originCoords: scannerSettings.originCoords,
+    distance: c.distance,
+    durationSeconds,
+    durationText: c.durationText,
+    waves: c.waves,
+    lithiumCost: c.lithiumCost,
+    scanCostLithium: scannerSettings.scanCostLithium,
+    scanLevelSetting: scannerSettings.scanLevelSetting,
+    scanRangeSystems: scannerSettings.scanRangeSystems,
+    metal: c.rewards.metal,
+    crystal: c.rewards.crystal,
+    deuterium: c.rewards.deut,
+    totalPossibleMsu: c.msu,
+    yieldRatio: c.yieldRatio,
+    hourlyMsu: c.hourlyMsu,
+    hourlyLithium: c.hourlyLithium,
+    isPureResource: isPure,
+    hasShips,
+    shipsText,
+    shipsMsu,
+    hasArtifacts,
+    artifactsAmount,
+    hasExperience,
+    experienceAmount,
+    items,
+  };
+
+  const loggedKey = `${metaUniverse}_${c.id}_${c.msu}_${c.lithiumCost}_${isPure ? 'pure' : 'mixed'}`;
+  if (card.getAttribute('data-nexus-logged-key') !== loggedKey) {
+    card.setAttribute('data-nexus-logged-key', loggedKey);
+    saveScannedAnomalyToDB(record);
+  }
+
+  // Remove visible checkmark badge from UI if present (logging continues silently in background)
+  card.querySelector('.nexus-scanner-logged-check')?.remove();
 }
 
 /**
@@ -4003,11 +5215,14 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
  */
 export function initOrionScannerEnhancer(force: boolean = false, animate: boolean = false): void {
   if (!isExtensionStillValid()) return;
-  const scannerContainer = document.querySelector<HTMLElement>('#scanner, #scannerResult');
+  const scannerContainer = document.querySelector<HTMLElement>('#scanner, #scannerResult, #orionscanner, .scannerHolder, #scannerResultHolder, #content');
   if (!scannerContainer) return;
 
   const cardsContainer = document.querySelector<HTMLElement>('#scannerResultHolder');
   if (!cardsContainer) return;
+
+  // Background sync player class & Mechan T18 tech bonus
+  syncPlayerClassAndT18Bonus().catch(() => {});
 
   const rawCards = cardsContainer.querySelectorAll<HTMLElement>('.scannerResultCard:not(#nexus-scanner-ranking-card)');
   if (rawCards.length === 0) return;
@@ -4024,8 +5239,12 @@ export function initOrionScannerEnhancer(force: boolean = false, animate: boolea
   if (parsedCards.length === 0) return;
 
   // Retrieve current ranking mode (persisted in localStorage)
-  const currentMode: ScannerRankingMode =
+  let currentMode: ScannerRankingMode =
     (localStorage.getItem('ognexus_orion_scanner_ranking_mode') as ScannerRankingMode) || 'yield';
+  if ((currentMode as string) === 'lithium') {
+    currentMode = 'recommended';
+    localStorage.setItem('ognexus_orion_scanner_ranking_mode', 'recommended');
+  }
 
   // Sort based on active mode
   if (currentMode === 'recommended') {
@@ -4052,15 +5271,6 @@ export function initOrionScannerEnhancer(force: boolean = false, animate: boolea
       }
       return b.msu - a.msu;
     });
-  } else if (currentMode === 'lithium') {
-    parsedCards.sort((a, b) => {
-      if (a.hourlyLithium <= 0 && b.hourlyLithium > 0) return 1;
-      if (b.hourlyLithium <= 0 && a.hourlyLithium > 0) return -1;
-      if (a.hourlyLithium !== b.hourlyLithium) {
-        return a.hourlyLithium - b.hourlyLithium; // Lower Lithium Cost/h is BETTER
-      }
-      return a.lithiumCost - b.lithiumCost;
-    });
   }
 
   // Assign ranks (1 = best, N = worst)
@@ -4068,7 +5278,7 @@ export function initOrionScannerEnhancer(force: boolean = false, animate: boolea
     c.rank = idx + 1;
   });
 
-  const scannerKey = `${currentMode}_${parsedCards.map((c) => `${c.id}_${c.rank}_${c.yieldRatio.toFixed(1)}_${c.hourlyLithium}_${c.recommendedScore}`).join(';')}`;
+  const scannerKey = `${currentMode}_${cachedPlayerClassIntel.t18BonusPct}_${parsedCards.map((c) => `${c.id}_${c.rank}_${c.yieldRatio.toFixed(1)}_${c.hourlyLithium}_${c.recommendedScore}`).join(';')}`;
   const existingKey = scannerContainer.getAttribute('data-nexus-scanner-state');
   const existingRankingCard = cardsContainer.querySelector<HTMLElement>('#nexus-scanner-ranking-card');
 
@@ -4174,6 +5384,33 @@ export function initOrionScannerEnhancer(force: boolean = false, animate: boolea
   parsedCards.forEach((c) => {
     enhanceScannedCard(c, currentMode, parsedCards.length);
   });
+
+  // 3. Expose global export helper for browser console and initialize tooltips
+  if (typeof window !== 'undefined') {
+    (window as any).migrateScannedAnomaliesPureStatus = migrateScannedAnomaliesPureStatus;
+  }
+  migrateScannedAnomaliesPureStatus().catch(() => {});
+
+  if (typeof window !== 'undefined' && !(window as any).exportOrionScanDataset) {
+    (window as any).exportOrionScanDataset = async (format: 'csv' | 'json' = 'csv') => {
+      const metaUniverse = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content') || '';
+      if (format === 'json') {
+        const json = await exportScannedAnomaliesAsJson(metaUniverse);
+        const dateStr = new Date().toISOString().slice(0, 10);
+        triggerFileDownload(json, `orion_scanned_anomalies_${metaUniverse || 'all'}_${dateStr}.json`, 'application/json');
+      } else {
+        const csv = await exportScannedAnomaliesAsCsv(metaUniverse);
+        if (!csv) {
+          alert('No pure resource scanned anomalies recorded yet.');
+          return;
+        }
+        const dateStr = new Date().toISOString().slice(0, 10);
+        triggerFileDownload(csv, `orion_scanned_anomalies_${metaUniverse || 'all'}_${dateStr}.csv`, 'text/csv');
+      }
+    };
+  }
+
+  initOrionNativeTooltipEngine();
 }
 
 /**
@@ -4189,8 +5426,7 @@ export function handleOrionAutoFleetDispatch(): void {
     if (win._ogNexusOrionFleetDispatched) return;
     if (win._ogNexusOrionFleetDispatchInProgress) return;
 
-    let shipId = 0;
-    let amount = 0;
+    const shipsToFill: Record<number, number> = {};
 
     // 1. Check sessionStorage payload
     const raw = sessionStorage.getItem('ognexus_orion_auto_fleet');
@@ -4198,31 +5434,48 @@ export function handleOrionAutoFleetDispatch(): void {
       try {
         const payload = JSON.parse(raw);
         const now = Date.now();
-        if (payload && now - payload.timestamp <= 60000 && payload.shipId && payload.amount) {
-          shipId = parseInt(payload.shipId, 10);
-          amount = parseInt(payload.amount, 10);
+        if (payload && now - payload.timestamp <= 60000) {
+          if (payload.ships && typeof payload.ships === 'object') {
+            for (const [sId, amt] of Object.entries(payload.ships)) {
+              const sid = parseInt(sId, 10);
+              const count = parseInt(String(amt), 10);
+              if (!isNaN(sid) && !isNaN(count) && count > 0) {
+                shipsToFill[sid] = count;
+              }
+            }
+          }
+          if (payload.shipId && payload.amount) {
+            const sid = parseInt(payload.shipId, 10);
+            const count = parseInt(payload.amount, 10);
+            if (!isNaN(sid) && !isNaN(count) && count > 0 && !shipsToFill[sid]) {
+              shipsToFill[sid] = count;
+            }
+          }
         }
       } catch {}
       sessionStorage.removeItem('ognexus_orion_auto_fleet');
     }
 
-    // 2. Check URL search parameters (e.g. am203=2536 or am202=9756)
-    if (!shipId || !amount) {
-      const urlParams = new URLSearchParams(window.location.search);
-      for (const [key, val] of urlParams.entries()) {
-        if (key.startsWith('am')) {
-          const sid = parseInt(key.slice(2), 10);
-          const amt = parseInt(val, 10);
-          if (!isNaN(sid) && !isNaN(amt) && amt > 0) {
-            shipId = sid;
-            amount = amt;
-            break;
+    // 2. Check URL search parameters (e.g. am203=2536 or am215=1000&am207=500)
+    const urlParams = new URLSearchParams(window.location.search);
+    for (const [key, val] of urlParams.entries()) {
+      if (key.startsWith('am')) {
+        const sid = parseInt(key.slice(2), 10);
+        const amt = parseInt(val, 10);
+        if (!isNaN(sid) && !isNaN(amt) && amt > 0) {
+          if (!shipsToFill[sid]) {
+            shipsToFill[sid] = amt;
           }
         }
       }
     }
 
-    if (!shipId || !amount) {
+    const shipEntries = Object.entries(shipsToFill).map(([sId, amt]) => ({
+      shipId: parseInt(sId, 10),
+      amount: amt
+    }));
+
+    if (shipEntries.length === 0) {
       win._ogNexusOrionFleetDispatched = true;
       return;
     }
@@ -4230,6 +5483,7 @@ export function handleOrionAutoFleetDispatch(): void {
     win._ogNexusOrionFleetDispatchInProgress = true;
     let attempts = 0;
     const maxAttempts = 30; // Poll for up to 3 seconds (30 * 100ms)
+    const filledShipIds = new Set<number>();
 
     const tryFill = () => {
       if (win._ogNexusOrionFleetDispatched) {
@@ -4238,28 +5492,45 @@ export function handleOrionAutoFleetDispatch(): void {
       }
 
       attempts++;
-      const selector = `input[name="am${shipId}"], #ship_${shipId}, li[data-technology="${shipId}"] input, #technologydetails_wrapper input[name="am${shipId}"]`;
-      const shipInput = document.querySelector<HTMLInputElement>(selector);
 
-      if (shipInput) {
+      for (const { shipId, amount } of shipEntries) {
+        if (filledShipIds.has(shipId)) continue;
+
+        const selector = `input[name="am${shipId}"], #ship_${shipId}, li[data-technology="${shipId}"] input, #technologydetails_wrapper input[name="am${shipId}"]`;
+        const shipInput = document.querySelector<HTMLInputElement>(selector);
+
+        if (shipInput) {
+          // If the user already focused or started editing this input, do not interrupt
+          if (document.activeElement === shipInput) {
+            filledShipIds.add(shipId);
+            continue;
+          }
+
+          let fillAmount = amount;
+          const maxVal = parseInt(shipInput.max || shipInput.getAttribute('data-max') || '', 10);
+          if (!isNaN(maxVal) && maxVal >= 0 && fillAmount > maxVal) {
+            fillAmount = maxVal;
+          }
+
+          shipInput.value = fillAmount.toString();
+          shipInput.dispatchEvent(new Event('input', { bubbles: true }));
+          shipInput.dispatchEvent(new Event('change', { bubbles: true }));
+          shipInput.dispatchEvent(new Event('keyup', { bubbles: true }));
+
+          // Add glowing border to highlight the pre-filled field
+          shipInput.classList.add('nexus-field-highlight');
+          setTimeout(() => {
+            try { shipInput.classList.remove('nexus-field-highlight'); } catch {}
+          }, 3000);
+
+          filledShipIds.add(shipId);
+        }
+      }
+
+      // If all ships were filled OR we reached max attempts and filled at least one:
+      if (filledShipIds.size === shipEntries.length || (attempts >= maxAttempts && filledShipIds.size > 0)) {
         win._ogNexusOrionFleetDispatched = true;
         win._ogNexusOrionFleetDispatchInProgress = false;
-
-        // If the user already focused or started editing an input, do not interrupt
-        if (document.activeElement === shipInput || (document.activeElement && (document.activeElement as HTMLElement).tagName === 'INPUT')) {
-          return;
-        }
-
-        shipInput.value = amount.toString();
-        shipInput.dispatchEvent(new Event('input', { bubbles: true }));
-        shipInput.dispatchEvent(new Event('change', { bubbles: true }));
-        shipInput.dispatchEvent(new Event('keyup', { bubbles: true }));
-
-        // Add glowing border to highlight the pre-filled field
-        shipInput.classList.add('nexus-field-highlight');
-        setTimeout(() => {
-          try { shipInput.classList.remove('nexus-field-highlight'); } catch {}
-        }, 3000);
 
         // Notify OGame fleet dispatcher calculation engine if present
         if (win.fleetDispatcher) {
@@ -4284,7 +5555,7 @@ export function handleOrionAutoFleetDispatch(): void {
           }
         } catch {}
 
-        console.log(`[OGameNexus Orion] Successfully pre-filled ${amount} of ship ID ${shipId}`);
+        console.log(`[OGameNexus Orion] Successfully pre-filled ships:`, shipsToFill);
         return;
       }
 

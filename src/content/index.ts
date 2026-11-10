@@ -4,8 +4,13 @@ import { initContentSettings } from './settings';
 import { trackExpeditions, trackRawExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
 
 import { detectLanguageFromServerLink } from '../i18n';
+import { IS_EXTENSION_DISABLED } from '../config/killSwitch';
 
-initContentSettings();
+if (IS_EXTENSION_DISABLED) {
+  console.warn('[OGame Nexus] Extension is deactivated pursuant to Gameforge directives. In-game features and background syncs are suspended.');
+} else {
+  initContentSettings();
+}
 
 function initLanguageAutoDetection(): void {
   try {
@@ -48,7 +53,9 @@ function initLanguageAutoDetection(): void {
   }
 }
 
-initLanguageAutoDetection();
+if (!IS_EXTENSION_DISABLED) {
+  initLanguageAutoDetection();
+}
 import { trackLifeformDiscoveries, trackRawLifeformDiscoveries } from './lifeforms';
 import { scrapeEmpireData, parseOgameTime, parseAjaxEmpireJson, parseExternalDataExportJson } from './empire';
 import { calculateEmpireProduction, AMORTIZATION_TABLE, getPlanetTechMultiplier, getAmortizationEntry, findMatchingQueueItem, getCollectorClassBoost } from '../utils/amortizationCalc';
@@ -1228,10 +1235,7 @@ function scrapeAndSync() {
 
   if (!playerId || !playerName) return;
 
-  // Background fetch of Empire production queues (1-minute automated throttle)
-  fetchEmpireProductionQueue(playerId, false).then(() => {
-    debouncedRefreshAssistantBar(playerId);
-  }).catch(() => {});
+  debouncedRefreshAssistantBar(playerId);
 
   // Scrape Avatar URL
   let avatarUrl = "";
@@ -2891,17 +2895,19 @@ const observer = new MutationObserver((mutations) => {
   throttledObserverLogic();
 });
 
-observer.observe(document.body, { childList: true, subtree: true });
-throttledObserverLogic();
+if (!IS_EXTENSION_DISABLED) {
+  observer.observe(document.body, { childList: true, subtree: true });
+  throttledObserverLogic();
 
-// Initialize Flying Fleet Movements Tracker
-initFleetMovementListener();
+  // Initialize Flying Fleet Movements Tracker
+  initFleetMovementListener();
 
-// Initialize Import/Export Passive Tracker
-initImportExportListener();
+  // Initialize Import/Export Passive Tracker
+  initImportExportListener();
 
-// Initialize Production Box Speedups Monitor
-initProductionBoxSpeedups();
+  // Initialize Production Box Speedups Monitor
+  initProductionBoxSpeedups();
+}
 
 function isFleetMessageTabActive(): boolean {
   // 1. Check marked main tab (has class 'marker')
@@ -3103,47 +3109,50 @@ function processActiveMessages(knownPage?: number) {
 }
 
 let messagesBackupTimeout: any = null;
-window.addEventListener('ogame-nexus-ajax-messages-loaded', (event: any) => {
-  const ajaxPage = event?.detail?.page;
-  // 1. Immediately and synchronously process messages (0ms delay) to prevent any flicker/delay
-  processActiveMessages(ajaxPage);
-  injectChangelogTab();
+let messageScrollThrottle: any = null;
 
-  // 2. Backup trigger in case of delayed or split DOM insertions by game client
-  if (messagesBackupTimeout) clearTimeout(messagesBackupTimeout);
-  messagesBackupTimeout = setTimeout(() => {
+if (!IS_EXTENSION_DISABLED) {
+  window.addEventListener('ogame-nexus-ajax-messages-loaded', (event: any) => {
+    const ajaxPage = event?.detail?.page;
+    // 1. Immediately and synchronously process messages (0ms delay) to prevent any flicker/delay
     processActiveMessages(ajaxPage);
     injectChangelogTab();
-  }, 200);
-});
 
-// Fast-scroll message listener: triggers immediate sync visual processing as new messages scroll into view
-let messageScrollThrottle: any = null;
-window.addEventListener('scroll', () => {
-  if (window.location.href.includes('page=ingame&component=messages')) {
-    if (messageScrollThrottle) clearTimeout(messageScrollThrottle);
-    messageScrollThrottle = setTimeout(() => {
-      processActiveMessages();
-    }, 20);
-  }
-}, { passive: true });
+    // 2. Backup trigger in case of delayed or split DOM insertions by game client
+    if (messagesBackupTimeout) clearTimeout(messagesBackupTimeout);
+    messagesBackupTimeout = setTimeout(() => {
+      processActiveMessages(ajaxPage);
+      injectChangelogTab();
+    }, 200);
+  });
 
-scrapeAndSync();
-injectButton();
-processActiveMessages();
-injectChangelogTab();
+  // Fast-scroll message listener: triggers immediate sync visual processing as new messages scroll into view
+  window.addEventListener('scroll', () => {
+    if (window.location.href.includes('page=ingame&component=messages')) {
+      if (messageScrollThrottle) clearTimeout(messageScrollThrottle);
+      messageScrollThrottle = setTimeout(() => {
+        processActiveMessages();
+      }, 20);
+    }
+  }, { passive: true });
 
-window.addEventListener('ogame-nexus-trigger-empire-sync', async () => {
-  try {
-    await performBackgroundEmpireSync(true);
-    const now = Date.now();
-    await chrome.storage.local.set({ 'last_empire_sync_time': now });
-    window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: true } }));
-  } catch (err) {
-    console.warn('OGame Nexus: Empire sync via event failed', err);
-    window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: false, error: err } }));
-  }
-});
+  scrapeAndSync();
+  injectButton();
+  processActiveMessages();
+  injectChangelogTab();
+
+  window.addEventListener('ogame-nexus-trigger-empire-sync', async () => {
+    try {
+      await performBackgroundEmpireSync(true);
+      const now = Date.now();
+      await chrome.storage.local.set({ 'last_empire_sync_time': now });
+      window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: true } }));
+    } catch (err) {
+      console.warn('OGame Nexus: Empire sync via event failed', err);
+      window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: false, error: err } }));
+    }
+  });
+}
 
 
 async function performBackgroundEmpireSync(ignoreDelay = false) {
@@ -3160,6 +3169,7 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   let allianceClassFromApi: number | undefined = undefined;
   let playerClassFromApi: number | undefined = undefined;
   let syncedViaAccountInfo = false;
+  let hasAnomaliesDetected: boolean | undefined = undefined;
 
   const fetchEmpireJson = async (planetType: number) => {
     let res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
@@ -3214,6 +3224,7 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
         const hasAnomalies = rawPlanets.some((p: any) =>
           p.buildings && ('45' in p.buildings || '4001' in p.buildings)
         );
+        hasAnomaliesDetected = hasAnomalies;
         const anomalyKey = 'ognexus_has_anomalies_' + playerId;
         try {
           if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
@@ -3238,25 +3249,72 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
           playerClassFromApi = Number(parsedExt.playerClass);
         }
         syncedViaAccountInfo = true;
+
+        // Proactively cache full fleet breakdown to window and chrome.storage.local
+        try {
+          const allFleet = [...parsedExt.planets, ...parsedExt.moons];
+          const byPId: Record<string, Record<number, number>> = {};
+          const byCoord: Record<string, Record<number, number>> = {};
+          allFleet.forEach((ent) => {
+            if (ent.id && ent.ships) byPId[String(ent.id)] = ent.ships;
+            if (ent.coords && ent.type && ent.ships) byCoord[`${ent.coords}_${ent.type}`] = ent.ships;
+          });
+          (window as any)._ognexus_cached_fleet = {
+            timestamp: Date.now(),
+            byPlanetId: byPId,
+            byCoordsType: byCoord
+          };
+          if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && playerId) {
+            chrome.storage.local.set({
+              [`ognexus_fleet_${playerId}`]: {
+                timestamp: Date.now(),
+                byPlanetId: byPId,
+                byCoordsType: byCoord
+              }
+            });
+          }
+        } catch (e) {}
       }
     }
   } catch (err) {
     // Quiet fallback to legacy empire AJAX
   }
 
-  // If externaldataexport didn't provide moon data (OGame accountInfo only exports planets), fetch moons via empire AJAX if Commander is active
-  if (moonsData.planets.length === 0) {
-    const officers = scrapeOfficers();
-    if (officers.hasCommander) {
-      try {
-        const moonsJson = await fetchEmpireJson(1);
-        const parsedMoons = parseAjaxEmpireJson(moonsJson, true);
-        if (parsedMoons.planets.length > 0) {
-          moonsData = parsedMoons;
-        }
-      } catch (err) {
-        // Moons might not exist or AJAX failed
+  // If Commander is active, enrich planets and moons with fleet and defenses from Empire AJAX
+  // (OGame externaldataexport intentionally excludes ships/defenses for anti-bot privacy)
+  const officers = scrapeOfficers();
+  if (officers.hasCommander) {
+    try {
+      const [planetsJson, moonsJson] = await Promise.all([
+        fetchEmpireJson(0).catch(() => null),
+        fetchEmpireJson(1).catch(() => null)
+      ]);
+      if (planetsJson) {
+        const parsedPlanets = parseAjaxEmpireJson(planetsJson, false);
+        parsedPlanets.planets.forEach((ep) => {
+          const target = planetsData.planets.find((p) => String(p.id) === String(ep.id) || (p.coords === ep.coords && p.type === 'planet'));
+          if (target) {
+            if (ep.ships && Object.keys(ep.ships).length > 0) target.ships = ep.ships;
+            if (ep.defenses && Object.keys(ep.defenses).length > 0) target.defenses = ep.defenses;
+          }
+        });
       }
+      if (moonsJson) {
+        const parsedMoons = parseAjaxEmpireJson(moonsJson, true);
+        if (moonsData.planets.length === 0) {
+          moonsData = parsedMoons;
+        } else if (parsedMoons.planets.length > 0) {
+          parsedMoons.planets.forEach((em) => {
+            const target = moonsData.planets.find((m) => String(m.id) === String(em.id) || (m.coords === em.coords && m.type === 'moon'));
+            if (target) {
+              if (em.ships && Object.keys(em.ships).length > 0) target.ships = em.ships;
+              if (em.defenses && Object.keys(em.defenses).length > 0) target.defenses = em.defenses;
+            }
+          });
+        }
+      }
+    } catch (err) {
+      // Quiet fallback if empire AJAX failed
     }
   }
 
@@ -3428,6 +3486,19 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   // Get active planet ID
   const activePlanetId = getActivePlanetId();
 
+  // Fallback check if hasAnomaliesDetected is still undefined
+  if (hasAnomaliesDetected === undefined) {
+    const domHasOrion = Boolean(document.querySelector('a[href*="component=orion"], [data-technology="45"], #technology_45, .orionTabContent, #orionscanner, #scanner, #scannerResultHolder'));
+    if (domHasOrion) {
+      hasAnomaliesDetected = true;
+    } else {
+      try {
+        const stored = localStorage.getItem('ognexus_has_anomalies');
+        if (stored !== null) hasAnomaliesDetected = stored === 'true';
+      } catch (e) {}
+    }
+  }
+
   // Send SYNC_SESSION to the background script
   safeSendMessage({
     type: "SYNC_SESSION",
@@ -3444,6 +3515,7 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
         serverUrl: window.location.origin,
         playerClass: playerClassFromApi !== undefined ? playerClassFromApi : scrapePlayerClass(),
         allianceClass: allianceClassFromApi !== undefined ? allianceClassFromApi : scrapeAllianceClass(),
+        hasAnomalies: hasAnomaliesDetected,
         ...scrapeOfficers()
       },
       planets: planetsList.length > 0 ? planetsList : [...planetsData.planets, ...moonsData.planets].map(p => ({
@@ -3537,53 +3609,57 @@ async function initLowAnimationMode() {
   }
 }
 
-initLowAnimationMode();
+if (!IS_EXTENSION_DISABLED) {
+  initLowAnimationMode();
 
-// Listen for raw messages response from MAIN world pageContext.ts
-window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
-  // CRITICAL: NEVER process raw messages if user is not on page 1 of the section
-  if (!isMessagePageOne()) {
-    return;
-  }
+  // Listen for raw messages response from MAIN world pageContext.ts
+  window.addEventListener('ogame-nexus-response-raw-messages', (event: any) => {
+    // CRITICAL: NEVER process raw messages if user is not on page 1 of the section
+    if (!isMessagePageOne()) {
+      return;
+    }
 
-  const content = event.detail?.content;
-  if (Array.isArray(content) && content.length > 0) {
-    const playerId = getMetaContent("ogame-player-id");
-    if (playerId) {
-      const activeSubtab = getActiveMessageSubtabId();
-      const isExpeditionsTabActive = activeSubtab === '22';
-      const isCombatsTabActive = activeSubtab === '21';
-      const isAllFleetsTabActive = activeSubtab === '20';
+    const content = event.detail?.content;
+    if (Array.isArray(content) && content.length > 0) {
+      const playerId = getMetaContent("ogame-player-id");
+      if (playerId) {
+        const activeSubtab = getActiveMessageSubtabId();
+        const isExpeditionsTabActive = activeSubtab === '22';
+        const isCombatsTabActive = activeSubtab === '21';
+        const isAllFleetsTabActive = activeSubtab === '20';
 
-      const isCommTab = !!document.querySelector('div.singleTab.marker[data-category-id="1"]') ||
-                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="10"]') ||
-                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="11"]') ||
-                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="12"]') ||
-                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="13"]') ||
-                        !!document.querySelector('div.innerTabItem.active[data-subtab-id="14"]');
+        const isCommTab = !!document.querySelector('div.singleTab.marker[data-category-id="1"]') ||
+                          !!document.querySelector('div.innerTabItem.active[data-subtab-id="10"]') ||
+                          !!document.querySelector('div.innerTabItem.active[data-subtab-id="11"]') ||
+                          !!document.querySelector('div.innerTabItem.active[data-subtab-id="12"]') ||
+                          !!document.querySelector('div.innerTabItem.active[data-subtab-id="13"]') ||
+                          !!document.querySelector('div.innerTabItem.active[data-subtab-id="14"]');
 
-      // Only run raw espionage tracking if we are NOT on a fleet-specific tab (Expeditions/Combats) and not Comm
-      if (!isCommTab && !isExpeditionsTabActive && !isCombatsTabActive) {
-        trackRawEspionageReports(playerId, content);
-      }
-
-      if (isFleetMessageTabActive()) {
-        // Only run expeditions tracker if on Expeditions tab or All Fleets tab
-        if (isExpeditionsTabActive || isAllFleetsTabActive) {
-          trackRawExpeditions(playerId, content);
-          trackRawLifeformDiscoveries(playerId, content);
+        // Only run raw espionage tracking if we are NOT on a fleet-specific tab (Expeditions/Combats) and not Comm
+        if (!isCommTab && !isExpeditionsTabActive && !isCombatsTabActive) {
+          trackRawEspionageReports(playerId, content);
         }
 
-        // Only run combat tracker if on Combats tab or All Fleets tab
-        if (isCombatsTabActive || isAllFleetsTabActive) {
-          trackRawCombatReports(playerId, content);
+        if (isFleetMessageTabActive()) {
+          // Only run expeditions tracker if on Expeditions tab or All Fleets tab
+          if (isExpeditionsTabActive || isAllFleetsTabActive) {
+            trackRawExpeditions(playerId, content);
+            trackRawLifeformDiscoveries(playerId, content);
+          }
+
+          // Only run combat tracker if on Combats tab or All Fleets tab
+          if (isCombatsTabActive || isAllFleetsTabActive) {
+            trackRawCombatReports(playerId, content);
+          }
         }
       }
     }
-  }
-});
+  });
+}
 
-// Auto-sync function checking every 5 minutes
+// Auto-sync function checking on active player page navigation with a 30-second cooldown
+const EMPIRE_SYNC_COOLDOWN_MS = 30 * 1000; // 30 seconds minimum delay between gameplay-triggered syncs
+
 async function checkAutoSync() {
   try {
     const playerId = getMetaContent("ogame-player-id");
@@ -3595,8 +3671,8 @@ async function checkAutoSync() {
     const lastSync = res.last_empire_sync_time || 0;
     const now = Date.now();
 
-    // 20 seconds delay between navigation auto-syncs
-    if (now - lastSync >= 20 * 1000) {
+    // 30-second cooldown between gameplay-triggered background syncs
+    if (now - lastSync >= EMPIRE_SYNC_COOLDOWN_MS) {
       // Update sync time immediately to prevent concurrent triggers in other tabs
       await chrome.storage.local.set({ 'last_empire_sync_time': now });
 
@@ -3609,8 +3685,8 @@ async function checkAutoSync() {
           badge.textContent = 'Game Synced: Just now';
         }
       } catch (syncErr) {
-        // Set timestamp back to 10 seconds ago on failure so next navigation retries promptly
-        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 10 * 1000 });
+        // Set timestamp back to 20 seconds ago on failure so next active navigation retries after 10 seconds
+        await chrome.storage.local.set({ 'last_empire_sync_time': Date.now() - 20 * 1000 });
       }
     }
   } catch (err: any) {
@@ -3618,47 +3694,50 @@ async function checkAutoSync() {
   }
 }
 
-// Run sync check once shortly after the player loads/navigates to the page
-setTimeout(checkAutoSync, 3000);
+if (!IS_EXTENSION_DISABLED) {
+  // Run sync check ONLY ONCE shortly after the player actively loads/navigates to an OGame page
+  setTimeout(checkAutoSync, 3000);
 
-// Standing periodic auto-sync every 60 seconds (respects 20s navigation cooldown)
-setInterval(checkAutoSync, 60 * 1000);
+  // NOTE: BANNED BY GAMEFORGE - NEVER ADD A REPETITIVE TIMER / INTERVAL HERE!
+  // Standing periodic polling on a timer (e.g. setInterval) is strictly forbidden under
+  // Gameforge Forbidden Features Category 5. Sync must ONLY be triggered by active player navigation.
 
-document.addEventListener('change', (e) => {
-  const target = e.target as HTMLElement;
-  if (target && (target.tagName === 'SELECT' || target.tagName === 'INPUT')) {
-    if (window.location.href.toLowerCase().includes("resourcesettings")) {
-      scrapeAndSync();
-    }
-  }
-});
-
-document.addEventListener('click', (e) => {
-  const target = e.target as HTMLElement;
-  const isCalcBtn = target && (
-    target.id === 'recalculate' || 
-    target.classList.contains('button') || 
-    target.classList.contains('btn_blue') ||
-    target.textContent?.toLowerCase().includes('recalculate') ||
-    target.textContent?.toLowerCase().includes('calculate') ||
-    target.textContent?.toLowerCase().includes('berechnen')
-  );
-  if (isCalcBtn) {
-    if (window.location.href.toLowerCase().includes("resourcesettings")) {
-      setTimeout(scrapeAndSync, 500);
-    }
-  }
-});
-
-if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.type === "GET_PAGE_PLAYER_INFO") {
-      const playerId = getMetaContent("ogame-player-id");
-      const universe = getMetaContent("ogame-universe");
-      sendResponse({ playerId, universe });
-      return true;
+  document.addEventListener('change', (e) => {
+    const target = e.target as HTMLElement;
+    if (target && (target.tagName === 'SELECT' || target.tagName === 'INPUT')) {
+      if (window.location.href.toLowerCase().includes("resourcesettings")) {
+        scrapeAndSync();
+      }
     }
   });
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const isCalcBtn = target && (
+      target.id === 'recalculate' || 
+      target.classList.contains('button') || 
+      target.classList.contains('btn_blue') ||
+      target.textContent?.toLowerCase().includes('recalculate') ||
+      target.textContent?.toLowerCase().includes('calculate') ||
+      target.textContent?.toLowerCase().includes('berechnen')
+    );
+    if (isCalcBtn) {
+      if (window.location.href.toLowerCase().includes("resourcesettings")) {
+        setTimeout(scrapeAndSync, 500);
+      }
+    }
+  });
+
+  if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      if (msg?.type === "GET_PAGE_PLAYER_INFO") {
+        const playerId = getMetaContent("ogame-player-id");
+        const universe = getMetaContent("ogame-universe");
+        sendResponse({ playerId, universe });
+        return true;
+      }
+    });
+  }
 }
 
 

@@ -26,10 +26,22 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { cleanUniverseId, isSameUniverse } from '../utils/universe';
 import { LanguageProvider, detectLanguageFromServerLink } from '../i18n';
+import { IS_EXTENSION_DISABLED } from '../config/killSwitch';
+import { DeactivatedNotice } from './views/DeactivatedNotice';
 import './index.css';
 import '../content/styles.css';
 
 const App: React.FC = () => {
+    useEffect(() => {
+        if (IS_EXTENSION_DISABLED) {
+            document.title = "OGame Nexus - Service Deactivated";
+        }
+    }, []);
+
+    if (IS_EXTENSION_DISABLED) {
+        return <DeactivatedNotice />;
+    }
+
     const [currentView, setCurrentView] = useState('overview');
     const [showWelcome, setShowWelcome] = useState(false);
     const [showChangelog, setShowChangelog] = useState(false);
@@ -273,7 +285,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("Failed to get manifest version", e);
         }
-        return "1.3.0";
+        return "1.3.1";
     };
 
     const autoDismissChangelogForNewInstall = (version: string) => {

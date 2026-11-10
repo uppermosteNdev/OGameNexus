@@ -15,15 +15,18 @@ import {
   extractAnomalyCombatWaves,
   extractStationedWarships,
   getPlayerCombatProfile,
+  loadPlayerPlanetsList,
   AnomalyCombatWave,
   CANONICAL_WARSHIP_IDS,
   CanonicalWarshipId,
   WARSHIP_METADATA,
-  PlayerCombatProfile
+  PlayerCombatProfile,
+  StationedPlanetFleet
 } from './orionWaveParser';
 import { NexuSimEngine } from '../utils/combatSim/engine';
 import { FleetParty, ServerSettings } from '../utils/combatSim/types';
 import { UNITS } from '../utils/combatSim/constants';
+import { dispatchMultiFleetToAnomaly } from './orion';
 
 /**
  * Universal metadata map for all potential enemy wave units
@@ -395,7 +398,11 @@ export async function openAnomalyWaveSimModal(
   const coordsStr = `${missionData.galaxy || 1}:${missionData.system || 1}:${missionData.position || 1}`;
   const waves = extractAnomalyCombatWaves(missionEl, missionData.id, missionData.level, coordsStr);
   const stationedWarships = extractStationedWarships(missionData.id);
-  const profile = await getPlayerCombatProfile();
+  const [profile, planetsList] = await Promise.all([
+    getPlayerCombatProfile(),
+    loadPlayerPlanetsList()
+  ]);
+  let activePlanetId = planetsList.find((p) => p.isCurrent)?.id || planetsList[0]?.id || '';
 
   // Hostile combat techs (default to first wave's techs or saved in localStorage)
   const enemyTechs = {
@@ -427,17 +434,21 @@ export async function openAnomalyWaveSimModal(
     savedFleet = {};
   }
 
+  const initialPlanet = planetsList.find((p) => p.isCurrent) || planetsList[0];
   const totalSaved = Object.values(savedFleet).reduce((a, b) => a + b, 0);
-  const totalStationed = Object.values(stationedWarships).reduce((a, b) => a + b, 0);
+  const totalAnomalyStationed = Object.values(stationedWarships).reduce((a, b) => a + b, 0);
+  const defaultFleetSource = totalAnomalyStationed > 0 ? stationedWarships : (initialPlanet?.ships || {});
   const activeWarships: Record<CanonicalWarshipId, number> = {
-    206: savedFleet[206] || (totalSaved === 0 ? stationedWarships[206] || 0 : 0),
-    207: savedFleet[207] || (totalSaved === 0 ? stationedWarships[207] || 0 : 0),
-    215: savedFleet[215] || (totalSaved === 0 ? stationedWarships[215] || 0 : 0),
-    211: savedFleet[211] || (totalSaved === 0 ? stationedWarships[211] || 0 : 0),
-    213: savedFleet[213] || (totalSaved === 0 ? stationedWarships[213] || 0 : 0),
-    214: savedFleet[214] || (totalSaved === 0 ? stationedWarships[214] || 0 : 0),
-    218: savedFleet[218] || (totalSaved === 0 ? stationedWarships[218] || 0 : 0),
-    219: savedFleet[219] || (totalSaved === 0 ? stationedWarships[219] || 0 : 0)
+    204: savedFleet[204] || (totalSaved === 0 ? defaultFleetSource[204] || 0 : 0),
+    205: savedFleet[205] || (totalSaved === 0 ? defaultFleetSource[205] || 0 : 0),
+    206: savedFleet[206] || (totalSaved === 0 ? defaultFleetSource[206] || 0 : 0),
+    207: savedFleet[207] || (totalSaved === 0 ? defaultFleetSource[207] || 0 : 0),
+    215: savedFleet[215] || (totalSaved === 0 ? defaultFleetSource[215] || 0 : 0),
+    211: savedFleet[211] || (totalSaved === 0 ? defaultFleetSource[211] || 0 : 0),
+    213: savedFleet[213] || (totalSaved === 0 ? defaultFleetSource[213] || 0 : 0),
+    214: savedFleet[214] || (totalSaved === 0 ? defaultFleetSource[214] || 0 : 0),
+    218: savedFleet[218] || (totalSaved === 0 ? defaultFleetSource[218] || 0 : 0),
+    219: savedFleet[219] || (totalSaved === 0 ? defaultFleetSource[219] || 0 : 0)
   };
 
   // Iterations per wave (20 to 100, default 20)
@@ -473,11 +484,98 @@ export async function openAnomalyWaveSimModal(
     const fleetCargo = computeFleetCargo(activeWarships, profile.hyperspaceTech);
     const starsHtml = '★'.repeat(Math.max(1, missionData.stars || 1));
 
-    // 1. Warship 2x4 Grid Cards (Top section)
+    const activePlanet = planetsList.find((p) => p.id === activePlanetId) || planetsList[0];
+
+    // Group each planet's moon on the same line as its planet
+    const planetMap = new Map<string, { planet?: StationedPlanetFleet; moon?: StationedPlanetFleet }>();
+    planetsList.forEach((p) => {
+      const existing = planetMap.get(p.coords) || {};
+      if (p.type === 'moon') existing.moon = p;
+      else existing.planet = p;
+      planetMap.set(p.coords, existing);
+    });
+
+    const dropdownRowsHtml = Array.from(planetMap.entries()).map(([coords, group]) => {
+      const p = group.planet;
+      const m = group.moon;
+
+      const pos = parseInt(coords.split(':')[2] || '1', 10) || 1;
+      const safePos = Math.min(15, Math.max(1, pos));
+      const defaultPlanetImg = typeof chrome !== 'undefined' && chrome.runtime?.getURL
+        ? chrome.runtime.getURL(`icons/overwatch/planet-slot-${safePos}.png`)
+        : `/icons/overwatch/planet-slot-${safePos}.png`;
+      const defaultMoonImg = typeof chrome !== 'undefined' && chrome.runtime?.getURL
+        ? chrome.runtime.getURL('icons/overwatch/moon.jpg')
+        : '/icons/overwatch/moon.jpg';
+
+      const pImg = p?.imgUrl || defaultPlanetImg;
+      const mImg = m?.imgUrl || defaultMoonImg;
+
+      const isPlanetSelected = p && p.id === activePlanet?.id;
+      const isMoonSelected = m && m.id === activePlanet?.id;
+
+      return `
+        <div class="nexus-planet-dropdown-row">
+          ${p ? `
+            <div class="nexus-dropdown-item planet ${isPlanetSelected ? 'selected' : ''}" data-planet-id="${p.id}" title="Select Planet: ${p.name} [${p.coords}]">
+              <div class="nexus-menu-thumb-wrap">
+                <img src="${pImg}" class="nexus-menu-thumb-img" alt="" onerror="this.src='${defaultPlanetImg}'; this.onerror=null;" />
+              </div>
+              <div class="nexus-menu-meta">
+                <span class="nexus-menu-name">${p.name}</span>
+                <span class="nexus-menu-coords">[${p.coords}]</span>
+              </div>
+              <span class="nexus-menu-type-badge planet">PLANET</span>
+            </div>
+          ` : `<div class="nexus-dropdown-item empty"></div>`}
+
+          ${m ? `
+            <div class="nexus-dropdown-item moon ${isMoonSelected ? 'selected' : ''}" data-planet-id="${m.id}" title="Select Moon: ${m.name} [${m.coords}]">
+              <div class="nexus-menu-thumb-wrap moon">
+                <img src="${mImg}" class="nexus-menu-thumb-img" alt="" onerror="this.src='${defaultMoonImg}'; this.onerror=null;" />
+              </div>
+              <div class="nexus-menu-meta">
+                <span class="nexus-menu-name">${m.name}</span>
+                <span class="nexus-menu-coords">[${m.coords}]</span>
+              </div>
+              <span class="nexus-menu-type-badge moon">MOON</span>
+            </div>
+          ` : `
+            <div class="nexus-dropdown-no-moon" title="No moon at this coordinate">
+              <span>—</span>
+            </div>
+          `}
+        </div>
+      `;
+    }).join('');
+
+    const activePos = parseInt((activePlanet?.coords || '1:1:1').split(':')[2] || '1', 10) || 1;
+    const safeActivePos = Math.min(15, Math.max(1, activePos));
+    const activeDefaultImg = activePlanet?.type === 'moon'
+      ? (typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL('icons/overwatch/moon.jpg') : '/icons/overwatch/moon.jpg')
+      : (typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(`icons/overwatch/planet-slot-${safeActivePos}.png`) : `/icons/overwatch/planet-slot-${safeActivePos}.png`);
+    const activeImgUrl = activePlanet?.imgUrl || activeDefaultImg;
+    const currentPlanetTotalFleet = activePlanet ? Object.values(activePlanet.ships).reduce((a, b) => a + b, 0) : 0;
+    const totalStationedAtAnomaly = Object.values(stationedWarships).reduce((a, b) => a + b, 0);
+
+    const stationedMiniGridHtml = CANONICAL_WARSHIP_IDS.map((id) => {
+      const meta = WARSHIP_METADATA[id];
+      const count = activePlanet?.ships[id] || 0;
+      const hasShips = count > 0;
+      return `
+        <div class="nexus-minigrid-cell ${hasShips ? 'has-ships' : 'zero'}" title="${meta.name}: ${count.toLocaleString()} on ${activePlanet?.name || 'body'} (${activePlanet?.type === 'moon' ? 'Moon' : 'Planet'}) (Click to load into War Fleet)" data-ship-id="${id}" data-count="${count}">
+          <div class="nexus-minigrid-icon">
+            <technology-icon regular="" ${meta.iconAttr}="" sq20=""></technology-icon>
+          </div>
+          <span class="minigrid-count">${hasShips ? formatAmount(count) : '0'}</span>
+        </div>
+      `;
+    }).join('');
+
+    // 1. Warship 2x5 Grid Cards (Top section)
     const warshipCardsHtml = CANONICAL_WARSHIP_IDS.map((id) => {
       const meta = WARSHIP_METADATA[id];
       const count = activeWarships[id] || 0;
-      const stationedCount = stationedWarships[id] || 0;
       const isActive = count > 0;
 
       return `
@@ -489,7 +587,6 @@ export async function openAnomalyWaveSimModal(
             <div class="nexus-sim-ship-info">
               <span class="nexus-sim-ship-name">${meta.name}</span>
             </div>
-            ${stationedCount > 0 ? `<span class="nexus-sim-stationed-badge" data-action="set" data-id="${id}" data-val="${stationedCount}" title="Stationed at anomaly: ${stationedCount.toLocaleString()} (Click to set)">Stn: ${formatAmount(stationedCount)}</span>` : ''}
           </div>
 
           <div class="nexus-sim-input-row">
@@ -725,118 +822,146 @@ export async function openAnomalyWaveSimModal(
         </div>
       </div>
 
-      <!-- Dedicated Combat Tech Comparison Strip (Centered, Clean, No Label Lines) -->
-      <div class="nexus-sim-tech-strip">
-        <div class="nexus-tech-telemetry-line"></div>
-        <!-- Player Techs -->
-        <div class="nexus-tech-group player">
-          ${profile.isGeneral ? `
-            <span class="nexus-sim-class-badge general" title="General Class: +2 to Weapons, Shielding, and Armour">
-              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline>
-                <line x1="13" y1="19" x2="19" y2="13"></line>
-                <line x1="16" y1="16" x2="20" y2="20"></line>
-                <line x1="19" y1="21" x2="21" y2="19"></line>
-                <polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"></polyline>
-                <line x1="5" y1="14" x2="9" y2="18"></line>
-                <line x1="7" y1="17" x2="4" y2="20"></line>
-                <line x1="3" y1="19" x2="5" y2="21"></line>
-              </svg>
-              <span>General (+2)</span>
-            </span>
-          ` : ''}
-          <div class="nexus-tech-item" title="Weapons Technology (+10% firepower/lvl)${profile.isGeneral ? ` • Base ${profile.baseWeapons} + 2 (General Class) = ${profile.weapons}` : ''}">
-            <technology-icon regular="" weaponstechnology="" sq20="" bordered="" class="tooltip" data-tooltip-title="Weapons Technology"></technology-icon>
-            <input
-              type="number"
-              min="0"
-              max="40"
-              step="1"
-              class="nexus-tech-num-input player"
-              data-side="player"
-              data-tech="weapons"
-              value="${profile.weapons}"
-              ${isSimulating ? 'disabled' : ''}
-            />
+      <!-- TOP COMMAND BAR: 75% Left (Planet Selection + 2x5 Grid) | 25% Right (3x2 Techs with VS) -->
+      <div class="nexus-sim-top-bar">
+        <!-- LEFT 75%: Planet Picker (Larger, on left, USE FLEET removed) + 2x5 Stationed Mini-Grid -->
+        <div class="nexus-top-planet-section">
+          <!-- Larger Planet/Moon Selection Widget with paired Moon on same line -->
+          <div class="nexus-planet-picker-wrap">
+            <div class="nexus-planet-selected-card" title="Click to switch planet or moon">
+              <div class="nexus-planet-thumb-wrap">
+                <img
+                  src="${activeImgUrl}"
+                  class="nexus-planet-thumb-img"
+                  alt=""
+                  onerror="this.src='${activeDefaultImg}'; this.onerror=null;"
+                />
+              </div>
+              <div class="nexus-planet-card-info">
+                <div class="nexus-planet-name-row">
+                  <span class="nexus-planet-name">${activePlanet?.name || 'Planet'}</span>
+                  <span class="nexus-planet-type-tag ${activePlanet?.type || 'planet'}">${activePlanet?.type === 'moon' ? 'MOON' : 'PLANET'}</span>
+                </div>
+                <span class="nexus-planet-coords">[${activePlanet?.coords || '1:1:1'}]</span>
+              </div>
+              <div class="nexus-dropdown-arrow-wrap">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Custom Dropdown Menu with paired Planet + Moon on same line -->
+            <div class="nexus-planet-dropdown-menu hidden">
+              ${dropdownRowsHtml}
+            </div>
           </div>
-          <div class="nexus-tech-item" title="Shielding Technology (+10% shields/lvl)${profile.isGeneral ? ` • Base ${profile.baseShielding} + 2 (General Class) = ${profile.shielding}` : ''}">
-            <technology-icon regular="" shieldingtechnology="" sq20="" bordered="" class="tooltip" data-tooltip-title="Shielding Technology"></technology-icon>
-            <input
-              type="number"
-              min="0"
-              max="40"
-              step="1"
-              class="nexus-tech-num-input player"
-              data-side="player"
-              data-tech="shielding"
-              value="${profile.shielding}"
-              ${isSimulating ? 'disabled' : ''}
-            />
-          </div>
-          <div class="nexus-tech-item" title="Armour Technology (+10% hull/lvl)${profile.isGeneral ? ` • Base ${profile.baseArmour} + 2 (General Class) = ${profile.armour}` : ''}">
-            <technology-icon regular="" armortechnology="" sq20="" bordered="" class="tooltip" data-tooltip-title="Armour Technology"></technology-icon>
-            <input
-              type="number"
-              min="0"
-              max="40"
-              step="1"
-              class="nexus-tech-num-input player"
-              data-side="player"
-              data-tech="armour"
-              value="${profile.armour}"
-              ${isSimulating ? 'disabled' : ''}
-            />
+
+          <!-- Stationed Warships 2x5 Mini-Grid -->
+          <div class="nexus-stationed-minigrid">
+            ${stationedMiniGridHtml}
           </div>
         </div>
 
-        <!-- Center VS Badge -->
-        <div class="nexus-tech-vs-wrap">
-          <div class="nexus-tech-vs-badge">VS</div>
-        </div>
+        <!-- RIGHT 25%: Combat Techs Comparison in 3x2 Matrix (Row 1: Player, Middle: VS, Row 2: Enemy) -->
+        <div class="nexus-top-techs-section">
+          <!-- Row 1: Player Techs (Green tint) -->
+          <div class="nexus-tech-row player">
+            <div class="nexus-tech-item player" title="Weapons Technology (+10% firepower/lvl)">
+              <technology-icon regular="" weaponstechnology="" sq18="" bordered="" class="tooltip" data-tooltip-title="Weapons Technology"></technology-icon>
+              <input
+                type="number"
+                min="0"
+                max="40"
+                step="1"
+                class="nexus-tech-num-input player"
+                data-side="player"
+                data-tech="weapons"
+                value="${profile.weapons}"
+                ${isSimulating ? 'disabled' : ''}
+              />
+            </div>
+            <div class="nexus-tech-item player" title="Shielding Technology (+10% shields/lvl)">
+              <technology-icon regular="" shieldingtechnology="" sq18="" bordered="" class="tooltip" data-tooltip-title="Shielding Technology"></technology-icon>
+              <input
+                type="number"
+                min="0"
+                max="40"
+                step="1"
+                class="nexus-tech-num-input player"
+                data-side="player"
+                data-tech="shielding"
+                value="${profile.shielding}"
+                ${isSimulating ? 'disabled' : ''}
+              />
+            </div>
+            <div class="nexus-tech-item player" title="Armour Technology (+10% hull/lvl)">
+              <technology-icon regular="" armortechnology="" sq18="" bordered="" class="tooltip" data-tooltip-title="Armour Technology"></technology-icon>
+              <input
+                type="number"
+                min="0"
+                max="40"
+                step="1"
+                class="nexus-tech-num-input player"
+                data-side="player"
+                data-tech="armour"
+                value="${profile.armour}"
+                ${isSimulating ? 'disabled' : ''}
+              />
+            </div>
+          </div>
 
-        <!-- Hostile Techs -->
-        <div class="nexus-tech-group enemy">
-          <div class="nexus-tech-item" title="Hostile Weapons Technology">
-            <technology-icon regular="" weaponstechnology="" sq20="" bordered="" class="tooltip" data-tooltip-title="Weapons Technology"></technology-icon>
-            <input
-              type="number"
-              min="0"
-              max="40"
-              step="1"
-              class="nexus-tech-num-input enemy"
-              data-side="enemy"
-              data-tech="weapons"
-              value="${enemyTechs.weapons}"
-              ${isSimulating ? 'disabled' : ''}
-            />
+          <!-- Middle: VS Divider Badge -->
+          <div class="nexus-tech-vs-row">
+            <div class="nexus-tech-vs-line"></div>
+            <div class="nexus-tech-vs-badge">VS</div>
+            <div class="nexus-tech-vs-line"></div>
           </div>
-          <div class="nexus-tech-item" title="Hostile Shielding Technology">
-            <technology-icon regular="" shieldingtechnology="" sq20="" bordered="" class="tooltip" data-tooltip-title="Shielding Technology"></technology-icon>
-            <input
-              type="number"
-              min="0"
-              max="40"
-              step="1"
-              class="nexus-tech-num-input enemy"
-              data-side="enemy"
-              data-tech="shielding"
-              value="${enemyTechs.shielding}"
-              ${isSimulating ? 'disabled' : ''}
-            />
-          </div>
-          <div class="nexus-tech-item" title="Hostile Armour Technology">
-            <technology-icon regular="" armortechnology="" sq20="" bordered="" class="tooltip" data-tooltip-title="Armour Technology"></technology-icon>
-            <input
-              type="number"
-              min="0"
-              max="40"
-              step="1"
-              class="nexus-tech-num-input enemy"
-              data-side="enemy"
-              data-tech="armour"
-              value="${enemyTechs.armour}"
-              ${isSimulating ? 'disabled' : ''}
-            />
+
+          <!-- Row 2: Enemy Techs (Red tint) -->
+          <div class="nexus-tech-row enemy">
+            <div class="nexus-tech-item enemy" title="Hostile Weapons Technology">
+              <technology-icon regular="" weaponstechnology="" sq18="" bordered="" class="tooltip" data-tooltip-title="Weapons Technology"></technology-icon>
+              <input
+                type="number"
+                min="0"
+                max="40"
+                step="1"
+                class="nexus-tech-num-input enemy"
+                data-side="enemy"
+                data-tech="weapons"
+                value="${enemyTechs.weapons}"
+                ${isSimulating ? 'disabled' : ''}
+              />
+            </div>
+            <div class="nexus-tech-item enemy" title="Hostile Shielding Technology">
+              <technology-icon regular="" shieldingtechnology="" sq18="" bordered="" class="tooltip" data-tooltip-title="Shielding Technology"></technology-icon>
+              <input
+                type="number"
+                min="0"
+                max="40"
+                step="1"
+                class="nexus-tech-num-input enemy"
+                data-side="enemy"
+                data-tech="shielding"
+                value="${enemyTechs.shielding}"
+                ${isSimulating ? 'disabled' : ''}
+              />
+            </div>
+            <div class="nexus-tech-item enemy" title="Hostile Armour Technology">
+              <technology-icon regular="" armortechnology="" sq18="" bordered="" class="tooltip" data-tooltip-title="Armour Technology"></technology-icon>
+              <input
+                type="number"
+                min="0"
+                max="40"
+                step="1"
+                class="nexus-tech-num-input enemy"
+                data-side="enemy"
+                data-tech="armour"
+                value="${enemyTechs.armour}"
+                ${isSimulating ? 'disabled' : ''}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -853,13 +978,22 @@ export async function openAnomalyWaveSimModal(
               </span>
             </div>
             <div class="nexus-sim-fleet-actions">
-              <button type="button" class="nexus-btn-autofill ${totalStationed > 0 ? 'highlight' : ''}" title="Populate with warships stationed at this anomaly" ${isSimulating ? 'disabled' : ''}>
+              ${totalStationedAtAnomaly > 0 ? `
+                <button type="button" class="nexus-btn-autofill-anomaly highlight" title="Populate with warships stationed at this anomaly mission (${totalStationedAtAnomaly.toLocaleString()} ships)" ${isSimulating ? 'disabled' : ''}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <span>Stationed at Anomaly (${totalStationedAtAnomaly.toLocaleString()})</span>
+                </button>
+              ` : ''}
+              <button type="button" class="nexus-btn-autofill-planet ${currentPlanetTotalFleet > 0 ? 'highlight' : ''}" title="Populate with warships from selected ${activePlanet?.type === 'moon' ? 'Moon' : 'Planet'} (${currentPlanetTotalFleet.toLocaleString()} ships)" ${isSimulating ? 'disabled' : ''}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   <polyline points="7 10 12 15 17 10"></polyline>
                   <line x1="12" y1="15" x2="12" y2="3"></line>
                 </svg>
-                <span>Auto-Fill Stationed (${totalStationed.toLocaleString()})</span>
+                <span>Load from ${activePlanet?.type === 'moon' ? 'Moon' : 'Planet'} (${currentPlanetTotalFleet.toLocaleString()})</span>
               </button>
               <button type="button" class="nexus-btn-clear" title="Clear all warship inputs" ${isSimulating ? 'disabled' : ''}>
                 <span>Clear</span>
@@ -906,6 +1040,13 @@ export async function openAnomalyWaveSimModal(
         </div>
         <div class="nexus-sim-footer-actions">
           <button type="button" class="nexus-sim-btn-secondary" id="nexus-sim-cancel-btn">Close</button>
+          <button type="button" class="nexus-sim-btn-send-fleet" id="nexus-sim-send-fleet-btn" ${totalInputShips === 0 || isSimulating ? 'disabled' : ''} title="Send selected fleet to this Anomaly via Fleet Dispatch">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 2L11 13"></path>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            <span>Send fleet to Anomaly</span>
+          </button>
           <button type="button" class="nexus-sim-btn-primary" id="nexus-sim-run-btn" ${totalInputShips === 0 || isSimulating ? 'disabled' : ''}>
             ${isSimulating ? `
               <span class="nexus-sim-spinner"></span>
@@ -938,6 +1079,61 @@ export async function openAnomalyWaveSimModal(
     // Close button
     modal.querySelector('.nexus-sim-close-btn')?.addEventListener('click', closeAnomalyWaveSimModal);
     modal.querySelector('#nexus-sim-cancel-btn')?.addEventListener('click', closeAnomalyWaveSimModal);
+
+    // Custom planet dropdown toggle
+    const triggerCard = modal.querySelector<HTMLElement>('.nexus-planet-selected-card');
+    const menuEl = modal.querySelector<HTMLElement>('.nexus-planet-dropdown-menu');
+    const arrowEl = modal.querySelector<HTMLElement>('.nexus-dropdown-arrow-wrap');
+
+    triggerCard?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (menuEl) {
+        const isHidden = menuEl.classList.contains('hidden');
+        menuEl.classList.toggle('hidden', !isHidden);
+        arrowEl?.classList.toggle('open', isHidden);
+      }
+    });
+
+    // Custom dropdown item selection (planet or moon clicked on same line)
+    modal.querySelectorAll<HTMLElement>('.nexus-dropdown-item[data-planet-id]').forEach((item) => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pId = item.dataset.planetId;
+        if (pId) {
+          activePlanetId = pId;
+          menuEl?.classList.add('hidden');
+          arrowEl?.classList.remove('open');
+          render();
+        }
+      });
+    });
+
+    // Close custom dropdown on click outside
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuEl && !menuEl.classList.contains('hidden')) {
+        if (!triggerCard?.contains(e.target as Node) && !menuEl.contains(e.target as Node)) {
+          menuEl.classList.add('hidden');
+          arrowEl?.classList.remove('open');
+        }
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+
+    // Click ship cell in 2x5 mini-grid to fill that ship into War Fleet
+    modal.querySelectorAll<HTMLElement>('.nexus-minigrid-cell').forEach((cell) => {
+      cell.addEventListener('click', () => {
+        if (isSimulating) return;
+        const id = parseInt(cell.dataset.shipId || '0', 10) as CanonicalWarshipId;
+        const count = parseInt(cell.dataset.count || '0', 10);
+        if (CANONICAL_WARSHIP_IDS.includes(id) && count > 0) {
+          activeWarships[id] = count;
+          persistFleet();
+          latestSummary = null;
+          simulatedResults = [];
+          render();
+        }
+      });
+    });
 
     // Iterations slider
     const slider = modal.querySelector<HTMLInputElement>('.nexus-sim-iter-slider');
@@ -1000,8 +1196,8 @@ export async function openAnomalyWaveSimModal(
       });
     });
 
-    // Auto-fill stationed fleet
-    modal.querySelector('.nexus-btn-autofill')?.addEventListener('click', () => {
+    // Auto-fill fleet from Anomaly
+    modal.querySelector('.nexus-btn-autofill-anomaly')?.addEventListener('click', () => {
       if (isSimulating) return;
       CANONICAL_WARSHIP_IDS.forEach((id) => {
         activeWarships[id] = stationedWarships[id] || 0;
@@ -1010,6 +1206,21 @@ export async function openAnomalyWaveSimModal(
       latestSummary = null;
       simulatedResults = [];
       render();
+    });
+
+    // Auto-fill fleet from selected Planet or Moon
+    modal.querySelector('.nexus-btn-autofill-planet')?.addEventListener('click', () => {
+      if (isSimulating) return;
+      const currentSelected = planetsList.find((p) => p.id === activePlanetId) || planetsList[0];
+      if (currentSelected) {
+        CANONICAL_WARSHIP_IDS.forEach((id) => {
+          activeWarships[id] = currentSelected.ships[id] || 0;
+        });
+        persistFleet();
+        latestSummary = null;
+        simulatedResults = [];
+        render();
+      }
     });
 
     // Clear fleet
@@ -1064,20 +1275,6 @@ export async function openAnomalyWaveSimModal(
       });
     });
 
-    // Clickable stationed badge on card top
-    modal.querySelectorAll<HTMLElement>('.nexus-sim-stationed-badge').forEach((badge) => {
-      badge.addEventListener('click', (e) => {
-        if (isSimulating) return;
-        const target = e.currentTarget as HTMLElement;
-        const id = parseInt(target.dataset.id || '0', 10) as CanonicalWarshipId;
-        const val = parseInt(target.dataset.val || '0', 10);
-        if (CANONICAL_WARSHIP_IDS.includes(id) && val > 0) {
-          activeWarships[id] = val;
-          persistFleet();
-          render();
-        }
-      });
-    });
 
     // Mouse-following hover for hostile fleet inspect buttons
     modal.querySelectorAll<HTMLElement>('.nexus-hostile-inspect-btn').forEach((btn) => {
@@ -1102,6 +1299,40 @@ export async function openAnomalyWaveSimModal(
     modal.querySelector('#nexus-sim-run-btn')?.addEventListener('click', () => {
       executeSimulation();
     });
+
+    // Send fleet to Anomaly via Fleet Dispatch
+    modal.querySelector('#nexus-sim-send-fleet-btn')?.addEventListener('click', () => {
+      const totalInput = Object.values(activeWarships).reduce((a, b) => a + b, 0);
+      if (totalInput === 0 || isSimulating) return;
+
+      const selectedShips: Record<number, number> = {};
+      for (const [sId, amt] of Object.entries(activeWarships)) {
+        if (amt > 0) {
+          selectedShips[Number(sId)] = amt;
+        }
+      }
+
+      if (Object.keys(selectedShips).length === 0) return;
+
+      persistFleet();
+
+      const sendBtn = modal.querySelector<HTMLButtonElement>('#nexus-sim-send-fleet-btn');
+      if (sendBtn) {
+        sendBtn.innerHTML = `
+          <span class="nexus-sim-spinner"></span>
+          <span>Dispatching Fleet...</span>
+        `;
+        sendBtn.disabled = true;
+      }
+
+      const targetCoords = {
+        galaxy: missionData.galaxy,
+        system: missionData.system,
+        position: missionData.position
+      };
+
+      dispatchMultiFleetToAnomaly(targetCoords, selectedShips, activePlanetId);
+    });
   };
 
   const persistFleet = () => {
@@ -1123,6 +1354,10 @@ export async function openAnomalyWaveSimModal(
     const runBtn = modal.querySelector<HTMLButtonElement>('#nexus-sim-run-btn');
     if (runBtn && !isSimulating) {
       runBtn.disabled = totalInputShips === 0;
+    }
+    const sendFleetBtn = modal.querySelector<HTMLButtonElement>('#nexus-sim-send-fleet-btn');
+    if (sendFleetBtn && !isSimulating) {
+      sendFleetBtn.disabled = totalInputShips === 0;
     }
   };
 

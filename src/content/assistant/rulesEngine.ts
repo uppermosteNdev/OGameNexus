@@ -1029,6 +1029,53 @@ async function evaluateImportExport(account: Account, settings: AssistantSetting
 // ==========================================================================
 // RULE 7: Optimal Amortization Upgrade Recommendation
 // ==========================================================================
+
+/**
+ * Detects if the active universe supports Project Orion / Anomaly update.
+ * If there is no clear indicator that Orion is active, returns false so
+ * that Interstellar Anomaly Scanner (IAS) and Orion buildings are suppressed.
+ */
+export async function checkAnomaliesSupported(account?: Account, planets?: Planet[]): Promise<boolean> {
+  // 1. Explicit property on account (set by background sync / externaldataexport)
+  if (account && account.hasAnomalies !== undefined) {
+    return Boolean(account.hasAnomalies);
+  }
+
+  // 2. Direct DOM inspection in the current game tab
+  if (typeof document !== 'undefined') {
+    if (document.querySelector('a[href*="component=orion"], [data-technology="45"], #technology_45, .orionTabContent, #orionscanner, #scanner, #scannerResultHolder')) {
+      return true;
+    }
+  }
+
+  // 3. chrome.storage.local (stored by content script after parsing accountInfo)
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    try {
+      const playerKey = account?.playerId ? `ognexus_has_anomalies_${account.playerId}` : 'ognexus_has_anomalies';
+      const res = await chrome.storage.local.get([playerKey, 'ognexus_has_anomalies']);
+      if (res[playerKey] !== undefined) return Boolean(res[playerKey]);
+      if (res['ognexus_has_anomalies'] !== undefined) return Boolean(res['ognexus_has_anomalies']);
+    } catch (e) {}
+  }
+
+  // 4. localStorage fallback
+  try {
+    const val = localStorage.getItem('ognexus_has_anomalies');
+    if (val !== null) return val === 'true';
+  } catch (e) {}
+
+  // 5. Existing planet telemetry in database
+  if (planets && planets.length > 0) {
+    const hasDbAnomalies = planets.some((p: any) =>
+      p.iaScanner !== undefined || (Array.isArray(p.controlCenterBuildings) && p.controlCenterBuildings.length > 0)
+    );
+    if (hasDbAnomalies) return true;
+  }
+
+  // Default: Orion / Anomaly update is NOT active
+  return false;
+}
+
 async function evaluateAmortization(
   planets: Planet[],
   account: Account,
@@ -1041,6 +1088,8 @@ async function evaluateAmortization(
   if (!validPlanets || validPlanets.length === 0) return results;
 
   try {
+    const anomaliesSupported = await checkAnomaliesSupported(account, validPlanets);
+
     const filters = {
       [AmortizationType.Mines]: true,
       [AmortizationType.LifeformProductionBuildings]: true,
@@ -1049,7 +1098,7 @@ async function evaluateAmortization(
       [AmortizationType.LifeformExpeditionResearches]: true,
       [AmortizationType.PlasmaTechnology]: true,
       [AmortizationType.Astrophysics]: true,
-      [AmortizationType.AnomalyBuildings]: true
+      [AmortizationType.AnomalyBuildings]: anomaliesSupported
     };
 
     const items = rankAmortizationItems(validPlanets, account, filters, rates || DEFAULT_RATES, 1, expoAverages);
@@ -1096,9 +1145,23 @@ async function evaluateAmortization(
         actionUrl = `/game/index.php?page=ingame&component=lfresearch&cp=${topItem.planetId}`;
       }
     } else if (topItem.type === AmortizationType.PlasmaTechnology) {
-      // Global research: NO button inside the modal
-      actionLabel = undefined;
-      actionUrl = undefined;
+      actionLabel = 'Research';
+      actionUrl = `/game/index.php?page=ingame&component=research`;
+    } else if (topItem.type === AmortizationType.Astrophysics) {
+      actionLabel = 'Research';
+      actionUrl = `/game/index.php?page=ingame&component=research`;
+    } else if (topItem.type === AmortizationType.AnomalyBuildings) {
+      if (topItem.id === 45) {
+        actionLabel = 'Facilities';
+        actionUrl = topItem.planetId
+          ? `/game/index.php?page=ingame&component=facilities&cp=${topItem.planetId}`
+          : `/game/index.php?page=ingame&component=facilities`;
+      } else {
+        actionLabel = 'Control Centre';
+        actionUrl = topItem.planetId
+          ? `/game/index.php?page=ingame&component=orion&tab=controlcenter&cp=${topItem.planetId}`
+          : `/game/index.php?page=ingame&component=orion&tab=controlcenter`;
+      }
     }
 
     const locationText = (planetName && coords) ? ` on ${planetName} [${coords}]` : '';

@@ -52,6 +52,7 @@ export const OVERWATCH_TESTER_WHITELIST: OverwatchTester[] = [
   { playerId: '100482', universeId: '*', playerName: 'M A D', note: 'Approved closed alpha tester (s268-en)' },
   { playerId: '100177', universeId: '*', playerName: 'Darth', note: 'Approved closed alpha tester (s264-en)' },
   { playerId: '101899', universeId: '*', playerName: 'David Gobbins', note: 'Approved closed alpha tester (s272-es)' },
+  { playerId: '100047', universeId: '*', playerName: 'Kloek8', note: 'Approved closed alpha tester (s186-nl)' },
 ];
 
 /**

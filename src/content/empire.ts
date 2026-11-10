@@ -360,11 +360,11 @@ export function parseExternalDataExportJson(data: any): {
     }
 
     // 2. Space Objects map (type 1 = planet, type 3 = moon)
-    const typeMap: Record<number, 'planet' | 'moon'> = {};
+    const typeMap: Record<string, 'planet' | 'moon'> = {};
     if (Array.isArray(data.spaceObjects)) {
         data.spaceObjects.forEach((so: any) => {
-            if (so && so.id) {
-                typeMap[Number(so.id)] = so.type === 3 ? 'moon' : 'planet';
+            if (so && so.id !== undefined) {
+                typeMap[String(so.id)] = so.type === 3 ? 'moon' : 'planet';
             }
         });
     }
@@ -377,29 +377,38 @@ export function parseExternalDataExportJson(data: any): {
         });
     }
 
-    // 4. Planets & Moons
-    const rawEntities: { rawP: any; defaultType?: 'planet' | 'moon' }[] = [];
+    // 4. Planets & Moons - gather all and deduplicate by ID
+    const entityMap = new Map<string, { rawP: any; defaultType?: 'planet' | 'moon' }>();
     if (data.planets && typeof data.planets === 'object') {
         const list = Array.isArray(data.planets) ? data.planets : Object.values(data.planets);
-        list.forEach((rawP: any) => rawEntities.push({ rawP, defaultType: 'planet' }));
+        list.forEach((rawP: any) => {
+            if (rawP && rawP.id !== undefined) entityMap.set(String(rawP.id), { rawP, defaultType: 'planet' });
+        });
     }
     if (data.moons && typeof data.moons === 'object') {
         const list = Array.isArray(data.moons) ? data.moons : Object.values(data.moons);
-        list.forEach((rawP: any) => rawEntities.push({ rawP, defaultType: 'moon' }));
+        list.forEach((rawP: any) => {
+            if (rawP && rawP.id !== undefined) entityMap.set(String(rawP.id), { rawP, defaultType: 'moon' });
+        });
     }
     if (data.celestialObjects && typeof data.celestialObjects === 'object') {
         const list = Array.isArray(data.celestialObjects) ? data.celestialObjects : Object.values(data.celestialObjects);
-        list.forEach((rawP: any) => rawEntities.push({ rawP }));
+        list.forEach((rawP: any) => {
+            if (rawP && rawP.id !== undefined && !entityMap.has(String(rawP.id))) {
+                entityMap.set(String(rawP.id), { rawP });
+            }
+        });
     }
 
-    rawEntities.forEach(({ rawP, defaultType }) => {
-        if (!rawP || !rawP.id) return;
+    entityMap.forEach(({ rawP, defaultType }) => {
+        if (!rawP || rawP.id === undefined) return;
 
-        const objectId = Number(rawP.id);
-        const isMoon = defaultType === 'moon' || rawP.type === 3 || rawP.type === 'moon' || typeMap[objectId] === 'moon';
+        const idStr = String(rawP.id);
+        const mappedType = typeMap[idStr];
+        const isMoon = mappedType === 'moon' || defaultType === 'moon' || rawP.type === 3 || rawP.type === 'moon';
 
         const planet: Partial<Planet> = {
-            id: String(rawP.id),
+            id: idStr,
             name: rawP.name || (isMoon ? "Moon" : "Planet"),
             coords: `${rawP.galaxy}:${rawP.system}:${rawP.position}`,
             type: isMoon ? 'moon' : 'planet',

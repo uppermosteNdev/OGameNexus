@@ -1,8 +1,8 @@
 import { db, getTacticalNotesForUniverse, saveTacticalNoteToDB, deleteTacticalNoteFromDB, TacticalNote, AnomalyDebrisReceipt } from "../db";
-import { parseOverview, parsePlayerDataXml, parseSupplies, parseResearches, parseLifeformResearch, parseLifeformBuildings, parseLifeformBonuses, parseServerDataXml } from "./scrapers";
+import { parsePlayerDataXml, parseServerDataXml } from "./scrapers";
 import { LIFEFORM_BUILDING_DATA, SHIP_DATA } from "../db/staticData";
 import { LIFEFORM_TECH_DATA, getLfTech, isLifeformBuilding } from "../db/lifeformTechData";
-import { AMORTIZATION_TABLE, calculateEmpireProduction, calculateMSU, DEFAULT_RATES, Cost } from "../utils/amortizationCalc";
+import { AMORTIZATION_TABLE, calculateEmpireProduction, calculateMSU, DEFAULT_RATES, Cost, getPlanetTechMultiplier } from "../utils/amortizationCalc";
 import { calculateDynamicLifeformOverview } from "../db/lfBonusOverviewEngine";
 import { sanitizeActiveItem } from "../utils/items";
 import { getOverwatchApiUrl, fetchOverwatch, getStoredOverwatchConfig } from "../utils/overwatchApi";
@@ -10,6 +10,7 @@ import { cleanUniverseId, isSameUniverse } from "../utils/universe";
 import { calculateAccountResearchScore } from "../utils/researchTimeCalc";
 import { fetchPlayerHighscores } from "../utils/ogameHighscores";
 import { recalculateAnomalyMissionLosses, recalculateAllAnomalyMissionLosses } from "../utils/anomalyCombat";
+import { IS_EXTENSION_DISABLED } from "../config/killSwitch";
 
 // Auto-heal / normalize any legacy or uncleaned debris harvests on extension launch
 async function normalizeDebrisHarvestsOnStartup() {
@@ -60,7 +61,9 @@ async function normalizeDebrisHarvestsOnStartup() {
         console.warn('OGame Nexus: Note during debris normalization', e);
     }
 }
-normalizeDebrisHarvestsOnStartup();
+if (!IS_EXTENSION_DISABLED) {
+    normalizeDebrisHarvestsOnStartup();
+}
 
 // Auto-heal / normalize any legacy or uncleaned spied planets on extension launch
 async function normalizeSpiedPlanetsOnStartup() {
@@ -80,18 +83,14 @@ async function normalizeSpiedPlanetsOnStartup() {
         for (const p of all) {
             const cleanUni = cleanUniverseId(p.universe);
             const candidates = universeAccountMap.get(cleanUni) || [];
-            let resolvedPid = p.userPlayerId;
+            let resolvedPid: string | undefined = p.userPlayerId;
             if (!resolvedPid || resolvedPid === 'unknown') {
                 if (candidates.length === 1) {
                     resolvedPid = candidates[0].playerId;
                 } else if (candidates.length > 1) {
-                    const sorted = candidates.slice().sort((a, b) => {
-                        const numA = Number(a.playerId);
-                        const numB = Number(b.playerId);
-                        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-                        return (a.lastSeen || 0) - (b.lastSeen || 0);
-                    });
-                    resolvedPid = sorted[0].playerId;
+                    // When multiple accounts exist on this universe, NEVER arbitrarily assign
+                    // unassigned targets to one account, as this causes cross-account target leakage!
+                    resolvedPid = undefined;
                 }
             }
 
@@ -128,8 +127,10 @@ async function normalizeSpiedPlanetsOnStartup() {
         console.warn('OGame Nexus: Note during spied planets normalization', e);
     }
 }
-normalizeSpiedPlanetsOnStartup();
-recalculateAllAnomalyMissionLosses();
+if (!IS_EXTENSION_DISABLED) {
+    normalizeSpiedPlanetsOnStartup();
+    recalculateAllAnomalyMissionLosses();
+}
 
 function cleanObject(obj: any) {
     const cleaned = { ...obj };
@@ -243,76 +244,7 @@ function mergeLifeformSetup(existing: any[], incoming: any[], fromEmpire: boolea
     return Array.from(slotMap.values()).sort((a, b) => a.slotNumber - b.slotNumber);
 }
 
-async function fetchPlanetSupplies(serverUrl: string, planetId: string) {
-    const url = `${serverUrl}/game/index.php?page=ingame&component=supplies&cp=${planetId}`;
-    try {
-        const response = await fetch(url);
-        const html = await response.text();
-        return parseSupplies(html);
-    } catch (err) {
-        console.error(`Background: Error fetching supplies for planet ${planetId}`, err);
-        return null;
-    }
-}
-async function fetchPlanetOverview(serverUrl: string, planetId: string) {
-    const url = `${serverUrl}/game/index.php?page=ingame&component=overview&cp=${planetId}`;
-    try {
-        const response = await fetch(url);
-        const html = await response.text();
-        return parseOverview(html);
-    } catch (err) {
-        console.error(`Background: Error fetching overview for planet ${planetId}`, err);
-        return null;
-    }
-}
 
-async function fetchPlanetResearch(serverUrl: string, planetId: string) {
-    const url = `${serverUrl}/game/index.php?page=ingame&component=research&cp=${planetId}`;
-    try {
-        const response = await fetch(url);
-        const html = await response.text();
-        return parseResearches(html);
-    } catch (err) {
-        console.error(`Background: Error fetching researches for planet ${planetId}`, err);
-        return null;
-    }
-}
-
-async function fetchPlanetLifeformResearch(serverUrl: string, planetId: string) {
-    const url = `${serverUrl}/game/index.php?page=ingame&component=lfresearch&cp=${planetId}`;
-    try {
-        const response = await fetch(url);
-        const html = await response.text();
-        return parseLifeformResearch(html);
-    } catch (err) {
-        console.error(`Background: Error fetching LF research for planet ${planetId}`, err);
-        return null;
-    }
-}
-
-async function fetchPlanetLifeformBuildings(serverUrl: string, planetId: string) {
-    const url = `${serverUrl}/game/index.php?page=ingame&component=lfbuildings&cp=${planetId}`;
-    try {
-        const response = await fetch(url);
-        const html = await response.text();
-        return parseLifeformBuildings(html);
-    } catch (err) {
-        console.error(`Background: Error fetching LF buildings for planet ${planetId}`, err);
-        return null;
-    }
-}
-
-async function fetchPlanetLifeformBonuses(serverUrl: string, planetId: string) {
-    const url = `${serverUrl}/game/index.php?page=ingame&component=lfbonuses&cp=${planetId}`;
-    try {
-        const response = await fetch(url);
-        const html = await response.text();
-        return parseLifeformBonuses(html);
-    } catch (err) {
-        console.error(`Background: Error fetching LF bonuses for planet ${planetId}`, err);
-        return null;
-    }
-}
 
 async function fetchServerData(universe: string) {
     const domain = universe.includes('.') ? universe : `${universe}.ogame.gameforge.com`;
@@ -754,6 +686,7 @@ async function syncData(data: any) {
     }
 }
 
+if (!IS_EXTENSION_DISABLED) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "OPEN_DASHBOARD") {
         (async () => {
@@ -1151,6 +1084,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                         : (empirePlanet?.controlCenterBuildings ?? existing?.controlCenterBuildings),
                                     crawlers: supplies?.crawlers !== undefined ? supplies.crawlers : (empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : (empirePlanet?.ships?.[217] ?? (empirePlanet?.ships as any)?.[`217`] ?? existing?.ships?.[217] ?? (existing?.ships as any)?.[`217`] ?? existing?.crawlers ?? 0)),
                                     lifeformId: resolvedLifeformId,
+                                    ships: (empirePlanet?.ships && typeof empirePlanet.ships === 'object' && Object.keys(empirePlanet.ships).length > 0) ? empirePlanet.ships : existing?.ships,
+                                    defenses: (empirePlanet?.defenses && typeof empirePlanet.defenses === 'object' && Object.keys(empirePlanet.defenses).length > 0) ? empirePlanet.defenses : existing?.defenses,
 
                                     // Security: LF Tech levels can only go up. Merge incoming with existing.
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], lifeformSetup || empirePlanet?.lifeformSetup || [], !lifeformSetup && !!empirePlanet?.lifeformSetup),
@@ -1175,8 +1110,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     activeItems: resolvedActiveItems,
                                     lifeformId: resolvedLifeformId,
                                     crawlers: empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : (empirePlanet?.ships?.[217] ?? (empirePlanet?.ships as any)?.[`217`] ?? existing?.ships?.[217] ?? (existing?.ships as any)?.[`217`] ?? existing?.crawlers ?? 0),
-                                    ships: empirePlanet?.ships || existing?.ships,
-                                    defenses: empirePlanet?.defenses || existing?.defenses,
+                                    ships: (empirePlanet?.ships && typeof empirePlanet.ships === 'object' && Object.keys(empirePlanet.ships).length > 0) ? empirePlanet.ships : existing?.ships,
+                                    defenses: (empirePlanet?.defenses && typeof empirePlanet.defenses === 'object' && Object.keys(empirePlanet.defenses).length > 0) ? empirePlanet.defenses : existing?.defenses,
                                     facilities: empirePlanet?.facilities || existing?.facilities,
                                     iaScanner: empirePlanet?.iaScanner ?? existing?.iaScanner,
                                     controlCenterBuildings: empirePlanet?.controlCenterBuildings ?? existing?.controlCenterBuildings,
@@ -1770,6 +1705,94 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (message.type === "GET_PLAYER_CLASS_INTEL") {
+        (async () => {
+            try {
+                let playerId = String(message.playerId || '').trim();
+                let account = null;
+                if (playerId) {
+                    account = (await db.accounts.get(playerId)) || (await db.accounts.get(Number(playerId) as any));
+                }
+                if (!account) {
+                    account = (await db.accounts.orderBy('lastSeen').reverse().first()) || (await db.accounts.toCollection().last());
+                }
+                if (!account) {
+                    const allAccs = await db.accounts.toArray();
+                    account = allAccs[0] || null;
+                }
+
+                const targetPlayerId = String(account?.playerId || playerId || '').trim();
+                let planets: any[] = [];
+                if (targetPlayerId) {
+                    planets = await db.planets.where('playerId').equals(targetPlayerId).toArray();
+                    if (planets.length === 0 && !isNaN(Number(targetPlayerId))) {
+                        planets = await db.planets.where('playerId').equals(Number(targetPlayerId) as any).toArray();
+                    }
+                }
+                if (planets.length === 0) {
+                    const allPlanets = await db.planets.toArray();
+                    planets = targetPlayerId ? allPlanets.filter(p => String(p.playerId) === targetPlayerId) : allPlanets;
+                    if (planets.length === 0) {
+                        planets = allPlanets;
+                    }
+                }
+                const cleanPlanets = planets.filter(p => p.type !== 'moon').map(p => ({ ...p, type: 'planet' }));
+
+                let t18BonusPct = 0;
+                if (cleanPlanets.length > 0) {
+                    try {
+                        const lfOverview = calculateDynamicLifeformOverview({
+                            empire: {
+                                planets: cleanPlanets,
+                                lifeformExperience: account?.lifeformExperience || []
+                            }
+                        } as any);
+                        const genClass = lfOverview?.characterClasses?.find(c => c.name === 'General');
+                        if (genClass?.total) {
+                            const parsed = parseFloat(genClass.total.replace('%', '').trim());
+                            if (!isNaN(parsed) && isFinite(parsed)) {
+                                t18BonusPct = parsed;
+                            }
+                        }
+                    } catch (e) {
+                        console.error("OGame Nexus: Error calculating dynamic lifeform overview for player class intel", e);
+                    }
+
+                    // Fallback to direct calculation if lfOverview was 0 or had an issue
+                    if (t18BonusPct === 0) {
+                        for (const p of cleanPlanets) {
+                            const techMult = getPlanetTechMultiplier(p, account);
+                            const setups = p.lifeformSetup;
+                            if (Array.isArray(setups)) {
+                                for (const s of setups) {
+                                    if (!s) continue;
+                                    const rawId = Number(s?.selectedTechId ?? s?.techId ?? s?.id);
+                                    const lvl = Number(s?.level ?? 0);
+                                    if (lvl <= 0) continue;
+
+                                    const tech = getLfTech(rawId);
+                                    // Strictly Mechan General Enhancement (ID 71, Game ID 13218)
+                                    if (tech && (tech.id === 71 || tech.gkId === 13218)) {
+                                        t18BonusPct += 0.2 * lvl * techMult;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                t18BonusPct = Math.round(t18BonusPct * 100) / 100;
+
+                const playerClass = (account && typeof account.playerClass === 'number') ? account.playerClass : 2;
+
+                sendResponse({ success: true, playerClass, t18BonusPct });
+            } catch (err) {
+                console.error("OGame Nexus: Error calculating player class intel in background", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
     if (message.type === "GET_ASSISTANT_DATA") {
         (async () => {
             try {
@@ -1782,6 +1805,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     account = await db.accounts.orderBy('lastSeen').reverse().first() || await db.accounts.toCollection().last();
                 }
                 const targetPlayerId = account?.playerId || playerId;
+
+                if (account && account.hasAnomalies === undefined && targetPlayerId) {
+                    try {
+                        const playerKey = `ognexus_has_anomalies_${targetPlayerId}`;
+                        const sRes = await chrome.storage.local.get([playerKey, 'ognexus_has_anomalies']);
+                        if (sRes[playerKey] !== undefined) {
+                            account.hasAnomalies = Boolean(sRes[playerKey]);
+                        } else if (sRes['ognexus_has_anomalies'] !== undefined) {
+                            account.hasAnomalies = Boolean(sRes['ognexus_has_anomalies']);
+                        }
+                    } catch (e) {}
+                }
 
                 let planets = targetPlayerId
                     ? await db.planets.where('playerId').equals(targetPlayerId).toArray()
@@ -2638,19 +2673,27 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                 }
 
                 const coordsToCheck = new Set<string>();
-                if (coords) coordsToCheck.add(String(coords).trim());
+                const normalizeCoord = (c: any) => String(c || '').replace(/[\[\]\s]/g, '').trim();
+                if (coords) {
+                    const clean = normalizeCoord(coords);
+                    if (clean) coordsToCheck.add(clean);
+                }
                 if (Array.isArray(coordsList)) {
-                    coordsList.forEach((c: any) => { if (c && typeof c === 'string') coordsToCheck.add(c.trim()); });
+                    coordsList.forEach((c: any) => {
+                        const clean = normalizeCoord(c);
+                        if (clean) coordsToCheck.add(clean);
+                    });
                 }
 
                 if (coordsToCheck.size > 0) {
                     const allPlanets = await db.spiedPlanets.toArray();
                     for (const p of allPlanets) {
-                        if (p.coords && coordsToCheck.has(p.coords.trim())) {
+                        const pCoord = normalizeCoord(p.coords);
+                        if (pCoord && coordsToCheck.has(pCoord)) {
                             if (!universe || isSameUniverse(p.universe, universe)) {
-                                if (!targetPid || p.userPlayerId === targetPid) {
-                                    keysToDelete.add(p.planetKey);
-                                }
+                                // If a coordinate is physically empty/destroyed in this universe,
+                                // purge it regardless of which account originally stored it!
+                                keysToDelete.add(p.planetKey);
                             }
                         }
                     }
@@ -2830,6 +2873,16 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
         return true;
     }
 });
+}
+
+if (typeof chrome !== 'undefined' && chrome.action) {
+    if (IS_EXTENSION_DISABLED) {
+        chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
+        chrome.action.setBadgeText({ text: 'OFF' });
+    } else {
+        chrome.action.setBadgeText({ text: '' });
+    }
+}
 
 chrome.action.onClicked.addListener(async (tab) => {
     let query = '';
@@ -2854,40 +2907,8 @@ if (typeof chrome !== 'undefined' && chrome.commands) {
 
 
 // ----------------------------------------------------------------------------
-// PERIODIC OVERWATCH EMPIRE AUTO-SYNC (EVERY 2 HOURS)
+// COMPLIANCE: CLEAR ALL BACKGROUND ALARMS (NO AUTOMATED REPETITIVE TIMERS)
 // ----------------------------------------------------------------------------
 if (typeof chrome !== 'undefined' && chrome.alarms) {
-    chrome.alarms.create('OVERWATCH_EMPIRE_PERIODIC_SYNC', { periodInMinutes: 30 });
-    chrome.alarms.onAlarm.addListener((alarm) => {
-        if (alarm.name === 'OVERWATCH_EMPIRE_PERIODIC_SYNC') {
-            (async () => {
-                try {
-                    const accounts = await db.accounts.toArray();
-                    for (const acc of accounts) {
-                        if (acc.playerId) {
-                            await autoSyncEmpireToOverwatch(acc.playerId, false);
-                        }
-                    }
-                } catch (err) {
-                    console.warn("OGame Nexus: Error in periodic empire auto-sync alarm:", err);
-                }
-            })();
-        }
-    });
+    chrome.alarms.clearAll();
 }
-
-// ----------------------------------------------------------------------------
-// EXTENSION STARTUP / SERVICE WORKER WAKEUP AUTO-SYNC CHECK
-// ----------------------------------------------------------------------------
-(async () => {
-    try {
-        const accounts = await db.accounts.toArray();
-        for (const acc of accounts) {
-            if (acc.playerId) {
-                autoSyncEmpireToOverwatch(acc.playerId, false).catch(() => {});
-            }
-        }
-    } catch (err) {
-        console.warn("OGame Nexus: Startup empire auto-sync check error:", err);
-    }
-})();

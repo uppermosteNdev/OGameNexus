@@ -21,6 +21,8 @@ export interface AnomalyCombatWave {
 }
 
 export const CANONICAL_WARSHIP_IDS = [
+  204, // Light Fighter
+  205, // Heavy Fighter
   206, // Cruiser
   207, // Battleship
   215, // Battlecruiser
@@ -34,6 +36,8 @@ export const CANONICAL_WARSHIP_IDS = [
 export type CanonicalWarshipId = typeof CANONICAL_WARSHIP_IDS[number];
 
 export const WARSHIP_METADATA: Record<CanonicalWarshipId, { name: string; iconAttr: string; role: string }> = {
+  204: { name: 'Light Fighter', iconAttr: 'fighterlight', role: 'Swarm Fighter' },
+  205: { name: 'Heavy Fighter', iconAttr: 'fighterheavy', role: 'Heavy Escort' },
   206: { name: 'Cruiser', iconAttr: 'cruiser', role: 'Anti-LF Swarm' },
   207: { name: 'Battleship', iconAttr: 'battleship', role: 'Heavy Gunner' },
   215: { name: 'Battlecruiser', iconAttr: 'interceptor', role: 'Capital Hunter' },
@@ -320,6 +324,8 @@ export function extractAnomalyCombatWaves(
  */
 export function extractStationedWarships(missionId: string): Record<CanonicalWarshipId, number> {
   const result: Record<CanonicalWarshipId, number> = {
+    204: 0,
+    205: 0,
     206: 0,
     207: 0,
     215: 0,
@@ -621,4 +627,389 @@ export async function getPlayerCombatProfile(): Promise<PlayerCombatProfile> {
     baseShielding,
     baseArmour
   };
+}
+
+
+export interface StationedPlanetFleet {
+  id: string;
+  name: string;
+  coords: string;
+  type: 'planet' | 'moon';
+  imgUrl?: string;
+  isCurrent: boolean;
+  ships: Record<CanonicalWarshipId, number>;
+}
+
+/**
+ * Loads the player's full list of planets and moons with their stationed warships and OGame icons.
+ * Proactively fetches live ship counts from OGame's accountInfo API to ensure 100% accurate fleet numbers.
+ */
+export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<CanonicalWarshipId, number>): Promise<StationedPlanetFleet[]> {
+  const metaPlayerId = document.querySelector<HTMLMetaElement>('meta[name="ogame-player-id"]')?.content;
+  const metaPlanetType = document.querySelector<HTMLMetaElement>('meta[name="ogame-planet-type"]')?.content?.trim();
+  const metaPlanetId = document.querySelector<HTMLMetaElement>('meta[name="ogame-planet-id"]')?.content?.trim() || '';
+
+  // 1. Authoritative Active Celestial Object Detection
+  // Check if an active moon link exists in the sidebar DOM (#planetList .moonlink.active) or meta tag
+  const activeMoonEl = document.querySelector<HTMLElement>('#planetList .smallplanet .moonlink.active, #planetList .moonlink.active');
+  const isCurrentMoon = metaPlanetType === '3' || metaPlanetType === 'moon' || !!activeMoonEl;
+  const currentType: 'planet' | 'moon' = isCurrentMoon ? 'moon' : 'planet';
+
+  // Active coordinates: prioritize active sidebar node, fallback to meta tag
+  let currentCoords = '';
+  if (activeMoonEl) {
+    const parentNode = activeMoonEl.closest('.smallplanet');
+    const coordsText = parentNode?.querySelector('.planet-koords')?.textContent?.trim() || '';
+    currentCoords = coordsText.replace(/[\[\]]/g, '').trim();
+  }
+  if (!currentCoords) {
+    const activePlanetNode = document.querySelector<HTMLElement>('#planetList .smallplanet.active, #planetList .smallplanet.active_home');
+    const coordsText = activePlanetNode?.querySelector('.planet-koords')?.textContent?.trim() || '';
+    currentCoords = coordsText.replace(/[\[\]]/g, '').trim();
+  }
+  if (!currentCoords) {
+    currentCoords = (document.querySelector<HTMLMetaElement>('meta[name="ogame-planet-coordinates"]')?.content || '').replace(/[\[\]]/g, '').trim();
+  }
+
+  // Active moon ID if available from link href
+  let activeMoonId = '';
+  if (isCurrentMoon && activeMoonEl) {
+    const href = activeMoonEl.getAttribute('href') || '';
+    const m = href.match(/cp=(\d+)/);
+    if (m) activeMoonId = m[1];
+  }
+
+  const liveShipsByPlanetId: Record<string, Record<number, number>> = {};
+  const liveShipsByCoords: Record<string, Record<number, number>> = {};
+  const realIdsByCoordsType: Record<string, string> = {};
+  const accountInfoEntities: { id: string; name: string; coords: string; type: 'planet' | 'moon'; ships: Record<number, number> }[] = [];
+
+  // 2. Fast Cache: Check in-memory window and chrome.storage.local
+  const applyFleetCache = (cache: any) => {
+    if (!cache || typeof cache !== 'object') return;
+    if (cache.byPlanetId) Object.assign(liveShipsByPlanetId, cache.byPlanetId);
+    if (cache.byCoordsType) Object.assign(liveShipsByCoords, cache.byCoordsType);
+    if (cache.realIds) Object.assign(realIdsByCoordsType, cache.realIds);
+  };
+
+  applyFleetCache((window as any)._ognexus_cached_fleet);
+
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && metaPlayerId) {
+    try {
+      const stored = await chrome.storage.local.get(`ognexus_fleet_${metaPlayerId}`);
+      if (stored && stored[`ognexus_fleet_${metaPlayerId}`]) {
+        applyFleetCache(stored[`ognexus_fleet_${metaPlayerId}`]);
+      }
+    } catch {}
+  }
+
+  // 3. Fetch externaldataexport accountInfo API directly (authoritative list of all 32 celestial objects & ships)
+  try {
+    const accRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (accRes.ok) {
+      const accText = await accRes.text();
+      const trimmed = accText ? accText.trim() : '';
+      if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        const accJson = JSON.parse(trimmed);
+
+        // Map spaceObjects for reliable planet vs moon distinction
+        const typeMap = new Map<string, 'planet' | 'moon'>();
+        if (Array.isArray(accJson.spaceObjects)) {
+          accJson.spaceObjects.forEach((so: any) => {
+            if (so && so.id !== undefined) {
+              typeMap.set(String(so.id), so.type === 3 ? 'moon' : 'planet');
+            }
+          });
+        }
+
+        // Gather all celestial entities (planets, moons, celestialObjects)
+        const allRaw: any[] = [];
+        if (accJson.planets && typeof accJson.planets === 'object') {
+          const list = Array.isArray(accJson.planets) ? accJson.planets : Object.values(accJson.planets);
+          list.forEach((p: any) => allRaw.push({ ...p, _defType: typeMap.get(String(p.id)) || (p.type === 3 ? 'moon' : 'planet') }));
+        }
+        if (accJson.moons && typeof accJson.moons === 'object') {
+          const list = Array.isArray(accJson.moons) ? accJson.moons : Object.values(accJson.moons);
+          list.forEach((m: any) => allRaw.push({ ...m, _defType: 'moon' }));
+        }
+        if (accJson.celestialObjects && typeof accJson.celestialObjects === 'object') {
+          const list = Array.isArray(accJson.celestialObjects) ? accJson.celestialObjects : Object.values(accJson.celestialObjects);
+          list.forEach((c: any) => allRaw.push({ ...c, _defType: typeMap.get(String(c.id)) || (c.type === 3 ? 'moon' : 'planet') }));
+        }
+
+        // Deduplicate by ID
+        const entityMap = new Map<string, any>();
+        allRaw.forEach((e) => {
+          if (e && e.id !== undefined && !entityMap.has(String(e.id))) {
+            entityMap.set(String(e.id), e);
+          }
+        });
+
+        entityMap.forEach((rawP) => {
+          const idStr = String(rawP.id);
+          const mappedType = typeMap.get(idStr);
+          const isMoon = mappedType === 'moon' || rawP._defType === 'moon' || rawP.type === 3 || rawP.type === 'moon';
+          const pType: 'planet' | 'moon' = isMoon ? 'moon' : 'planet';
+          const coords = `${rawP.galaxy}:${rawP.system}:${rawP.position}`;
+          const key = `${coords}_${pType}`;
+          const name = rawP.name || (isMoon ? 'Moon' : 'Planet');
+
+          const ships: Record<number, number> = {};
+          if (rawP.ships && typeof rawP.ships === 'object') {
+            Object.entries(rawP.ships).forEach(([sIdStr, sCount]) => {
+              const sId = parseInt(sIdStr, 10);
+              const num = Number(sCount);
+              if (!isNaN(sId) && num > 0) ships[sId] = num;
+            });
+          }
+          // Direct properties
+          CANONICAL_WARSHIP_IDS.forEach((wId) => {
+            if (ships[wId] === undefined && rawP[wId] !== undefined) {
+              const val = Number(rawP[wId]);
+              if (!isNaN(val) && val > 0) ships[wId] = val;
+            }
+          });
+
+          liveShipsByPlanetId[idStr] = { ...(liveShipsByPlanetId[idStr] || {}), ...ships };
+          liveShipsByCoords[key] = { ...(liveShipsByCoords[key] || {}), ...ships };
+          realIdsByCoordsType[key] = idStr;
+
+          accountInfoEntities.push({
+            id: idStr,
+            name,
+            coords,
+            type: pType,
+            ships
+          });
+        });
+
+        (window as any)._ognexus_cached_fleet = {
+          timestamp: Date.now(),
+          byPlanetId: liveShipsByPlanetId,
+          byCoordsType: liveShipsByCoords,
+          realIds: realIdsByCoordsType
+        };
+
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && metaPlayerId) {
+          chrome.storage.local.set({
+            [`ognexus_fleet_${metaPlayerId}`]: {
+              timestamp: Date.now(),
+              byPlanetId: liveShipsByPlanetId,
+              byCoordsType: liveShipsByCoords,
+              realIds: realIdsByCoordsType
+            }
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[OrionSim] accountInfo fleet query failed:', err);
+  }
+
+  // 4. Scrape live DOM #planetList for images, custom names, and visual link attributes
+  const domPlanets: any[] = [];
+  try {
+    const planetNodes = document.querySelectorAll('#planetList .smallplanet');
+    planetNodes.forEach((node) => {
+      const pId = node.id.replace('planet-', '');
+      const name = node.querySelector('.planet-name')?.textContent?.trim() || 'Planet';
+      const coords = (node.querySelector('.planet-koords')?.textContent?.trim() || '').replace(/[\[\]]/g, '');
+      const planetImgEl = node.querySelector<HTMLImageElement>('.planetPic');
+      const planetImg = planetImgEl?.src || planetImgEl?.getAttribute('src') || '';
+
+      const pos = parseInt(coords.split(':')[2] || '1', 10) || 1;
+      const safePos = Math.min(15, Math.max(1, pos));
+      const fallbackPlanetImg = typeof chrome !== 'undefined' && chrome.runtime?.getURL
+        ? chrome.runtime.getURL(`icons/overwatch/planet-slot-${safePos}.png`)
+        : `/icons/overwatch/planet-slot-${safePos}.png`;
+
+      if (pId && coords && coords !== '0:0:0') {
+        domPlanets.push({
+          id: pId,
+          name,
+          coords,
+          type: 'planet' as const,
+          imgUrl: planetImg || fallbackPlanetImg
+        });
+
+        const moonLink = node.querySelector<HTMLElement>('.moonlink');
+        if (moonLink) {
+          const href = moonLink.getAttribute('href') || '';
+          const m = href.match(/cp=(\d+)/);
+          const realMoonId = realIdsByCoordsType[`${coords}_moon`];
+          const mId = m ? m[1] : (realMoonId || `${pId}_moon`);
+          let moonName = 'Moon';
+          const tip = moonLink.getAttribute('data-tooltip-title') || '';
+          const nameMatch = tip.match(/<b>(.*?)[\\[]/);
+          if (nameMatch) moonName = nameMatch[1].trim();
+
+          let moonImg = '';
+          const moonImgEl = moonLink.querySelector<HTMLImageElement>('.icon-moon, img');
+          if (moonImgEl) {
+            if (moonImgEl.tagName.toLowerCase() === 'img') {
+              moonImg = moonImgEl.src || moonImgEl.getAttribute('src') || '';
+            } else {
+              const bg = window.getComputedStyle(moonImgEl).backgroundImage;
+              const match = bg.match(/url\(["']?(.*?)["']?\)/);
+              if (match && match[1]) {
+                moonImg = match[1];
+              }
+            }
+          }
+          const fallbackMoonImg = typeof chrome !== 'undefined' && chrome.runtime?.getURL
+            ? chrome.runtime.getURL('icons/overwatch/moon.jpg')
+            : '/icons/overwatch/moon.jpg';
+
+          domPlanets.push({
+            id: mId,
+            name: moonName,
+            coords,
+            type: 'moon' as const,
+            imgUrl: moonImg || fallbackMoonImg
+          });
+        }
+      }
+    });
+  } catch (domErr) {
+    console.warn('[OrionSim] DOM planet scraping error:', domErr);
+  }
+
+  // 5. Build unified StationedPlanetFleet map
+  const resultMap = new Map<string, StationedPlanetFleet>();
+
+  // A. Use accountInfo entities as authoritative foundation for all 32 objects
+  for (const accEnt of accountInfoEntities) {
+    const key = `${accEnt.coords}_${accEnt.type}`;
+    const domMatch = domPlanets.find((dp) => dp.coords === accEnt.coords && dp.type === accEnt.type);
+
+    const pos = parseInt(accEnt.coords.split(':')[2] || '1', 10) || 1;
+    const safePos = Math.min(15, Math.max(1, pos));
+    const defaultImg = accEnt.type === 'moon'
+      ? (typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL('icons/overwatch/moon.jpg') : '/icons/overwatch/moon.jpg')
+      : (typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(`icons/overwatch/planet-slot-${safePos}.png`) : `/icons/overwatch/planet-slot-${safePos}.png`);
+
+    const imgUrl = domMatch?.imgUrl || defaultImg;
+
+    // Strict Type Match: Moon can only be current if currentType is moon, Planet only if currentType is planet
+    let isCurrent = false;
+    if (accEnt.type === currentType) {
+      if (currentCoords && accEnt.coords === currentCoords) {
+        isCurrent = true;
+      } else if (activeMoonId && String(accEnt.id) === String(activeMoonId)) {
+        isCurrent = true;
+      } else if (!isCurrentMoon && metaPlanetId && String(accEnt.id) === String(metaPlanetId)) {
+        isCurrent = true;
+      }
+    }
+
+    const ships: Record<CanonicalWarshipId, number> = {
+      204: 0, 205: 0, 206: 0, 207: 0, 215: 0, 211: 0, 213: 0, 214: 0, 218: 0, 219: 0
+    };
+    for (const id of CANONICAL_WARSHIP_IDS) {
+      const fallbackVal = (isCurrent && fallbackCurrentShips) ? (fallbackCurrentShips[id] || 0) : 0;
+      const parsed = Number(accEnt.ships[id] ?? liveShipsByCoords[key]?.[id] ?? liveShipsByPlanetId[String(accEnt.id)]?.[id] ?? fallbackVal);
+      ships[id] = parsed > 0 ? parsed : fallbackVal;
+    }
+
+    resultMap.set(key, {
+      id: accEnt.id,
+      name: domMatch?.name || accEnt.name,
+      coords: accEnt.coords,
+      type: accEnt.type,
+      imgUrl,
+      isCurrent,
+      ships
+    });
+  }
+
+  // B. Merge any DOM planets missing from accountInfo
+  for (const dp of domPlanets) {
+    const key = `${dp.coords}_${dp.type}`;
+    if (!resultMap.has(key)) {
+      let isCurrent = false;
+      if (dp.type === currentType) {
+        if (currentCoords && dp.coords === currentCoords) {
+          isCurrent = true;
+        } else if (activeMoonId && String(dp.id) === String(activeMoonId)) {
+          isCurrent = true;
+        } else if (!isCurrentMoon && metaPlanetId && String(dp.id) === String(metaPlanetId)) {
+          isCurrent = true;
+        }
+      }
+
+      const liveShips = liveShipsByCoords[key] || liveShipsByPlanetId[String(dp.id)] || {};
+      const ships: Record<CanonicalWarshipId, number> = {
+        204: 0, 205: 0, 206: 0, 207: 0, 215: 0, 211: 0, 213: 0, 214: 0, 218: 0, 219: 0
+      };
+      for (const id of CANONICAL_WARSHIP_IDS) {
+        const fallbackVal = (isCurrent && fallbackCurrentShips) ? (fallbackCurrentShips[id] || 0) : 0;
+        const parsed = Number(liveShips[id] ?? fallbackVal);
+        ships[id] = parsed > 0 ? parsed : fallbackVal;
+      }
+
+      resultMap.set(key, {
+        id: String(dp.id),
+        name: dp.name,
+        coords: dp.coords,
+        type: dp.type,
+        imgUrl: dp.imgUrl,
+        isCurrent,
+        ships
+      });
+    }
+  }
+
+  let list = Array.from(resultMap.values());
+
+  if (list.length === 0) {
+    const pos = parseInt(currentCoords.split(':')[2] || '1', 10) || 1;
+    const safePos = Math.min(15, Math.max(1, pos));
+    const defaultImg = currentType === 'moon'
+      ? (typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL('icons/overwatch/moon.jpg') : '/icons/overwatch/moon.jpg')
+      : (typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(`icons/overwatch/planet-slot-${safePos}.png`) : `/icons/overwatch/planet-slot-${safePos}.png`);
+
+    const initialShips: Record<CanonicalWarshipId, number> = {
+      204: 0, 205: 0, 206: 0, 207: 0, 215: 0, 211: 0, 213: 0, 214: 0, 218: 0, 219: 0
+    };
+    if (fallbackCurrentShips) {
+      CANONICAL_WARSHIP_IDS.forEach((id) => {
+        initialShips[id] = fallbackCurrentShips[id] || 0;
+      });
+    }
+
+    list.push({
+      id: metaPlanetId || 'current',
+      name: 'Current Planet',
+      coords: currentCoords || '1:1:1',
+      type: currentType,
+      imgUrl: defaultImg,
+      isCurrent: true,
+      ships: initialShips
+    });
+  }
+
+  // Sort: by galaxy, system, position, then planet before moon
+  list.sort((a, b) => {
+    const [gA, sA, pA] = a.coords.split(':').map((n) => parseInt(n, 10) || 0);
+    const [gB, sB, pB] = b.coords.split(':').map((n) => parseInt(n, 10) || 0);
+    if (gA !== gB) return gA - gB;
+    if (sA !== sB) return sA - sB;
+    if (pA !== pB) return pA - pB;
+    if (a.type !== b.type) return a.type === 'planet' ? -1 : 1;
+    return 0;
+  });
+
+  // Guarantee that EXACTLY ONE item is marked isCurrent, strictly prioritizing (currentCoords + currentType)
+  const exactCurrent = list.find((p) => p.coords === currentCoords && p.type === currentType)
+    || list.find((p) => p.isCurrent && p.type === currentType)
+    || list.find((p) => p.isCurrent)
+    || list[0];
+
+  list.forEach((p) => {
+    p.isCurrent = Boolean(exactCurrent && p.id === exactCurrent.id && p.type === exactCurrent.type);
+  });
+
+  return list;
 }

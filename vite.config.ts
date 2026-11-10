@@ -21,6 +21,7 @@ function generateManifest(targetBrowser: string) {
       const sw = baseManifest.background.service_worker;
       delete baseManifest.background.service_worker;
       baseManifest.background.scripts = [sw];
+      delete baseManifest.background.type;
     }
     
     // 2. Remove Chrome-only oauth2 key
@@ -30,10 +31,7 @@ function generateManifest(targetBrowser: string) {
     baseManifest.browser_specific_settings = {
       gecko: {
         id: "og-nexus-extension@ogamenexus.org",
-        strict_min_version: "109.0",
-        data_collection_permissions: {
-          required: ["none"]
-        }
+        strict_min_version: "115.0",
       }
     };
   }
@@ -53,8 +51,11 @@ export default defineConfig({
       skipManifestValidation: true,
     }),
   ],
+  esbuild: {
+    charset: "ascii",
+  },
   build: {
-    minify: false,
+    minify: target === "firefox",
     outDir: `dist-${target}`,
   },
   resolve: {

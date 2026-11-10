@@ -1,5 +1,7 @@
 // This script runs in the "MAIN" world, meaning it has access to the page's global variables like 'initOverlays'
+import { IS_EXTENSION_DISABLED } from '../config/killSwitch';
 
+if (!IS_EXTENSION_DISABLED) {
 // Initialize OGLight suppression attribute as early as possible in the MAIN world
 try {
     const cachedCleanOGLight = localStorage.getItem('og_nexus_clean_oglight');
@@ -348,4 +350,5 @@ window.addEventListener('ogame-nexus-request-eventlist', () => {
         }
     } catch (e) {}
 });
+}
 

@@ -903,12 +903,6 @@ export function initFleetMovementListener(): void {
     saveFleetMovements(data, pId, uni);
     return;
   }
-
-  // 3. Proactive initial fetch 2.5 seconds after page load
-  setTimeout(() => {
-    const { playerId: pId, universe: uni } = getCurrentPlayerAndUniverse();
-    fetchAndSyncFleetMovements(false, pId, uni).catch(() => {});
-  }, 2500);
 }
 
 /**

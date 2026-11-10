@@ -1138,9 +1138,14 @@ const Lifeforms: React.FC = () => {
                                 </div>
 
                                 {(() => {
-                                    const classBoostKeys = ['Collector Class Boost', 'General Class Boost', 'Discoverer Class Boost'];
-                                    const classBoostsData = Object.entries((empireBonuses as any).sandbox || {})
-                                        .filter(([name, val]) => classBoostKeys.includes(name) && (val as number) > 0);
+                                    const accountClass = (activeAccount && typeof activeAccount.playerClass === 'number') ? activeAccount.playerClass : 2;
+                                    let targetClassKey = 'General Class Boost';
+                                    if (accountClass === 1) targetClassKey = 'Collector Class Boost';
+                                    else if (accountClass === 3) targetClassKey = 'Discoverer Class Boost';
+                                    else if (accountClass === 2) targetClassKey = 'General Class Boost';
+
+                                    const boostVal = (empireBonuses as any).sandbox?.[targetClassKey] || 0;
+                                    const classBoostsData: [string, any][] = targetClassKey ? [[targetClassKey, boostVal]] : [];
 
                                     if (classBoostsData.length === 0) return null;
 
@@ -1152,11 +1157,7 @@ const Lifeforms: React.FC = () => {
                                             <div className="bento-bonuses-grid">
                                                 {/* Enhancement card based on account class */}
                                                 {(() => {
-                                                    const accountClass = activeAccount?.playerClass;
-                                                    let techId = 69; // Supercomputer (Lifeform 1, slot 18)
-                                                    if (accountClass === 1) techId = 70; // Collector (Lifeform 2, slot 18)
-                                                    else if (accountClass === 2) techId = 71; // General (Lifeform 3, slot 18)
-                                                    else if (accountClass === 3) techId = 72; // Discoverer (Lifeform 4, slot 18)
+                                                    const techId = accountClass === 1 ? 70 : accountClass === 3 ? 72 : 71;
 
                                                     const tech = getLfTech(techId);
                                                     if (!tech) return null;

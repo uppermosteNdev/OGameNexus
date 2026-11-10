@@ -1009,6 +1009,7 @@ export function rankAmortizationItems(
                     currentLevel = getLifeformTechLevel(p, entry.id);
                     if (currentLevel === 0) return;
                 } else if (entry.type === AmortizationType.AnomalyBuildings) {
+                    if (state.account?.hasAnomalies === false) return;
                     if (entry.id === 45) {
                         currentLevel = p.iaScanner ?? p.facilities?.find((f: any) => f.id === 45)?.level ?? 0;
                     } else if (entry.id && entry.id >= 4001 && entry.id <= 4007) {

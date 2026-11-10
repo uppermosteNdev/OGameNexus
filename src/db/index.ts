@@ -16,6 +16,7 @@ export interface Account {
     serverUrl?: string;
     playerClass?: number; // 1: Collector, 2: Warrior, 3: Discoverer
     allianceClass?: number; // 0: None/Other, 1: Trader, 2: Researcher, 3: Warrior
+    hasAnomalies?: boolean; // Whether the universe supports Project Orion / Anomaly update
     hasCommander?: boolean;
     hasAdmiral?: boolean;
     hasEngineer?: boolean;
@@ -404,6 +405,45 @@ export interface AnomalyMission {
     msuPerLithium: number;
 }
 
+export interface ScannedAnomalyRecord {
+    id?: number;
+    anomalyId: string;
+    universe: string;
+    playerId: string;
+    scannedAt: number;
+    name: string;
+    stars: number;
+    level: number;
+    category: 'combat' | 'delivery' | 'other';
+    environment: 'pvp' | 'pve';
+    targetCoords: string;
+    originCoords?: string;
+    distance: number;
+    durationSeconds: number;
+    durationText: string;
+    waves: number;
+    lithiumCost: number;
+    scanCostLithium?: number;
+    scanLevelSetting?: number;
+    scanRangeSystems?: number;
+    metal: number;
+    crystal: number;
+    deuterium: number;
+    totalPossibleMsu: number;
+    yieldRatio: number;
+    hourlyMsu: number;
+    hourlyLithium: number;
+    isPureResource: boolean;
+    hasShips: boolean;
+    shipsText?: string;
+    shipsMsu?: number;
+    hasArtifacts: boolean;
+    artifactsAmount?: string;
+    hasExperience: boolean;
+    experienceAmount?: string;
+    items?: string;
+}
+
 export interface GameKnowledge {
     id: number;
     category: string; // 'ships', 'buildings', etc.
@@ -598,6 +638,7 @@ export class OGNexusDB extends Dexie {
     universeBaseline!: Table<UniverseBaselineSystem>;
     tacticalNotes!: Table<TacticalNote, string>;
     anomalyMissions!: Table<AnomalyMission, string>;
+    scannedAnomalies!: Table<ScannedAnomalyRecord, number>;
 
     constructor() {
         super('OGNexusDB');
@@ -841,6 +882,33 @@ export class OGNexusDB extends Dexie {
             anomalyMissions: 'id, playerId, universe, status, category, environment, createdAt, updatedAt'
         });
 
+        // Version 42 adds 'scannedAnomalies' table for reverse-engineering Orion reward calculations
+        this.version(42).stores({
+            accounts: 'playerId, playerName, universe, lastSeen',
+            planets: 'id, playerId, coords, lifeformId',
+            expeditions: 'messageId, playerId, timestamp, coords, result',
+            lifeformDiscoveries: 'messageId, playerId, timestamp, coords, discoveryType',
+            lifeformSpecies: 'lifeformId, lifeformName',
+            gameKnowledge: 'id, category, name',
+            settings: 'id',
+            lifeformTechnologies: 'id, lifeformId, name',
+            lifeformBonusBreakdown: 'id, bonusName',
+            lifeformSavedSetups: '++id, playerId, name',
+            todoProjects: '++id, projectKey, playerId, planetId, type',
+            debrisHarvests: 'harvestKey, messageId, playerId, timestamp, coords, universe',
+            combatReports: 'messageId, playerId, timestamp, coords, winner, anomalyId',
+            spiedPlanets: 'planetKey, planetId, playerId, coords, lastSpiedTimestamp, universe, userPlayerId',
+            universeBaseline: '[universe+galaxy+system], universe',
+            tacticalNotes: 'noteKey, universe, targetType, targetId, tag, updatedAt',
+            anomalyMissions: 'id, playerId, universe, status, category, environment, createdAt, updatedAt',
+            scannedAnomalies: '++id, [universe+anomalyId], universe, playerId, scannedAt, name, level, stars, category, environment, waves, distance, lithiumCost, totalPossibleMsu, yieldRatio'
+        });
+
+        // Version 43 adds isPureResource index to scannedAnomalies for instant dataset filtering
+        this.version(43).stores({
+            scannedAnomalies: '++id, [universe+anomalyId], universe, playerId, scannedAt, name, level, stars, category, environment, waves, distance, lithiumCost, totalPossibleMsu, yieldRatio, isPureResource'
+        });
+
         // Seed data for new database installations
         this.on('populate', () => {
             this.seedKnowledge();
@@ -853,7 +921,12 @@ export class OGNexusDB extends Dexie {
             this.seedSettings();
             this.migrateSpiedPlanets();
             this.cleanPoisonedProductionSettings();
+            this.migrateScannedAnomaliesPureStatus();
         });
+    }
+
+    private async migrateScannedAnomaliesPureStatus() {
+        await migrateScannedAnomaliesPureStatus();
     }
 
     private async seedSettings() {
@@ -1067,4 +1140,201 @@ export async function saveTacticalNoteToDB(note: TacticalNote): Promise<string> 
 
 export async function deleteTacticalNoteFromDB(noteKey: string): Promise<void> {
     await db.tacticalNotes.delete(noteKey);
+}
+
+export async function saveScannedAnomalyToDB(record: ScannedAnomalyRecord): Promise<void> {
+    try {
+        const cleanUni = cleanUniverseId(record.universe);
+        const cleanedRecord: ScannedAnomalyRecord = {
+            ...record,
+            universe: cleanUni
+        };
+        const existing = await db.scannedAnomalies
+            .where('[universe+anomalyId]')
+            .equals([cleanUni, record.anomalyId])
+            .first();
+
+        if (existing && existing.id) {
+            await db.scannedAnomalies.update(existing.id, cleanedRecord);
+        } else {
+            await db.scannedAnomalies.add(cleanedRecord);
+        }
+    } catch (err) {
+        console.error('OGame Nexus: Error saving scanned anomaly to DB', err);
+    }
+}
+
+export async function getScannedAnomalies(universe?: string): Promise<ScannedAnomalyRecord[]> {
+    try {
+        if (universe) {
+            const cleanUni = cleanUniverseId(universe);
+            return await db.scannedAnomalies.where('universe').equals(cleanUni).toArray();
+        }
+        return await db.scannedAnomalies.toArray();
+    } catch (err) {
+        console.error('OGame Nexus: Error reading scanned anomalies from DB', err);
+        return [];
+    }
+}
+
+/**
+ * One-time migration for previously logged scanned anomalies:
+ * Sets isPureResource to true for all existing entries that contain
+ * exclusively Metal, Crystal, and Deuterium (no ships, artifacts, or lifeform experience).
+ */
+export async function migrateScannedAnomaliesPureStatus(): Promise<number> {
+    try {
+        const allRecords = await db.scannedAnomalies.toArray();
+        if (allRecords.length === 0) return 0;
+
+        const updates: ScannedAnomalyRecord[] = [];
+        for (const r of allRecords) {
+            const hasDrops = Boolean(
+                r.hasShips ||
+                r.hasArtifacts ||
+                r.hasExperience ||
+                (r.shipsMsu && r.shipsMsu > 0) ||
+                (r.artifactsAmount && r.artifactsAmount.trim() !== '') ||
+                (r.experienceAmount && r.experienceAmount.trim() !== '') ||
+                (r.shipsText && r.shipsText.trim() !== '')
+            );
+            const hasResources = (r.metal > 0 || r.crystal > 0 || r.deuterium > 0);
+            const shouldBePure = !hasDrops && hasResources;
+
+            if (r.isPureResource !== shouldBePure && r.id) {
+                updates.push({
+                    ...r,
+                    isPureResource: shouldBePure
+                });
+            }
+        }
+
+        if (updates.length > 0) {
+            await db.scannedAnomalies.bulkPut(updates);
+            console.log(`[OGame Nexus] Migrated isPureResource for ${updates.length} scanned anomalies.`);
+        }
+        return updates.length;
+    } catch (err) {
+        console.error('OGame Nexus: Error migrating scanned anomalies pure status', err);
+        return 0;
+    }
+}
+
+/**
+ * Normalizes Unicode non-breaking spaces and dash ranges (en-dash, em-dash) to clean ASCII,
+ * and repairs already-corrupted Windows-1252/ANSI mojibake artifacts like "Â â€“Â ".
+ */
+export function cleanRewardString(str: string | null | undefined): string {
+    if (!str) return '';
+    return str
+        .replace(/\u00C2\s*/g, ' ')
+        .replace(/\u00E2\u20AC\u201C|\u00E2\u20AC\u201D/g, '-')
+        .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+        .replace(/[\u2010-\u2015\u2212]/g, '-')
+        .replace(/\s*-\s*/g, ' - ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+export async function exportScannedAnomaliesAsCsv(universe?: string): Promise<string> {
+    const list = await getScannedAnomalies(universe);
+    if (list.length === 0) return '';
+    const headers = [
+        'id', 'anomalyId', 'universe', 'playerId', 'scannedAt', 'scannedAtIso',
+        'name', 'stars', 'level', 'category', 'environment', 'waves',
+        'distance', 'durationSeconds', 'durationText', 'targetCoords', 'originCoords',
+        'lithiumCost', 'scanCostLithium', 'scanLevelSetting', 'scanRangeSystems',
+        'metal', 'crystal', 'deuterium', 'totalPossibleMsu', 'yieldRatio',
+        'hourlyMsu', 'hourlyLithium',
+        'isPureResource', 'hasShips', 'shipsText', 'shipsMsu',
+        'hasArtifacts', 'artifactsAmount', 'hasExperience', 'experienceAmount', 'items'
+    ];
+    const rows = list.map(r => {
+        const hasDrops = Boolean(
+            r.hasShips ||
+            r.hasArtifacts ||
+            r.hasExperience ||
+            (r.shipsMsu && r.shipsMsu > 0) ||
+            (r.artifactsAmount && r.artifactsAmount.trim() !== '') ||
+            (r.experienceAmount && r.experienceAmount.trim() !== '') ||
+            (r.shipsText && r.shipsText.trim() !== '')
+        );
+        const hasResources = (r.metal > 0 || r.crystal > 0 || r.deuterium > 0);
+        const isPure = r.isPureResource !== undefined
+            ? Boolean(r.isPureResource)
+            : (!hasDrops && hasResources);
+
+        return [
+            r.id ?? '',
+            r.anomalyId,
+            r.universe,
+            r.playerId,
+            r.scannedAt,
+            new Date(r.scannedAt).toISOString(),
+            `"${(cleanRewardString(r.name) || '').replace(/"/g, '""')}"`,
+            r.stars,
+            r.level,
+            r.category,
+            r.environment,
+            r.waves,
+            r.distance,
+            r.durationSeconds,
+            `"${cleanRewardString(r.durationText)}"`,
+            `"${r.targetCoords}"`,
+            `"${r.originCoords || ''}"`,
+            r.lithiumCost,
+            r.scanCostLithium ?? '',
+            r.scanLevelSetting ?? '',
+            r.scanRangeSystems ?? '',
+            r.metal,
+            r.crystal,
+            r.deuterium,
+            r.totalPossibleMsu,
+            r.yieldRatio,
+            r.hourlyMsu,
+            r.hourlyLithium,
+            isPure ? 1 : 0,
+            r.hasShips ? 1 : 0,
+            `"${cleanRewardString(r.shipsText).replace(/"/g, '""')}"`,
+            r.shipsMsu ?? 0,
+            r.hasArtifacts ? 1 : 0,
+            `"${cleanRewardString(r.artifactsAmount).replace(/"/g, '""')}"`,
+            r.hasExperience ? 1 : 0,
+            `"${cleanRewardString(r.experienceAmount).replace(/"/g, '""')}"`,
+            `"${cleanRewardString(r.items).replace(/"/g, '""')}"`
+        ].join(',');
+    });
+    // Prepend UTF-8 BOM so Microsoft Excel automatically recognizes UTF-8 encoding
+    return '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+}
+
+export async function exportScannedAnomaliesAsJson(universe?: string): Promise<string> {
+    const list = await getScannedAnomalies(universe);
+    const sanitized = list.map(r => {
+        const hasDrops = Boolean(
+            r.hasShips ||
+            r.hasArtifacts ||
+            r.hasExperience ||
+            (r.shipsMsu && r.shipsMsu > 0) ||
+            (r.artifactsAmount && r.artifactsAmount.trim() !== '') ||
+            (r.experienceAmount && r.experienceAmount.trim() !== '') ||
+            (r.shipsText && r.shipsText.trim() !== '')
+        );
+        const hasResources = (r.metal > 0 || r.crystal > 0 || r.deuterium > 0);
+        const isPure = r.isPureResource !== undefined
+            ? Boolean(r.isPureResource)
+            : (!hasDrops && hasResources);
+
+        return {
+            ...r,
+            isPureResource: isPure,
+            name: cleanRewardString(r.name),
+            durationText: cleanRewardString(r.durationText),
+            shipsText: r.shipsText ? cleanRewardString(r.shipsText) : undefined,
+            artifactsAmount: r.artifactsAmount ? cleanRewardString(r.artifactsAmount) : undefined,
+            experienceAmount: r.experienceAmount ? cleanRewardString(r.experienceAmount) : undefined,
+            items: r.items ? cleanRewardString(r.items) : undefined
+        };
+    });
+    return JSON.stringify(sanitized, null, 2);
 }

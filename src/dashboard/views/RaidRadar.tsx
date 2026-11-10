@@ -346,6 +346,22 @@ const RaidRadar: React.FC = () => {
         }
     };
 
+    const handleClearAccountTargets = async () => {
+        if (!activeAccount?.playerId) return;
+        if (confirm(`Are you sure you want to clear all spied inactive targets stored for "${activeAccount.playerName || 'this account'}"? You can repopulate fresh targets anytime by opening your espionage reports in the OGame message log.`)) {
+            try {
+                const cleanUni = cleanUniverseId(activeAccount.universe || '');
+                const all = await db.spiedPlanets.toArray();
+                const toDelete = all.filter(p => isSameUniverse(p.universe, cleanUni) && p.userPlayerId === activeAccount.playerId);
+                if (toDelete.length > 0) {
+                    await db.spiedPlanets.bulkDelete(toDelete.map(p => p.planetKey));
+                }
+            } catch (err) {
+                console.error("Failed to clear account targets", err);
+            }
+        }
+    };
+
     // Available galaxies dynamically extracted from active spied planets
     const availableGalaxies = useMemo(() => {
         const galaxies = new Set<number>();
@@ -1940,6 +1956,38 @@ const RaidRadar: React.FC = () => {
                             >
                                 <RotateCcw size={18} />
                                 Reset to Defaults
+                            </button>
+                        </div>
+
+                        {/* Database & Target Maintenance Section */}
+                        <div style={{ marginTop: '36px', paddingTop: '24px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                                <Trash2 size={18} color="#f87171" />
+                                <h4 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#fff' }}>Target Cache & Cross-Account Management</h4>
+                            </div>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: '1.6' }}>
+                                If you play on multiple accounts on the same universe or have stale targets that no longer exist in the galaxy, you can clear this account's targets below. Your targets will immediately repopulate with fresh coordinates the next time you view espionage reports in your message log or browse the galaxy.
+                            </p>
+                            <button
+                                onClick={handleClearAccountTargets}
+                                style={{
+                                    padding: '10px 18px',
+                                    borderRadius: '10px',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#f87171',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.85rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    transition: 'all 0.2s ease',
+                                    outline: 'none'
+                                }}
+                            >
+                                <Trash2 size={15} />
+                                Clear Targets for "{activeAccount?.playerName || 'Current Account'}"
                             </button>
                         </div>
                     </div>
