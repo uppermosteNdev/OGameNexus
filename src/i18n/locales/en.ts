@@ -1,4 +1,4 @@
-﻿export const en = {
+export const en = {
     common: {
         language: "Language",
         selectLanguage: "Select Language",
@@ -118,8 +118,29 @@
     dataManagement: {
         title: "Nexus Data Center",
         subtitle: "Backup, restore, and migrate universe data across devices or accounts.",
-        tabNexusData: "OGame Nexus Data",
+        tabAccountsManagement: "Accounts Management",
+        tabNexusData: "OGame Nexus Sync",
         tabTrackerSync: "OGame Tracker Sync",
+        accountsManagementTitle: "Accounts Management",
+        accountsManagementSubtitle: "Overview and manage all OGame commander profiles recorded on this browser.",
+        searchAccountsPlaceholder: "Search by player, universe, or community...",
+        allCommunities: "All Communities",
+        activeEmpireBadge: "ACTIVE EMPIRE",
+        switchEmpireBtn: "Switch Active",
+        downloadBackupBtn: "Download Backup (.json)",
+        importToActiveBtn: "Import to Active Empire",
+        importHistoryModalTitle: "Merge Career History to Active Empire",
+        importHistoryModalSubtitle: "Transfer expeditions, combat logs, debris harvests, and lifeform tech into your active commander.",
+        sourceAccountHeader: "SOURCE EMPIRE",
+        targetAccountHeader: "ACTIVE EMPIRE (TARGET)",
+        recordsToMergeHeader: "RECORDS TO BE MERGED",
+        safetyGuaranteeTitle: "Colonies, Fleets & Resources Are 100% Safe",
+        safetyGuaranteeDesc: "This transfer will NEVER overwrite, remove, or modify your active planets, moons, mines, facilities, ships in orbit/flight, defense structures, or resource storage vaults. Only historical career records are transferred into your active commander profile.",
+        duplicateDeduplicationNote: "Duplicate combat reports and expedition logs are automatically merged so your career statistics stay accurate.",
+        confirmMergeBtn: "Confirm & Merge Career History",
+        mergingInProgress: "Merging Career History...",
+        mergingSuccessTitle: "Career History Successfully Merged!",
+        dismissModalBtn: "Done & View Empire",
         tabBackup: "System Backup",
         tabRestore: "System Restore",
         exportTitle: "Universe Snapshot",
@@ -273,7 +294,7 @@
     },
     changelog: {
         title: "System Updated",
-        versionBadge: "v1.3.0",
+        versionBadge: "v1.3.2",
         telemetryReport: "OGAME NEXUS COMMAND DECK TELEMETRY REPORT",
         dataPreservedNotice: "Your planetary setups, harvested telemetry, and tracking histories have been preserved securely during this update.",
         acknowledge: "Acknowledge",
@@ -295,4 +316,12 @@
     }
 };
 
-export type LocaleTranslations = typeof en;
+type DeepPartial<T> = {
+    [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
+
+export type LocaleTranslations = {
+    [K in keyof typeof en]: (typeof en)[K] extends Record<string, any>
+        ? DeepPartial<(typeof en)[K]> & Record<string, any>
+        : (typeof en)[K];
+};

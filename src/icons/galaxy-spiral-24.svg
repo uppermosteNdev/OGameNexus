@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Galactic Core -->
+  <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+  <!-- Arm 1 -->
+  <path d="M12,8.25 C7.5,8.25 5.25,11.25 5.25,14.25 C5.25,18 8.625,20.25 12.75,20.25 C17.25,20.25 20.625,16.875 20.625,12.375 C20.625,9.375 18.75,6.375 15.75,4.5" />
+  <!-- Arm 2 -->
+  <path d="M12,15.75 C16.5,15.75 18.75,12.75 18.75,9.75 C18.75,6 15.375,3.75 11.25,3.75 C6.75,3.75 3.375,7.125 3.375,11.625 C3.375,14.625 5.25,17.625 8.25,19.5" />
+</svg>

@@ -1,4 +1,5 @@
 import { InventoryItem } from '../db';
+import { fetchGameOnLoad, fetchGameOnUserAction, isPageLoadValid } from '../utils/networkGuard';
 
 /**
  * Gets cached player inventory from chrome.storage.local
@@ -276,20 +277,39 @@ export function parseInventoryHtml(html: string): InventoryItem[] {
 /**
  * Generic inventory fetch: fetches shop/inventory component via POST, parses items, and persists to DB and local storage
  */
-export async function fetchPlayerInventory(playerId?: string): Promise<InventoryItem[]> {
+export async function fetchPlayerInventory(
+  playerId?: string,
+  trigger?: Event | OGameRequestGuard.Ticket
+): Promise<InventoryItem[]> {
+  const targetPlayerId = playerId || document.querySelector("meta[name='ogame-player-id']")?.getAttribute("content") || '';
+
+  // If no user trigger is available and start-up PAGE_LOAD window has lapsed, quietly fall back to stored cache
+  if (!trigger && !isPageLoadValid()) {
+    return getStoredPlayerInventory(targetPlayerId);
+  }
+
   try {
     const url = '/game/index.php?page=ingame&component=shop&ajax=1&action=inventoryGet';
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json, text/plain, */*',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      redirect: 'manual'
-    });
+    const response = trigger
+      ? await fetchGameOnUserAction(trigger, url, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          redirect: 'manual'
+        })
+      : await fetchGameOnLoad(url, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          redirect: 'manual'
+        });
 
     if (!response.ok || response.type === 'opaqueredirect') {
-      return [];
+      return getStoredPlayerInventory(targetPlayerId);
     }
 
     const text = await response.text();
@@ -304,12 +324,16 @@ export async function fetchPlayerInventory(playerId?: string): Promise<Inventory
     const items = parseInventoryHtml(html);
 
     if (items && items.length > 0) {
-      await savePlayerInventory(items, playerId);
+      await savePlayerInventory(items, targetPlayerId);
     }
 
     return items;
   } catch (err: any) {
+    if (err?.name === 'OGameRequestGuardError' || err?.message?.includes('OGameRequestGuard')) {
+      console.debug('OGame Nexus: Inventory fetch skipped or lapsed via guard:', err.message);
+      return getStoredPlayerInventory(targetPlayerId);
+    }
     // Normal browser behavior when player navigates away while fetch is in-flight
-    return [];
+    return getStoredPlayerInventory(targetPlayerId);
   }
 }

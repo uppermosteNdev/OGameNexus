@@ -5,7 +5,7 @@ import { handleGalaxySync, handleGetPlayerActivity, handleGetGalaxyEvents, handl
 import { handleShareSpyReport, handleGetSpyReports } from './spyReports';
 import { handleEmpireSync, handleGetEmpireRoster, handleGetEmpireMember, handleGetPhalanxCoverage } from './empireSync';
 import { handleVaultSend, handleVaultFetch, handleVaultSummary, hashVaultKey } from './personalVault';
-import { handleMigrateVaultToR2, handleVerifyVaultR2, getMasterAdminSecret } from './migrationR2';
+import { handleMigrateVaultToR2, handleVerifyVaultR2, getMasterAdminSecret, isValidMasterAdminRequest } from './migrationR2';
 import { archiveHistoricalEventsBatch, getUniverseEventArchive, listUniverseEventArchives } from './eventArchiver';
 import { handleInactiveScout } from './inactiveScout';
 import { isUniverseSeeded, seedUniverseFromOfficialAPI, syncDailyPlayersAndAlliances, cleanUniverseId, ensureBaselinePlanetsMigrated, exportUniverseBaselineToR2 } from './universeSeeder';
@@ -36,22 +36,38 @@ export interface Env {
   VAULT_BUCKET: R2Bucket;
   ENVIRONMENT: string;
   SERVER_PEPPER: string;
+  LEGACY_SERVER_PEPPER?: string;
   EXTENSION_SECRET?: string;
+  MASTER_ADMIN_SECRET?: string;
+  STRICT_TOPFLOP_AUTH?: string;
   [key: string]: any;
 }
 
 export function getPepper(env: any): string {
-  if (env?.SERVER_PEPPER && env.SERVER_PEPPER !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS' && env.SERVER_PEPPER !== 'nexus_pepper_default') {
-    return env.SERVER_PEPPER;
+  const val = typeof env?.SERVER_PEPPER === 'string' ? env.SERVER_PEPPER.trim() : '';
+  if (val && val !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') {
+    return val;
   }
-  return 'nexus_overwatch_secret_pepper_2026';
+  throw new Error('SERVER_PEPPER is not configured in Cloudflare Worker secrets.');
 }
 
-export function getExtensionSecret(env: any): string {
-  if (env?.EXTENSION_SECRET && env.EXTENSION_SECRET !== 'CHANGE_ME_EXTENSION_SECRET') {
-    return env.EXTENSION_SECRET;
+export function getCandidatePeppers(env: any): string[] {
+  const candidates = [env?.SERVER_PEPPER, env?.LEGACY_SERVER_PEPPER]
+    .map((p: any) => (typeof p === 'string' ? p.trim() : ''))
+    .filter((p: string) => p.length > 0 && p !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS');
+  const unique = Array.from(new Set(candidates));
+  if (unique.length === 0) {
+    throw new Error('SERVER_PEPPER is not configured in Cloudflare Worker secrets.');
   }
-  return 'nx_sec_9a7b4c2e8f103d5ae8b4f1a2c9d7e5b3';
+  return unique;
+}
+
+export function getExtensionSecret(env: any): string | null {
+  const val = typeof env?.EXTENSION_SECRET === 'string' ? env.EXTENSION_SECRET.trim() : '';
+  if (val && val !== 'CHANGE_ME_EXTENSION_SECRET') {
+    return val;
+  }
+  return null;
 }
 
 const { preflight, corsify } = cors({
@@ -67,6 +83,7 @@ const { preflight, corsify } = cors({
     'X-Nexus-Timestamp',
     'X-Nexus-Signature',
     'X-Nexus-Master-Admin',
+    'X-TopFlop-Token',
   ],
 });
 
@@ -77,8 +94,13 @@ const router = AutoRouter<any>({
       const url = new URL(req.url);
       const path = url.pathname;
 
-      // Allow public root, health check, and public TopFlop image endpoints (for Discord bot)
-      if (path === '/' || path === '/api/health' || path.startsWith('/topflop/') || path.startsWith('/api/topflop/') || path.startsWith('/api/v1/topflop/')) {
+      // Allow public root, health check, and public TopFlop rendered PNG images/assets (for Discord embeds).
+      // Note: /topflop/status is an admin inspection endpoint and does NOT bypass auth.
+      if (
+        path === '/' ||
+        path === '/api/health' ||
+        (path.startsWith('/topflop/') && path !== '/topflop/status')
+      ) {
         return;
       }
 
@@ -96,19 +118,50 @@ const router = AutoRouter<any>({
       const authHeader = req.headers.get('Authorization') || req.headers.get('X-Nexus-Token');
       const vaultKey = req.headers.get('X-Vault-Key') || req.headers.get('x-vault-key') || req.headers.get('X-Nexus-Vault-Key') || req.headers.get('x-nexus-vault-key');
       const masterAdmin = req.headers.get('X-Nexus-Master-Admin') || req.headers.get('x-nexus-master-admin');
-      // If request has Authorization bearer token or Personal Vault key or Master Admin header, allow it through to route authentication
-      if ((authHeader && (authHeader.startsWith('Bearer ') || authHeader.length > 10)) || vaultKey || masterAdmin) {
+      const topFlopToken = req.headers.get('X-TopFlop-Token') || req.headers.get('x-topflop-token');
+      const isTopFlopApiRoute = path.startsWith('/api/topflop/') || path.startsWith('/api/v1/topflop/');
+      const isBackfillRoute = path.includes('backfill-snapshots');
+
+      // Backfill endpoint always delegates to strict master admin validation inside its handler
+      if (isBackfillRoute || path === '/topflop/status') {
+        if (!isValidMasterAdminRequest(req, env)) {
+          return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
+        }
+        return;
+      }
+
+      // If request carries an explicit auth credential (Bearer / Vault / Master Admin / TopFlop Edit Key),
+      // let route-level authentication validate it.
+      if (
+        (authHeader && (authHeader.startsWith('Bearer ') || authHeader.length > 10)) ||
+        vaultKey ||
+        masterAdmin ||
+        (isTopFlopApiRoute && topFlopToken)
+      ) {
         return;
       }
 
       const clientKey = req.headers.get('X-Nexus-Client-Key');
       const timestampStr = req.headers.get('X-Nexus-Timestamp');
       const signature = req.headers.get('X-Nexus-Signature');
-      const canonicalSecret = 'nx_sec_9a7b4c2e8f103d5ae8b4f1a2c9d7e5b3';
-      const configuredSecret = getExtensionSecret(env);
 
-      const isValidClientKey = clientKey === canonicalSecret || clientKey === configuredSecret;
-      if (!clientKey || !isValidClientKey) {
+      // During Top/Flop rollout transition (STRICT_TOPFLOP_AUTH !== 'true'), allow unsigned legacy extension
+      // requests through to route-level validation (which still hides webhooks and validates inputs).
+      // If signature headers ARE supplied by the new extension, verify them strictly!
+      const strictTopFlopAuth = String(env?.STRICT_TOPFLOP_AUTH || '').toLowerCase() === 'true';
+      if (isTopFlopApiRoute && !strictTopFlopAuth && !clientKey && !signature) {
+        return;
+      }
+
+      const configuredSecret = getExtensionSecret(env);
+      if (!configuredSecret) {
+        return json(
+          { error: 'Server configuration error: Extension authentication secret is not configured.' },
+          { status: 503 }
+        );
+      }
+
+      if (!clientKey || !timingSafeEqual(clientKey, configuredSecret)) {
         return json(
           { error: 'Access denied: Valid Nexus Extension authorization required' },
           { status: 403 }
@@ -133,9 +186,8 @@ const router = AutoRouter<any>({
       }
 
       const message = `${req.method.toUpperCase()}:${path}:${timestampStr}`;
-      const sig1 = await computeHmacSignature(message, clientKey);
-      const sig2 = await computeHmacSignature(message, configuredSecret);
-      if (!timingSafeEqual(signature, sig1) && !timingSafeEqual(signature, sig2)) {
+      const expectedSig = await computeHmacSignature(message, configuredSecret);
+      if (!timingSafeEqual(signature, expectedSig)) {
         return json(
           { error: 'Access denied: Invalid request signature' },
           { status: 403 }
@@ -1562,8 +1614,7 @@ router.post('/api/v1/universe/seed', async (req: Request, env: Env) => {
 
     // If force is requested, require MASTER_ADMIN_SECRET and enforce 24h cooldown
     if (force) {
-      const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
-      if (!env.MASTER_ADMIN_SECRET || !adminSecretHeader || adminSecretHeader !== env.MASTER_ADMIN_SECRET) {
+      if (!isValidMasterAdminRequest(req, env)) {
         return json({ error: 'Unauthorized: Master admin secret required for forced universe re-seeding.' }, { status: 403 });
       }
 
@@ -1822,8 +1873,7 @@ router.get('/api/v1/universe/:universeId/baseline', async (req: Request, env: En
 });
 
 router.post('/api/v1/admin/sync-baseline-r2', async (req: Request, env: Env) => {
-  const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
-  if (adminSecretHeader !== getMasterAdminSecret(env)) {
+  if (!isValidMasterAdminRequest(req, env)) {
     return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
   }
 
@@ -1910,8 +1960,7 @@ router.get('/api/v1/galaxy/events/archive', async (req: Request, env: Env) => {
 });
 
 router.post('/api/v1/admin/archive-events', async (req: Request, env: Env) => {
-  const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
-  if (adminSecretHeader !== getMasterAdminSecret(env)) {
+  if (!isValidMasterAdminRequest(req, env)) {
     return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
   }
 
@@ -1980,8 +2029,7 @@ router.get('/api/v1/tools/inactive-scout', handleInactiveScout);
 // 9. DEBUG & INTERROGATION (Dump local D1 data as JSON)
 // ============================================================================
 router.get('/api/v1/debug/dump', async (req: Request, env: Env) => {
-  const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
-  if (!env.MASTER_ADMIN_SECRET || !adminSecretHeader || adminSecretHeader !== env.MASTER_ADMIN_SECRET) {
+  if (!isValidMasterAdminRequest(req, env)) {
     return json({ error: 'Unauthorized: Master admin secret required for database interrogation.' }, { status: 403 });
   }
   try {

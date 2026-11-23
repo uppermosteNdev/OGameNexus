@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const fr: LocaleTranslations = {
     common: {
@@ -120,7 +120,8 @@ export const fr: LocaleTranslations = {
     dataManagement: {
         title: "Centre de donnÃ©es Nexus",
         subtitle: "Sauvegardez, restaurez et migrez les donnÃ©es d'univers entre vos appareils ou comptes.",
-        tabNexusData: "DonnÃ©es OGame Nexus",
+        tabAccountsManagement: "Gestion des comptes",
+        tabNexusData: "OGame Nexus Sync",
         tabTrackerSync: "Synchronisation OGame Tracker",
         tabBackup: "Sauvegarde systÃ¨me",
         tabRestore: "Restauration systÃ¨me",
@@ -275,7 +276,7 @@ export const fr: LocaleTranslations = {
     },
     changelog: {
         title: "SystÃ¨me Mis Ã  Jour",
-        versionBadge: "v1.3.0",
+        versionBadge: "v1.3.2",
         telemetryReport: "RAPPORT DE TÃ‰LÃ‰MÃ‰TRIE DU PONT DE COMMANDE OGAME NEXUS",
         dataPreservedNotice: "Vos configurations planÃ©taires, donnÃ©es tÃ©lÃ©mÃ©triques et historiques de suivi ont Ã©tÃ© prÃ©servÃ©s en toute sÃ©curitÃ© lors de cette mise Ã  jour.",
         acknowledge: "Confirmer",

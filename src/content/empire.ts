@@ -359,15 +359,29 @@ export function parseExternalDataExportJson(data: any): {
         });
     }
 
-    // 2. Space Objects map (type 1 = planet, type 3 = moon)
-    const typeMap: Record<string, 'planet' | 'moon'> = {};
-    if (Array.isArray(data.spaceObjects)) {
-        data.spaceObjects.forEach((so: any) => {
-            if (so && so.id !== undefined) {
-                typeMap[String(so.id)] = so.type === 3 ? 'moon' : 'planet';
+    // 2. Space Objects map (type 1 = planet, type 3 = moon, name, and coordinates)
+    const spaceObjectMap = new Map<string, { type: 'planet' | 'moon'; coords?: string; name?: string }>();
+    const rawSoList: any[] = Array.isArray(data.spaceObjects)
+        ? data.spaceObjects
+        : (data.static?.spaceObjects && Array.isArray(data.static.spaceObjects) ? data.static.spaceObjects : []);
+    rawSoList.forEach((so: any) => {
+        if (so && so.id !== undefined) {
+            let coords: string | undefined = undefined;
+            if (so.coordinates) {
+                coords = String(so.coordinates).replace(/[\[\]]/g, '').trim();
+            } else if (so.coordinate && typeof so.coordinate === 'object') {
+                coords = `${so.coordinate.galaxy}:${so.coordinate.system}:${so.coordinate.position}`;
+            } else if (so.galaxy !== undefined && so.system !== undefined && so.position !== undefined) {
+                coords = `${so.galaxy}:${so.system}:${so.position}`;
             }
-        });
-    }
+            const isMoon = so.type === 3 || so.type === 'moon';
+            spaceObjectMap.set(String(so.id), {
+                type: isMoon ? 'moon' : 'planet',
+                coords: (coords && /^\d+:\d+:\d+$/.test(coords)) ? coords : undefined,
+                name: so.name
+            });
+        }
+    });
 
     // 3. Species Experience
     const speciesExp: Record<string, any> = {};
@@ -399,18 +413,38 @@ export function parseExternalDataExportJson(data: any): {
             }
         });
     }
+    // Also include any spaceObjects that might not be in data.planets yet
+    rawSoList.forEach((so: any) => {
+        if (so && so.id !== undefined && !entityMap.has(String(so.id))) {
+            entityMap.set(String(so.id), { rawP: so, defaultType: (so.type === 3 || so.type === 'moon') ? 'moon' : 'planet' });
+        }
+    });
 
     entityMap.forEach(({ rawP, defaultType }) => {
         if (!rawP || rawP.id === undefined) return;
 
         const idStr = String(rawP.id);
-        const mappedType = typeMap[idStr];
-        const isMoon = mappedType === 'moon' || defaultType === 'moon' || rawP.type === 3 || rawP.type === 'moon';
+        const soInfo = spaceObjectMap.get(idStr);
+        const isMoon = soInfo?.type === 'moon' || defaultType === 'moon' || rawP.type === 3 || rawP.type === 'moon';
+
+        // Extract coordinates from all possible representations (including spaceObjects map)
+        let resolvedCoords: string | undefined = undefined;
+        if (rawP.coords) {
+            resolvedCoords = String(rawP.coords).replace(/[\[\]]/g, '').trim();
+        } else if (rawP.coordinates) {
+            resolvedCoords = String(rawP.coordinates).replace(/[\[\]]/g, '').trim();
+        } else if (rawP.coordinate && typeof rawP.coordinate === 'object') {
+            resolvedCoords = `${rawP.coordinate.galaxy}:${rawP.coordinate.system}:${rawP.coordinate.position}`;
+        } else if (rawP.galaxy !== undefined && rawP.system !== undefined && rawP.position !== undefined) {
+            resolvedCoords = `${rawP.galaxy}:${rawP.system}:${rawP.position}`;
+        } else if (soInfo?.coords) {
+            resolvedCoords = soInfo.coords;
+        }
 
         const planet: Partial<Planet> = {
             id: idStr,
-            name: rawP.name || (isMoon ? "Moon" : "Planet"),
-            coords: `${rawP.galaxy}:${rawP.system}:${rawP.position}`,
+            name: rawP.name || soInfo?.name || (isMoon ? "Moon" : "Planet"),
+            coords: resolvedCoords || "0:0:0",
             type: isMoon ? 'moon' : 'planet',
             parentPlanetId: rawP.siblingId ? String(rawP.siblingId) : undefined,
             ships: {},

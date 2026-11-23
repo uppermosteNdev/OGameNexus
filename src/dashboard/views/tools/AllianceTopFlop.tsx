@@ -8,6 +8,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../db';
 import { cleanUniverseId } from '../../../utils/universe';
+import { fetchOverwatch, getStoredOverwatchConfig } from '../../../utils/overwatchApi';
+import { fetchExternal } from '../../../utils/networkGuard';
 import {
   Copy,
   Check,
@@ -34,6 +36,8 @@ import {
   X,
   SlidersHorizontal,
   Send,
+  Key,
+  Trash2,
 } from 'lucide-react';
 import './AllianceTopFlop.css';
 
@@ -53,6 +57,9 @@ interface TopFlopConfig {
   is_default?: number;
   last_generated_at?: number;
   discord_webhook_url?: string | null;
+  hasWebhook?: boolean;
+  maskedWebhookUrl?: string | null;
+  hasEditToken?: boolean;
   webhook_post_hour?: number | null;
   last_webhook_sent_at?: number | null;
 }
@@ -303,9 +310,64 @@ export const AllianceTopFlop: React.FC = () => {
 
   // Automated Discord Webhook State
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState<string>('');
+  const [hasSavedWebhook, setHasSavedWebhook] = useState<boolean>(false);
+  const [maskedWebhookUrl, setMaskedWebhookUrl] = useState<string | null>(null);
   const [webhookPostHour, setWebhookPostHour] = useState<number>(0);
   const [isTestingWebhook, setIsTestingWebhook] = useState<boolean>(false);
   const [webhookStatus, setWebhookStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Per-Config Edit Key (for multi-device non-Overwatch editing)
+  const [topFlopEditToken, setTopFlopEditToken] = useState<string>('');
+  const [showEditKeyBox, setShowEditKeyBox] = useState<boolean>(false);
+  const [editKeyCopied, setEditKeyCopied] = useState<boolean>(false);
+
+  const editTokenStorageKey = useMemo(() => {
+    if (!universeId || !allianceId || !myPlayerId) return '';
+    return `topflop_edit_token_${universeId}_${allianceId}_${myPlayerId}`;
+  }, [universeId, allianceId, myPlayerId]);
+
+  useEffect(() => {
+    if (!editTokenStorageKey || typeof chrome === 'undefined' || !chrome.storage?.local) return;
+    chrome.storage.local.get([editTokenStorageKey]).then((res) => {
+      const saved = res?.[editTokenStorageKey];
+      if (typeof saved === 'string' && saved.trim()) {
+        setTopFlopEditToken(saved.trim());
+      } else {
+        setTopFlopEditToken('');
+      }
+    }).catch(() => {});
+  }, [editTokenStorageKey]);
+
+  const persistEditToken = async (token?: string | null) => {
+    const clean = (token || '').trim();
+    setTopFlopEditToken(clean);
+    if (editTokenStorageKey && typeof chrome !== 'undefined' && chrome.storage?.local) {
+      try {
+        if (clean) {
+          await chrome.storage.local.set({ [editTokenStorageKey]: clean });
+        } else {
+          await chrome.storage.local.remove([editTokenStorageKey]);
+        }
+      } catch {}
+    }
+  };
+
+  const buildTopFlopHeaders = async (includeJsonContentType = true): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = {};
+    if (includeJsonContentType) {
+      headers['Content-Type'] = 'application/json';
+    }
+    if (topFlopEditToken.trim()) {
+      headers['X-TopFlop-Token'] = topFlopEditToken.trim();
+    }
+    try {
+      const owConfig = await getStoredOverwatchConfig(universeId, myPlayerId);
+      if (owConfig?.authToken) {
+        headers['Authorization'] = `Bearer ${owConfig.authToken}`;
+      }
+    } catch {}
+    return headers;
+  };
 
   // Helper: Format UTC hour with user's local time preview
   const formatUtcOption = (hour: number) => {
@@ -397,7 +459,11 @@ export const AllianceTopFlop: React.FC = () => {
     setScheduledUtcHour(p.scheduled_utc_hour ?? 0);
     setCategory(p.category ?? 0);
     setCustomTitle(p.custom_title || 'Top / Flop of the day');
-    setDiscordWebhookUrl(p.discord_webhook_url || '');
+    // Server masks raw webhooks on GET to prevent leaking secret Discord URLs
+    const configured = Boolean(p.hasWebhook || (p.discord_webhook_url && p.discord_webhook_url.trim()));
+    setHasSavedWebhook(configured);
+    setMaskedWebhookUrl(p.maskedWebhookUrl || null);
+    setDiscordWebhookUrl('');
     setWebhookPostHour(p.webhook_post_hour ?? (p.scheduled_utc_hour ?? 0));
 
     if (p.theme && p.theme.startsWith('{')) {
@@ -438,7 +504,11 @@ export const AllianceTopFlop: React.FC = () => {
     if (!allianceId) return;
     setIsLoadingConfig(true);
     try {
-      const res = await fetch(`https://nexus-sync-worker.nexus-overwatch.workers.dev/api/topflop/presets?universe=${universeId}&allianceId=${allianceId}`);
+      const headers = await buildTopFlopHeaders(false);
+      const res = await fetchOverwatch(
+        `/api/topflop/presets?universe=${encodeURIComponent(universeId)}&allianceId=${encodeURIComponent(allianceId)}`,
+        { headers }
+      );
       if (res.ok) {
         const data = await res.json();
         if (data.defaultAllianceLogo) {
@@ -447,7 +517,7 @@ export const AllianceTopFlop: React.FC = () => {
           setDefaultAllianceLogo(data.liveData.customLogoUrl);
         }
         if (data.presets && Array.isArray(data.presets)) {
-          const cfg = data.presets.find((p: TopFlopConfig) => p.player_id === myPlayerId) || data.presets[0];
+          const cfg = data.presets.find((p: TopFlopConfig) => String(p.player_id) === String(myPlayerId)) || data.presets[0];
           if (cfg) {
             populateFromConfig(cfg);
           }
@@ -475,11 +545,23 @@ export const AllianceTopFlop: React.FC = () => {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const DISCORD_WEBHOOK_REGEX = /^https:\/\/(canary\.|ptb\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/;
+
   // Save / Update Configuration to Cloudflare D1
   const handleSaveConfig = async () => {
     if (!allianceId) return;
+    const newWebhook = discordWebhookUrl.trim();
+    if (newWebhook && !DISCORD_WEBHOOK_REGEX.test(newWebhook)) {
+      setWebhookStatus({
+        success: false,
+        message: 'Invalid URL. Webhook must match https://discord.com/api/webhooks/<id>/<token>',
+      });
+      return;
+    }
+
     setIsSaving(true);
     setStatusMessage(null);
+    setWebhookStatus(null);
     try {
       const payload = {
         universeId,
@@ -494,63 +576,134 @@ export const AllianceTopFlop: React.FC = () => {
         customTitle,
         category,
         isDefault: 1,
-        discordWebhookUrl: discordWebhookUrl.trim() || null,
+        // Only send a webhook if the user pasted a new one; blank preserves existing stored webhook
+        discordWebhookUrl: newWebhook || null,
+        clearWebhook: false,
         webhookPostHour,
+        supportsEditToken: true,
       };
 
-      const res = await fetch('https://nexus-sync-worker.nexus-overwatch.workers.dev/api/topflop/preset', {
+      const headers = await buildTopFlopHeaders(true);
+      const res = await fetchOverwatch('/api/topflop/preset', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
+      const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
+        if (data.editToken) {
+          await persistEditToken(data.editToken);
+        }
+        if (typeof data.hasWebhook === 'boolean') {
+          setHasSavedWebhook(data.hasWebhook);
+          setMaskedWebhookUrl(data.maskedWebhookUrl || null);
+        }
+        setDiscordWebhookUrl('');
         setStatusMessage('Configuration successfully saved to Cloudflare!');
         setImageTimestamp(Date.now());
         await fetchConfig();
       } else {
-        setStatusMessage('Failed to save configuration.');
+        if (res.status === 403) setShowEditKeyBox(true);
+        setStatusMessage(data.error || 'Failed to save configuration.');
       }
     } catch (err: any) {
       setStatusMessage(`Error: ${err?.message || 'Connection failed'}`);
     } finally {
       setIsSaving(false);
-      setTimeout(() => setStatusMessage(null), 4000);
+      setTimeout(() => setStatusMessage(null), 5000);
+    }
+  };
+
+  // Explicitly remove the saved Discord webhook from D1
+  const handleClearWebhook = async () => {
+    if (!allianceId) return;
+    setIsSaving(true);
+    setWebhookStatus(null);
+    try {
+      const headers = await buildTopFlopHeaders(true);
+      const res = await fetchOverwatch('/api/topflop/preset', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          universeId,
+          allianceId,
+          allianceTag,
+          configName: `${allianceTag || 'Alliance'} Daily Top/Flop`,
+          playerId: myPlayerId,
+          playerName: myPlayerName,
+          scheduledUtcHour,
+          theme: serializedTheme,
+          customLogoUrl: null,
+          customTitle,
+          category,
+          isDefault: 1,
+          discordWebhookUrl: null,
+          clearWebhook: true,
+          webhookPostHour,
+          supportsEditToken: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (data.editToken) await persistEditToken(data.editToken);
+        setHasSavedWebhook(false);
+        setMaskedWebhookUrl(null);
+        setDiscordWebhookUrl('');
+        setWebhookStatus({ success: true, message: 'Discord webhook removed.' });
+      } else {
+        if (res.status === 403) setShowEditKeyBox(true);
+        setWebhookStatus({ success: false, message: data.error || 'Failed to remove webhook.' });
+      }
+    } catch (err: any) {
+      setWebhookStatus({ success: false, message: err?.message || 'Connection failed' });
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setWebhookStatus(null), 4000);
     }
   };
 
   // Test Discord Webhook by sending an immediate embed card
   const handleTestWebhook = async () => {
     const cleanUrl = discordWebhookUrl.trim();
-    if (!cleanUrl) {
+    if (!cleanUrl && !hasSavedWebhook) {
       setWebhookStatus({ success: false, message: 'Please enter a Discord Webhook URL first.' });
       return;
     }
-    if (!cleanUrl.startsWith('https://discord.com/api/webhooks/') && !cleanUrl.startsWith('https://discordapp.com/api/webhooks/')) {
-      setWebhookStatus({ success: false, message: 'Invalid URL. Webhook must start with https://discord.com/api/webhooks/...' });
+    if (cleanUrl && !DISCORD_WEBHOOK_REGEX.test(cleanUrl)) {
+      setWebhookStatus({ success: false, message: 'Invalid URL. Webhook must match https://discord.com/api/webhooks/<id>/<token>' });
       return;
     }
 
     setIsTestingWebhook(true);
     setWebhookStatus(null);
     try {
-      const res = await fetch('https://nexus-sync-worker.nexus-overwatch.workers.dev/api/topflop/test-webhook', {
+      const headers = await buildTopFlopHeaders(true);
+      const res = await fetchOverwatch('/api/topflop/test-webhook', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          webhookUrl: cleanUrl,
+          webhookUrl: cleanUrl || undefined,
           webhookPostHour,
           universeId,
           allianceId,
           playerId: myPlayerId,
           category,
+          supportsEditToken: true,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
+        if (data.editToken) {
+          await persistEditToken(data.editToken);
+        }
+        setHasSavedWebhook(true);
+        if (data.maskedWebhookUrl) setMaskedWebhookUrl(data.maskedWebhookUrl);
+        setDiscordWebhookUrl('');
         setWebhookStatus({ success: true, message: '✓ Test card posted to Discord & Webhook saved!' });
         await fetchConfig();
       } else {
+        if (res.status === 403) setShowEditKeyBox(true);
         setWebhookStatus({ success: false, message: data.error || 'Failed sending test webhook.' });
       }
     } catch (err: any) {
@@ -564,6 +717,11 @@ export const AllianceTopFlop: React.FC = () => {
   // Trigger Immediate "Generate Now" on Edge
   const handleGenerateNow = async () => {
     if (!allianceId) return;
+    const newWebhook = discordWebhookUrl.trim();
+    if (newWebhook && !DISCORD_WEBHOOK_REGEX.test(newWebhook)) {
+      setStatusMessage('Invalid Discord Webhook URL format.');
+      return;
+    }
     setIsGenerating(true);
     setStatusMessage('Generating live Top/Flop image on Cloudflare edge...');
     try {
@@ -579,30 +737,41 @@ export const AllianceTopFlop: React.FC = () => {
         customLogoUrl: null,
         category,
         scheduledUtcHour,
-        discordWebhookUrl: discordWebhookUrl.trim() || null,
+        discordWebhookUrl: newWebhook || null,
+        clearWebhook: false,
         webhookPostHour,
+        supportsEditToken: true,
       };
 
-      const res = await fetch('https://nexus-sync-worker.nexus-overwatch.workers.dev/api/topflop/generate-now', {
+      const headers = await buildTopFlopHeaders(true);
+      const res = await fetchOverwatch('/api/topflop/generate-now', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
+      const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
+        if (data.editToken) {
+          await persistEditToken(data.editToken);
+        }
+        if (typeof data.hasWebhook === 'boolean') {
+          setHasSavedWebhook(data.hasWebhook);
+          setMaskedWebhookUrl(data.maskedWebhookUrl || null);
+        }
+        setDiscordWebhookUrl('');
         setImageTimestamp(Date.now());
         setStatusMessage('Fresh Top/Flop image generated successfully!');
         await fetchConfig();
       } else {
-        setStatusMessage('Generation completed with edge cache update.');
-        setImageTimestamp(Date.now());
+        if (res.status === 403) setShowEditKeyBox(true);
+        setStatusMessage(data.error || 'Failed to generate Top/Flop image.');
       }
     } catch (err: any) {
-      setStatusMessage(`Notice: ${err?.message || 'Generated'}`);
-      setImageTimestamp(Date.now());
+      setStatusMessage(`Error: ${err?.message || 'Connection failed'}`);
     } finally {
       setIsGenerating(false);
-      setTimeout(() => setStatusMessage(null), 3500);
+      setTimeout(() => setStatusMessage(null), 4500);
     }
   };
 
@@ -615,7 +784,7 @@ export const AllianceTopFlop: React.FC = () => {
   // Download image helper
   const handleDownloadImage = async () => {
     try {
-      const res = await fetch(previewImageUrl);
+      const res = await fetchExternal(previewImageUrl);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -740,7 +909,7 @@ export const AllianceTopFlop: React.FC = () => {
               }}
             >
               <Eye className="w-4 h-4" />
-              <span>3. Live Preview & Discord</span>
+              <span>3. Live Preview</span>
             </button>
           </div>
 
@@ -788,18 +957,65 @@ export const AllianceTopFlop: React.FC = () => {
                     <div className="atf-form-group" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                       <label className="atf-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span>Discord Webhook URL</span>
-                        <span style={{ fontSize: '11px', color: '#818cf8', fontWeight: 600 }}>Automated Daily Post</span>
+                        <span style={{ fontSize: '11px', color: hasSavedWebhook ? '#4ade80' : '#818cf8', fontWeight: 600 }}>
+                          {hasSavedWebhook ? '✓ Webhook Active' : 'Automated Daily Post'}
+                        </span>
                       </label>
+                      {hasSavedWebhook && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '8px',
+                            padding: '7px 10px',
+                            marginBottom: '8px',
+                            borderRadius: '8px',
+                            background: 'rgba(34, 197, 94, 0.08)',
+                            border: '1px solid rgba(34, 197, 94, 0.25)',
+                            fontSize: '11px',
+                            color: '#bbf7d0',
+                            fontFamily: 'monospace',
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {maskedWebhookUrl || 'Saved securely on Cloudflare edge'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleClearWebhook}
+                            disabled={isSaving}
+                            title="Remove saved Discord webhook"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(248, 113, 113, 0.35)',
+                              background: 'rgba(248, 113, 113, 0.12)',
+                              color: '#fca5a5',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontFamily: 'inherit',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                      )}
                       <input
                         type="url"
-                        placeholder="https://discord.com/api/webhooks/..."
+                        placeholder={hasSavedWebhook ? 'Paste a new webhook URL to replace existing (leave blank to keep current)' : 'https://discord.com/api/webhooks/...'}
                         value={discordWebhookUrl}
                         onChange={(e) => setDiscordWebhookUrl(e.target.value)}
                         className="atf-input"
                         style={{ fontSize: '12px', fontFamily: 'monospace' }}
                       />
                       <span className="atf-hint">
-                        Paste your channel webhook URL (e.g. from Discord channel settings $\rightarrow$ Integrations $\rightarrow$ Webhooks). NexusBot will automatically post the fresh 24h card to your channel.
+                        Paste your channel webhook URL (Discord Channel Settings → Integrations → Webhooks). For security, saved webhook URLs are stored encrypted-at-rest and never displayed in plaintext.
                       </span>
                     </div>
 
@@ -839,7 +1055,7 @@ export const AllianceTopFlop: React.FC = () => {
                         <span>Save Webhook Settings</span>
                       </button>
 
-                      {discordWebhookUrl && (
+                      {(discordWebhookUrl.trim() || hasSavedWebhook) && (
                         <button
                           type="button"
                           className="atf-btn-action"
@@ -865,6 +1081,69 @@ export const AllianceTopFlop: React.FC = () => {
                       <div className="atf-info-box-text">
                         Tracking <strong>[{allianceTag}] {allianceName}</strong> on universe <strong>{universeId}</strong>. Highscores are synchronized continuously every hour.
                       </div>
+                    </div>
+
+                    {/* Multi-Device Preset Edit Key (Optional / Auto-shown on 403) */}
+                    <div style={{ marginTop: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowEditKeyBox((v) => !v)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'rgba(148, 163, 184, 0.85)',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          padding: '2px 0',
+                        }}
+                      >
+                        <Key className="w-3 h-3" />
+                        <span>{showEditKeyBox ? 'Hide Preset Edit Key' : 'Multi-Device Edit Key'}</span>
+                      </button>
+
+                      {showEditKeyBox && (
+                        <div
+                          style={{
+                            marginTop: '8px',
+                            padding: '10px',
+                            borderRadius: '10px',
+                            background: 'rgba(15, 23, 42, 0.6)',
+                            border: '1px solid rgba(148, 163, 184, 0.18)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <input
+                              type="password"
+                              placeholder="Paste Edit Key (tfk_...) to edit from another device"
+                              value={topFlopEditToken}
+                              onChange={(e) => persistEditToken(e.target.value)}
+                              className="atf-input"
+                              style={{ fontSize: '11px', fontFamily: 'monospace', flex: 1 }}
+                            />
+                            {topFlopEditToken && (
+                              <button
+                                type="button"
+                                className="atf-btn-action"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(topFlopEditToken);
+                                  setEditKeyCopied(true);
+                                  setTimeout(() => setEditKeyCopied(false), 2000);
+                                }}
+                                style={{ padding: '7px 10px', fontSize: '11px' }}
+                              >
+                                {editKeyCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                <span>{editKeyCopied ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            )}
+                          </div>
+                          <span className="atf-hint" style={{ display: 'block', marginTop: '6px' }}>
+                            Generated automatically on your first save. Copy this key to edit the same preset on another PC (Overwatch Alliance admins unlock automatically).
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1148,7 +1427,7 @@ export const AllianceTopFlop: React.FC = () => {
                       type="button"
                       className="atf-btn-action"
                       onClick={handleCopyDiscordUrl}
-                      title="Copy permanent Discord image link"
+                      title="Copy image link"
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copied ? 'Link Copied!' : 'Copy Image Link'}</span>
@@ -1184,70 +1463,6 @@ export const AllianceTopFlop: React.FC = () => {
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* DISCORD SHARING CARD */}
-                <div className="atf-discord-box">
-                  <div className="atf-discord-box-header">
-                    <div className="atf-discord-icon-wrap">
-                      <Users className="w-4 h-4 text-indigo-400" />
-                    </div>
-                    <div>
-                      <h4 className="atf-discord-box-title">Discord Auto-Embed Link</h4>
-                      <p className="atf-discord-box-desc">
-                        Paste this permanent URL into any Discord channel. Discord will automatically embed this live image and keep it updated daily at your cut-off hour.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="atf-discord-input-row">
-                    <input
-                      type="text"
-                      readOnly
-                      value={timestampedDiscordUrl}
-                      className="atf-discord-url-input"
-                      onClick={(e) => (e.target as HTMLInputElement).select()}
-                    />
-                    <button
-                      type="button"
-                      className="atf-discord-copy-btn"
-                      onClick={handleCopyDiscordUrl}
-                    >
-                      {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                      <span>{copied ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-
-                  {discordWebhookUrl && (
-                    <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(88, 101, 242, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#86efac' }}>
-                        <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                        <span>Automated daily post configured for <strong>{formatUtcOption(webhookPostHour)}</strong></span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestWebhook}
-                        disabled={isTestingWebhook}
-                        style={{
-                          background: 'rgba(88, 101, 242, 0.2)',
-                          border: '1px solid rgba(88, 101, 242, 0.4)',
-                          color: '#e0e7ff',
-                          borderRadius: '6px',
-                          padding: '5px 12px',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Send className="w-3 h-3" />
-                        <span>{isTestingWebhook ? 'Sending...' : 'Test Post to Discord'}</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 {/* Preview Footer Navigation */}

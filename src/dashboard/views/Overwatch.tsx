@@ -1,5 +1,5 @@
 // ============================================================================
-// NEXUS OVERWATCH — TACTICAL COMMAND DECK (DESIGN-TASTE-FRONTEND V2)
+// NEXUS OVERWATCH â€” TACTICAL COMMAND DECK (DESIGN-TASTE-FRONTEND V2)
 // Design Read: Mission-critical tactical intelligence deck for OGame alliance leaders
 // Dials: VARIANCE: 7 | MOTION: 5 | DENSITY: 6
 // ============================================================================
@@ -57,6 +57,7 @@ import {
   saveStoredOverwatchConfig,
   removeStoredOverwatchConfig,
   getOverwatchAccountStorageKey,
+  fetchOverwatch,
 } from '../../utils/overwatchApi';
 import {
   isOverwatchTester,
@@ -207,7 +208,7 @@ const EASE_TRANSITION = {
 
 function formatTimeAgo(timestamp?: number | null, fallbackTimestamp?: number | null): string {
   const time = timestamp || fallbackTimestamp;
-  if (!time) return '—';
+  if (!time) return 'â€”';
   const ageSec = Math.max(0, Math.floor((Date.now() - time) / 1000));
   if (ageSec < 60) return 'Just now';
   if (ageSec < 3600) return `${Math.floor(ageSec / 60)}m ago`;
@@ -435,12 +436,12 @@ const IntelDetailsCell: React.FC<{ evt: any; onJumpCoords?: (g: number, s: numbe
         <div className="ow-intel-diff-grid">
           <div className="ow-intel-diff-box before">
             <div className="ow-intel-diff-label">BEFORE</div>
-            <div className="ow-intel-diff-val">{beforeText || '—'}</div>
+            <div className="ow-intel-diff-val">{beforeText || 'â€”'}</div>
           </div>
-          <div className="ow-intel-diff-arrow">➜</div>
+          <div className="ow-intel-diff-arrow">âžœ</div>
           <div className="ow-intel-diff-box after">
             <div className="ow-intel-diff-label">AFTER</div>
-            <div className="ow-intel-diff-val">{afterText || '—'}</div>
+            <div className="ow-intel-diff-val">{afterText || 'â€”'}</div>
           </div>
         </div>
 
@@ -588,8 +589,8 @@ const IntelPlayerCell: React.FC<{ evt: any }> = ({ evt }) => {
     const newColor = getPlayerStatusColor(newStatus);
 
     const titleText = isRename
-      ? `Player renamed: ${oldDisplay} ➜ ${newDisplay}`
-      : `${defaultName}: ${formatStatus(oldStatus)} ➜ ${formatStatus(newStatus)}`;
+      ? `Player renamed: ${oldDisplay} âžœ ${newDisplay}`
+      : `${defaultName}: ${formatStatus(oldStatus)} âžœ ${formatStatus(newStatus)}`;
 
     return (
       <div
@@ -597,7 +598,7 @@ const IntelPlayerCell: React.FC<{ evt: any }> = ({ evt }) => {
         title={titleText}
       >
         <strong style={{ color: oldColor, transition: 'color 0.2s ease' }}>{oldDisplay}</strong>
-        <span style={{ color: '#00f2ff', opacity: 0.8, fontSize: '11px' }}>➜</span>
+        <span style={{ color: '#00f2ff', opacity: 0.8, fontSize: '11px' }}>âžœ</span>
         <strong style={{ color: newColor, transition: 'color 0.2s ease' }}>{newDisplay}</strong>
       </div>
     );
@@ -660,7 +661,7 @@ const DiscordShareButton: React.FC<DiscordShareButtonProps> = ({ glyphCode, alli
 
   const handleCopy = () => {
     if (!glyphCode) return;
-    const text = `🛰️ **Nexus Overwatch Active for [${allianceTag || 'Alliance'}]**\nConnect in OGame Nexus Dashboard > Overwatch:\n🔑 **Alliance Glyph:** \`${glyphCode}\``;
+    const text = `ðŸ›°ï¸ **Nexus Overwatch Active for [${allianceTag || 'Alliance'}]**\nConnect in OGame Nexus Dashboard > Overwatch:\nðŸ”‘ **Alliance Glyph:** \`${glyphCode}\``;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -676,7 +677,7 @@ const DiscordShareButton: React.FC<DiscordShareButtonProps> = ({ glyphCode, alli
       >
         <img src={discordIconUrl} alt="Discord" className="ow-discord-icon-img" />
         {copied ? (
-          <span className="ow-discord-copied-text">Copied ✓</span>
+          <span className="ow-discord-copied-text">Copied âœ“</span>
         ) : null}
       </button>
 
@@ -688,7 +689,7 @@ const DiscordShareButton: React.FC<DiscordShareButtonProps> = ({ glyphCode, alli
             <span>Discord Dispatch</span>
           </div>
           <span className={`ow-popover-badge ${copied ? 'copied' : ''}`}>
-            {copied ? 'Copied to Clipboard ✓' : 'Click to Copy'}
+            {copied ? 'Copied to Clipboard âœ“' : 'Click to Copy'}
           </span>
         </div>
 
@@ -713,9 +714,9 @@ const DiscordShareButton: React.FC<DiscordShareButtonProps> = ({ glyphCode, alli
 
         <div className={`ow-popover-footer ${copied ? 'copied' : ''}`}>
           {copied ? (
-            <span><strong>✓ Ready to paste into Discord!</strong></span>
+            <span><strong>âœ“ Ready to paste into Discord!</strong></span>
           ) : (
-            <span>⚡ <strong>Click icon</strong> to copy dispatch snippet</span>
+            <span>âš¡ <strong>Click icon</strong> to copy dispatch snippet</span>
           )}
         </div>
       </div>
@@ -860,10 +861,10 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
     const payload = [
       `Nexus Overwatch Access Request:`,
-      `• Pilot: ${pName}`,
-      `• Player ID: ${pId}`,
-      `• Universe: ${cleanUni}${uniName ? ` (${uniName})` : ''}`,
-      rawUni && rawUni !== cleanUni ? `• Domain: ${rawUni}` : '',
+      `â€¢ Pilot: ${pName}`,
+      `â€¢ Player ID: ${pId}`,
+      `â€¢ Universe: ${cleanUni}${uniName ? ` (${uniName})` : ''}`,
+      rawUni && rawUni !== cleanUni ? `â€¢ Domain: ${rawUni}` : '',
     ].filter(Boolean).join('\n');
 
     navigator.clipboard.writeText(payload);
@@ -1107,7 +1108,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
         allianceTag: activeAllyTag || '',
         playerId: effectiveAccount?.playerId || '',
       });
-      const res = await fetch(`${apiUrl}/api/v1/alliances/detect?${params.toString()}`);
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/alliances/detect?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setDetectedAlliance(data);
@@ -1356,7 +1357,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
         if (effectiveConfig.authToken) {
           headers['Authorization'] = `Bearer ${effectiveConfig.authToken}`;
         }
-        const res = await fetch(
+        const res = await fetchOverwatch(
           `${apiUrl}/api/v1/players/search?universeId=${encodeURIComponent(activeUniverse)}&q=${encodeURIComponent(q)}`,
           { headers }
         );
@@ -1454,7 +1455,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
           headers['Authorization'] = `Bearer ${effectiveConfig.authToken}`;
         }
         const targetId = specificPlayerId || nameOrId.trim();
-        const res = await fetch(
+        const res = await fetchOverwatch(
           `${apiUrl}/api/v1/players/${encodeURIComponent(targetId)}/activity?universeId=${encodeURIComponent(activeUniverse)}&name=${encodeURIComponent(nameOrId.trim())}`,
           { headers }
         );
@@ -1614,7 +1615,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       ? `&player=${encodeURIComponent(debouncedPlayerFilter)}`
       : '';
 
-    fetch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&page=${targetPage}&limit=${targetSize}${typesParam}${playerParam}`, { headers })
+    fetchOverwatch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&page=${targetPage}&limit=${targetSize}${typesParam}${playerParam}`, { headers })
       .then(res => res.json())
       .then(data => {
         if (data && data.success && Array.isArray(data.events)) {
@@ -1646,7 +1647,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       setActiveApiUrl(apiUrl);
 
       // 1. Fetch Universe Stats
-      fetch(`${apiUrl}/api/v1/universe/${activeUniverse}/status`)
+      fetchOverwatch(`${apiUrl}/api/v1/universe/${activeUniverse}/status`)
         .then(res => res.json())
         .then(data => {
           if (isCancelled) return;
@@ -1694,7 +1695,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
             const typesParam = selectedEventTypes.length < ALL_EVENT_TYPE_IDS.length
               ? `&types=${encodeURIComponent(selectedEventTypes.join(','))}`
               : '';
-            fetch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&page=1&limit=1${typesParam}`, { headers })
+            fetchOverwatch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&page=1&limit=1${typesParam}`, { headers })
               .then(r => r.json())
               .then(d => {
                 if (d && d.pagination && d.pagination.total > eventsTotal) {
@@ -1754,7 +1755,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       const headers: Record<string, string> = {};
       if (config.authToken) headers['Authorization'] = `Bearer ${config.authToken}`;
 
-      const res = await fetch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&since=${lastChecked}&limit=100`, { headers });
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/galaxy/events?universeId=${activeUniverse}&since=${lastChecked}&limit=100`, { headers });
       if (!res.ok) return;
       const data = await res.json();
       if (data && data.success && Array.isArray(data.events)) {
@@ -1811,7 +1812,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
         // 1. Fetch pending requests (admin only)
         if (config.role === 'admin') {
-          fetch(`${apiUrl}/api/v1/alliances/requests?allianceId=${config.allianceId}`, { headers })
+          fetchOverwatch(`${apiUrl}/api/v1/alliances/requests?allianceId=${config.allianceId}`, { headers })
             .then(res => res.json())
             .then(data => {
               if (!isCancelled && data && data.success && Array.isArray(data.requests)) {
@@ -1822,7 +1823,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
         }
 
         // 2. Fetch roster (admin and members)
-        fetch(`${apiUrl}/api/v1/alliances/roster?allianceId=${config.allianceId}`, { headers })
+        fetchOverwatch(`${apiUrl}/api/v1/alliances/roster?allianceId=${config.allianceId}`, { headers })
           .then(res => res.json())
           .then(data => {
             if (!isCancelled && data && data.success && Array.isArray(data.roster)) {
@@ -1839,7 +1840,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
           .catch(() => { });
 
         // 3. Fetch permissions matrix
-        fetch(`${apiUrl}/api/v1/alliances/permissions?allianceId=${config.allianceId}`, { headers })
+        fetchOverwatch(`${apiUrl}/api/v1/alliances/permissions?allianceId=${config.allianceId}`, { headers })
           .then(res => res.json())
           .then(data => {
             if (!isCancelled && data && data.success && data.permissions) {
@@ -1896,7 +1897,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       const headers: Record<string, string> = {};
       if (config.authToken) headers['Authorization'] = `Bearer ${config.authToken}`;
 
-      const res = await fetch(`${apiUrl}/api/v1/galaxy/system?universeId=${activeUniverse}&galaxy=${g}&system=${s}`, {
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/galaxy/system?universeId=${activeUniverse}&galaxy=${g}&system=${s}`, {
         headers,
         signal: controller.signal,
       });
@@ -1992,7 +1993,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     const apiUrl = await getOverwatchApiUrl();
 
     try {
-      const res = await fetch(`${apiUrl}/api/v1/universe/seed`, {
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/universe/seed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ universeId: activeUniverse, force: force || isDebugOverwrite, overwrite: isDebugOverwrite }),
@@ -2001,22 +2002,22 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       if (data && data.success) {
         if (data.cached) {
           setResyncSuccessMsg(
-            `ℹ Cache active: ${data.message || 'Gameforge universe.xml updates weekly on-demand.'}`
+            `â„¹ Cache active: ${data.message || 'Gameforge universe.xml updates weekly on-demand.'}`
           );
         } else if (data.stats) {
           const eventsStr = data.stats.eventsCount !== undefined ? `, ${data.stats.eventsCount} delta events` : '';
           setResyncSuccessMsg(
-            `✓ ${isDebugOverwrite ? 'Overwritten' : 'Updated'} (${data.stats.planetsCount.toLocaleString()} planets, ${data.stats.moonsCount.toLocaleString()} moons${eventsStr})`
+            `âœ“ ${isDebugOverwrite ? 'Overwritten' : 'Updated'} (${data.stats.planetsCount.toLocaleString()} planets, ${data.stats.moonsCount.toLocaleString()} moons${eventsStr})`
           );
         } else {
-          setResyncSuccessMsg(`✓ Universe sync completed`);
+          setResyncSuccessMsg(`âœ“ Universe sync completed`);
         }
         // Refresh current system view
         fetchSystemData(selectedGalaxy, selectedSystem);
         // Refresh live feed
         fetchLiveEvents();
         // Refresh universe status
-        fetch(`${apiUrl}/api/v1/universe/${activeUniverse}/status`)
+        fetchOverwatch(`${apiUrl}/api/v1/universe/${activeUniverse}/status`)
           .then(r => r.json())
           .then(st => {
             if (st && st.success) {
@@ -2091,7 +2092,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       const apiUrl = await getOverwatchApiUrl();
       const pId = String(activeAccount?.playerId || '');
       const vaultKey = await getStoredVaultKey(activeUniverse, pId).catch(() => '');
-      const res = await fetch(`${apiUrl}/api/v1/alliances/reconnect`, {
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/alliances/reconnect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2166,7 +2167,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     // Call Cloudflare Edge Backend API
     try {
       const apiUrl = await getOverwatchApiUrl();
-      const res = await fetch(`${apiUrl}/api/v1/auth/join`, {
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/auth/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2246,7 +2247,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
     try {
       const apiUrl = await getOverwatchApiUrl();
-      const res = await fetch(`${apiUrl}/api/v1/alliances/create`, {
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/alliances/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2328,7 +2329,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     if (config.allianceId && req.requestId) {
       try {
         const apiUrl = await getOverwatchApiUrl();
-        await fetch(`${apiUrl}/api/v1/alliances/requests/approve`, {
+        await fetchOverwatch(`${apiUrl}/api/v1/alliances/requests/approve`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2354,7 +2355,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     if (config.allianceId && req.requestId) {
       try {
         const apiUrl = await getOverwatchApiUrl();
-        await fetch(`${apiUrl}/api/v1/alliances/requests/deny`, {
+        await fetchOverwatch(`${apiUrl}/api/v1/alliances/requests/deny`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2387,7 +2388,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
     try {
       if (config.allianceId) {
         const apiUrl = await getOverwatchApiUrl();
-        await fetch(`${apiUrl}/api/v1/alliances/permissions`, {
+        await fetchOverwatch(`${apiUrl}/api/v1/alliances/permissions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2426,7 +2427,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
       const apiUrl = await getOverwatchApiUrl();
       const pId = activeAccount?.playerId || '';
       const cleanGlyph = joinGlyph.trim().toUpperCase();
-      const res = await fetch(`${apiUrl}/api/v1/auth/status?playerId=${encodeURIComponent(pId)}&universeId=${encodeURIComponent(activeUniverse)}&glyph=${encodeURIComponent(cleanGlyph)}`);
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/auth/status?playerId=${encodeURIComponent(pId)}&universeId=${encodeURIComponent(activeUniverse)}&glyph=${encodeURIComponent(cleanGlyph)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.status === 'approved' && data.allianceId) {
@@ -2728,7 +2729,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                   style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                   title="Click to copy Player ID"
                 >
-                  #{activeAccount?.playerId || '—'}
+                  #{activeAccount?.playerId || 'â€”'}
                   {copiedField === 'playerId' ? (
                     <Check size={12} style={{ color: '#10b981' }} />
                   ) : (
@@ -2911,9 +2912,9 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                     {/* Detected Pilot Summary */}
                     <div className="ow-access-modal-pilot-summary">
                       <span>PILOT: <strong>{activeAccount?.playerName || 'Commander'}</strong></span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>ID: <strong>#{activeAccount?.playerId || 'Unknown'}</strong></span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>UNIVERSE: <strong>{activeAccount?.universe ? cleanUniverseId(activeAccount.universe) : 'Unknown'}</strong></span>
                     </div>
 
@@ -3183,7 +3184,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
               <div className="ow-glyph-chip">
                 <span>{effectiveConfig.glyphCode}</span>
                 <button className="ow-btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={copyGlyph}>
-                  {copied ? 'Copied ✓' : 'Copy'}
+                  {copied ? 'Copied âœ“' : 'Copy'}
                 </button>
               </div>
 
@@ -3239,7 +3240,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <span>Overwatch Setup</span>
                       </div>
                       <span style={{ fontSize: '10px', color: '#64748b' }}>
-                        {activePillar === 'setup' ? '▼' : '▸'}
+                        {activePillar === 'setup' ? 'â–¼' : 'â–¸'}
                       </span>
                     </div>
 
@@ -3294,7 +3295,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <span>Universe Intel</span>
                       </div>
                       <span style={{ fontSize: '10px', color: '#64748b' }}>
-                        {activePillar === 'intel' ? '▼' : '▸'}
+                        {activePillar === 'intel' ? 'â–¼' : 'â–¸'}
                       </span>
                     </div>
 
@@ -3427,7 +3428,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <span>Alliance Empire</span>
                       </div>
                       <span style={{ fontSize: '10px', color: '#64748b' }}>
-                        {activePillar === 'empire' ? '▼' : '▸'}
+                        {activePillar === 'empire' ? 'â–¼' : 'â–¸'}
                       </span>
                     </div>
 
@@ -3492,7 +3493,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <span>Personal Vault</span>
                       </div>
                       <span style={{ fontSize: '10px', color: '#64748b' }}>
-                        {activePillar === 'vault' ? '▼' : '▸'}
+                        {activePillar === 'vault' ? 'â–¼' : 'â–¸'}
                       </span>
                     </div>
 
@@ -3534,7 +3535,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <span className="ow-dock-tag pending">{pendingRequests.length}</span>
                       ) : (
                         <span style={{ fontSize: '10px', color: '#64748b' }}>
-                          {activePillar === 'command' ? '▼' : '▸'}
+                          {activePillar === 'command' ? 'â–¼' : 'â–¸'}
                         </span>
                       )}
                     </div>
@@ -3613,7 +3614,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <span>Overwatch Setup</span>
                       </div>
                       <span style={{ fontSize: '10px', color: '#64748b' }}>
-                        {activePillar === 'setup' ? '▼' : '▸'}
+                        {activePillar === 'setup' ? 'â–¼' : 'â–¸'}
                       </span>
                     </div>
 
@@ -3669,7 +3670,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         <span>Personal Tools & Vault</span>
                       </div>
                       <span style={{ fontSize: '10px', color: '#64748b' }}>
-                        {activePillar === 'vault' ? '▼' : '▸'}
+                        {activePillar === 'vault' ? 'â–¼' : 'â–¸'}
                       </span>
                     </div>
 
@@ -3825,7 +3826,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
                   <div className="ow-cipher-box" style={{ background: 'rgba(251, 191, 36, 0.04)', borderColor: 'rgba(251, 191, 36, 0.25)', marginBottom: 20 }}>
                     <p style={{ margin: 0, fontSize: '13px', color: '#e2e8f0', lineHeight: 1.6 }}>
-                      🔒 <strong>Single Alliance Limit:</strong> Players cannot operate or create multiple Overwatch Alliances concurrently.
+                      ðŸ”’ <strong>Single Alliance Limit:</strong> Players cannot operate or create multiple Overwatch Alliances concurrently.
                     </p>
                     {effectiveConfig.glyphCode && (
                       <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -3840,7 +3841,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           onClick={copyGlyph}
                         >
                           <Copy size={12} style={{ marginRight: 5 }} />
-                          <span>{copied ? 'Copied ✓' : 'Copy Glyph'}</span>
+                          <span>{copied ? 'Copied âœ“' : 'Copy Glyph'}</span>
                         </button>
                       </div>
                     )}
@@ -3879,7 +3880,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         setActivePillar('command');
                       }}
                     >
-                      View Features Guide ➜
+                      View Features Guide âžœ
                     </button>
                   </div>
                 </motion.section>
@@ -3939,7 +3940,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           }}
                         >
                           <Copy size={13} style={{ marginRight: 6 }} />
-                          <span>{copied ? 'Copied ✓' : 'Copy Glyph'}</span>
+                          <span>{copied ? 'Copied âœ“' : 'Copy Glyph'}</span>
                         </button>
                         <DiscordShareButton
                           glyphCode={detectedAlliance.glyphCode}
@@ -3970,15 +3971,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                       className="ow-link-btn"
                       onClick={() => setPrimaryTab('join')}
                     >
-                      Go to Join Overwatch ➜
+                      Go to Join Overwatch âžœ
                     </button>
-                    <span className="ow-divider">•</span>
+                    <span className="ow-divider">â€¢</span>
                     <button
                       type="button"
                       className="ow-link-btn"
                       onClick={() => setPrimaryTab('features')}
                     >
-                      View Features Guide ➜
+                      View Features Guide âžœ
                     </button>
                   </div>
                 </motion.section>
@@ -4003,7 +4004,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                   {detectedAlliance?.exists && (
                     <div className="ow-cipher-box" style={{ background: 'rgba(0, 242, 255, 0.04)', borderColor: 'rgba(0, 242, 255, 0.2)', marginBottom: 20 }}>
                       <p style={{ margin: 0, fontSize: '13px', color: '#e2e8f0', lineHeight: 1.6 }}>
-                        ℹ️ <strong>Alliance Overwatch Already Exists:</strong> <strong>{detectedAlliance.adminPlayerName || 'Admin'}</strong> has already created an Overwatch alliance for <strong>[{detectedAlliance.allianceTag}] {detectedAlliance.allianceName}</strong>. You can switch to the <strong>Join Overwatch</strong> tab to connect to it, or create a separate one below.
+                        â„¹ï¸ <strong>Alliance Overwatch Already Exists:</strong> <strong>{detectedAlliance.adminPlayerName || 'Admin'}</strong> has already created an Overwatch alliance for <strong>[{detectedAlliance.allianceTag}] {detectedAlliance.allianceName}</strong>. You can switch to the <strong>Join Overwatch</strong> tab to connect to it, or create a separate one below.
                       </p>
                     </div>
                   )}
@@ -4107,15 +4108,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         setShowCustomJoin(false);
                       }}
                     >
-                      Go to Join Overwatch ➜
+                      Go to Join Overwatch âžœ
                     </button>
-                    <span className="ow-divider">•</span>
+                    <span className="ow-divider">â€¢</span>
                     <button
                       type="button"
                       className="ow-link-btn"
                       onClick={() => setPrimaryTab('features')}
                     >
-                      View Features Guide ➜
+                      View Features Guide âžœ
                     </button>
                   </div>
                 </motion.section>
@@ -4165,7 +4166,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
                   <div className="ow-cipher-box" style={{ background: 'rgba(0, 242, 255, 0.04)', borderColor: 'rgba(0, 242, 255, 0.2)', marginBottom: 20 }}>
                     <p style={{ margin: 0, fontSize: '13px', color: '#e2e8f0', lineHeight: 1.6 }}>
-                      ℹ️ <strong>Want to join a different alliance?</strong> Disconnect from your current alliance first. Then enter an invite glyph to join.
+                      â„¹ï¸ <strong>Want to join a different alliance?</strong> Disconnect from your current alliance first. Then enter an invite glyph to join.
                     </p>
                   </div>
 
@@ -4202,7 +4203,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         setActivePillar('command');
                       }}
                     >
-                      View Features Guide ➜
+                      View Features Guide âžœ
                     </button>
                   </div>
                 </motion.section>
@@ -4257,7 +4258,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
 
                     <div className="ow-cipher-box" style={{ background: 'rgba(251, 191, 36, 0.04)', borderColor: 'rgba(251, 191, 36, 0.2)', textAlign: 'center' }}>
                       <p style={{ margin: 0, fontSize: '13px', color: '#e2e8f0', lineHeight: 1.6 }}>
-                        💡 <strong>Admin Approval:</strong> An alliance admin will assign your role (<strong>Member</strong> or <strong>Visitor</strong>) and approve your request.
+                        ðŸ’¡ <strong>Admin Approval:</strong> An alliance admin will assign your role (<strong>Member</strong> or <strong>Visitor</strong>) and approve your request.
                       </p>
                     </div>
 
@@ -4389,9 +4390,9 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                             className="ow-link-btn"
                             onClick={() => setShowCustomJoin(false)}
                           >
-                            ◀ Back to [{activeAllyTag || 'Alliance'}] Join
+                            â—€ Back to [{activeAllyTag || 'Alliance'}] Join
                           </button>
-                          <span className="ow-divider">•</span>
+                          <span className="ow-divider">â€¢</span>
                         </>
                       )}
                       <button
@@ -4399,15 +4400,15 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         className="ow-link-btn"
                         onClick={() => setPrimaryTab('create')}
                       >
-                        Create Alliance Overwatch ➜
+                        Create Alliance Overwatch âžœ
                       </button>
-                      <span className="ow-divider">•</span>
+                      <span className="ow-divider">â€¢</span>
                       <button
                         type="button"
                         className="ow-link-btn"
                         onClick={() => setPrimaryTab('features')}
                       >
-                        View Features Guide ➜
+                        View Features Guide âžœ
                       </button>
                     </div>
                   </motion.section>
@@ -4469,7 +4470,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           }}
                         >
                           <Copy size={13} style={{ marginRight: 6 }} />
-                          <span>{copied ? 'Copied ✓' : 'Copy Glyph'}</span>
+                          <span>{copied ? 'Copied âœ“' : 'Copy Glyph'}</span>
                         </button>
                         <DiscordShareButton
                           glyphCode={detectedAlliance.glyphCode}
@@ -4508,7 +4509,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         className="ow-link-btn"
                         onClick={() => setPrimaryTab('features')}
                       >
-                        View Features Guide ➜
+                        View Features Guide âžœ
                       </button>
                     </div>
                   </motion.section>
@@ -4626,23 +4627,23 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         className="ow-link-btn"
                         onClick={() => setShowCustomJoin(true)}
                       >
-                        Join with Custom Invite Glyph ➜
+                        Join with Custom Invite Glyph âžœ
                       </button>
-                      <span className="ow-divider">•</span>
+                      <span className="ow-divider">â€¢</span>
                       <button
                         type="button"
                         className="ow-link-btn"
                         onClick={() => setPrimaryTab('create')}
                       >
-                        Create Alliance Overwatch ➜
+                        Create Alliance Overwatch âžœ
                       </button>
-                      <span className="ow-divider">•</span>
+                      <span className="ow-divider">â€¢</span>
                       <button
                         type="button"
                         className="ow-link-btn"
                         onClick={() => setPrimaryTab('features')}
                       >
-                        View Features Guide ➜
+                        View Features Guide âžœ
                       </button>
                     </div>
                   </motion.section>
@@ -4720,7 +4721,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                         {resyncSuccessMsg && (
-                          <span style={{ fontSize: '12px', color: resyncSuccessMsg.startsWith('✓') ? '#4ade80' : '#38bdf8', fontWeight: 700, maxWidth: 280, whiteSpace: 'normal', lineHeight: 1.25 }}>
+                          <span style={{ fontSize: '12px', color: resyncSuccessMsg.startsWith('âœ“') ? '#4ade80' : '#38bdf8', fontWeight: 700, maxWidth: 280, whiteSpace: 'normal', lineHeight: 1.25 }}>
                             {resyncSuccessMsg}
                           </span>
                         )}
@@ -4746,7 +4747,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                             onClick={() => setSelectedGalaxy(Math.max(1, selectedGalaxy - 1))}
                             disabled={selectedGalaxy <= 1}
                           >
-                            ◀
+                            â—€
                           </button>
                           {Array.from({ length: universeStats?.galaxies || 5 }).map((_, idx) => {
                             const g = idx + 1;
@@ -4765,7 +4766,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                             onClick={() => setSelectedGalaxy(Math.min(universeStats?.galaxies || 5, selectedGalaxy + 1))}
                             disabled={selectedGalaxy >= (universeStats?.galaxies || 5)}
                           >
-                            ▶
+                            â–¶
                           </button>
                         </div>
                       </div>
@@ -4789,7 +4790,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                               onClick={() => setSelectedSystem((s) => Math.max(1, s - 1))}
                               disabled={selectedSystem <= 1}
                             >
-                              ◀
+                              â—€
                             </button>
                             <input
                               type="number"
@@ -4837,7 +4838,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                               onClick={() => setSelectedSystem((s) => Math.min(universeStats?.systems || 499, s + 1))}
                               disabled={selectedSystem >= (universeStats?.systems || 499)}
                             >
-                              ▶
+                              â–¶
                             </button>
                           </div>
                           <button
@@ -5046,17 +5047,17 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                   {slot.has_moon === 1 ? (
                                     (slot.moon_destroyed === 1 || (slot.planet_name || '').toLowerCase().includes('destroy')) ? (
                                       <span className="ow-tag red" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                        <span>💥</span>
+                                        <span>ðŸ’¥</span>
                                         <span>{slot.moon_size ? `${slot.moon_size.toLocaleString()} km (Destroyed)` : 'Destroyed Moon'}</span>
                                       </span>
                                     ) : (
                                       <span className="ow-tag green" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                        <span>🌙</span>
+                                        <span>ðŸŒ™</span>
                                         <span>{slot.moon_size ? `${slot.moon_size.toLocaleString()} km` : 'Moon'}</span>
                                       </span>
                                     )
                                   ) : (
-                                    <span style={{ color: '#475569' }}>—</span>
+                                    <span style={{ color: '#475569' }}>â€”</span>
                                   )}
                                 </td>
                                 <td>
@@ -5089,7 +5090,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                       Abandoned (Pending Wipe)
                                     </span>
                                   ) : (
-                                    <span style={{ color: '#475569' }}>—</span>
+                                    <span style={{ color: '#475569' }}>â€”</span>
                                   )}
                                 </td>
                                 <td className="ow-activity-cell" style={{ textAlign: 'center' }}>
@@ -5104,7 +5105,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                       <span>Activity</span>
                                     </button>
                                   ) : (
-                                    <span style={{ color: '#475569' }}>—</span>
+                                    <span style={{ color: '#475569' }}>â€”</span>
                                   )}
                                 </td>
                                 <td>
@@ -5113,7 +5114,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                       [{slot.alliance_tag}]
                                     </span>
                                   ) : (
-                                    <span style={{ color: '#475569' }}>—</span>
+                                    <span style={{ color: '#475569' }}>â€”</span>
                                   )}
                                 </td>
                                 <td>
@@ -5122,7 +5123,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                       M: {slot.debris_metal.toLocaleString()} | C: {slot.debris_crystal.toLocaleString()}
                                     </span>
                                   ) : (
-                                    <span style={{ color: '#475569' }}>—</span>
+                                    <span style={{ color: '#475569' }}>â€”</span>
                                   )}
                                 </td>
                                 <td>
@@ -5181,7 +5182,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                             title="Live stream paused while browsing historical logs. Click to jump to live feed."
                           >
                             <span className="ow-status-dot paused"></span>
-                            <span>Live Paused (P{eventsPage}) • Jump to Live</span>
+                            <span>Live Paused (P{eventsPage}) â€¢ Jump to Live</span>
                             {eventsUnseenCount > 0 && (
                               <span className="ow-unseen-badge">+{eventsUnseenCount}</span>
                             )}
@@ -5386,12 +5387,12 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                 <>
                                   Showing <strong>{filteredEvents.length}</strong> event{filteredEvents.length === 1 ? '' : 's'} matching <strong>"{playerFilter.trim()}"</strong>
                                   <span style={{ color: '#64748b', marginLeft: 8 }}>
-                                    ({eventsTotal.toLocaleString()} total in feed • Page {eventsPage})
+                                    ({eventsTotal.toLocaleString()} total in feed â€¢ Page {eventsPage})
                                   </span>
                                 </>
                               ) : (
                                 <>
-                                  Showing <strong>{eventsTotal === 0 ? 0 : ((eventsPage - 1) * eventsPageSize) + 1}–{Math.min(eventsPage * eventsPageSize, eventsTotal)}</strong> of <strong>{eventsTotal.toLocaleString()}</strong> events
+                                  Showing <strong>{eventsTotal === 0 ? 0 : ((eventsPage - 1) * eventsPageSize) + 1}â€“{Math.min(eventsPage * eventsPageSize, eventsTotal)}</strong> of <strong>{eventsTotal.toLocaleString()}</strong> events
                                 </>
                               )}
                             </span>
@@ -5455,7 +5456,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                     ) : (
                       <div style={{ padding: '36px 20px', textAlign: 'center', background: '#040712', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
                         <div style={{ color: '#00f2ff', fontSize: '14px', fontWeight: 700, marginBottom: 6 }}>
-                          🛰️ {playerFilter.trim().length >= 3 ? `No Events Found for Player "${playerFilter.trim()}"` : 'No Events Found for Selected Filters'}
+                          ðŸ›°ï¸ {playerFilter.trim().length >= 3 ? `No Events Found for Player "${playerFilter.trim()}"` : 'No Events Found for Selected Filters'}
                         </div>
                         <p style={{ color: '#94a3b8', fontSize: '12.5px', margin: 0, maxWidth: 540, marginInline: 'auto', lineHeight: 1.5 }}>
                           {playerFilter.trim().length >= 3
@@ -5609,7 +5610,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                             <div key={req.requestId} className="ow-request-card">
                               <div className="ow-request-header">
                                 <div>
-                                  <span className="ow-request-name">👤 {req.playerName}</span>
+                                  <span className="ow-request-name">ðŸ‘¤ {req.playerName}</span>
                                   <span className="ow-request-tag">[{req.allianceTag || 'NO-TAG'}]</span>
                                 </div>
                                 <span
@@ -5707,7 +5708,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                         ) : permissionsSaveSuccess ? (
                           <>
                             <CheckCircle2 size={13} style={{ color: '#4ade80', marginRight: 6 }} />
-                            <span>Saved ✓</span>
+                            <span>Saved âœ“</span>
                           </>
                         ) : (
                           <>
@@ -5741,7 +5742,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                               <p>Access real-time sector updates, colonized slots, and debris fields</p>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <span className="ow-perm-lock-icon" title="Admin always has full access">✓ (Locked)</span>
+                              <span className="ow-perm-lock-icon" title="Admin always has full access">âœ“ (Locked)</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
                               <input
@@ -5767,7 +5768,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                               <p>Share solar systems you browse in OGame with the alliance</p>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <span className="ow-perm-lock-icon">✓ (Locked)</span>
+                              <span className="ow-perm-lock-icon">âœ“ (Locked)</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
                               <input
@@ -5795,7 +5796,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           <p>Access spy reports probed by squadmates, enemy fleet counts, and defense levels</p>
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <span className="ow-perm-lock-icon">✓ (Locked)</span>
+                          <span className="ow-perm-lock-icon">âœ“ (Locked)</span>
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <input
@@ -5821,7 +5822,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                           <p>Allow extension to sync scanned spy probes directly into the vault</p>
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <span className="ow-perm-lock-icon">✓ (Locked)</span>
+                          <span className="ow-perm-lock-icon">âœ“ (Locked)</span>
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <input
@@ -5848,7 +5849,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                               <p>View player online/offline activity patterns and estimated sleep schedules</p>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <span className="ow-perm-lock-icon">✓ (Locked)</span>
+                              <span className="ow-perm-lock-icon">âœ“ (Locked)</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
                               <input
@@ -5874,7 +5875,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                               <p>Lock attack targets with timers to avoid fleet collisions</p>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <span className="ow-perm-lock-icon">✓ (Locked)</span>
+                              <span className="ow-perm-lock-icon">âœ“ (Locked)</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
                               <input
@@ -5900,7 +5901,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                               <p>Permission to share alliance invite glyphs with other players</p>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <span className="ow-perm-lock-icon">✓ (Locked)</span>
+                              <span className="ow-perm-lock-icon">âœ“ (Locked)</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
                               <input
@@ -5999,7 +6000,7 @@ const Overwatch: React.FC<OverwatchProps> = ({ onSelect }) => {
                                 </td>
                                 <td>
                                   {isAdmin ? (
-                                    <span style={{ color: '#64748b', fontSize: '12px' }}>—</span>
+                                    <span style={{ color: '#64748b', fontSize: '12px' }}>â€”</span>
                                   ) : (
                                     <button
                                       type="button"

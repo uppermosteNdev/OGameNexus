@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Galactic Nucleus -->
+  <circle cx="128" cy="128" r="18" fill="currentColor" stroke="none" />
+  <!-- Spiral Arm 1 -->
+  <path d="M128,88 C80,88 56,120 56,152 C56,192 92,216 136,216 C184,216 220,180 220,132 C220,100 200,68 168,48" />
+  <!-- Spiral Arm 2 (180° Symmetrical Counterpart) -->
+  <path d="M128,168 C176,168 200,136 200,104 C200,64 164,40 120,40 C72,40 36,76 36,124 C36,156 56,188 88,208" />
+</svg>

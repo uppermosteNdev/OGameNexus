@@ -45,6 +45,19 @@ export default defineConfig({
     react(),
     webExtension({
       manifest: () => generateManifest(target),
+      transformManifest: (manifest: any) => {
+        if (manifest.content_scripts) {
+          for (const script of manifest.content_scripts) {
+            if (script.matches?.some((m: string) => m.includes('/game/*')) && script.world !== 'MAIN') {
+              script.js = ['ogame-request-guard.js', ...(script.js ?? [])];
+            }
+          }
+        }
+        if (target === 'firefox' && manifest.background && manifest.background.scripts) {
+          manifest.background.scripts = ['ogame-request-guard.js', ...(manifest.background.scripts ?? [])];
+        }
+        return manifest;
+      },
       browser: target,
       watchFilePaths: ["package.json"],
       additionalInputs: ["dashboard.html"],

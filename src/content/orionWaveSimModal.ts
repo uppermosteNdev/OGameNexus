@@ -16,12 +16,15 @@ import {
   extractStationedWarships,
   getPlayerCombatProfile,
   loadPlayerPlanetsList,
+  calculatePlayerLifeformShipBonuses,
   AnomalyCombatWave,
   CANONICAL_WARSHIP_IDS,
   CanonicalWarshipId,
   WARSHIP_METADATA,
   PlayerCombatProfile,
-  StationedPlanetFleet
+  StationedPlanetFleet,
+  PlayerLifeformShipBonuses,
+  ShipLifeformBonusDetails
 } from './orionWaveParser';
 import { NexuSimEngine } from '../utils/combatSim/engine';
 import { FleetParty, ServerSettings } from '../utils/combatSim/types';
@@ -47,13 +50,23 @@ const ALL_SHIP_METADATA: Record<number, { name: string; iconAttr: string; role: 
   213: { name: 'Destroyer', iconAttr: 'destroyer', role: 'Anti-BC & Armor' },
   214: { name: 'Deathstar', iconAttr: 'deathstar', role: 'Superheavy Base' },
   215: { name: 'Battlecruiser', iconAttr: 'interceptor', role: 'Capital Hunter' },
+  217: { name: 'Crawler', iconAttr: 'crawler', role: 'Collector Drone' },
   218: { name: 'Reaper', iconAttr: 'reaper', role: 'Debris Harvester' },
-  219: { name: 'Pathfinder', iconAttr: 'explorer', role: 'Scout Vanguard' }
+  219: { name: 'Pathfinder', iconAttr: 'explorer', role: 'Scout Vanguard' },
+  // Defenses (Hostile wave defense structures)
+  401: { name: 'Rocket Launcher', iconAttr: 'rocketlauncher', role: 'Defense' },
+  402: { name: 'Light Laser', iconAttr: 'lasercannonlight', role: 'Defense' },
+  403: { name: 'Heavy Laser', iconAttr: 'lasercannonheavy', role: 'Defense' },
+  404: { name: 'Gauss Cannon', iconAttr: 'gausscannon', role: 'Heavy Defense' },
+  405: { name: 'Ion Cannon', iconAttr: 'ioncannon', role: 'Shield Defense' },
+  406: { name: 'Plasma Turret', iconAttr: 'plasmacannon', role: 'Capital Defense' },
+  407: { name: 'Small Shield Dome', iconAttr: 'shielddomesmall', role: 'Shield Dome' },
+  408: { name: 'Large Shield Dome', iconAttr: 'shielddomelarge', role: 'Shield Dome' }
 };
 
 function getShipMetadata(id: number): { name: string; iconAttr: string; role: string } {
   return ALL_SHIP_METADATA[id] || {
-    name: UNITS[id]?.name || `Ship ${id}`,
+    name: UNITS[id]?.name || `Unit ${id}`,
     iconAttr: 'cruiser',
     role: ''
   };
@@ -135,16 +148,115 @@ function computeFleetMsu(ships: Record<number, number>): number {
   return msu;
 }
 
+let activeShipBonusTooltip: HTMLElement | null = null;
+
+function hideShipBonusTooltip(): void {
+  if (activeShipBonusTooltip) {
+    activeShipBonusTooltip.remove();
+    activeShipBonusTooltip = null;
+  }
+}
+
+function positionShipBonusTooltip(e: MouseEvent, tip: HTMLElement): void {
+  const pad = 14;
+  let x = e.clientX + pad;
+  let y = e.clientY + pad;
+  const rect = tip.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth - 10) {
+    x = e.clientX - rect.width - pad;
+  }
+  if (y + rect.height > window.innerHeight - 10) {
+    y = e.clientY - rect.height - pad;
+  }
+  tip.style.left = `${Math.max(10, x)}px`;
+  tip.style.top = `${Math.max(10, y)}px`;
+}
+
 /**
- * Computes cargo capacity for a fleet given hyperspace tech.
+ * Renders a styled floating tooltip with one Lifeform bonus per line
+ * matching the Reward Pool / Collected Rewards UI layout.
  */
-function computeFleetCargo(ships: Record<number, number>, hypTech: number): number {
+function showShipBonusTooltip(
+  e: MouseEvent,
+  shipId: number,
+  shipName: string,
+  iconAttr: string,
+  bonus: ShipLifeformBonusDetails | undefined
+): void {
+  hideShipBonusTooltip();
+
+  const b = bonus || { weapons: 0, shield: 0, armour: 0, speed: 0, cargo: 0, totalBonusCount: 0 };
+  const hasBuffs = b.totalBonusCount > 0;
+  const totalPct = b.weapons + b.shield + b.armour + b.speed + b.cargo;
+
+  const tip = document.createElement('div');
+  tip.id = 'nexus-floating-ship-bonus-tooltip';
+  tip.className = 'nexus-floating-rewards-tooltip nexus-ship-bonus-floating-tooltip';
+
+  const rows: Array<{ icon: string; name: string; val: number; iconColor: string }> = [
+    { icon: '⚔', name: 'Weapons', val: b.weapons, iconColor: '#f97316' },
+    { icon: '🛡', name: 'Shield', val: b.shield, iconColor: '#38bdf8' },
+    { icon: '🔰', name: 'Armour', val: b.armour, iconColor: '#34d399' },
+    { icon: '⚡', name: 'Speed', val: b.speed, iconColor: '#60a5fa' },
+    { icon: '📦', name: 'Cargo', val: b.cargo, iconColor: '#fbbf24' },
+  ];
+
+  const rowsHtml = rows.map((r) => {
+    const isBoosted = r.val > 0.001;
+    const valColor = isBoosted ? '#34d399' : '#64748b';
+    const valText = `+${r.val.toFixed(1)}%`;
+    return `
+      <div class="nexus-reward-row" style="display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 16px !important; white-space: nowrap !important; line-height: 22px !important;">
+        <div class="nexus-reward-left" style="display: inline-flex !important; align-items: center !important; gap: 7px !important; flex-shrink: 0 !important;">
+          <span style="color: ${r.iconColor}; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; width: 14px;">${r.icon}</span>
+          <span class="nexus-reward-name" style="color: #cbd5e1; font-weight: 600; font-size: 11px;">${r.name}</span>
+        </div>
+        <span class="nexus-reward-amount" style="color: ${valColor}; font-weight: 700; font-family: monospace, sans-serif; font-size: 11px; white-space: nowrap !important; margin-left: auto !important; text-align: right !important;">${valText}</span>
+      </div>
+    `;
+  }).join('');
+
+  const badgeHtml = hasBuffs
+    ? `<span style="margin-left: auto; font-size: 10px; color: #2dd4bf; font-weight: 700; background: rgba(20, 184, 166, 0.15); padding: 1px 6px; border-radius: 3px; border: 1px solid rgba(20, 184, 166, 0.35); white-space: nowrap;">+${totalPct.toFixed(1)}% Total</span>`
+    : `<span style="margin-left: auto; font-size: 10px; color: #64748b; font-weight: 600; background: rgba(255, 255, 255, 0.05); padding: 1px 6px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.1); white-space: nowrap;">0 Buffs</span>`;
+
+  tip.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; padding-bottom: 5px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <technology-icon regular="" ${iconAttr}="" sq20="" style="display: inline-block; vertical-align: middle; flex-shrink: 0; width: 18px; height: 18px;"></technology-icon>
+        <span style="font-weight: 700; color: #e2e8f0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">${shipName}</span>
+      </div>
+      ${badgeHtml}
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      ${rowsHtml}
+    </div>
+    <div style="margin-top: 6px; padding-top: 5px; border-top: 1px dashed rgba(255, 255, 255, 0.08); font-size: 9.5px; color: #64748b; text-align: center; font-style: italic;">
+      Cumulative empire-wide Lifeform research
+    </div>
+  `;
+
+  document.body.appendChild(tip);
+  activeShipBonusTooltip = tip;
+
+  positionShipBonusTooltip(e, tip);
+}
+
+/**
+ * Computes cargo capacity for a fleet given hyperspace tech and per-ship lifeform cargo bonuses.
+ */
+function computeFleetCargo(
+  ships: Record<number, number>,
+  hypTech: number,
+  perShipCargo?: Record<number, number>
+): number {
   let cargo = 0;
-  const factor = 1 + hypTech * 0.05;
   for (const [idStr, count] of Object.entries(ships)) {
     const id = parseInt(idStr, 10);
     const unit = UNITS[id];
     if (unit && count > 0) {
+      const lfCargo = ((perShipCargo && perShipCargo[id]) || 0) / 100;
+      const factor = 1 + hypTech * 0.05 + lfCargo;
       cargo += Math.floor(unit.cargo * factor) * count;
     }
   }
@@ -159,7 +271,8 @@ function simulateSingleWave(
   currentFleet: Record<number, number>,
   profile: PlayerCombatProfile,
   iterations: number,
-  targetCoords: { galaxy: number; system: number; position: number }
+  targetCoords: { galaxy: number; system: number; position: number },
+  lfBonuses: PlayerLifeformShipBonuses
 ): WaveSimResult {
   const initialShipCount = Object.values(currentFleet).reduce((a, b) => a + b, 0);
 
@@ -169,7 +282,7 @@ function simulateSingleWave(
     debrisFactorDef: 0,
     deuteriumInDebris: true,
     repairFactor: 0.7,
-    lifeforms: false,
+    lifeforms: true,
     rapidFire: true,
     galaxies: 9,
     systems: 499,
@@ -202,9 +315,11 @@ function simulateSingleWave(
       globalWeapon: 0,
       globalShield: 0,
       globalArmour: 0,
-      perShipWeapon: {},
-      perShipShield: {},
-      perShipArmour: {}
+      perShipWeapon: lfBonuses.perShipWeapon || {},
+      perShipShield: lfBonuses.perShipShield || {},
+      perShipArmour: lfBonuses.perShipArmour || {},
+      perShipCargo: lfBonuses.perShipCargo || {},
+      perShipSpeed: lfBonuses.perShipSpeed || {}
     },
     units: { ...currentFleet }
   };
@@ -324,7 +439,7 @@ function showWaveInspectTooltip(e: MouseEvent, wave: AnomalyCombatWave): void {
     <div class="nexus-tt-header">
       <div class="nexus-tt-title-wrap">
         <span class="nexus-tt-badge">Wave ${wave.waveNumber} Hostiles</span>
-        <span class="nexus-tt-count">${totalShips.toLocaleString()} Vessels</span>
+        <span class="nexus-tt-count">${totalShips.toLocaleString()} Hostile Units</span>
       </div>
       <span class="nexus-tt-msu">${formatAmount(waveMsu)} MSU</span>
     </div>
@@ -398,10 +513,13 @@ export async function openAnomalyWaveSimModal(
   const coordsStr = `${missionData.galaxy || 1}:${missionData.system || 1}:${missionData.position || 1}`;
   const waves = extractAnomalyCombatWaves(missionEl, missionData.id, missionData.level, coordsStr);
   const stationedWarships = extractStationedWarships(missionData.id);
-  const [profile, planetsList] = await Promise.all([
+  let planetsList: StationedPlanetFleet[] = [];
+  const [profile, initialPlanets, lfBonuses] = await Promise.all([
     getPlayerCombatProfile(),
-    loadPlayerPlanetsList()
+    loadPlayerPlanetsList(),
+    calculatePlayerLifeformShipBonuses()
   ]);
+  planetsList = initialPlanets;
   let activePlanetId = planetsList.find((p) => p.isCurrent)?.id || planetsList[0]?.id || '';
 
   // Hostile combat techs (default to first wave's techs or saved in localStorage)
@@ -476,12 +594,13 @@ export async function openAnomalyWaveSimModal(
   modal.className = 'nexus-wave-sim-dialog';
 
   const render = () => {
+    hideShipBonusTooltip();
     const prevWavesStack = modal.querySelector('.nexus-sim-waves-stack');
     const prevScrollTop = prevWavesStack ? prevWavesStack.scrollTop : 0;
 
     const totalInputShips = Object.values(activeWarships).reduce((a, b) => a + b, 0);
     const fleetMsu = computeFleetMsu(activeWarships);
-    const fleetCargo = computeFleetCargo(activeWarships, profile.hyperspaceTech);
+    const fleetCargo = computeFleetCargo(activeWarships, profile.hyperspaceTech, lfBonuses.perShipCargo);
     const starsHtml = '★'.repeat(Math.max(1, missionData.stars || 1));
 
     const activePlanet = planetsList.find((p) => p.id === activePlanetId) || planetsList[0];
@@ -577,15 +696,23 @@ export async function openAnomalyWaveSimModal(
       const meta = WARSHIP_METADATA[id];
       const count = activeWarships[id] || 0;
       const isActive = count > 0;
+      const shipLfBonus = lfBonuses.byShipId[id];
+      const hasLfBuffs = shipLfBonus && shipLfBonus.totalBonusCount > 0;
 
       return `
         <div class="nexus-sim-warship-card ${isActive ? 'active' : 'idle'}" data-ship-id="${id}">
-          <div class="nexus-sim-card-top">
+          <div
+            class="nexus-sim-card-top nexus-sim-ship-bonus-trigger"
+            data-ship-id="${id}"
+          >
             <div class="nexus-sim-ship-icon-frame">
               <technology-icon regular="" ${meta.iconAttr}="" sq24=""></technology-icon>
             </div>
             <div class="nexus-sim-ship-info">
-              <span class="nexus-sim-ship-name">${meta.name}</span>
+              <div class="nexus-sim-ship-name-row">
+                <span class="nexus-sim-ship-name">${meta.name}</span>
+                ${hasLfBuffs ? `<span class="nexus-sim-lf-pill">+LF</span>` : ''}
+              </div>
             </div>
           </div>
 
@@ -858,8 +985,10 @@ export async function openAnomalyWaveSimModal(
           </div>
 
           <!-- Stationed Warships 2x5 Mini-Grid -->
-          <div class="nexus-stationed-minigrid">
-            ${stationedMiniGridHtml}
+          <div class="nexus-stationed-fleet-wrap">
+            <div class="nexus-stationed-minigrid">
+              ${stationedMiniGridHtml}
+            </div>
           </div>
         </div>
 
@@ -1295,6 +1424,25 @@ export async function openAnomalyWaveSimModal(
       });
     });
 
+    // Mouse-following hover for ship lifeform bonuses
+    modal.querySelectorAll<HTMLElement>('.nexus-sim-ship-bonus-trigger').forEach((triggerEl) => {
+      const sid = parseInt(triggerEl.getAttribute('data-ship-id') || '0', 10);
+      const meta = WARSHIP_METADATA[sid as CanonicalWarshipId];
+      if (!meta) return;
+
+      triggerEl.addEventListener('mouseenter', (e) => {
+        showShipBonusTooltip(e, sid, meta.name, meta.iconAttr, lfBonuses.byShipId[sid]);
+      });
+      triggerEl.addEventListener('mousemove', (e) => {
+        if (activeShipBonusTooltip) {
+          positionShipBonusTooltip(e, activeShipBonusTooltip);
+        }
+      });
+      triggerEl.addEventListener('mouseleave', () => {
+        hideShipBonusTooltip();
+      });
+    });
+
     // Run simulation
     modal.querySelector('#nexus-sim-run-btn')?.addEventListener('click', () => {
       executeSimulation();
@@ -1421,7 +1569,7 @@ export async function openAnomalyWaveSimModal(
         continue;
       }
 
-      const res = simulateSingleWave(wave, currentFleet, profile, activeIterations, targetCoords);
+      const res = simulateSingleWave(wave, currentFleet, profile, activeIterations, targetCoords, lfBonuses);
       simulatedResults.push(res);
 
       totalAttackerLossMsu += res.attackerLossMsu;
@@ -1491,6 +1639,7 @@ export async function openAnomalyWaveSimModal(
  */
 export function closeAnomalyWaveSimModal(): void {
   hideWaveInspectTooltip();
+  hideShipBonusTooltip();
   if (activeModalOverlay) {
     if ((activeModalOverlay as any)._keydownHandler) {
       document.removeEventListener('keydown', (activeModalOverlay as any)._keydownHandler);

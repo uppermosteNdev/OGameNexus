@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Trash2, Globe, X, Maximize2, ChevronDown, Rocket, Layers, MapPin, SlidersHorizontal, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../../db';
+import { db, Planet } from '../../../db';
 
 import { calculateMSU, DEFAULT_RATES } from '../../../utils/amortizationCalc';
 import { cleanUniverseId, isSameUniverse } from '../../../utils/universe';
@@ -278,12 +278,71 @@ const ScrapOptimizer: React.FC = () => {
     const { getEntityName, getResource, t } = useTranslation();
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const rates: any = useLiveQuery(() => db.settings.get('conversion_rates')) || DEFAULT_RATES;
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    // Listen for background empire data update broadcast
+    useEffect(() => {
+        const handleMsg = (msg: any) => {
+            if (msg && msg.type === 'EMPIRE_DATA_UPDATED') {
+                setRefreshTrigger(n => n + 1);
+            }
+        };
+        chrome.runtime?.onMessage?.addListener(handleMsg);
+        return () => {
+            chrome.runtime?.onMessage?.removeListener(handleMsg);
+        };
+    }, []);
+
     const allLocations = useLiveQuery(
-        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).toArray() : [],
-        [activeAccount]
+        () => {
+            if (!activeAccount) return [];
+            const pidVariants = [activeAccount.playerId, String(activeAccount.playerId), Number(activeAccount.playerId)].filter(v => v !== undefined && v !== null && !isNaN(v as any));
+            return db.planets.where('playerId').anyOf(pidVariants).toArray();
+        },
+        [activeAccount, refreshTrigger]
     ) || [];
 
-    const planetsOnly = allLocations.filter(p => p.type === 'planet');
+    const planetsOnly = useMemo(() => {
+        const map = new Map<string, Planet>();
+        const isValidCoord = (c?: string) => Boolean(c && c !== "0:0:0" && !c.includes("0:0:0") && /^\d+:\d+:\d+$/.test(String(c).trim()));
+
+        allLocations.filter(p => p.type === 'planet').forEach(p => {
+            const k = String(p.id);
+            const prev = map.get(k);
+            if (!prev) {
+                map.set(k, p);
+            } else {
+                const prevUpdated = prev.lastUpdated || 0;
+                const currUpdated = p.lastUpdated || 0;
+                const base = currUpdated >= prevUpdated ? p : prev;
+                const older = currUpdated >= prevUpdated ? prev : p;
+                const resolvedCoords = isValidCoord(base.coords) ? base.coords : (isValidCoord(older.coords) ? older.coords : (base.coords || older.coords || "0:0:0"));
+                const resolvedDeutStorage = Math.max(prev.deuteriumStorage || 0, p.deuteriumStorage || 0);
+
+                const isTrader = Number(activeAccount?.allianceClass) === 2 || Number(activeAccount?.allianceClass) === 1;
+                const calcCap = (lvl: number) => {
+                    const l = Math.max(0, lvl || 0);
+                    const b = 5000 * Math.floor(2.5 * Math.exp((20 / 33) * l));
+                    return isTrader && l > 0 ? Math.floor(b * 1.10) : b;
+                };
+
+                map.set(k, {
+                    ...older,
+                    ...base,
+                    id: k,
+                    coords: resolvedCoords,
+                    name: (base.name && base.name !== 'Planet' && base.name !== 'Moon') ? base.name : (older.name || base.name),
+                    deuteriumStorage: resolvedDeutStorage,
+                    deuteriumCapacity: Math.max(prev.deuteriumCapacity || 0, p.deuteriumCapacity || 0, calcCap(resolvedDeutStorage)),
+                    metalStorage: Math.max(prev.metalStorage || 0, p.metalStorage || 0),
+                    metalCapacity: Math.max(prev.metalCapacity || 0, p.metalCapacity || 0, calcCap(Math.max(prev.metalStorage || 0, p.metalStorage || 0))),
+                    crystalStorage: Math.max(prev.crystalStorage || 0, p.crystalStorage || 0),
+                    crystalCapacity: Math.max(prev.crystalCapacity || 0, p.crystalCapacity || 0, calcCap(Math.max(prev.crystalStorage || 0, p.crystalStorage || 0))),
+                });
+            }
+        });
+        return Array.from(map.values());
+    }, [allLocations, activeAccount]);
 
     const stationaryTotals = useMemo(() => {
         const totals: Record<string, number> = {};

@@ -5,6 +5,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { fetchOverwatch } from '../../utils/overwatchApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
@@ -576,7 +577,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
 
             // Otherwise fetch from Cloudflare Worker
             try {
-              const res = await fetch(`${apiUrl}/api/v1/overwatch/empire/member?playerId=${pId}`, {
+              const res = await fetchOverwatch(`${apiUrl}/api/v1/overwatch/empire/member?playerId=${pId}`, {
                 method: 'GET',
                 headers: {
                   Authorization: `Bearer ${config.authToken}`,
@@ -649,7 +650,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
       }
       setRosterError(null);
 
-      const res = await fetch(`${apiUrl}/api/v1/overwatch/empire/roster`, {
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/overwatch/empire/roster`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${config.authToken}`,
@@ -973,7 +974,7 @@ export const OverwatchEmpire: React.FC<OverwatchEmpireProps> = ({
       }
 
       // Fetch official payload from Cloudflare Worker
-      const res = await fetch(`${apiUrl}/api/v1/overwatch/empire/member?playerId=${playerId}`, {
+      const res = await fetchOverwatch(`${apiUrl}/api/v1/overwatch/empire/member?playerId=${playerId}`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${config.authToken}`,

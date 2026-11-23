@@ -72,7 +72,7 @@ export function initOrionNativeTooltipEngine(): void {
     tip.className = `nexus-native-tooltip-popup ${isHtml ? 'nexus-tooltip-rich' : ''}`;
     tip.innerHTML = `
       ${titleText ? `<div class="nexus-native-tooltip-title">${escapeHtml(titleText)}</div>` : ''}
-      <div class="nexus-native-tooltip-body">${isHtml ? bodyText : escapeHtml(bodyText)}</div>
+      <div class="nexus-native-tooltip-body">${isHtml ? bodyText : escapeHtml(bodyText).replace(/\r?\n/g, '<br>')}</div>
       <div class="nexus-native-tooltip-arrow"></div>
     `;
 
@@ -143,6 +143,7 @@ import { openAnomalyWaveSimModal } from './orionWaveSimModal';
 import { isSameUniverse, cleanUniverseId } from '../utils/universe';
 import { getPlanetTechMultiplier } from '../utils/amortizationCalc';
 import { getLfTech } from '../db/lifeformTechData';
+import { fetchGameOnLoad, isPageLoadValid } from '../utils/networkGuard';
 
 // Pre-computed map: normalized ship name -> base resource costs & 3:2:1 MSU
 interface ShipCostInfo {
@@ -419,6 +420,8 @@ interface OrionMissionData {
   totalWaves: number;
   lithiumCost: number;
   rewardsMsu: number;
+  totalPossibleMsu?: number;
+  shipBudgetMsu?: number;
   rewardSummaryText: string;
   efficiencyRatio: number;
   maxWaveCargo: number;
@@ -712,38 +715,40 @@ export async function getPlayerCargoCapabilities(): Promise<PlayerCargoCapabilit
     }
   }
 
-  // 2. Direct local accountInfo fetch if background hasn't synced yet
-  try {
-    const accRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-    if (accRes.ok) {
-      const text = await accRes.text();
-      const trimmed = text ? text.trim() : '';
-      if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
-        const data = JSON.parse(trimmed);
-        const researches = data.researches || {};
-        const hsLevel = parseInt(researches['114'] || researches[114] || 0, 10);
-        const isCollector = Number(data.characterClassId || data.playerClass) === 1;
-        const classMultiplier = isCollector ? 1.25 : 1.0;
-        const hsBonus = hsLevel * 0.05;
+  // 2. Direct local accountInfo fetch if background hasn't synced yet and PAGE_LOAD window is active
+  if (isPageLoadValid()) {
+    try {
+      const accRes = await fetchGameOnLoad('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      if (accRes.ok) {
+        const text = await accRes.text();
+        const trimmed = text ? text.trim() : '';
+        if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+          const data = JSON.parse(trimmed);
+          const researches = data.researches || {};
+          const hsLevel = parseInt(researches['114'] || researches[114] || 0, 10);
+          const isCollector = Number(data.characterClassId || data.playerClass) === 1;
+          const classMultiplier = isCollector ? 1.25 : 1.0;
+          const hsBonus = hsLevel * 0.05;
 
-        const lcCap = Math.floor(25000 * (1 + hsBonus) * classMultiplier);
-        const scCap = Math.floor(5000 * (1 + hsBonus) * classMultiplier);
+          const lcCap = Math.floor(25000 * (1 + hsBonus) * classMultiplier);
+          const scCap = Math.floor(5000 * (1 + hsBonus) * classMultiplier);
 
-        cachedCargoCaps = {
-          hyperspaceTech: hsLevel,
-          isCollector,
-          totalLcBonusPct: Math.round(((lcCap / 25000) - 1) * 100),
-          totalScBonusPct: Math.round(((scCap / 5000) - 1) * 100),
-          lcCapacity: lcCap,
-          scCapacity: scCap
-        };
-        return cachedCargoCaps;
+          cachedCargoCaps = {
+            hyperspaceTech: hsLevel,
+            isCollector,
+            totalLcBonusPct: Math.round(((lcCap / 25000) - 1) * 100),
+            totalScBonusPct: Math.round(((scCap / 5000) - 1) * 100),
+            lcCapacity: lcCap,
+            scCapacity: scCap
+          };
+          return cachedCargoCaps;
+        }
       }
+    } catch (err: any) {
+      console.debug('OGame Nexus Orion: accountInfo fetch skipped via guard:', err?.message || err);
     }
-  } catch {
-    // quiet fallback
   }
 
   return {
@@ -1408,9 +1413,14 @@ function parseMissionElement(el: HTMLElement, cargoCaps: PlayerCargoCapabilities
                 el.querySelector('.missionNameText')?.textContent?.trim() ||
                 '';
 
-  if (!rawName || rawName.toLowerCase() === 'unknown mission') {
+  const isGenericOrMissingName = !rawName ||
+    rawName.toLowerCase() === 'unknown mission' ||
+    rawName.toLowerCase() === 'anomaly mission' ||
+    rawName.toLowerCase() === 'collected anomaly mission';
+
+  if (isGenericOrMissingName) {
     const routeDestName = el.querySelector('.missionRouteLabels .routeLabelCell:nth-child(2) .nodeLabel')?.textContent?.trim();
-    if (routeDestName) {
+    if (routeDestName && routeDestName.toLowerCase() !== 'anomaly mission' && routeDestName.toLowerCase() !== 'unknown mission') {
       rawName = routeDestName;
     } else {
       rawName = 'Anomaly Mission';
@@ -1505,6 +1515,40 @@ function parseMissionElement(el: HTMLElement, cargoCaps: PlayerCargoCapabilities
 
   const rewards = parseMissionRewards(el);
 
+  // Extract possible rewards pool (even if active won rewards exist in wonCell)
+  let possibleRewards = rewards;
+  if (hasActiveWonRewards) {
+    const possibleCell = el.querySelector<HTMLElement>('.possibleRewardsList, .possibleRewardsCell');
+    if (possibleCell && possibleCell.querySelectorAll('.rewardLine').length > 0) {
+      possibleRewards = parseMissionRewards(possibleCell);
+    }
+  }
+
+  const extras = parseScannedExtras(el);
+  const rawShipText = extras.shipAmount ||
+    (possibleRewards.items || []).filter((it) => /ship|vessel|fighter|cruiser|battleship|battlecruiser|bomber|destroyer|deathstar|reaper|pathfinder/i.test(it)).join('; ') ||
+    (extras.hasShips ? 'Random Ships' : '');
+  const shipsText = cleanRewardString(rawShipText);
+
+  const budget = calculateAnomalyShipBudget({
+    name: rawName,
+    level,
+    stars: starsCount,
+    category,
+    environment,
+    waves: totalWaves,
+    lithiumCost: totalLithiumCost,
+    rewards: possibleRewards,
+    shipsText,
+    hasShips: extras.hasShips || !!shipsText,
+    hasArtifacts: extras.hasArtifacts,
+    hasExperience: extras.hasExperience,
+  });
+
+  const totalPossibleMsu = budget.totalEffectiveMsu;
+  const shipBudgetMsu = budget.shipBudgetMsu;
+  const missionRewardsMsu = hasActiveWonRewards ? rewards.msu : totalPossibleMsu;
+
   // Standard OGame MSU: 1 M : 1.5 C : 3.0 D (3:2:1 standard)
   let efficiencyRatio = 0;
   if (hasActiveWonRewards && collectCost > 0 && rewards.msu > 0) {
@@ -1513,9 +1557,9 @@ function parseMissionElement(el: HTMLElement, cargoCaps: PlayerCargoCapabilities
     if (isFinite(rawRatio) && rawRatio >= 0.05 && rawRatio <= 1000.0) {
       efficiencyRatio = rawRatio;
     }
-  } else if (totalLithiumCost > 0 && rewards.msu > 0) {
-    // Otherwise measure overall mission yield
-    const rawRatio = rewards.msu / totalLithiumCost;
+  } else if (totalLithiumCost > 0 && totalPossibleMsu > 0) {
+    // Otherwise measure overall mission yield (including ship valuation)
+    const rawRatio = totalPossibleMsu / totalLithiumCost;
     if (isFinite(rawRatio) && rawRatio >= 0.05 && rawRatio <= 1000.0) {
       efficiencyRatio = rawRatio;
     }
@@ -1554,7 +1598,9 @@ function parseMissionElement(el: HTMLElement, cargoCaps: PlayerCargoCapabilities
     currentWave: isCompletedCard ? totalWaves : currentWave,
     totalWaves,
     lithiumCost: hasActiveWonRewards && collectCost > 0 ? collectCost : totalLithiumCost,
-    rewardsMsu: rewards.msu,
+    rewardsMsu: missionRewardsMsu,
+    totalPossibleMsu,
+    shipBudgetMsu,
     rewardSummaryText: rewards.summaryText,
     efficiencyRatio,
     maxWaveCargo,
@@ -1614,7 +1660,7 @@ function showRewardPoolTooltip(e: MouseEvent, el: HTMLElement, mission: OrionMis
   hideRewardsTooltip();
 
   const details = extractPossibleRewardDetails(el, mission);
-  const totalMsu = mission.rewardsMsu;
+  const totalMsu = mission.totalPossibleMsu || mission.rewardsMsu;
 
   const tip = document.createElement('div');
   tip.id = 'nexus-floating-rewards-tooltip';
@@ -2171,9 +2217,12 @@ function extractMissionRewardDetails(el: HTMLElement, mission: OrionMissionData,
       const key = 'random_ships';
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
+        const shipValText = (mission?.shipBudgetMsu && mission.shipBudgetMsu > 0)
+          ? `${rawAmount || 'Vessel Fleet'} (≈${formatHuman(mission.shipBudgetMsu)} MSU)`
+          : (rawAmount || 'Vessel Fleet');
         details.push({
           name: 'Random ships',
-          amountText: rawAmount || 'Vessel Fleet',
+          amountText: shipValText,
           iconHtml: '<technology-icon regular="" interceptor="" sq20="" bordered="" style="pointer-events: none; vertical-align: middle;"></technology-icon>',
           color: '#fbbf24'
         });
@@ -2326,9 +2375,12 @@ function extractMissionRewardDetails(el: HTMLElement, mission: OrionMissionData,
     }
     rewards.items.forEach((itemStr) => {
       if (itemStr.toLowerCase().includes('random ship')) {
+        const shipValText = (mission?.shipBudgetMsu && mission.shipBudgetMsu > 0)
+          ? `${itemStr.replace(/random ships/i, '').trim() || 'Vessel Fleet'} (≈${formatHuman(mission.shipBudgetMsu)} MSU)`
+          : (itemStr.replace(/random ships/i, '').trim() || 'Vessel Fleet');
         details.push({
           name: 'Random ships',
-          amountText: itemStr.replace(/random ships/i, '').trim() || 'Vessel Fleet',
+          amountText: shipValText,
           iconHtml: '<technology-icon regular="" interceptor="" sq20="" bordered="" style="pointer-events: none; vertical-align: middle;"></technology-icon>',
           color: '#fbbf24'
         });
@@ -2474,7 +2526,7 @@ function injectMissionIntelBar(
       `;
       lcBtn.setAttribute(
         'data-nexus-tooltip-title',
-        `Fleet Dispatch: Large Cargo | Click to dispatch ${neededLC.toLocaleString()} Large Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}] (Peak Demand: ${formatHuman(mission.maxWaveCargo)} space)`
+        `Fleet Dispatch: Large Cargo | Click to dispatch ${neededLC.toLocaleString()} Large Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}]\n(Peak Demand: ${formatHuman(mission.maxWaveCargo)} space)`
       );
 
       lcBtn.addEventListener('click', (e) => {
@@ -2502,7 +2554,7 @@ function injectMissionIntelBar(
       `;
       scBtn.setAttribute(
         'data-nexus-tooltip-title',
-        `Fleet Dispatch: Small Cargo | Click to dispatch ${neededSC.toLocaleString()} Small Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}] (Peak Demand: ${formatHuman(mission.maxWaveCargo)} space)`
+        `Fleet Dispatch: Small Cargo | Click to dispatch ${neededSC.toLocaleString()} Small Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}]\n(Peak Demand: ${formatHuman(mission.maxWaveCargo)} space)`
       );
 
       scBtn.addEventListener('click', (e) => {
@@ -2643,31 +2695,27 @@ function injectNativeAdvisorySection(
       <span class="cell">
         <span class="cellLabel">Peak Cargo Demand</span>
         <span class="nexus-cell-main">${formatHuman(mission.maxWaveCargo)} Space</span>
-        <span class="nexus-cell-sub">Peak demand: Wave ${mission.peakWaveNum} of ${mission.totalWaves || 1}</span>
       </span>
       <span class="cell">
         <span class="cellLabel">Recommended Fleet</span>
         <div class="nexus-rec-fleet-box" style="display: flex; flex-direction: column; gap: 4px; justify-content: center; margin-top: 3px;">
-          <a href="${targetUrlLC}" class="nexus-rec-fleet-lc nexus-tooltip-trigger ogl_ready" style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-decoration: none;" data-nexus-tooltip-title="Fleet Dispatch: Large Cargo | Click to dispatch ${neededLC.toLocaleString()} Large Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}]">
+          <a href="${targetUrlLC}" class="nexus-rec-fleet-lc nexus-tooltip-trigger ogl_ready" style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-decoration: none;" data-nexus-tooltip-title="Fleet Dispatch: Large Cargo | Click to dispatch ${neededLC.toLocaleString()} Large Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}]&#10;(Peak Demand: ${formatHuman(mission.maxWaveCargo)} space)">
             <technology-icon regular="" transporterlarge="" sq20="" style="pointer-events: none;"></technology-icon>
             <span class="nexus-fleet-num text-gold" style="font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em;">${neededLC.toLocaleString()}</span>
           </a>
-          <a href="${targetUrlSC}" class="nexus-rec-fleet-sc nexus-tooltip-trigger ogl_ready" style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-decoration: none;" data-nexus-tooltip-title="Fleet Dispatch: Small Cargo | Click to dispatch ${neededSC.toLocaleString()} Small Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}]">
+          <a href="${targetUrlSC}" class="nexus-rec-fleet-sc nexus-tooltip-trigger ogl_ready" style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-decoration: none;" data-nexus-tooltip-title="Fleet Dispatch: Small Cargo | Click to dispatch ${neededSC.toLocaleString()} Small Cargo to [${coords.galaxy ?? '?'}:${coords.system ?? '?'}:${coords.position ?? '?'}]&#10;(Peak Demand: ${formatHuman(mission.maxWaveCargo)} space)">
             <technology-icon regular="" transportersmall="" sq20="" style="pointer-events: none;"></technology-icon>
             <span class="nexus-fleet-num text-blue" style="font-size: 0.95rem; font-weight: 700; opacity: 0.85;">${neededSC.toLocaleString()}</span>
           </a>
         </div>
-        <span class="nexus-cell-sub nexus-tooltip-trigger ogl_ready" style="margin-top: 2px;" data-nexus-tooltip-title="Fleet Cargo Capacity | LC: ${cargoCaps.lcCapacity.toLocaleString()} space • SC: ${cargoCaps.scCapacity.toLocaleString()} space">LC: ${formatHuman(cargoCaps.lcCapacity)} • SC: ${formatHuman(cargoCaps.scCapacity)} (Tech +${cargoCaps.totalLcBonusPct}%)</span>
       </span>
       <span class="cell">
         <span class="cellLabel">Stationed Fleet</span>
         <span class="nexus-cell-main ${stationedClass}">${stationedTitle}</span>
-        <span class="nexus-cell-sub">${stationedSub}</span>
       </span>
       <span class="cell">
         <span class="cellLabel">Mission Efficiency</span>
         <span class="nexus-cell-main text-sky">${mission.efficiencyRatio > 0 ? mission.efficiencyRatio.toFixed(1) + ' MSU / Lithium' : 'Exp / Ships'}</span>
-        <span class="nexus-cell-sub">${mission.rewardSummaryText || 'Net Reward Value'}</span>
       </span>
     `;
 
@@ -2728,7 +2776,7 @@ function injectNativeAdvisorySection(
  * - Artifacts found
  * - Lifeform XP found
  */
-function injectMissionRewardsSummary(el: HTMLElement): void {
+function injectMissionRewardsSummary(el: HTMLElement, mission?: OrionMissionData): void {
   // Find the "Mission Rewards" section title
   const sectionTitles = el.querySelectorAll<HTMLElement>('.missionDetailsSectionTitle');
   let rewardsTitleEl: HTMLElement | null = null;
@@ -2849,10 +2897,15 @@ function injectMissionRewardsSummary(el: HTMLElement): void {
     }
   });
 
+  // If no specific ships were counted, but mission has an estimated ship budget:
+  if (shipMsu === 0 && (mission?.shipBudgetMsu || 0) > 0) {
+    shipMsu = mission!.shipBudgetMsu!;
+  }
+
   const totalMetal = rawMetal + shipMetal;
   const totalCrystal = rawCrystal + shipCrystal;
   const totalDeut = rawDeut + shipDeut;
-  const totalMsu = totalMetal * 1.0 + totalCrystal * 1.5 + totalDeut * 3.0;
+  const totalMsu = totalMetal * 1.0 + totalCrystal * 1.5 + totalDeut * 3.0 + (shipMsu > 0 && shipMetal === 0 ? shipMsu : 0);
 
   let summaryBar = el.querySelector<HTMLElement>('.nexus-mission-rewards-summary');
   if (!summaryBar) {
@@ -3125,11 +3178,30 @@ async function syncAnomalyMissionToDb(el: HTMLElement, mission: OrionMissionData
       const netProfitMsu = grossTotal - fleetLossesMsu;
       const msuPerLithium = totalClaimedLithium > 0 ? grossTotal / totalClaimedLithium : 0;
 
+      // Resolve name: Never downgrade a specific existing name to a generic placeholder!
+      const isCandidateGeneric = !mission.name ||
+        mission.name.toLowerCase() === 'anomaly mission' ||
+        mission.name.toLowerCase() === 'unknown mission' ||
+        mission.name.toLowerCase() === 'collected anomaly mission';
+      const isExistingGeneric = !existing.name ||
+        existing.name.toLowerCase() === 'anomaly mission' ||
+        existing.name.toLowerCase() === 'unknown mission' ||
+        existing.name.toLowerCase() === 'collected anomaly mission';
+
+      let resolvedName = existing.name;
+      if (!isCandidateGeneric) {
+        resolvedName = mission.name;
+      } else if (isExistingGeneric && !isCandidateGeneric) {
+        resolvedName = mission.name;
+      } else if (isExistingGeneric) {
+        resolvedName = existing.name || mission.name || 'Anomaly Mission';
+      }
+
       const updatedMission: AnomalyMission = {
         ...existing,
         playerId: (existing.playerId && existing.playerId !== 'unknown') ? existing.playerId : playerId,
         universe: existing.universe || universe,
-        name: (mission.name && mission.name !== 'Unknown Mission') ? mission.name : existing.name,
+        name: resolvedName,
         level: mission.level || existing.level,
         stars: mission.stars || existing.stars,
         category: (mission.category && mission.category !== 'other') ? mission.category : existing.category,
@@ -3480,11 +3552,19 @@ function hookCollectRewardsConfirmation(overlay: HTMLElement, missionId: string)
         const totalClaimedLithium = receipts.reduce((sum, w) => sum + (w.lithiumCost || 0), 0);
         const maxClaimedWave = receipts.length > 0 ? Math.max(...receipts.map((w) => w.waveNumber)) : 1;
 
+        // Try to resolve anomaly name from card if available in the DOM
+        const missionCard = document.querySelector(`.anomalyMission[data-space-object-id="${missionId}"]`) ||
+                            document.querySelector(`.anomalyMission[data-id="${missionId}"]`) ||
+                            document.getElementById(`anomalyMission_${missionId}`);
+        const cardTitle = missionCard?.querySelector('.missionDetailsTitle .missionNameText')?.textContent?.trim() ||
+                          missionCard?.querySelector('.missionNameText')?.textContent?.trim() ||
+                          missionCard?.querySelector('.missionRouteLabels .routeLabelCell:nth-child(2) .nodeLabel')?.textContent?.trim();
+
         const newMission: AnomalyMission = {
           id: missionId,
           playerId,
           universe,
-          name: 'Collected Anomaly Mission',
+          name: (cardTitle && cardTitle.toLowerCase() !== 'unknown mission') ? cardTitle : 'Anomaly Mission',
           level: 0,
           stars: 0,
           category: 'other',
@@ -3586,7 +3666,7 @@ export async function initOrionMissionEnhancer(): Promise<void> {
       injectNativeAdvisorySection(el, mission, neededLC, neededSC, cargoCaps);
 
       // 3. Aggregate Rewards Valuation Bar under Mission Rewards
-      injectMissionRewardsSummary(el);
+      injectMissionRewardsSummary(el, mission);
 
       // 4. Strip any native title attributes that trigger ugly OS-level white box
       el.querySelectorAll<HTMLElement>('.nexus-mission-intel-bar [title], .nexus-btn-icon[title], .nexus-tag[title], .nexus-advisory-section [title], .nexus-mission-rewards-summary [title]').forEach((child) => {
@@ -3664,14 +3744,21 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+export interface OrionPredictedShip {
+  name: string;
+  iconAttr: string;
+  msu: number;
+  count: number;
+  pct: number;
+}
+
 export interface OrionFleetDeduction {
   maxShips: number;
   minShips: number;
   shipBudgetMsu: number;
-  avgMsuPerShip: number;
-  fleetTier: string;
-  eligibleHulls: string;
-  upperBounds: string;
+  avgMsuPerShip?: number;
+  isDelivery: boolean;
+  ships: OrionPredictedShip[];
 }
 
 export interface TacticalTooltipStat {
@@ -3982,12 +4069,402 @@ export async function syncPlayerClassAndT18Bonus(): Promise<PlayerClassIntel> {
   return cachedPlayerClassIntel;
 }
 
+export interface EmpireAnomalyBonuses {
+  coloniesCount: number;
+  metalLvl: number;
+  metalBonusPct: number;
+  crystalLvl: number;
+  crystalBonusPct: number;
+  deutLvl: number;
+  deutBonusPct: number;
+  lithiumLvl: number;
+  lithiumBonusPct: number;
+  shipsLvl: number;
+  shipsBonusPct: number;
+  artefactsLvl: number;
+  artefactsBonusPct: number;
+  experienceLvl: number;
+  experienceBonusPct: number;
+  updatedAt: number;
+}
+
+const DEFAULT_ANOMALY_BONUSES: EmpireAnomalyBonuses = {
+  coloniesCount: 0,
+  metalLvl: 0,
+  metalBonusPct: 0,
+  crystalLvl: 0,
+  crystalBonusPct: 0,
+  deutLvl: 0,
+  deutBonusPct: 0,
+  lithiumLvl: 0,
+  lithiumBonusPct: 0,
+  shipsLvl: 0,
+  shipsBonusPct: 0,
+  artefactsLvl: 0,
+  artefactsBonusPct: 0,
+  experienceLvl: 0,
+  experienceBonusPct: 0,
+  updatedAt: 0,
+};
+
+function getInitialEmpireAnomalyBonuses(): EmpireAnomalyBonuses {
+  try {
+    const raw = localStorage.getItem('ognexus_empire_anomaly_bonuses');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.metalBonusPct === 'number') {
+        return parsed;
+      }
+    }
+  } catch {}
+  return { ...DEFAULT_ANOMALY_BONUSES };
+}
+
+let cachedEmpireAnomalyBonuses: EmpireAnomalyBonuses = getInitialEmpireAnomalyBonuses();
+
+if (typeof window !== 'undefined') {
+  syncEmpireAnomalyBonuses().catch(() => {});
+}
+
+export function getPlanetFacilityLevel(planet: any, techId: number): number {
+  if (techId === 45) {
+    if (typeof planet.iaScanner === 'number') return planet.iaScanner;
+    const fac = planet.facilities?.find((f: any) => f.id === 45);
+    if (fac && typeof fac.level === 'number') return fac.level;
+    const b = planet.buildings;
+    if (b) {
+      if (typeof b['45'] === 'number') return b['45'];
+      if (typeof b['45']?.level === 'number') return b['45'].level;
+    }
+    return 0;
+  }
+  const cc = planet.controlCenterBuildings?.find((b: any) => b.id === techId);
+  if (cc && typeof cc.level === 'number') return cc.level;
+  const b = planet.buildings;
+  if (b) {
+    const key = String(techId);
+    if (typeof b[key] === 'number') return b[key];
+    if (typeof b[key]?.level === 'number') return b[key].level;
+  }
+  return 0;
+}
+
+export async function syncEmpireAnomalyBonuses(): Promise<EmpireAnomalyBonuses> {
+  const metaPlayerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content') || '';
+  let syncedFromBackground = false;
+
+  // 1. Authoritative query to background service worker (where the extension's IndexedDB lives)
+  if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.sendMessage) {
+    try {
+      const bgRes = await new Promise<any>((resolve) => {
+        chrome.runtime.sendMessage({ type: "GET_EMPIRE_ANOMALY_BONUSES", playerId: metaPlayerId }, (res) => {
+          if (chrome.runtime.lastError || !res) {
+            resolve(null);
+          } else {
+            resolve(res);
+          }
+        });
+      });
+
+      if (bgRes && bgRes.success && bgRes.bonuses) {
+        const prevSig = `${cachedEmpireAnomalyBonuses.metalLvl}_${cachedEmpireAnomalyBonuses.crystalLvl}_${cachedEmpireAnomalyBonuses.deutLvl}_${cachedEmpireAnomalyBonuses.shipsLvl}_${cachedEmpireAnomalyBonuses.artefactsLvl}`;
+        const b = bgRes.bonuses;
+        const newSig = `${b.metalLvl}_${b.crystalLvl}_${b.deutLvl}_${b.shipsLvl}_${b.artefactsLvl}`;
+
+        cachedEmpireAnomalyBonuses = b;
+        syncedFromBackground = true;
+
+        try {
+          localStorage.setItem('ognexus_empire_anomaly_bonuses', JSON.stringify(cachedEmpireAnomalyBonuses));
+        } catch {}
+
+        if (prevSig !== newSig) {
+          const scannerContainer = document.querySelector<HTMLElement>(
+            '#scanner, #scannerResult, #orionscanner, .scannerHolder, #scannerResultHolder, #content'
+          );
+          if (scannerContainer) {
+            initOrionScannerEnhancer(true, false);
+          }
+        }
+        return cachedEmpireAnomalyBonuses;
+      }
+    } catch (err) {
+      console.debug('[Orion] Background empire anomaly bonuses query failed, attempting local fallback:', err);
+    }
+  }
+
+  // 2. Local fallback if background worker is unreachable
+  if (!syncedFromBackground) {
+    try {
+      const allPlanets = await db.planets.toArray();
+      let planets: any[] = [];
+      if (metaPlayerId) {
+        planets = allPlanets.filter((p) => String(p.playerId).trim() === String(metaPlayerId).trim() && p.type !== 'moon');
+      }
+      if (!planets || planets.length === 0) {
+        planets = allPlanets.filter((p) => p.type !== 'moon');
+      }
+
+      if (planets && planets.length > 0) {
+        let metalLvl = 0;
+        let crystalLvl = 0;
+        let deutLvl = 0;
+        let lithiumLvl = 0;
+        let shipsLvl = 0;
+        let xpArtefactsLvl = 0;
+
+        for (const p of planets) {
+          metalLvl += getPlanetFacilityLevel(p, 4003);
+          crystalLvl += getPlanetFacilityLevel(p, 4004);
+          deutLvl += getPlanetFacilityLevel(p, 4006);
+          lithiumLvl += getPlanetFacilityLevel(p, 4002);
+          shipsLvl += getPlanetFacilityLevel(p, 4001);
+          xpArtefactsLvl += getPlanetFacilityLevel(p, 4005);
+        }
+
+        const prevSig = `${cachedEmpireAnomalyBonuses.metalLvl}_${cachedEmpireAnomalyBonuses.crystalLvl}_${cachedEmpireAnomalyBonuses.deutLvl}_${cachedEmpireAnomalyBonuses.shipsLvl}_${cachedEmpireAnomalyBonuses.artefactsLvl}`;
+        const newSig = `${metalLvl}_${crystalLvl}_${deutLvl}_${shipsLvl}_${xpArtefactsLvl}`;
+
+        cachedEmpireAnomalyBonuses = {
+          coloniesCount: planets.length,
+          metalLvl,
+          metalBonusPct: Math.round(metalLvl * 0.2 * 10) / 10,
+          crystalLvl,
+          crystalBonusPct: Math.round(crystalLvl * 0.2 * 10) / 10,
+          deutLvl,
+          deutBonusPct: Math.round(deutLvl * 0.2 * 10) / 10,
+          lithiumLvl,
+          lithiumBonusPct: Math.round(lithiumLvl * 0.2 * 10) / 10,
+          shipsLvl,
+          shipsBonusPct: Math.round(shipsLvl * 0.2 * 10) / 10,
+          artefactsLvl: xpArtefactsLvl,
+          artefactsBonusPct: Math.round(xpArtefactsLvl * 0.2 * 10) / 10,
+          experienceLvl: xpArtefactsLvl,
+          experienceBonusPct: Math.round(xpArtefactsLvl * 0.2 * 10) / 10,
+          updatedAt: Date.now(),
+        };
+
+        try {
+          localStorage.setItem('ognexus_empire_anomaly_bonuses', JSON.stringify(cachedEmpireAnomalyBonuses));
+        } catch {}
+
+        if (prevSig !== newSig) {
+          const scannerContainer = document.querySelector<HTMLElement>(
+            '#scanner, #scannerResult, #orionscanner, .scannerHolder, #scannerResultHolder, #content'
+          );
+          if (scannerContainer) {
+            initOrionScannerEnhancer(true, false);
+          }
+        }
+      }
+    } catch (err) {
+      console.debug('[Orion] Failed to sync empire anomaly bonuses locally:', err);
+    }
+  }
+  return cachedEmpireAnomalyBonuses;
+}
+
+export interface AnomalyBonusItem {
+  id: number;
+  name: string;
+  category: string;
+  level: number;
+  bonusPct: number;
+  color: string;
+  iconPath: string;
+}
+
+export function getMissionPossibleRewards(c: ScannedAnomalyData, card: HTMLElement) {
+  const extras = parseScannedExtras(card);
+  const rewardsEl = card.querySelector('.scannerResultRewards, .possibleRewardsList, .rewardsCell');
+  const rewardsHtml = (rewardsEl?.innerHTML || '').toLowerCase();
+  const rewardsText = (rewardsEl?.textContent || '').toLowerCase();
+  const rewardItems = c.rewards.items || [];
+
+  const hasMetal = c.rewards.metal > 0 ||
+    rewardsHtml.includes('metal') ||
+    rewardsText.includes('metal') ||
+    rewardItems.some((i) => /metal/i.test(i));
+
+  const hasCrystal = c.rewards.crystal > 0 ||
+    rewardsHtml.includes('crystal') ||
+    rewardsText.includes('crystal') ||
+    rewardItems.some((i) => /crystal/i.test(i));
+
+  const hasDeut = c.rewards.deut > 0 ||
+    rewardsHtml.includes('deuterium') ||
+    rewardsHtml.includes('deut') ||
+    rewardsText.includes('deuterium') ||
+    rewardsText.includes('deut') ||
+    rewardItems.some((i) => /deut/i.test(i));
+
+  const hasShips = extras.hasShips ||
+    (c.rewards.shipsMsu !== undefined && c.rewards.shipsMsu > 0) ||
+    (c.fleetDeduction && c.fleetDeduction.maxShips > 0) ||
+    !!rewardsEl?.querySelector('technology-icon') ||
+    rewardsHtml.includes('ship') ||
+    rewardsHtml.includes('vessel') ||
+    rewardItems.some((i) => /ship|vessel|fighter|cruiser|battleship|battlecruiser|bomber|destroyer|deathstar|reaper|pathfinder/i.test(i));
+
+  const hasArtifacts = extras.hasArtifacts ||
+    rewardsHtml.includes('artifact') ||
+    rewardsHtml.includes('artefact') ||
+    rewardsText.includes('artifact') ||
+    rewardsText.includes('artefact') ||
+    rewardItems.some((i) => /artifact|artefact/i.test(i));
+
+  const hasExperience = extras.hasExperience ||
+    rewardsHtml.includes('experience') ||
+    rewardsHtml.includes('speciesexperience') ||
+    rewardsText.includes('experience') ||
+    rewardsText.includes('xp') ||
+    rewardItems.some((i) => /experience|xp/i.test(i));
+
+  return { hasMetal, hasCrystal, hasDeut, hasShips, hasArtifacts, hasExperience };
+}
+
+export function getApplicableAnomalyBonuses(c: ScannedAnomalyData, card: HTMLElement, bonuses: EmpireAnomalyBonuses): AnomalyBonusItem[] {
+  const possible = getMissionPossibleRewards(c, card);
+  const items: AnomalyBonusItem[] = [];
+
+  // 1. Metal: Tech 4003 - Metal Recycling Unit (+0.2% per level)
+  if (possible.hasMetal) {
+    items.push({
+      id: 4003,
+      name: 'Metal Recycling Unit',
+      category: 'Metal Yield Bonus',
+      level: bonuses.metalLvl,
+      bonusPct: bonuses.metalBonusPct,
+      color: '#f97316',
+      iconPath: 'icons/facilities/metal_recycling_unit_large.jpg',
+    });
+  }
+
+  // 2. Crystal: Tech 4004 - Crystal Finishing Station (+0.2% per level)
+  if (possible.hasCrystal) {
+    items.push({
+      id: 4004,
+      name: 'Crystal Finishing Station',
+      category: 'Crystal Yield Bonus',
+      level: bonuses.crystalLvl,
+      bonusPct: bonuses.crystalBonusPct,
+      color: '#38bdf8',
+      iconPath: 'icons/facilities/crystal_finishing_station_large.jpg',
+    });
+  }
+
+  // 3. Deuterium: Tech 4006 - High-Pressure Deut Tanks (+0.2% per level)
+  if (possible.hasDeut) {
+    items.push({
+      id: 4006,
+      name: 'High-Pressure Deut Tanks',
+      category: 'Deuterium Yield Bonus',
+      level: bonuses.deutLvl,
+      bonusPct: bonuses.deutBonusPct,
+      color: '#22c55e',
+      iconPath: 'icons/facilities/high-pressure_deuterium_tanks_large.jpg',
+    });
+  }
+
+  // 4. Ships: Tech 4001 - Intergalactic Recovery Centre (+0.2% per level)
+  if (possible.hasShips) {
+    items.push({
+      id: 4001,
+      name: 'Intergalactic Recovery Centre',
+      category: 'Ship Salvage Bonus',
+      level: bonuses.shipsLvl,
+      bonusPct: bonuses.shipsBonusPct,
+      color: '#facc15',
+      iconPath: 'icons/facilities/intergalactic_recovery_centre_large.jpg',
+    });
+  }
+
+  // 5. Artifacts and/or Species Experience: Tech 4005 - Anomaly Analysis Centre (+0.2% per level)
+  if (possible.hasArtifacts && possible.hasExperience) {
+    items.push({
+      id: 4005,
+      name: 'Anomaly Analysis Centre',
+      category: 'Artefacts & Species XP',
+      level: bonuses.artefactsLvl,
+      bonusPct: bonuses.artefactsBonusPct,
+      color: '#c084fc',
+      iconPath: 'icons/facilities/anomaly_analysis_centre_large.jpg',
+    });
+  } else if (possible.hasArtifacts) {
+    items.push({
+      id: 4005,
+      name: 'Anomaly Analysis Centre',
+      category: 'Lifeform Artefacts',
+      level: bonuses.artefactsLvl,
+      bonusPct: bonuses.artefactsBonusPct,
+      color: '#a855f7',
+      iconPath: 'icons/facilities/anomaly_analysis_centre_large.jpg',
+    });
+  } else if (possible.hasExperience) {
+    items.push({
+      id: 4005,
+      name: 'Anomaly Analysis Centre',
+      category: 'Species Experience',
+      level: bonuses.experienceLvl,
+      bonusPct: bonuses.experienceBonusPct,
+      color: '#c084fc',
+      iconPath: 'icons/facilities/anomaly_analysis_centre_large.jpg',
+    });
+  }
+
+  return items;
+}
+
+export function buildAnomalyBonusTooltipHtml(applicableBonuses: AnomalyBonusItem[], coloniesCount: number): string {
+  const coloniesText = coloniesCount > 0 ? `${coloniesCount} Colonies Active` : 'Empire Facilities';
+
+  const rowsHtml = applicableBonuses.map((b) => {
+    const iconUrl = typeof chrome !== 'undefined' && chrome.runtime?.getURL
+      ? chrome.runtime.getURL(b.iconPath)
+      : `/${b.iconPath}`;
+
+    return `
+      <div class="nexus-bonus-row">
+        <img class="nexus-bonus-thumb" src="${escapeHtml(iconUrl)}" alt="${escapeHtml(b.name)}" />
+        <div class="nexus-bonus-info">
+          <div class="nexus-bonus-name">${escapeHtml(b.name)}</div>
+          <div class="nexus-bonus-sub">
+            <span class="nexus-bonus-category">${escapeHtml(b.category)}</span>
+            <span class="nexus-bonus-lvl">${b.level} lvl</span>
+          </div>
+        </div>
+        <div class="nexus-bonus-value" style="color: ${b.color};">
+          +${b.bonusPct.toFixed(1)}%
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="nexus-bonus-tooltip-card">
+      <div class="nexus-bonus-topbar">
+        <span class="nexus-tip-pill amber">Anomaly Facilities</span>
+        <span class="nexus-bonus-colonies-chip">${escapeHtml(coloniesText)}</span>
+      </div>
+      <div class="nexus-bonus-list">
+        ${rowsHtml}
+      </div>
+      <div class="nexus-bonus-callout">
+        <span class="nexus-bonus-callout-icon">⚡</span>
+        <span class="nexus-bonus-callout-text">Empire facility bonuses automatically scale your mission reward loot</span>
+      </div>
+    </div>
+  `;
+}
+
 export const ORION_MISSION_MULTIPLIERS: Record<string, { multiplier: number; tier: 'S+' | 'S' | 'A' | 'B' | 'U'; isDelivery: boolean }> = {
   'Pirate Hideout': { multiplier: 20.0, tier: 'S', isDelivery: false },
   'Pirate Ambush': { multiplier: 20.0, tier: 'S', isDelivery: false },
+  'Alien Flagship': { multiplier: 20.0, tier: 'S', isDelivery: false },
   'Alien Encounter': { multiplier: 18.0, tier: 'S', isDelivery: false },
   'Small Pirate Encounter': { multiplier: 18.0, tier: 'S', isDelivery: false },
   'Lost Deliveries': { multiplier: 14.0, tier: 'S', isDelivery: true },
+  'Special Merchant': { multiplier: 20.0, tier: 'S', isDelivery: false },
   'Medium Pirate Encounter': { multiplier: 14.0, tier: 'S', isDelivery: false },
   'Delivery: Metal': { multiplier: 13.0, tier: 'A', isDelivery: true },
   'Delivery: Crystal': { multiplier: 13.0, tier: 'A', isDelivery: true },
@@ -4009,7 +4486,14 @@ export const ORION_MISSION_MULTIPLIERS: Record<string, { multiplier: number; tie
   'Lifeform Encounter': { multiplier: 9.75, tier: 'U', isDelivery: false },
 };
 
-export function deduceFleetFromBudget(shipBudgetMsu: number, shipsText: string): OrionFleetDeduction | null {
+export const ORION_SHIP_CONVERSION_FACTOR = 0.75; // OGame's 25% construction tax on warships
+
+export function deduceFleetFromBudget(
+  shipBudgetMsu: number,
+  shipsText: string,
+  isDelivery: boolean = false,
+  waves: number = 1
+): OrionFleetDeduction | null {
   if (!shipsText || shipBudgetMsu <= 0) return null;
 
   const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
@@ -4019,33 +4503,163 @@ export function deduceFleetFromBudget(shipBudgetMsu: number, shipsText: string):
   if (maxShips <= 0) return null;
 
   const avgMsu = shipBudgetMsu / maxShips;
+
+  if (isDelivery) {
+    const baseSc = 5000;
+    const lcUpgrade = 10000;
+    const expectedShips = (minShips > 0 && maxShips > minShips)
+      ? Math.round((minShips + maxShips) / 2)
+      : maxShips;
+
+    let scCount = 0;
+    let lcCount = 0;
+
+    if (shipBudgetMsu <= baseSc * expectedShips) {
+      // Pure Small Cargo fleet scaled to the budget, bounded within [minShips, maxShips]
+      scCount = Math.min(maxShips, Math.max(minShips, Math.round(shipBudgetMsu / baseSc)));
+      lcCount = 0;
+    } else {
+      const excess = Math.max(0, shipBudgetMsu - (baseSc * expectedShips));
+      lcCount = Math.min(expectedShips, Math.max(0, Math.round(excess / lcUpgrade)));
+      scCount = Math.max(0, expectedShips - lcCount);
+    }
+
+    const totalCalculatedShips = scCount + lcCount;
+    const lcPct = totalCalculatedShips > 0 ? Math.round((lcCount / totalCalculatedShips) * 100) : 0;
+    const scPct = Math.max(0, 100 - lcPct);
+
+    const ships: OrionPredictedShip[] = [];
+    if (scCount > 0) {
+      ships.push({ name: 'Small Cargo', iconAttr: 'transportersmall', msu: 5000, count: scCount, pct: scPct });
+    }
+    if (lcCount > 0) {
+      ships.push({ name: 'Large Cargo', iconAttr: 'transporterlarge', msu: 15000, count: lcCount, pct: lcPct });
+    }
+
+    return {
+      maxShips,
+      minShips,
+      shipBudgetMsu,
+      avgMsuPerShip: avgMsu,
+      isDelivery: true,
+      ships,
+    };
+  }
+
+  // Combat Missions (Option A: Peak Wave Density + Auxiliary Cargos + Refined Squadrons)
   const baseLf = 4500;
   const excess = Math.max(0, shipBudgetMsu - (baseLf * maxShips));
 
-  const maxBattleships = Math.floor(excess / (67500 - baseLf));
-  const maxCruisers = Math.floor(excess / (36500 - baseLf));
-  const maxHeavyFighters = Math.floor(excess / (12000 - baseLf));
+  // 1. Calculate Peak Wave Density (evaluating individual wave density if multi-wave)
+  const budgetPerWave = waves > 0 ? (shipBudgetMsu / waves) : shipBudgetMsu;
+  const peakDensity = (minShips > 0 && minShips < maxShips)
+    ? (budgetPerWave / minShips)
+    : (shipBudgetMsu / maxShips);
+  const effectiveDensity = Math.max(avgMsu, peakDensity);
 
-  let fleetTier = 'Light Escort Fleet';
-  let eligibleHulls = 'Light Fighters & Small Cargos';
-  let upperBounds = 'Pure Light Screen';
+  // 2. Auxiliary Cargos in Combat Missions (empirical presence in alien/pirate stashes)
+  const scPct = 0.070; // ~7.0% Small Cargo
+  const lcPct = 0.025; // ~2.5% Large Cargo
 
-  if (avgMsu < 7500) {
-    fleetTier = 'Light Escort Fleet';
-    eligibleHulls = 'Light Fighters & Small Cargos (95%+)';
-    upperBounds = maxCruisers > 0 ? `Max ${maxCruisers} Cruisers or ${maxHeavyFighters} HF` : 'Pure Light Screen';
-  } else if (avgMsu < 24000) {
-    fleetTier = 'Medium Strike Fleet';
-    eligibleHulls = 'Heavy Fighters, Large Cargos, Cruisers';
-    upperBounds = `Max ${maxBattleships} Battleships, ${maxCruisers} Cruisers`;
-  } else if (avgMsu < 55000) {
-    fleetTier = 'Heavy Cruiser Fleet';
-    eligibleHulls = 'Cruisers, Battleships with Fighter screen';
-    upperBounds = `Max ${maxBattleships} Battleships, ${maxCruisers} Cruisers`;
+  let ripCount = 0;
+  let repPct = 0;
+  let bcPct = 0;
+  let bsPct = 0;
+  let crPct = 0;
+  let hfPct = 0;
+
+  if (effectiveDensity >= 1000000 && excess >= 13995500) {
+    ripCount = Math.min(maxShips, Math.max(1, Math.floor(excess / 13995500)));
+  } else if (effectiveDensity >= 24000) {
+    repPct = 0.018;  // ~1.8% Apex Warship (Reaper)
+    bcPct = 0.035;   // ~3.5% Battlecruisers
+    bsPct = 0.038;   // ~3.8% Battleships
+    crPct = 0.140;   // ~14.0% Cruisers
+    hfPct = 0.220;   // ~22.0% Heavy Fighters
+  } else if (effectiveDensity >= 17000) {
+    bcPct = 0.035;   // ~3.5% Battlecruisers
+    bsPct = 0.035;   // ~3.5% Battleships
+    crPct = 0.150;   // ~15.0% Cruisers
+    hfPct = 0.260;   // ~26.0% Heavy Fighters
+  } else if (effectiveDensity >= 12000) {
+    bsPct = 0.050;   // ~5.0% Battleships
+    crPct = 0.135;   // ~13.5% Cruisers
+    hfPct = 0.320;   // ~32.0% Heavy Fighters
   } else {
-    fleetTier = 'Capital Warfleet';
-    eligibleHulls = 'Battleships, Battlecruisers, Destroyers, Reapers';
-    upperBounds = `Max ${maxBattleships} Battleships, ${maxCruisers} Cruisers`;
+    crPct = 0.080;   // ~8.0% Cruisers
+    hfPct = 0.300;   // ~30.0% Heavy Fighters
+  }
+
+  let remainingShips = maxShips - ripCount;
+
+  const scCount = Math.min(remainingShips, Math.round(maxShips * scPct));
+  remainingShips -= scCount;
+
+  const lcCount = Math.min(remainingShips, Math.round(maxShips * lcPct));
+  remainingShips -= lcCount;
+
+  const repCount = Math.min(remainingShips, Math.round(maxShips * repPct));
+  remainingShips -= repCount;
+
+  const bcCount = Math.min(remainingShips, Math.round(maxShips * bcPct));
+  remainingShips -= bcCount;
+
+  const bsCount = Math.min(remainingShips, Math.round(maxShips * bsPct));
+  remainingShips -= bsCount;
+
+  const crCount = Math.min(remainingShips, Math.round(maxShips * crPct));
+  remainingShips -= crCount;
+
+  const hfCount = Math.min(remainingShips, Math.round(maxShips * hfPct));
+  remainingShips -= hfCount;
+
+  const lfCount = Math.max(0, remainingShips);
+
+  const rawCounts: Record<string, number> = {
+    SC: scCount,
+    LC: lcCount,
+    LF: lfCount,
+    HF: hfCount,
+    CR: crCount,
+    BS: bsCount,
+    BC: bcCount,
+    REP: repCount,
+    RIP: ripCount,
+  };
+
+  // Canonical display order for combat fleet with auxiliary logistics
+  const shipOrder = [
+    { id: 'SC', name: 'Small Cargo', iconAttr: 'transportersmall', msu: 5000 },
+    { id: 'LC', name: 'Large Cargo', iconAttr: 'transporterlarge', msu: 15000 },
+    { id: 'LF', name: 'Light Fighter', iconAttr: 'fighterlight', msu: 4500 },
+    { id: 'HF', name: 'Heavy Fighter', iconAttr: 'fighterheavy', msu: 12000 },
+    { id: 'CR', name: 'Cruiser', iconAttr: 'cruiser', msu: 36500 },
+    { id: 'BS', name: 'Battleship', iconAttr: 'battleship', msu: 67500 },
+    { id: 'BC', name: 'Battlecruiser', iconAttr: 'interceptor', msu: 135000 },
+    { id: 'REP', name: 'Reaper', iconAttr: 'reaper', msu: 227500 },
+    { id: 'RIP', name: 'Deathstar', iconAttr: 'deathstar', msu: 14000000 },
+  ];
+
+  const ships: OrionPredictedShip[] = [];
+  for (const s of shipOrder) {
+    const count = rawCounts[s.id] || 0;
+    if (count > 0) {
+      const pct = maxShips > 0 ? Math.round((count / maxShips) * 100) : 0;
+      ships.push({
+        name: s.name,
+        iconAttr: s.iconAttr,
+        msu: s.msu,
+        count,
+        pct,
+      });
+    }
+  }
+
+  // Normalize percentages so they sum cleanly to 100%
+  const totalPct = ships.reduce((sum, s) => sum + s.pct, 0);
+  if (totalPct !== 100 && ships.length > 0) {
+    const target = ships.find(s => s.name === 'Light Fighter') || ships[0];
+    target.pct += (100 - totalPct);
   }
 
   return {
@@ -4053,10 +4667,69 @@ export function deduceFleetFromBudget(shipBudgetMsu: number, shipsText: string):
     minShips,
     shipBudgetMsu,
     avgMsuPerShip: avgMsu,
-    fleetTier,
-    eligibleHulls,
-    upperBounds,
+    isDelivery: false,
+    ships,
   };
+}
+
+export function buildFleetFindsTooltipHtml(c: ScannedAnomalyData, deduction: OrionFleetDeduction | null): string {
+  const isDelivery = c.category === 'delivery' || c.name.toLowerCase().includes('delivery') || c.name.toLowerCase().includes('deliveries');
+  const activeDeduction = (deduction && deduction.ships && deduction.ships.length > 0)
+    ? deduction
+    : deduceFleetFromBudget(c.shipBudgetMsu || c.rewards?.shipsMsu || 0, parseScannedExtras(c.element).shipAmount, isDelivery, c.waves || 1);
+
+  const shipVal = activeDeduction?.shipBudgetMsu || c.shipBudgetMsu || c.rewards?.shipsMsu || 0;
+  const shipValText = shipVal > 0 ? `+${formatHuman(shipVal)} MSU` : 'Unknown';
+  const rawShipAmount = parseScannedExtras(c.element).shipAmount;
+  const shipCountText = activeDeduction
+    ? (activeDeduction.minShips === activeDeduction.maxShips
+        ? `${activeDeduction.maxShips.toLocaleString()} ships`
+        : `${activeDeduction.minShips.toLocaleString()} – ${activeDeduction.maxShips.toLocaleString()} ships`)
+    : formatRewardInterval(rawShipAmount, 'ships');
+
+  let shipsHtml = '';
+  if (activeDeduction && activeDeduction.ships) {
+    shipsHtml = activeDeduction.ships.map((s) => {
+      const countDisplay = `~${s.count.toLocaleString()}`;
+      const pctDisplay = `${s.pct}%`;
+
+      return `
+        <div class="nexus-fleet-ship-row">
+          <div class="nexus-fleet-ship-info">
+            <technology-icon regular="" ${s.iconAttr}="" sq20="" title="${escapeHtml(s.name)}"></technology-icon>
+            <span class="nexus-ship-name">${escapeHtml(s.name)}</span>
+          </div>
+          <div class="nexus-fleet-ship-stats">
+            <span class="nexus-ship-count">${escapeHtml(countDisplay)}</span>
+            <span class="nexus-ship-pct">${escapeHtml(pctDisplay)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  return `
+    <div class="nexus-extra-tooltip cyan nexus-fleet-finds-card">
+      <div class="nexus-extra-grid dual">
+        <div class="nexus-extra-cell">
+          <span class="nexus-extra-label">Fleet Value</span>
+          <span class="nexus-extra-val text-cyan">${escapeHtml(shipValText)}</span>
+        </div>
+        <div class="nexus-extra-cell">
+          <span class="nexus-extra-label">Ship Count</span>
+          <span class="nexus-extra-val">${escapeHtml(shipCountText)}</span>
+        </div>
+      </div>
+
+      <div class="nexus-fleet-ships-list">
+        ${shipsHtml}
+      </div>
+
+      <div class="nexus-fleet-disclaimer">
+        * Estimated prediction based on fleet budget. Actual drops may vary due to server RNG.
+      </div>
+    </div>
+  `;
 }
 
 export interface ScannedAnomalyData {
@@ -4111,6 +4784,217 @@ function parseDurationHours(text: string): number {
   return hours > 0 ? hours : 1;
 }
 
+export interface AnomalyShipBudgetParams {
+  name: string;
+  level: number;
+  stars: number;
+  category: 'delivery' | 'combat' | 'other';
+  environment: 'pvp' | 'pve';
+  waves: number;
+  lithiumCost: number;
+  rewards: { metal: number; crystal: number; deut: number; msu: number; items?: string[] };
+  shipsText?: string;
+  hasShips?: boolean;
+  hasArtifacts?: boolean;
+  hasExperience?: boolean;
+}
+
+export interface AnomalyShipBudgetResult {
+  shipBudgetMsu: number;
+  rollStatus: 'high_roll' | 'low_roll' | 'guaranteed' | 'utility';
+  rollTierLabel: string;
+  rollAuditSummary: string;
+  archetypeTier: 'S+' | 'S' | 'A' | 'B' | 'U';
+  archetypeMultiplier: number;
+  waveBonusPct: number;
+  highTierBaseBudget: number;
+  lowTierBaseBudget: number;
+  fleetDeduction: OrionFleetDeduction | null;
+  totalEffectiveMsu: number;
+  yieldRatio: number;
+}
+
+/**
+ * Reverse-engineers authoritative Orion anomaly budget calculations, roll tier status,
+ * and estimated fleet MSU for any scanned or active mission.
+ */
+export function calculateAnomalyShipBudget(params: AnomalyShipBudgetParams): AnomalyShipBudgetResult {
+  const waves = Math.max(1, params.waves || 1);
+  const waveFactor = (waves + 50) / 51;
+  const waveBonusPct = Math.round((waveFactor - 1) * 1000) / 10;
+
+  const name = params.name || 'Unknown Anomaly';
+  const isDelivery = params.category === 'delivery' || name.toLowerCase().includes('delivery');
+  const missionMeta = ORION_MISSION_MULTIPLIERS[name];
+  const archetypeMultiplier = missionMeta?.multiplier || (isDelivery ? 13.0 : 12.0);
+
+  let archetypeTier: 'S+' | 'S' | 'A' | 'B' | 'U';
+  if (missionMeta) {
+    archetypeTier = missionMeta.tier;
+  } else if (name.toLowerCase().includes('lifeform') || name.toLowerCase().includes('artifact')) {
+    archetypeTier = 'U';
+  } else if (name === 'Chaos Mission' || archetypeMultiplier >= 30.0) {
+    archetypeTier = 'S+';
+  } else if (archetypeMultiplier >= 14.0) {
+    archetypeTier = 'S';
+  } else if (archetypeMultiplier >= 11.0) {
+    archetypeTier = 'A';
+  } else {
+    archetypeTier = 'B';
+  }
+  const isDeliveryMission = missionMeta?.isDelivery ?? isDelivery;
+
+  const intel = cachedPlayerClassIntel;
+  const envMult = params.environment === 'pvp' ? (intel?.pvpMultiplier || 4.0) : (intel?.pveMultiplier || 1.5);
+
+  const highTierBaseBudget = params.lithiumCost * 0.306 * waveFactor * archetypeMultiplier * envMult;
+  const lowTierBaseBudget = highTierBaseBudget * 0.375;
+
+  const shipsText = cleanRewardString(params.shipsText || '');
+  const hasShips = params.hasShips || !!shipsText;
+
+  let rollStatus: 'high_roll' | 'low_roll' | 'guaranteed' | 'utility' = 'high_roll';
+  let rollTierLabel = 'High Roll';
+  let rollAuditSummary = '100% High Tier Jackpot';
+  let shipBudgetMsu = 0;
+
+  const empireBonuses = cachedEmpireAnomalyBonuses;
+  const metalMult = 1 + (Math.max(0, empireBonuses?.metalBonusPct || 0) / 100);
+  const crystalMult = 1 + (Math.max(0, empireBonuses?.crystalBonusPct || 0) / 100);
+  const deutMult = 1 + (Math.max(0, empireBonuses?.deutBonusPct || 0) / 100);
+  const shipsMult = 1 + (Math.max(0, empireBonuses?.shipsBonusPct || 0) / 100);
+
+  const rawBaseMetal = (params.rewards.metal > 0 && metalMult > 0) ? (params.rewards.metal / metalMult) : 0;
+  const rawBaseCrystal = (params.rewards.crystal > 0 && crystalMult > 0) ? (params.rewards.crystal / crystalMult) : 0;
+  const rawBaseDeut = (params.rewards.deut > 0 && deutMult > 0) ? (params.rewards.deut / deutMult) : 0;
+  const rawResourceBudgetMsu = (rawBaseMetal * 1.0) + (rawBaseCrystal * 1.5) + (rawBaseDeut * 3.0);
+
+  const effectiveResMult = (params.rewards.msu > 0 && rawResourceBudgetMsu > 0)
+    ? (params.rewards.msu / rawResourceBudgetMsu)
+    : (metalMult || 1.0);
+
+  const hasLifeformRewards = params.hasArtifacts || params.hasExperience || name.toLowerCase().includes('lifeform');
+
+  if (hasLifeformRewards && !hasShips) {
+    rollStatus = 'utility';
+    rollTierLabel = 'Utility';
+    rollAuditSummary = 'Lifeform Tech & Species Progression (Artifacts / XP)';
+    shipBudgetMsu = 0;
+  } else if (isDeliveryMission) {
+    rollStatus = 'guaranteed';
+    rollTierLabel = 'Guaranteed';
+
+    if (hasShips) {
+      rollAuditSummary = params.rewards.msu > 0
+        ? 'Guaranteed 100% (Delivery Cargo Fleet + Resources)'
+        : 'Guaranteed 100% (Delivery Cargo Fleet)';
+
+      if (params.rewards.msu === 0) {
+        shipBudgetMsu = Math.round(highTierBaseBudget * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+      } else {
+        const remainingBudgetRaw = highTierBaseBudget - rawResourceBudgetMsu;
+        if (remainingBudgetRaw > 0) {
+          shipBudgetMsu = Math.round(remainingBudgetRaw * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+        } else {
+          const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+          const avgShips = parts.length > 0 ? (parts[0] + parts[parts.length - 1]) / 2 : 0;
+          // In delivery missions, cargo fleet average is ~5,000 - 6,000 MSU (Small Cargo 5k, Large Cargo 15k)
+          shipBudgetMsu = Math.round(avgShips * 5000 * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+        }
+      }
+    } else {
+      rollAuditSummary = 'Guaranteed 100% (Zero Risk, Zero Combat Loss)';
+      shipBudgetMsu = 0;
+    }
+  } else if (hasShips && params.rewards.msu === 0) {
+    const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+    const maxShips = parts.length > 0 ? parts[parts.length - 1] : 0;
+    const scale = params.level * params.stars * waves;
+    const lowTierEffectiveShips = lowTierBaseBudget * shipsMult * ORION_SHIP_CONVERSION_FACTOR;
+    const isHigh = maxShips * 4500 > lowTierEffectiveShips * 1.05 || maxShips > scale * 1.1;
+    if (isHigh) {
+      rollStatus = 'high_roll';
+      rollTierLabel = 'High Roll';
+      rollAuditSummary = '100% High Tier Fleet Jackpot';
+      shipBudgetMsu = Math.round(highTierBaseBudget * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+    } else {
+      rollStatus = 'low_roll';
+      rollTierLabel = 'Low Roll';
+      rollAuditSummary = '37.5% Low Tier Fleet Penalty';
+      shipBudgetMsu = Math.round(lowTierBaseBudget * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+    }
+  } else if (hasShips && params.rewards.msu > 0) {
+    const lowTierEffective = lowTierBaseBudget * effectiveResMult;
+
+    const isHigh = params.rewards.msu >= lowTierEffective * 0.75 ||
+                   (highTierBaseBudget > 0 && (rawResourceBudgetMsu / highTierBaseBudget) >= 0.28) ||
+                   (params.lithiumCost > 0 && (params.rewards.msu / params.lithiumCost >= (params.environment === 'pvp' ? 10.0 : 3.8)));
+
+    if (isHigh) {
+      rollStatus = 'high_roll';
+      rollTierLabel = 'High Roll';
+      rollAuditSummary = '100% High Tier (Split: Resources + Fleet)';
+      const remainingBudgetRaw = highTierBaseBudget - rawResourceBudgetMsu;
+      if (remainingBudgetRaw > 0) {
+        shipBudgetMsu = Math.round(remainingBudgetRaw * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+      } else {
+        const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+        const avgShips = parts.length > 0 ? (parts[0] + parts[parts.length - 1]) / 2 : 0;
+        shipBudgetMsu = Math.round(avgShips * 6000 * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+      }
+    } else {
+      rollStatus = 'low_roll';
+      rollTierLabel = 'Low Roll';
+      rollAuditSummary = '37.5% Low Tier (Split: Resources + Fleet)';
+      const remainingBudgetRaw = lowTierBaseBudget - rawResourceBudgetMsu;
+      if (remainingBudgetRaw > 0) {
+        shipBudgetMsu = Math.round(remainingBudgetRaw * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+      } else {
+        const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+        const avgShips = parts.length > 0 ? (parts[0] + parts[parts.length - 1]) / 2 : 0;
+        shipBudgetMsu = Math.round(avgShips * 4500 * 0.375 * shipsMult * ORION_SHIP_CONVERSION_FACTOR);
+      }
+    }
+  } else {
+    const ratio = highTierBaseBudget > 0 ? rawResourceBudgetMsu / highTierBaseBudget : 0;
+    if (Math.abs(ratio - 1.0) < 0.18 || ratio >= 0.75) {
+      rollStatus = 'high_roll';
+      rollTierLabel = 'High Roll';
+      rollAuditSummary = '100% High Tier Jackpot';
+    } else {
+      rollStatus = 'low_roll';
+      rollTierLabel = 'Low Roll';
+      rollAuditSummary = '37.5% Low Tier Penalty (62.5% loss)';
+    }
+  }
+
+  const fleetDeduction = deduceFleetFromBudget(shipBudgetMsu, shipsText, isDeliveryMission, waves);
+  const totalEffectiveMsu = params.rewards.msu + shipBudgetMsu;
+
+  let yieldRatio = 0;
+  if (params.lithiumCost > 0 && totalEffectiveMsu > 0) {
+    const raw = totalEffectiveMsu / params.lithiumCost;
+    if (isFinite(raw) && raw >= 0.05 && raw <= 1000.0) {
+      yieldRatio = raw;
+    }
+  }
+
+  return {
+    shipBudgetMsu,
+    rollStatus,
+    rollTierLabel,
+    rollAuditSummary,
+    archetypeTier,
+    archetypeMultiplier,
+    waveBonusPct,
+    highTierBaseBudget,
+    lowTierBaseBudget,
+    fleetDeduction,
+    totalEffectiveMsu,
+    yieldRatio,
+  };
+}
+
 /**
  * Parses a single scanned anomaly card from #scannerResultHolder.
  */
@@ -4157,146 +5041,37 @@ function parseScannedAnomalyCard(card: HTMLElement): ScannedAnomalyData | null {
   const lithiumCost = parseOgameAmount(costTooltip);
 
   const rewards = parseMissionRewards(card);
-
-  // 1. Reverse-Engineered Wave Scaling
-  const waveFactor = (waves + 50) / 51;
-  const waveBonusPct = Math.round((waveFactor - 1) * 1000) / 10;
-
-  // 2. Mission Archetype & Multipliers
-  const missionMeta = ORION_MISSION_MULTIPLIERS[name];
-  const archetypeMultiplier = missionMeta?.multiplier || (isDelivery ? 13.0 : 12.0);
-  let archetypeTier: 'S+' | 'S' | 'A' | 'B' | 'U';
-  if (missionMeta) {
-    archetypeTier = missionMeta.tier;
-  } else if (name.toLowerCase().includes('lifeform') || name.toLowerCase().includes('artifact')) {
-    archetypeTier = 'U';
-  } else if (name === 'Chaos Mission' || archetypeMultiplier >= 30.0) {
-    archetypeTier = 'S+';
-  } else if (archetypeMultiplier >= 14.0) {
-    archetypeTier = 'S';
-  } else if (archetypeMultiplier >= 11.0) {
-    archetypeTier = 'A';
-  } else {
-    archetypeTier = 'B';
-  }
-  const isDeliveryMission = missionMeta?.isDelivery ?? isDelivery;
-
-  // 3. Environment Multiplier (General class: PvP 4.0x, PvE 1.5x, augmented by Mechan T18)
-  const intel = cachedPlayerClassIntel;
-  const envMult = environment === 'pvp' ? (intel?.pvpMultiplier || 4.0) : (intel?.pveMultiplier || 1.5);
-
-  // 4. Theoretical High-Tier Budget (Raw MSU)
-  const highTierBaseBudget = lithiumCost * 0.306 * waveFactor * archetypeMultiplier * envMult;
-  const lowTierBaseBudget = highTierBaseBudget * 0.375;
-
-  // 5. Parse displayed extras for ships
   const extras = parseScannedExtras(card);
   const rawShipText = extras.shipAmount ||
     (rewards.items || []).filter((it) => /ship|vessel|fighter|cruiser|battleship|battlecruiser|bomber|destroyer|deathstar|reaper|pathfinder/i.test(it)).join('; ') ||
     (extras.hasShips ? 'Random Ships' : '');
   const shipsText = cleanRewardString(rawShipText);
 
-  // 6. Determine Roll Tier Status (Strictly: Guaranteed, High Roll, Low Roll, or Utility)
-  let rollStatus: 'high_roll' | 'low_roll' | 'guaranteed' | 'utility' = 'high_roll';
-  let rollTierLabel = 'High Roll';
-  let rollAuditSummary = '100% High Tier Jackpot';
-  let shipBudgetMsu = 0;
+  const budget = calculateAnomalyShipBudget({
+    name,
+    level,
+    stars,
+    category,
+    environment,
+    waves,
+    lithiumCost,
+    rewards,
+    shipsText,
+    hasShips: extras.hasShips || !!shipsText,
+    hasArtifacts: extras.hasArtifacts,
+    hasExperience: extras.hasExperience,
+  });
 
-  const rawMsuDisplayed = rewards.msu > 0 ? rewards.msu / 1.43 : 0;
-  const hasLifeformRewards = extras.hasArtifacts || extras.hasExperience || name.toLowerCase().includes('lifeform');
-
-  if (hasLifeformRewards) {
-    // Artifact / Lifeform XP missions: Display "Utility" instead of High Roll / Low Roll / Guaranteed
-    rollStatus = 'utility';
-    rollTierLabel = 'Utility';
-    rollAuditSummary = 'Lifeform Tech & Species Progression (Artifacts / XP)';
-    shipBudgetMsu = 0; // Omit phantom ship MSU on Artifact/XP runs
-  } else if (isDeliveryMission) {
-    rollStatus = 'guaranteed';
-    rollTierLabel = 'Guaranteed';
-    rollAuditSummary = 'Guaranteed 100% (Zero Risk, Zero Combat Loss)';
-  } else if (shipsText && rewards.msu === 0) {
-    // Pure fleet drop (Rescue, Lost Wreckage without resources)
-    const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
-    const maxShips = parts.length > 0 ? parts[parts.length - 1] : 0;
-    const scale = level * stars * waves;
-    // High roll if maxShips is proportional to High Tier (> 1.0x scale or maxShips * 4500 > lowTierBaseBudget)
-    const isHigh = maxShips * 4500 > lowTierBaseBudget * 1.05 || maxShips > scale * 1.1;
-    if (isHigh) {
-      rollStatus = 'high_roll';
-      rollTierLabel = 'High Roll';
-      rollAuditSummary = '100% High Tier Fleet Jackpot';
-      shipBudgetMsu = Math.round(highTierBaseBudget * 1.43);
-    } else {
-      rollStatus = 'low_roll';
-      rollTierLabel = 'Low Roll';
-      rollAuditSummary = '37.5% Low Tier Fleet Penalty';
-      shipBudgetMsu = Math.round(lowTierBaseBudget * 1.43);
-    }
-  } else if (shipsText && rewards.msu > 0) {
-    // Mixed resources + fleet (e.g. Chaos Mission, Defend, or Encounters with ships)
-    const highTierEffective = highTierBaseBudget * 1.43;
-    const lowTierEffective = lowTierBaseBudget * 1.43;
-
-    // In mixed missions, resources typically represent 35% to 70% of the total budget.
-    // If the displayed resource MSU is higher than 75% of the ENTIRE low-tier budget,
-    // or if the resource ratio vs high tier is >= 0.28, it mathematically cannot be a low roll.
-    const isHigh = rewards.msu >= lowTierEffective * 0.75 ||
-                   (highTierBaseBudget > 0 && (rawMsuDisplayed / highTierBaseBudget) >= 0.28) ||
-                   (rewards.msu / lithiumCost >= (environment === 'pvp' ? 10.0 : 3.8));
-
-    if (isHigh) {
-      rollStatus = 'high_roll';
-      rollTierLabel = 'High Roll';
-      rollAuditSummary = '100% High Tier (Split: Resources + Fleet)';
-      const remainingBudgetRaw = highTierBaseBudget - rawMsuDisplayed;
-      if (remainingBudgetRaw > 0) {
-        shipBudgetMsu = Math.round(remainingBudgetRaw * 1.43);
-      } else {
-        const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
-        const avgShips = parts.length > 0 ? (parts[0] + parts[parts.length - 1]) / 2 : 0;
-        shipBudgetMsu = Math.round(avgShips * 6000);
-      }
-    } else {
-      rollStatus = 'low_roll';
-      rollTierLabel = 'Low Roll';
-      rollAuditSummary = '37.5% Low Tier (Split: Resources + Fleet)';
-      const remainingBudgetRaw = lowTierBaseBudget - rawMsuDisplayed;
-      if (remainingBudgetRaw > 0) {
-        shipBudgetMsu = Math.round(remainingBudgetRaw * 1.43);
-      } else {
-        const parts = shipsText.replace(/,/g, '').split('-').map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
-        const avgShips = parts.length > 0 ? (parts[0] + parts[parts.length - 1]) / 2 : 0;
-        shipBudgetMsu = Math.round(avgShips * 4500 * 0.375);
-      }
-    }
-  } else {
-    // Pure resource combat
-    const ratio = highTierBaseBudget > 0 ? rawMsuDisplayed / highTierBaseBudget : 0;
-    if (Math.abs(ratio - 1.0) < 0.18 || ratio >= 0.75) {
-      rollStatus = 'high_roll';
-      rollTierLabel = 'High Roll';
-      rollAuditSummary = '100% High Tier Jackpot';
-    } else {
-      rollStatus = 'low_roll';
-      rollTierLabel = 'Low Roll';
-      rollAuditSummary = '37.5% Low Tier Penalty (62.5% loss)';
-    }
-  }
-
-  // 7. Fleet deduction if ships are present
-  const fleetDeduction = deduceFleetFromBudget(shipBudgetMsu, shipsText);
-
-  // 8. Total Effective MSU (Resources + Estimated Fleet)
-  const totalEffectiveMsu = rewards.msu + shipBudgetMsu;
-
-  let yieldRatio = 0;
-  if (lithiumCost > 0 && totalEffectiveMsu > 0) {
-    const raw = totalEffectiveMsu / lithiumCost;
-    if (isFinite(raw) && raw >= 0.05 && raw <= 1000.0) {
-      yieldRatio = raw;
-    }
-  }
+  const totalEffectiveMsu = budget.totalEffectiveMsu;
+  const shipBudgetMsu = budget.shipBudgetMsu;
+  const yieldRatio = budget.yieldRatio;
+  const rollStatus = budget.rollStatus;
+  const rollTierLabel = budget.rollTierLabel;
+  const rollAuditSummary = budget.rollAuditSummary;
+  const archetypeTier = budget.archetypeTier;
+  const archetypeMultiplier = budget.archetypeMultiplier;
+  const waveBonusPct = budget.waveBonusPct;
+  const fleetDeduction = budget.fleetDeduction;
 
   const hourlyMsu = durationHours > 0 && totalEffectiveMsu > 0 ? totalEffectiveMsu / durationHours : 0;
   const hourlyLithium = durationHours > 0 && lithiumCost > 0 ? Math.round(lithiumCost / durationHours) : 0;
@@ -4727,7 +5502,8 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
   const isPure = isPureResourceMission(c, card);
 
   // Guard against DOM thrashing on hover
-  const cardStateKey = `${mode}_${c.rank}_${c.yieldRatio.toFixed(1)}_${c.hourlyLithium}_${c.recommendedScore}_${cachedPlayerClassIntel.t18BonusPct}_${isPure ? 'pure' : 'mixed'}_v4`;
+  const bonusSig = `${cachedEmpireAnomalyBonuses.metalLvl}_${cachedEmpireAnomalyBonuses.crystalLvl}_${cachedEmpireAnomalyBonuses.deutLvl}_${cachedEmpireAnomalyBonuses.shipsLvl}_${cachedEmpireAnomalyBonuses.artefactsLvl}`;
+  const cardStateKey = `${mode}_${c.rank}_${c.yieldRatio.toFixed(1)}_${c.hourlyLithium}_${c.recommendedScore}_${cachedPlayerClassIntel.t18BonusPct}_${bonusSig}_${isPure ? 'pure' : 'mixed'}_v5`;
   const existingCardState = card.getAttribute('data-nexus-card-state');
   const hasIntelBar = card.querySelector('.nexus-briefing-intel-bar') !== null;
   if (existingCardState === cardStateKey && hasIntelBar) {
@@ -4806,32 +5582,11 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
 
     if (extras.hasShips) {
       const shipTitle = 'Fleet Finds';
-      const shipVal = c.fleetDeduction?.shipBudgetMsu || c.shipBudgetMsu || c.rewards?.shipsMsu || 0;
-      const shipCountText = c.fleetDeduction
-        ? (c.fleetDeduction.minShips === c.fleetDeduction.maxShips
-            ? `${c.fleetDeduction.maxShips.toLocaleString()} ships`
-            : `${c.fleetDeduction.minShips.toLocaleString()} – ${c.fleetDeduction.maxShips.toLocaleString()} ships`)
-        : formatRewardInterval(extras.shipAmount, 'ships');
-      const shipValText = shipVal > 0 ? `+${formatHuman(shipVal)} MSU` : 'Unknown';
-
-      const extrasShipHtml = `
-        <div class="nexus-extra-tooltip cyan">
-          <div class="nexus-extra-grid dual">
-            <div class="nexus-extra-cell">
-              <span class="nexus-extra-label">Fleet Value</span>
-              <span class="nexus-extra-val text-cyan">${escapeHtml(shipValText)}</span>
-            </div>
-            <div class="nexus-extra-cell">
-              <span class="nexus-extra-label">Ship Count</span>
-              <span class="nexus-extra-val">${escapeHtml(shipCountText)}</span>
-            </div>
-          </div>
-        </div>
-      `;
+      const extrasShipHtml = buildFleetFindsTooltipHtml(c, c.fleetDeduction);
 
       extraBadges.push(
         `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(shipTitle)}" data-nexus-tooltip-body="${escapeHtml(extrasShipHtml)}" data-nexus-tooltip-html="true">` +
-        `<technology-icon regular="" interceptor="" bordered=""></technology-icon>` +
+        `<technology-icon regular="" interceptor="" bordered="" style="pointer-events: none; vertical-align: middle;"></technology-icon>` +
         `</span>`
       );
     }
@@ -4852,7 +5607,7 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
 
       extraBadges.push(
         `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(artTitle)}" data-nexus-tooltip-body="${escapeHtml(artHtml)}" data-nexus-tooltip-html="true">` +
-        `<resource-icon class="artifact"></resource-icon>` +
+        `<resource-icon class="artifact" style="width: 20px !important; height: 20px !important; max-width: 20px !important; max-height: 20px !important; display: inline-block !important; background-size: contain !important; background-repeat: no-repeat !important; background-position: center !important; pointer-events: none !important;"></resource-icon>` +
         `</span>`
       );
     }
@@ -4873,7 +5628,7 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
 
       extraBadges.push(
         `<span class="nexus-extra-item nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(xpTitle)}" data-nexus-tooltip-body="${escapeHtml(xpHtml)}" data-nexus-tooltip-html="true">` +
-        `<resource-icon class="speciesExperience"></resource-icon>` +
+        `<resource-icon class="speciesExperience" style="width: 20px !important; height: 20px !important; max-width: 20px !important; max-height: 20px !important; display: inline-block !important; background-size: contain !important; background-repeat: no-repeat !important; background-position: center !important; pointer-events: none !important;"></resource-icon>` +
         `</span>`
       );
     }
@@ -5084,7 +5839,17 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
     const wavesBadgeText = c.waves === 1 ? '1 Wave' : `${c.waves} Waves`;
     const envBadgeText = isPvp ? 'PvP' : 'PvE';
 
-    // 5. Render Option B: Tactical Cockpit Layout
+    // 5. Anomaly Facility Bonus Badge (Strictly filtered by possible rewards for this mission)
+    const applicableBonuses = getApplicableAnomalyBonuses(c, card, cachedEmpireAnomalyBonuses);
+    let bonusBadgeHtml = '';
+    if (applicableBonuses.length > 0) {
+      const bonusTitle = 'Empire Anomaly Bonuses';
+      const bonusTooltipHtml = buildAnomalyBonusTooltipHtml(applicableBonuses, cachedEmpireAnomalyBonuses.coloniesCount);
+      bonusBadgeHtml = `
+          <span class="nexus-ribbon-badge badge-anomaly-bonus nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(bonusTitle)}" data-nexus-tooltip-body="${escapeHtml(bonusTooltipHtml)}" data-nexus-tooltip-html="true">BONUS</span>`;
+    }
+
+    // 6. Render Option B: Tactical Cockpit Layout
     intelBar.innerHTML = `
       <span class="nexus-briefing-rank nexus-rank-tier-${tierIndex}">#${c.rank}</span>
       <div class="nexus-briefing-body">
@@ -5092,7 +5857,7 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
           <span class="nexus-ribbon-badge ${rollBadgeClass} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(rollTitle)}" data-nexus-tooltip-body="${escapeHtml(rollTooltipHtml)}" data-nexus-tooltip-html="true">${c.rollTierLabel}</span>
           <span class="nexus-ribbon-badge ${archBadgeClass} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(archTitle)}" data-nexus-tooltip-body="${escapeHtml(archTooltipHtml)}" data-nexus-tooltip-html="true">${archBadgeText}</span>
           <span class="nexus-ribbon-badge badge-wave nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(waveTitle)}" data-nexus-tooltip-body="${escapeHtml(waveTooltipHtml)}" data-nexus-tooltip-html="true">${wavesBadgeText}</span>
-          <span class="nexus-ribbon-badge ${envClass} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(envTitle)}" data-nexus-tooltip-body="${escapeHtml(envTooltipHtml)}" data-nexus-tooltip-html="true">${envBadgeText}</span>
+          <span class="nexus-ribbon-badge ${envClass} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="${escapeHtml(envTitle)}" data-nexus-tooltip-body="${escapeHtml(envTooltipHtml)}" data-nexus-tooltip-html="true">${envBadgeText}</span>${bonusBadgeHtml}
         </div>
         <div class="nexus-briefing-stats">
           <div class="nexus-stat-capsule ${mode === 'yield' ? 'active-capsule' : ''} nexus-tooltip-trigger ogl_ready" data-nexus-tooltip-title="MSU / Lith | Resource return multiplier per Lithium fuel spent">
@@ -5144,7 +5909,7 @@ function enhanceScannedCard(c: ScannedAnomalyData, mode: ScannerRankingMode, tot
     (c.rewards.items || []).filter((it) => /ship|vessel|fighter|cruiser|battleship|battlecruiser|bomber|destroyer|deathstar|reaper|pathfinder/i.test(it)).join('; ') ||
     (hasShips ? 'Random Ships' : '');
   const shipsText = cleanRewardString(rawShipText);
-  const shipsMsu = c.rewards.shipsMsu || 0;
+  const shipsMsu = c.rewards.shipsMsu || c.shipBudgetMsu || 0;
   const hasArtifacts = extras.hasArtifacts;
   const artifactsAmount = cleanRewardString(extras.artifactAmount);
   const hasExperience = extras.hasExperience;
@@ -5223,6 +5988,7 @@ export function initOrionScannerEnhancer(force: boolean = false, animate: boolea
 
   // Background sync player class & Mechan T18 tech bonus
   syncPlayerClassAndT18Bonus().catch(() => {});
+  syncEmpireAnomalyBonuses().catch(() => {});
 
   const rawCards = cardsContainer.querySelectorAll<HTMLElement>('.scannerResultCard:not(#nexus-scanner-ranking-card)');
   if (rawCards.length === 0) return;

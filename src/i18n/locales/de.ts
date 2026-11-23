@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const de: LocaleTranslations = {
     common: {
@@ -120,7 +120,8 @@ export const de: LocaleTranslations = {
     dataManagement: {
         title: "Nexus Datenzentrale",
         subtitle: "Sichere, stelle wieder her und migriere Universumsdaten zwischen GerÃ¤ten oder Accounts.",
-        tabNexusData: "OGame Nexus Daten",
+        tabAccountsManagement: "Accounts-Verwaltung",
+        tabNexusData: "OGame Nexus Sync",
         tabTrackerSync: "OGame Tracker Sync",
         tabBackup: "System-Sicherung",
         tabRestore: "System-Wiederherstellung",
@@ -275,7 +276,7 @@ export const de: LocaleTranslations = {
     },
     changelog: {
         title: "System Aktualisiert",
-        versionBadge: "v1.3.0",
+        versionBadge: "v1.3.2",
         telemetryReport: "OGAME NEXUS KOMMANDODECK TELEMETRIE-BERICHT",
         dataPreservedNotice: "Deine Planeteneinstellungen, erfassten Telemetriedaten und ÃœberwachungsverlÃ¤ufe wurden bei diesem Update sicher beibehalten.",
         acknowledge: "BestÃ¤tigen",

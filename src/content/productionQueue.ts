@@ -1,4 +1,5 @@
 import { ProductionQueueItem, EmpireProductionQueueData, ProductionQueueType } from '../db';
+import { fetchGameOnLoad, fetchGameOnUserAction, isPageLoadValid } from '../utils/networkGuard';
 
 /**
  * Fetches and parses all active in-progress production queues across the empire
@@ -7,10 +8,12 @@ import { ProductionQueueItem, EmpireProductionQueueData, ProductionQueueType } f
  *
  * @param playerId Target player ID
  * @param ignoreDelay If true, bypasses the 1-minute automated throttle (used for manual sync / re-scan)
+ * @param trigger Optional user interaction event or ticket. If omitted, uses PAGE_LOAD within 3s.
  */
 export async function fetchEmpireProductionQueue(
   playerId?: string,
-  ignoreDelay = false
+  ignoreDelay = false,
+  trigger?: Event | OGameRequestGuard.Ticket
 ): Promise<EmpireProductionQueueData | null> {
   const targetPlayerId = playerId || document.querySelector("meta[name='ogame-player-id']")?.getAttribute("content") || '';
   if (!targetPlayerId) return null;
@@ -28,14 +31,20 @@ export async function fetchEmpireProductionQueue(
     } catch (e) {}
   }
 
+  // If no user trigger is available and start-up PAGE_LOAD window has lapsed, quietly fall back to stored cache
+  if (!trigger && !isPageLoadValid()) {
+    return getStoredProductionQueue(targetPlayerId);
+  }
+
   try {
-    const res = await fetch('/game/index.php?page=ajax&component=productionqueue&ajax=1', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
+    const url = '/game/index.php?page=ajax&component=productionqueue&ajax=1';
+    const res = trigger
+      ? await fetchGameOnUserAction(trigger, url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      : await fetchGameOnLoad(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
 
     if (!res.ok) {
       console.warn(`[OGame Nexus] Failed to fetch production queue (HTTP ${res.status})`);
-      return null;
+      return getStoredProductionQueue(targetPlayerId);
     }
 
     const html = await res.text();
@@ -67,8 +76,8 @@ const OGAME_TECH_TOKENS: Record<string, number> = {
   'deathstar': 214, 'battlecruiser': 215, 'crawler': 217, 'reaper': 218, 'pathfinder': 219,
 
   // Defense
-  'rocketlauncher': 401, 'lightlaser': 402, 'heavylaser': 403, 'gausscannon': 404,
-  'ioncannon': 405, 'plasmaturret': 406, 'smallshielddome': 407, 'largeshielddome': 408,
+  'rocketlauncher': 401, 'lightlaser': 402, 'lasercannonlight': 402, 'heavylaser': 403, 'lasercannonheavy': 403, 'gausscannon': 404,
+  'ioncannon': 405, 'plasmaturret': 406, 'plasmacannon': 406, 'smallshielddome': 407, 'shielddomesmall': 407, 'largeshielddome': 408, 'shielddomelarge': 408,
   'antiballisticmissile': 502, 'antiballisticmissiles': 502,
   'interplanetarymissile': 503, 'interplanetarymissiles': 503
 };
@@ -256,10 +265,14 @@ const OGAME_TECH_TOKENS: Record<string, number> = {
 
     return queueData;
   } catch (err: any) {
-    if (!err?.message?.includes('Extension context invalidated')) {
-      console.error('[OGame Nexus] Error during fetchEmpireProductionQueue', err);
+    if (err?.name === 'OGameRequestGuardError' || err?.message?.includes('OGameRequestGuard')) {
+      console.debug('[OGame Nexus] Production queue fetch skipped or lapsed via guard:', err.message);
+      return getStoredProductionQueue(targetPlayerId);
     }
-    return null;
+    if (!err?.message?.includes('Extension context invalidated')) {
+      console.warn('[OGame Nexus] Error during fetchEmpireProductionQueue', err);
+    }
+    return getStoredProductionQueue(targetPlayerId);
   }
 }
 

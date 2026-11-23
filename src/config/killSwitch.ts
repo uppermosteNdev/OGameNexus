@@ -10,4 +10,4 @@
  *
  * To re-enable the extension in version 1.3.2+, simply set this flag back to false.
  */
-export const IS_EXTENSION_DISABLED = true;
+export const IS_EXTENSION_DISABLED = false;

@@ -11,6 +11,7 @@ import { calculateAccountResearchScore } from "../utils/researchTimeCalc";
 import { fetchPlayerHighscores } from "../utils/ogameHighscores";
 import { recalculateAnomalyMissionLosses, recalculateAllAnomalyMissionLosses } from "../utils/anomalyCombat";
 import { IS_EXTENSION_DISABLED } from "../config/killSwitch";
+import { fetchPublicApi, fetchExternal } from "../utils/networkGuard";
 
 // Auto-heal / normalize any legacy or uncleaned debris harvests on extension launch
 async function normalizeDebrisHarvestsOnStartup() {
@@ -209,6 +210,29 @@ function mergeControlCenterBuildings(existing: any[], incoming: any[]) {
     return Array.from(map.values()).sort((a, b) => a.id - b.id);
 }
 
+function getPlanetFacilityLevel(planet: any, techId: number): number {
+    if (techId === 45) {
+        if (typeof planet.iaScanner === 'number') return planet.iaScanner;
+        const fac = planet.facilities?.find((f: any) => f.id === 45);
+        if (fac && typeof fac.level === 'number') return fac.level;
+        const b = planet.buildings;
+        if (b) {
+            if (typeof b['45'] === 'number') return b['45'];
+            if (typeof b['45']?.level === 'number') return b['45'].level;
+        }
+        return 0;
+    }
+    const cc = planet.controlCenterBuildings?.find((b: any) => b.id === techId);
+    if (cc && typeof cc.level === 'number') return cc.level;
+    const b = planet.buildings;
+    if (b) {
+        const key = String(techId);
+        if (typeof b[key] === 'number') return b[key];
+        if (typeof b[key]?.level === 'number') return b[key].level;
+    }
+    return 0;
+}
+
 function mergeLifeformSetup(existing: any[], incoming: any[], fromEmpire: boolean = false) {
     const safeExisting = Array.isArray(existing) ? existing : [];
     const safeIncoming = Array.isArray(incoming) ? incoming : [];
@@ -251,7 +275,7 @@ async function fetchServerData(universe: string) {
     const url = `https://${domain}/api/serverData.xml`;
     // console.log(`Background: Fetching Server Data from ${url}`);
     try {
-        const response = await fetch(url);
+        const response = await fetchPublicApi(url);
         const xml = await response.text();
         return parseServerDataXml(xml);
     } catch (err) {
@@ -615,77 +639,6 @@ export async function autoSyncEmpireToOverwatch(playerId: string, force = false)
     }
 }
 
-async function syncData(data: any) {
-    const { account, planets, overview, supplies, facilities, production, activePlanetId, lifeformId, researches, lifeformSetup, lifeformExperience, lifeformBuildings, empire } = data;
-    if (account) {
-        // Merge incoming account data with potentially existing stats from overview
-        const existing = await db.accounts.get(account.playerId);
-
-        // Security: Standard Research levels can only go up. Compare and keep max.
-        let mergedResearches = existing?.researches || [];
-        if (researches && researches.length > 0) {
-            const newResearches = [...mergedResearches];
-            researches.forEach((nr: { id: number, level: number }) => {
-                const idx = newResearches.findIndex(r => r.id === nr.id);
-                if (idx >= 0) {
-                    newResearches[idx].level = Math.max(newResearches[idx].level, nr.level);
-                } else if (nr.level > 0) {
-                    newResearches.push(nr);
-                }
-            });
-            mergedResearches = newResearches;
-        }
-
-        // Fetch Server Data if needed (generic based on universe field)
-        let serverData = {};
-        if (account.universe) {
-            const scraped = await fetchServerData(account.universe);
-            if (scraped) serverData = scraped;
-        }
-
-        let rawLfExp = (lifeformExperience && (Array.isArray(lifeformExperience) ? lifeformExperience.length > 0 : Object.keys(lifeformExperience).length > 0)) 
-            ? lifeformExperience 
-            : existing?.lifeformExperience;
-        let mergedLifeformExp: any[] = [];
-        if (Array.isArray(rawLfExp)) {
-            mergedLifeformExp = rawLfExp.map((s: any) => ({
-                id: Number(s.id),
-                lifeformId: Number(s.lifeformId || (s.id > 700 ? s.id - 700 : s.id)),
-                level: Number(s.level || 0),
-                bonus: Number(s.bonus || 0),
-                currentExp: Number(s.currentExp !== undefined ? s.currentExp : (s.xp || 0)),
-                nextLevelExp: Number(s.nextLevelExp !== undefined ? s.nextLevelExp : (s.xpToNextLevel || 100)),
-                xp: Number(s.xp !== undefined ? s.xp : (s.currentExp || 0)),
-                xpToNextLevel: Number(s.xpToNextLevel !== undefined ? s.xpToNextLevel : (s.nextLevelExp || 100))
-            }));
-        } else if (rawLfExp && typeof rawLfExp === 'object') {
-            mergedLifeformExp = Object.entries(rawLfExp).map(([id, val]: [string, any]) => {
-                const specId = parseInt(id);
-                const lifeformId = specId > 700 ? specId - 700 : specId;
-                if (typeof val === 'object' && val !== null) {
-                    return { id: specId, lifeformId, ...val };
-                }
-                return { id: specId, lifeformId, level: Number(val) };
-            });
-        }
-
-        await db.accounts.put(cleanObject({
-            ...existing,
-            ...account,
-            ...serverData,
-            ...(overview?.accountData || {}),
-            researches: mergedResearches,
-            activeResearch: data.activeResearch !== undefined ? data.activeResearch : (account as any)?.activeResearch ?? existing?.activeResearch,
-            lifeformExperience: mergedLifeformExp,
-            artifacts: (account as any).artifacts ?? existing?.artifacts,
-            artifactsLastUpdated: (account as any).artifactsLastUpdated ?? existing?.artifactsLastUpdated,
-            inventory: (account as any).inventory ?? existing?.inventory,
-            inventoryLastUpdated: (account as any).inventoryLastUpdated ?? existing?.inventoryLastUpdated,
-            lastSeen: Date.now()
-        }));
-    }
-}
-
 if (!IS_EXTENSION_DISABLED) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "OPEN_DASHBOARD") {
@@ -903,11 +856,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         mergedResearches = newResearches;
                     }
 
-                    // Fetch Server Data if needed (generic based on universe field)
-                    let serverData = {};
-                    if (account.universe) {
-                        const scraped = await fetchServerData(account.universe);
-                        if (scraped) serverData = scraped;
+                    // Non-blocking fetch of serverData.xml only once if universe speed/settings are missing
+                    if (account?.universe && !(existing as any)?.speed) {
+                        fetchServerData(account.universe).then(scraped => {
+                            if (scraped) {
+                                db.accounts.update(account.playerId, scraped as any).catch(() => {});
+                            }
+                        }).catch(err => {
+                            console.debug('OGame Nexus: Non-blocking serverData fetch skipped:', err);
+                        });
                     }
 
                     let rawLfExp = (lifeformExperience && (Array.isArray(lifeformExperience) ? lifeformExperience.length > 0 : Object.keys(lifeformExperience).length > 0)) 
@@ -939,7 +896,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     await db.accounts.put(cleanObject({
                         ...existing,
                         ...account,
-                        ...serverData,
                         ...(overview?.accountData || {}),
                         researches: mergedResearches,
                         activeResearch: message.data.activeResearch !== undefined ? message.data.activeResearch : (account as any)?.activeResearch ?? existing?.activeResearch,
@@ -952,9 +908,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     }));
                 }
 
-                if (planets && planets.length > 0 && account?.playerId) {
+                let incomingPlanets = (planets && Array.isArray(planets) && planets.length > 0) ? planets : [];
+                if (incomingPlanets.length === 0 && account?.playerId) {
+                    try {
+                        const fleetKey = `ognexus_fleet_${account.playerId}`;
+                        const fleetStore = await chrome.storage.local.get([fleetKey]);
+                        const cachedFleet = fleetStore?.[fleetKey];
+                        if (cachedFleet && Array.isArray(cachedFleet.entities) && cachedFleet.entities.length > 0) {
+                            incomingPlanets = cachedFleet.entities.map((e: any) => ({
+                                id: String(e.id),
+                                name: e.name || (e.type === 'moon' ? 'Moon' : 'Planet'),
+                                coords: e.coords,
+                                type: e.type || 'planet',
+                                ships: e.ships || {},
+                                lastUpdated: cachedFleet.timestamp || Date.now()
+                            }));
+                        }
+                    } catch (e) {}
+                }
+
+                if (incomingPlanets.length > 0 && account?.playerId) {
                     await db.transaction('rw', [db.planets, db.accounts], async () => {
-                        const existingPlanets = await db.planets.where('playerId').equals(account.playerId).toArray();
+                        const pidVariants = [account.playerId, String(account.playerId), Number(account.playerId)].filter(v => v !== undefined && v !== null && !isNaN(v as any));
+                        const existingPlanets = await db.planets.where('playerId').anyOf(pidVariants).toArray();
 
                         // Purge any existing invalid/placeholder planets (coords '0:0:0' or empty coords) from the database
                         const invalidPlanetIds = existingPlanets.filter(p => !p.coords || p.coords === "0:0:0" || p.coords.includes("0:0:0")).map(p => p.id);
@@ -969,8 +945,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             }
                         }
 
-                        for (const p of planets) {
-                            const existing = existingPlanets.find(ep => ep.id === p.id);
+                        for (const p of incomingPlanets) {
+                            const existing = existingPlanets.find(ep => String(ep.id) === String(p.id));
                             const isMainPlanet = activePlanetId === p.id;
                             
                             let empirePlanet: any = undefined;
@@ -1047,10 +1023,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             const safeFacilities = Array.isArray(facilities) ? facilities : undefined;
                             const safeControlCenterBuildings = Array.isArray(controlCenterBuildings) ? controlCenterBuildings : undefined;
 
+                            const isTraderAlliance = Number(account?.allianceClass) === 2 || Number(account?.allianceClass) === 1;
+                            const calcCap = (lvl: number) => {
+                                const l = Math.max(0, lvl || 0);
+                                const base = 5000 * Math.floor(2.5 * Math.exp((20 / 33) * l));
+                                return isTraderAlliance && l > 0 ? Math.floor(base * 1.10) : base;
+                            };
+
+                            // Coordinate Resolution: If incoming coords are valid (not 0:0:0 and matches galaxy:system:pos), adopt them!
+                            // Immediately registers relocations whether from server accountInfo or sidebar DOM scraping.
+                            const isValidCoord = (c?: string) => Boolean(c && c !== "0:0:0" && !c.includes("0:0:0") && /^\d+:\d+:\d+$/.test(String(c).trim()));
+                            const resolvedCoords = isValidCoord(p.coords)
+                                ? String(p.coords).trim()
+                                : (isValidCoord(existing?.coords) ? String(existing!.coords).trim() : "0:0:0");
+
+                            // Building Levels: NEVER DOWNGRADE (take highest known verified level across existing, empire, supplies, and p)
+                            const resolvedMetalMine = Math.max(existing?.metalMine || 0, empirePlanet?.metalMine || 0, supplies?.metalMine || 0, p?.metalMine || 0, (p as any)?.mines?.metal || 0);
+                            const resolvedCrystalMine = Math.max(existing?.crystalMine || 0, empirePlanet?.crystalMine || 0, supplies?.crystalMine || 0, p?.crystalMine || 0, (p as any)?.mines?.crystal || 0);
+                            const resolvedDeutMine = Math.max(existing?.deuteriumMine || 0, empirePlanet?.deuteriumMine || 0, supplies?.deuteriumMine || 0, p?.deuteriumMine || 0, (p as any)?.mines?.deuterium || 0);
+                            const resolvedSolarPlant = Math.max(existing?.solarPlant || 0, empirePlanet?.solarPlant || 0, supplies?.solarPlant || 0, p?.solarPlant || 0);
+                            const resolvedFusionReactor = Math.max(existing?.fusionReactor || 0, empirePlanet?.fusionReactor || 0, supplies?.fusionReactor || 0, p?.fusionReactor || 0);
+                            const resolvedSolarSatellites = Math.max(existing?.solarSatellites || 0, empirePlanet?.solarSatellites || 0, supplies?.solarSatellites || 0, p?.solarSatellites || 0);
+
+                            const resolvedMetalStorage = Math.max(existing?.metalStorage || 0, empirePlanet?.metalStorage || 0, supplies?.metalStorage || 0, p?.metalStorage || 0, (p as any)?.storage?.metal || 0);
+                            const resolvedCrystalStorage = Math.max(existing?.crystalStorage || 0, empirePlanet?.crystalStorage || 0, supplies?.crystalStorage || 0, p?.crystalStorage || 0, (p as any)?.storage?.crystal || 0);
+                            const resolvedDeuteriumStorage = Math.max(existing?.deuteriumStorage || 0, empirePlanet?.deuteriumStorage || 0, supplies?.deuteriumStorage || 0, p?.deuteriumStorage || 0, (p as any)?.storage?.deuterium || 0);
+
+                            const resolvedRobotics = Math.max(existing?.roboticsFactory || 0, empirePlanet?.roboticsFactory || 0, p?.roboticsFactory || 0, (safeFacilities?.find((f: any) => f.id === 14)?.level) || 0);
+                            const resolvedShipyard = Math.max(existing?.shipyard || 0, empirePlanet?.shipyard || 0, p?.shipyard || 0, (safeFacilities?.find((f: any) => f.id === 21)?.level) || 0);
+                            const resolvedLab = Math.max(existing?.researchLab || 0, empirePlanet?.researchLab || 0, p?.researchLab || 0, (safeFacilities?.find((f: any) => f.id === 31)?.level) || 0);
+                            const resolvedAllianceDepot = Math.max(existing?.allianceDepot || 0, empirePlanet?.allianceDepot || 0, p?.allianceDepot || 0, (safeFacilities?.find((f: any) => f.id === 34)?.level) || 0);
+                            const resolvedMissileSilo = Math.max(existing?.missileSilo || 0, empirePlanet?.missileSilo || 0, p?.missileSilo || 0, (safeFacilities?.find((f: any) => f.id === 44)?.level) || 0);
+                            const resolvedNanite = Math.max(existing?.naniteFactory || 0, empirePlanet?.naniteFactory || 0, p?.naniteFactory || 0, (safeFacilities?.find((f: any) => f.id === 15)?.level) || 0);
+                            const resolvedTerraformer = Math.max(existing?.terraformer || 0, empirePlanet?.terraformer || 0, p?.terraformer || 0, (safeFacilities?.find((f: any) => f.id === 33)?.level) || 0);
+                            const resolvedSpaceDock = Math.max(existing?.spaceDock || 0, empirePlanet?.spaceDock || 0, p?.spaceDock || 0, (safeFacilities?.find((f: any) => f.id === 36)?.level) || 0);
+                            const resolvedLunarBase = Math.max(existing?.lunarBase || 0, empirePlanet?.lunarBase || 0, p?.lunarBase || 0, (safeFacilities?.find((f: any) => f.id === 41)?.level) || 0);
+                            const resolvedSensorPhalanx = Math.max(existing?.sensorPhalanx || 0, empirePlanet?.sensorPhalanx || 0, p?.sensorPhalanx || 0, (safeFacilities?.find((f: any) => f.id === 42)?.level) || 0);
+                            const resolvedJumpGate = Math.max(existing?.jumpGate || 0, empirePlanet?.jumpGate || 0, p?.jumpGate || 0, (safeFacilities?.find((f: any) => f.id === 43)?.level) || 0);
+                            const resolvedIaScanner = Math.max(existing?.iaScanner || 0, empirePlanet?.iaScanner || 0, p?.iaScanner || 0, (safeFacilities?.find((f: any) => f.id === 45)?.level) || 0);
+
                             const updateData: any = cleanObject({
                                 ...p,
                                 ...empirePlanet,
-                                playerId: account.playerId,
+                                id: String(p.id),
+                                coords: resolvedCoords,
+                                playerId: String(account.playerId),
                                 name: resolvedName,
                                 activeItems: resolvedActiveItems,
                                 resources: empirePlanet?.resources || existing?.resources,
@@ -1059,26 +1076,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     ...(overview?.planetData || {}),
                                     ...supplies,
                                     name: resolvedName,
+                                    coords: resolvedCoords,
                                     activeItems: resolvedActiveItems,
-                                    ...(safeFacilities ? {
-                                        facilities: safeFacilities,
-                                        // Also map array back to individual fields for compatibility
-                                        roboticsFactory: safeFacilities.find((f: any) => f.id === 14)?.level,
-                                        shipyard: safeFacilities.find((f: any) => f.id === 21)?.level,
-                                        researchLab: safeFacilities.find((f: any) => f.id === 31)?.level,
-                                        allianceDepot: safeFacilities.find((f: any) => f.id === 34)?.level,
-                                        missileSilo: safeFacilities.find((f: any) => f.id === 44)?.level,
-                                        naniteFactory: safeFacilities.find((f: any) => f.id === 15)?.level,
-                                        terraformer: safeFacilities.find((f: any) => f.id === 33)?.level,
-                                        spaceDock: safeFacilities.find((f: any) => f.id === 36)?.level,
-                                        lunarBase: safeFacilities.find((f: any) => f.id === 41)?.level,
-                                        sensorPhalanx: safeFacilities.find((f: any) => f.id === 42)?.level,
-                                        jumpGate: safeFacilities.find((f: any) => f.id === 43)?.level,
-                                        iaScanner: safeFacilities.find((f: any) => f.id === 45)?.level ?? empirePlanet?.iaScanner ?? existing?.iaScanner
-                                    } : {
-                                        facilities: empirePlanet?.facilities || existing?.facilities,
-                                        iaScanner: empirePlanet?.iaScanner ?? existing?.iaScanner
-                                    }),
+                                    facilities: safeFacilities || empirePlanet?.facilities || existing?.facilities,
+                                    iaScanner: resolvedIaScanner || empirePlanet?.iaScanner || existing?.iaScanner,
                                     controlCenterBuildings: safeControlCenterBuildings
                                         ? mergeControlCenterBuildings(empirePlanet?.controlCenterBuildings || existing?.controlCenterBuildings || [], safeControlCenterBuildings)
                                         : (empirePlanet?.controlCenterBuildings ?? existing?.controlCenterBuildings),
@@ -1099,30 +1100,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                             crystal: production.crystal,
                                             deuterium: production.deuterium,
                                             lastUpdated: production.lastUpdated
-                                        },
-                                        metalCapacity: production.metalCapacity,
-                                        crystalCapacity: production.crystalCapacity,
-                                        deuteriumCapacity: production.deuteriumCapacity
+                                        }
                                     } : {})
                                 } : {
                                     // Even if not the active planet, if we have empire data for it, merge it
                                     name: resolvedName,
+                                    coords: resolvedCoords,
                                     activeItems: resolvedActiveItems,
                                     lifeformId: resolvedLifeformId,
                                     crawlers: empirePlanet?.crawlers !== undefined ? empirePlanet.crawlers : (empirePlanet?.ships?.[217] ?? (empirePlanet?.ships as any)?.[`217`] ?? existing?.ships?.[217] ?? (existing?.ships as any)?.[`217`] ?? existing?.crawlers ?? 0),
                                     ships: (empirePlanet?.ships && typeof empirePlanet.ships === 'object' && Object.keys(empirePlanet.ships).length > 0) ? empirePlanet.ships : existing?.ships,
                                     defenses: (empirePlanet?.defenses && typeof empirePlanet.defenses === 'object' && Object.keys(empirePlanet.defenses).length > 0) ? empirePlanet.defenses : existing?.defenses,
                                     facilities: empirePlanet?.facilities || existing?.facilities,
-                                    iaScanner: empirePlanet?.iaScanner ?? existing?.iaScanner,
+                                    iaScanner: resolvedIaScanner || empirePlanet?.iaScanner || existing?.iaScanner,
                                     controlCenterBuildings: empirePlanet?.controlCenterBuildings ?? existing?.controlCenterBuildings,
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], empirePlanet?.lifeformSetup || [], true),
-                                })
+                                }),
+                                // Re-apply resolved buildings so supplies spread never downgrades verified levels
+                                ...(resolvedMetalMine > 0 ? { metalMine: resolvedMetalMine } : {}),
+                                ...(resolvedCrystalMine > 0 ? { crystalMine: resolvedCrystalMine } : {}),
+                                ...(resolvedDeutMine > 0 ? { deuteriumMine: resolvedDeutMine } : {}),
+                                ...(resolvedSolarPlant > 0 ? { solarPlant: resolvedSolarPlant } : {}),
+                                ...(resolvedFusionReactor > 0 ? { fusionReactor: resolvedFusionReactor } : {}),
+                                ...(resolvedSolarSatellites > 0 ? { solarSatellites: resolvedSolarSatellites } : {}),
+                                ...(resolvedMetalStorage > 0 ? { metalStorage: resolvedMetalStorage, metalCapacity: calcCap(resolvedMetalStorage) } : {}),
+                                ...(resolvedCrystalStorage > 0 ? { crystalStorage: resolvedCrystalStorage, crystalCapacity: calcCap(resolvedCrystalStorage) } : {}),
+                                ...(resolvedDeuteriumStorage > 0 ? { deuteriumStorage: resolvedDeuteriumStorage, deuteriumCapacity: calcCap(resolvedDeuteriumStorage) } : {}),
+                                ...(resolvedRobotics > 0 ? { roboticsFactory: resolvedRobotics } : {}),
+                                ...(resolvedShipyard > 0 ? { shipyard: resolvedShipyard } : {}),
+                                ...(resolvedLab > 0 ? { researchLab: resolvedLab } : {}),
+                                ...(resolvedAllianceDepot > 0 ? { allianceDepot: resolvedAllianceDepot } : {}),
+                                ...(resolvedMissileSilo > 0 ? { missileSilo: resolvedMissileSilo } : {}),
+                                ...(resolvedNanite > 0 ? { naniteFactory: resolvedNanite } : {}),
+                                ...(resolvedTerraformer > 0 ? { terraformer: resolvedTerraformer } : {}),
+                                ...(resolvedSpaceDock > 0 ? { spaceDock: resolvedSpaceDock } : {}),
+                                ...(resolvedLunarBase > 0 ? { lunarBase: resolvedLunarBase } : {}),
+                                ...(resolvedSensorPhalanx > 0 ? { sensorPhalanx: resolvedSensorPhalanx } : {}),
+                                ...(resolvedJumpGate > 0 ? { jumpGate: resolvedJumpGate } : {}),
+                                ...(resolvedIaScanner > 0 ? { iaScanner: resolvedIaScanner } : {})
                             });
 
-                            if (existing) {
-                                // Dirty checking to prevent duplicate planet writes
-                                let isDirty = false;
+                            if (existing && existing.id !== String(p.id)) {
+                                await db.planets.delete(existing.id);
+                            }
+
+                            // Dirty checking to prevent duplicate planet writes
+                            let isDirty = !existing || existing.id !== String(p.id) || existing.coords !== resolvedCoords;
+                            if (!isDirty) {
                                 for (const key of Object.keys(updateData)) {
                                     const val1 = updateData[key];
                                     const val2 = (existing as any)[key];
@@ -1136,24 +1161,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                         break;
                                     }
                                 }
-                                if (isDirty) {
-                                    await db.planets.update(p.id, updateData);
-                                }
-                            } else {
-                                await db.planets.put({
-                                    ...updateData,
-                                    sandboxSetup: [], // Initialize new planets with empty sandbox
-                                    lifeformSetup: []
-                                });
+                            }
+
+                            const cleanPlanetRecord = cleanObject({
+                                ...(existing || {}),
+                                ...updateData,
+                                id: String(p.id),
+                                coords: resolvedCoords,
+                                playerId: String(account.playerId),
+                                lastUpdated: Date.now(),
+                                sandboxSetup: existing?.sandboxSetup || [],
+                                lifeformSetup: updateData.lifeformSetup || existing?.lifeformSetup || []
+                            });
+
+                            if (isDirty) {
+                                await db.planets.put(cleanPlanetRecord);
                             }
 
                             console.log(
-                                `%c[OGame Nexus Sync] Synced Planet "${resolvedName}" (${p.coords || existing?.coords}):`,
+                                `%c[OGame Nexus Sync] Synced Planet "${resolvedName}" (${resolvedCoords}):`,
                                 'color: #00f2ff; font-weight: bold; font-size: 11px;',
                                 {
                                     planetId: p.id,
                                     name: resolvedName,
-                                    coords: p.coords || existing?.coords,
+                                    coords: resolvedCoords,
                                     lifeformId: resolvedLifeformId,
                                     lifeformSetup: updateData.lifeformSetup,
                                     lifeformBuildings: updateData.lifeformBuildings,
@@ -1165,7 +1196,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         }
 
                         // Fetch the fully merged and updated list of planets to compute accurate global production
-                        const updatedPlanets = await db.planets.where('playerId').equals(account.playerId).toArray();
+                        const updatedPlanets = await db.planets.where('playerId').anyOf(pidVariants).toArray();
                         const updatedAccount = await db.accounts.get(account.playerId);
                         if (updatedAccount) {
                             // Expired items check: filter out any activeItems that have already expired
@@ -1223,14 +1254,60 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             }
                         }
 
-                        // Handle destroyed planets - ONLY if we actually have a valid list to compare against
-                        // Crucially, ONLY do this if we have the official sidebar list (isFullPlanetList)
-                        if (message.data.isFullPlanetList) {
-                            const visibleIds = planets.map((p: any) => p.id);
-                            const destroyedIds = existingPlanets.filter(p => !visibleIds.includes(p.id)).map(p => p.id);
-                            if (destroyedIds.length > 0) await db.planets.bulkDelete(destroyedIds);
+                        // Handle destroyed planets - ONLY if we actually have a valid, authoritative list to compare against
+                        // Crucially, ONLY do this if we have isFullPlanetList AND entity count hasn't dropped suspiciously (>50%)
+                        if (message.data.isFullPlanetList && planets && planets.length > 0) {
+                            const isDropSuspicious = existingPlanets.length > 2 && planets.length < Math.floor(existingPlanets.length * 0.5);
+                            if (!isDropSuspicious) {
+                                const visibleIds = planets.map((p: any) => String(p.id));
+                                const destroyedIds = existingPlanets.filter(p => !visibleIds.includes(String(p.id))).map(p => p.id);
+                                if (destroyedIds.length > 0) {
+                                    console.log(`[OGame Nexus Sync] Removing ${destroyedIds.length} abandoned/destroyed colonies:`, destroyedIds);
+                                    await db.planets.bulkDelete(destroyedIds);
+                                }
+                            } else {
+                                console.warn(`[OGame Nexus Sync] Skipping colony deletion: incoming entity count dropped >50% (${planets.length} vs ${existingPlanets.length}). Protecting existing colonies.`);
+                            }
+                        }
+
+                        // Ensure strict deduplication by ID in IndexedDB so stale legacy keys cannot shadow updated records
+                        try {
+                            const allCurrentPlanets = await db.planets.where('playerId').anyOf(pidVariants).toArray();
+                            const idMap = new Map<string, any>();
+                            const duplicatesToDelete: any[] = [];
+                            for (const pl of allCurrentPlanets) {
+                                const k = String(pl.id);
+                                if (!idMap.has(k)) {
+                                    idMap.set(k, pl);
+                                } else {
+                                    const prev = idMap.get(k);
+                                    const toKeep = (pl.lastUpdated || 0) >= (prev.lastUpdated || 0) ? pl : prev;
+                                    const toRem = toKeep === pl ? prev : pl;
+                                    duplicatesToDelete.push(toRem.id);
+                                    idMap.set(k, toKeep);
+                                }
+                            }
+                            if (duplicatesToDelete.length > 0) {
+                                console.log(`[OGame Nexus Sync] Purging ${duplicatesToDelete.length} duplicate/legacy planet records:`, duplicatesToDelete);
+                                await db.planets.bulkDelete(duplicatesToDelete);
+                            }
+                        } catch (dedupErr) {
+                            console.debug('OGame Nexus: Note during planet deduplication:', dedupErr);
                         }
                     });
+
+                    // Notify all open dashboard tabs so views (Empire, ScrapOptimizer, etc.) refresh instantly
+                    try {
+                        const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL('dashboard.html*') });
+                        for (const tab of tabs) {
+                            if (tab.id) {
+                                chrome.tabs.sendMessage(tab.id, {
+                                    type: 'EMPIRE_DATA_UPDATED',
+                                    playerId: String(account.playerId)
+                                }).catch(() => {});
+                            }
+                        }
+                    } catch (e) {}
 
                     // Auto-sync empire to Overwatch Alliance Hub (non-blocking)
                     autoSyncEmpireToOverwatch(account.playerId).catch(e => {
@@ -1679,7 +1756,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "FETCH_COMBAT_REPORT") {
         const { apiKey } = message;
-        fetch(`https://ogapi.faw-kes.de/v1/report/${apiKey}/1`)
+        fetchExternal(`https://ogapi.faw-kes.de/v1/report/${apiKey}/1`)
             .then(response => response.json())
             .then(data => sendResponse({ success: true, data }))
             .catch(error => sendResponse({ success: false, error: error.message }));
@@ -1787,6 +1864,87 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ success: true, playerClass, t18BonusPct });
             } catch (err) {
                 console.error("OGame Nexus: Error calculating player class intel in background", err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    if (message.type === "GET_EMPIRE_ANOMALY_BONUSES") {
+        (async () => {
+            try {
+                let playerId = String(message.playerId || '').trim();
+                let account = null;
+                if (playerId) {
+                    account = (await db.accounts.get(playerId)) || (await db.accounts.get(Number(playerId) as any));
+                }
+                if (!account) {
+                    account = (await db.accounts.orderBy('lastSeen').reverse().first()) || (await db.accounts.toCollection().last());
+                }
+                if (!account) {
+                    const allAccs = await db.accounts.toArray();
+                    account = allAccs[0] || null;
+                }
+
+                const targetPlayerId = String(account?.playerId || playerId || '').trim();
+                let planets: any[] = [];
+                if (targetPlayerId) {
+                    planets = await db.planets.where('playerId').equals(targetPlayerId).toArray();
+                    if (planets.length === 0 && !isNaN(Number(targetPlayerId))) {
+                        planets = await db.planets.where('playerId').equals(Number(targetPlayerId) as any).toArray();
+                    }
+                }
+                if (planets.length === 0) {
+                    const allPlanets = await db.planets.toArray();
+                    planets = targetPlayerId ? allPlanets.filter(p => String(p.playerId) === targetPlayerId) : allPlanets;
+                    if (planets.length === 0) {
+                        planets = allPlanets;
+                    }
+                }
+                const userPlanets = planets.filter(p => p.type !== 'moon');
+
+                let metalLvl = 0;
+                let crystalLvl = 0;
+                let deutLvl = 0;
+                let lithiumLvl = 0;
+                let shipsLvl = 0;
+                let xpArtefactsLvl = 0;
+                let conversionLvl = 0;
+
+                for (const p of userPlanets) {
+                    metalLvl += getPlanetFacilityLevel(p, 4003);
+                    crystalLvl += getPlanetFacilityLevel(p, 4004);
+                    deutLvl += getPlanetFacilityLevel(p, 4006);
+                    lithiumLvl += getPlanetFacilityLevel(p, 4002);
+                    shipsLvl += getPlanetFacilityLevel(p, 4001);
+                    xpArtefactsLvl += getPlanetFacilityLevel(p, 4005);
+                    conversionLvl += getPlanetFacilityLevel(p, 4007);
+                }
+
+                const bonuses = {
+                    coloniesCount: userPlanets.length,
+                    metalLvl,
+                    metalBonusPct: Math.round(metalLvl * 0.2 * 10) / 10,
+                    crystalLvl,
+                    crystalBonusPct: Math.round(crystalLvl * 0.2 * 10) / 10,
+                    deutLvl,
+                    deutBonusPct: Math.round(deutLvl * 0.2 * 10) / 10,
+                    lithiumLvl,
+                    lithiumBonusPct: Math.round(lithiumLvl * 0.2 * 10) / 10,
+                    shipsLvl,
+                    shipsBonusPct: Math.round(shipsLvl * 0.2 * 10) / 10,
+                    artefactsLvl: xpArtefactsLvl,
+                    artefactsBonusPct: Math.round(xpArtefactsLvl * 0.2 * 10) / 10,
+                    experienceLvl: xpArtefactsLvl,
+                    experienceBonusPct: Math.round(xpArtefactsLvl * 0.2 * 10) / 10,
+                    conversionLvl,
+                    conversionBonusPct: Math.round(conversionLvl * 0.05 * 100) / 100,
+                    updatedAt: Date.now(),
+                };
+
+                sendResponse({ success: true, bonuses });
+            } catch (err) {
+                console.error("OGame Nexus: Error getting empire anomaly bonuses in background", err);
                 sendResponse({ success: false, error: String(err) });
             }
         })();
@@ -2827,13 +2985,31 @@ function calculateStorageCapacity(level: number, hasTraderClass?: boolean): numb
                         const netProfitMsu = grossTotal - fleetLossesMsu;
                         const msuPerLithium = totalClaimedLithium > 0 ? grossTotal / totalClaimedLithium : 0;
 
+                        const isCandidateGeneric = !mission.name ||
+                            mission.name.toLowerCase() === 'anomaly mission' ||
+                            mission.name.toLowerCase() === 'unknown mission' ||
+                            mission.name.toLowerCase() === 'collected anomaly mission';
+                        const isExistingGeneric = !existing.name ||
+                            existing.name.toLowerCase() === 'anomaly mission' ||
+                            existing.name.toLowerCase() === 'unknown mission' ||
+                            existing.name.toLowerCase() === 'collected anomaly mission';
+
+                        let resolvedName = existing.name;
+                        if (!isCandidateGeneric) {
+                            resolvedName = mission.name;
+                        } else if (isExistingGeneric && !isCandidateGeneric) {
+                            resolvedName = mission.name;
+                        } else if (isExistingGeneric) {
+                            resolvedName = existing.name || mission.name || 'Anomaly Mission';
+                        }
+
                         await db.anomalyMissions.put({
                             ...existing,
                             ...mission,
                             id: missionIdStr,
                             playerId: (mission.playerId && mission.playerId !== 'unknown') ? mission.playerId : (existing.playerId || ''),
                             universe: mission.universe || existing.universe || '',
-                            name: (mission.name && mission.name !== 'Unknown Mission') ? mission.name : existing.name,
+                            name: resolvedName,
                             category: (mission.category && mission.category !== 'other') ? mission.category : existing.category,
                             environment: mission.environment || existing.environment,
                             combatReportIds: mergedCombatIds,

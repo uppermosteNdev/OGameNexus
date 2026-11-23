@@ -922,6 +922,7 @@ export class OGNexusDB extends Dexie {
             this.migrateSpiedPlanets();
             this.cleanPoisonedProductionSettings();
             this.migrateScannedAnomaliesPureStatus();
+            this.normalizePlanets();
         });
     }
 
@@ -1105,6 +1106,84 @@ export class OGNexusDB extends Dexie {
             }
         } catch (error) {
             console.error('OGame Nexus: Failed to clean poisoned production settings', error);
+        }
+    }
+
+    private async normalizePlanets() {
+        try {
+            const allPlanets = await this.planets.toArray();
+            if (!allPlanets || allPlanets.length === 0) return;
+
+            // Group all planets by string ID
+            const groups = new Map<string, any[]>();
+            for (const p of allPlanets) {
+                const key = String(p.id);
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key)!.push(p);
+            }
+
+            const toDelete: any[] = [];
+            const toPut: any[] = [];
+
+            for (const [key, records] of groups.entries()) {
+                const hasNonStringKey = records.some(r => typeof r.id !== 'string');
+                const hasDuplicates = records.length > 1;
+
+                if (hasNonStringKey || hasDuplicates) {
+                    records.forEach(r => toDelete.push(r.id));
+
+                    // Merge all records, taking the highest building levels and latest info
+                    let merged = { ...records[0] };
+                    for (let i = 1; i < records.length; i++) {
+                        const r = records[i];
+                        const rUpdated = r.lastUpdated || 0;
+                        const mUpdated = merged.lastUpdated || 0;
+                        const baseRecord = rUpdated >= mUpdated ? r : merged;
+                        const olderRecord = rUpdated >= mUpdated ? merged : r;
+
+                        merged = {
+                            ...olderRecord,
+                            ...baseRecord,
+                            metalMine: Math.max(merged.metalMine || 0, r.metalMine || 0),
+                            crystalMine: Math.max(merged.crystalMine || 0, r.crystalMine || 0),
+                            deuteriumMine: Math.max(merged.deuteriumMine || 0, r.deuteriumMine || 0),
+                            solarPlant: Math.max(merged.solarPlant || 0, r.solarPlant || 0),
+                            fusionReactor: Math.max(merged.fusionReactor || 0, r.fusionReactor || 0),
+                            solarSatellites: Math.max(merged.solarSatellites || 0, r.solarSatellites || 0),
+                            metalStorage: Math.max(merged.metalStorage || 0, r.metalStorage || 0),
+                            crystalStorage: Math.max(merged.crystalStorage || 0, r.crystalStorage || 0),
+                            deuteriumStorage: Math.max(merged.deuteriumStorage || 0, r.deuteriumStorage || 0),
+                            roboticsFactory: Math.max(merged.roboticsFactory || 0, r.roboticsFactory || 0),
+                            shipyard: Math.max(merged.shipyard || 0, r.shipyard || 0),
+                            researchLab: Math.max(merged.researchLab || 0, r.researchLab || 0),
+                            allianceDepot: Math.max(merged.allianceDepot || 0, r.allianceDepot || 0),
+                            missileSilo: Math.max(merged.missileSilo || 0, r.missileSilo || 0),
+                            naniteFactory: Math.max(merged.naniteFactory || 0, r.naniteFactory || 0),
+                            terraformer: Math.max(merged.terraformer || 0, r.terraformer || 0),
+                            spaceDock: Math.max(merged.spaceDock || 0, r.spaceDock || 0),
+                            lunarBase: Math.max(merged.lunarBase || 0, r.lunarBase || 0),
+                            sensorPhalanx: Math.max(merged.sensorPhalanx || 0, r.sensorPhalanx || 0),
+                            jumpGate: Math.max(merged.jumpGate || 0, r.jumpGate || 0),
+                            iaScanner: Math.max(merged.iaScanner || 0, r.iaScanner || 0),
+                        };
+                    }
+
+                    merged.id = key;
+                    if (merged.playerId) merged.playerId = String(merged.playerId);
+                    toPut.push(merged);
+                }
+            }
+
+            if (toDelete.length > 0) {
+                console.log(`OGame Nexus: Purging ${toDelete.length} legacy/duplicate planet keys from IndexedDB:`, toDelete);
+                await this.planets.bulkDelete(toDelete);
+            }
+            if (toPut.length > 0) {
+                console.log(`OGame Nexus: Saving ${toPut.length} normalized planets:`, toPut.map(p => ({ id: p.id, name: p.name, coords: p.coords, deutStorage: p.deuteriumStorage })));
+                await this.planets.bulkPut(toPut);
+            }
+        } catch (error) {
+            console.error('OGame Nexus: Failed to normalize planets in IndexedDB', error);
         }
     }
 }

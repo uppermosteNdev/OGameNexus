@@ -1,3 +1,5 @@
+import { fetchExternal } from './networkGuard';
+
 export interface GoogleAccount {
     email: string;
     name: string;
@@ -89,7 +91,7 @@ export const linkGoogleAccount = async (): Promise<GoogleAccount | null> => {
             return null;
         }
 
-        const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        const response = await fetchExternal('https://www.googleapis.com/oauth2/v2/userinfo', {
             headers: {
                 Authorization: `Bearer ${token}`
             }
@@ -131,7 +133,7 @@ export const unlinkGoogleAccount = async () => {
             chrome.identity.getAuthToken({ interactive: false }, (token) => {
                 if (token) {
                     const url = `https://accounts.google.com/o/oauth2/revoke?token=${token}`;
-                    fetch(url).catch(err => console.error("Revocation request error:", err));
+                    fetchExternal(url).catch(err => console.error("Revocation request error:", err));
                     chrome.identity.removeCachedAuthToken({ token }, () => {
                         resolve();
                     });
@@ -172,7 +174,7 @@ const doUpload = async (token: string, fileName: string, content: string): Promi
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
         form.append('file', new Blob([content], { type: 'application/json' }));
 
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        const response = await fetchExternal('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${token}`

@@ -23,7 +23,7 @@ export class NexuSimEngine {
         // General class gives +2 combat tech levels (+20%)
         const generalBonus = party.playerClass === 2 ? 2 : 0;
         // Warrior alliance class gives +1 combat tech level (+10%)
-        const warriorBonus = party.allianceClass === 3 ? 1 : 0;
+        const warriorBonus = party.allianceClass === 1 ? 1 : 0;
 
         const effectiveWeapons = party.techs.weapons + generalBonus + warriorBonus;
         const effectiveShielding = party.techs.shielding + generalBonus + warriorBonus;
@@ -50,8 +50,12 @@ export class NexuSimEngine {
         const armour = Math.max(1, Math.floor(base.armour + armourBonus));
         const hull = armour * 0.10;
 
-        // Hyperspace Tech (+5% cargo per level)
-        const cargoBonus = 0.05 * base.cargo * party.techs.hyperspaceTech;
+        // Hyperspace Tech (+5% cargo per level) + Lifeform Cargo
+        let lfCargoFactor = 0;
+        if (serverSettings.lifeforms && party.lifeformBonuses?.perShipCargo) {
+            lfCargoFactor = (party.lifeformBonuses.perShipCargo[unitId] || 0) * 0.01;
+        }
+        const cargoBonus = base.cargo * (0.05 * (party.techs?.hyperspaceTech || 0) + lfCargoFactor);
         const cargo = Math.floor(base.cargo + cargoBonus);
 
         return {
@@ -60,7 +64,7 @@ export class NexuSimEngine {
             armour,
             hull,
             cargo,
-            speed: base.speed,
+            speed: NexuSimEngine.calculateShipSpeed(unitId, party, serverSettings),
             fuel: base.fuel
         };
     }
@@ -785,7 +789,13 @@ export class NexuSimEngine {
             }
         }
 
-        let speed = baseSpeed * (1 + driveBonus);
+        // Lifeforms speed bonus
+        let lfSpeedBonus = 0;
+        if (serverSettings.lifeforms && party.lifeformBonuses?.perShipSpeed) {
+            lfSpeedBonus = (party.lifeformBonuses.perShipSpeed[unitId] || 0) / 100;
+        }
+
+        let speed = baseSpeed * (1 + driveBonus + lfSpeedBonus);
 
         // General class speed bonuses
         if (party.playerClass === 2) {
@@ -889,7 +899,11 @@ export class NexuSimEngine {
             if (count > 0 && id < 400) {
                 const base = UNITS[id];
                 if (!base) continue;
-                let c = base.cargo * (1 + 0.05 * hypTech);
+                let lfCargoFactor = 0;
+                if (serverSettings.lifeforms && party.lifeformBonuses?.perShipCargo) {
+                    lfCargoFactor = (party.lifeformBonuses.perShipCargo[id] || 0) / 100;
+                }
+                let c = base.cargo * (1 + 0.05 * hypTech + lfCargoFactor);
                 if (party.playerClass === 1 && (id === 202 || id === 203)) {
                     c *= (1 + (serverSettings.minerBonusIncreasedCargoCapacityForTradingShips ?? 25) / 100);
                 } else if (party.playerClass === 2 && id === 209) {

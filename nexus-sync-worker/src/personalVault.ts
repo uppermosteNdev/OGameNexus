@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { json } from 'itty-router';
-import { Env } from './index';
+import { Env, getPepper, getCandidatePeppers } from './index';
 import { getUniverseDb } from './dbRouter';
 import { cleanUniverseId } from './universeSeeder';
 import { gzipCompress, gzipDecompress, PlayerVaultManifest } from './migrationR2';
@@ -15,10 +15,11 @@ import { gzipCompress, gzipDecompress, PlayerVaultManifest } from './migrationR2
 export const VAULT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes (120 seconds)
 
 export function getSafePepper(pepper?: string): string {
-  if (pepper && pepper !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') {
-    return pepper;
+  const clean = typeof pepper === 'string' ? pepper.trim() : '';
+  if (clean && clean !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') {
+    return clean;
   }
-  return 'nexus_pepper_default';
+  throw new Error('SERVER_PEPPER is not configured in Cloudflare Worker secrets.');
 }
 
 export async function hashVaultKey(key: string, serverPepper?: string): Promise<string> {
@@ -78,14 +79,15 @@ async function authenticateVault(
   universeId: string,
   playerId: string,
   vaultKey: string,
-  serverPepper: string,
+  env: Env,
   deviceLabel?: string
 ): Promise<VaultCredentialsResult> {
   if (!vaultKey || typeof vaultKey !== 'string' || vaultKey.trim().length < 6) {
     return { valid: false, isNew: false, error: 'Vault key must be at least 6 characters' };
   }
 
-  const keyHash = await hashVaultKey(vaultKey, serverPepper);
+  const primaryPepper = getPepper(env);
+  const keyHash = await hashVaultKey(vaultKey, primaryPepper);
   const now = Date.now();
 
   const existing = await db
@@ -122,11 +124,7 @@ async function authenticateVault(
     return { valid: true, isNew: true, lastFullResyncAt: null, lastSentAt: null, lastFetchedAt: null };
   }
 
-  const candidatePeppers = Array.from(new Set([
-    'nexus_overwatch_secret_pepper_2026',
-    serverPepper,
-    'nexus_pepper_default',
-  ])).filter(p => p && p !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') as string[];
+  const candidatePeppers = getCandidatePeppers(env);
 
   let matchedHash: string | null = null;
   for (const p of candidatePeppers) {
@@ -270,7 +268,7 @@ export async function handleVaultSend(req: Request, env: Env): Promise<Response>
     const playerId = String(rawPlayerId).trim();
     const db = getUniverseDb(env, universeId);
 
-    const auth = await authenticateVault(db, universeId, playerId, vaultKey, env.SERVER_PEPPER, deviceLabel);
+    const auth = await authenticateVault(db, universeId, playerId, vaultKey, env, deviceLabel);
     if (!auth.valid) {
       if (auth.notFound) {
         return json({ error: auth.error || 'Player not found in active universe' }, { status: 404 });
@@ -513,7 +511,7 @@ export async function handleVaultFetch(req: Request, env: Env): Promise<Response
     const playerId = String(rawPlayerId).trim();
     const db = getUniverseDb(env, universeId);
 
-    const auth = await authenticateVault(db, universeId, playerId, vaultKey, env.SERVER_PEPPER);
+    const auth = await authenticateVault(db, universeId, playerId, vaultKey, env);
     if (!auth.valid) {
       if (auth.notFound) {
         return json({ error: auth.error || 'Player not found in active universe' }, { status: 404 });
@@ -660,11 +658,7 @@ export async function handleVaultSummary(req: Request, env: Env): Promise<Respon
       return json({ error: 'Vault authentication key required' }, { status: 401 });
     }
 
-    const candidatePeppers = Array.from(new Set([
-      'nexus_overwatch_secret_pepper_2026',
-      env.SERVER_PEPPER,
-      'nexus_pepper_default',
-    ])).filter(p => p && p !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') as string[];
+    const candidatePeppers = getCandidatePeppers(env);
 
     let keyMatched = false;
     for (const p of candidatePeppers) {

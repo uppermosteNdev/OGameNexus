@@ -74,6 +74,11 @@ export async function ensureTopFlopTables(db: D1Database): Promise<void> {
         custom_title TEXT DEFAULT 'Top / Flop of the day',
         category INTEGER NOT NULL DEFAULT 0,
         is_default INTEGER NOT NULL DEFAULT 0,
+        discord_webhook_url TEXT,
+        webhook_post_hour INTEGER DEFAULT 0,
+        last_webhook_sent_at INTEGER,
+        edit_token_hash TEXT,
+        last_manual_action_at INTEGER,
         last_generated_at INTEGER,
         updated_at INTEGER NOT NULL
       );
@@ -132,9 +137,19 @@ export async function ensureTopFlopTables(db: D1Database): Promise<void> {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_topflop_history_date ON alliance_topflop_history(universe_id, ogame_alliance_id, score_date);`),
   ]);
 
-  try {
-    await db.prepare('ALTER TABLE alliance_hourly_snapshots ADD COLUMN prev_scores_json TEXT;').run();
-  } catch {}
+  const migrations = [
+    'ALTER TABLE alliance_hourly_snapshots ADD COLUMN prev_scores_json TEXT;',
+    'ALTER TABLE alliance_topflop_configs ADD COLUMN discord_webhook_url TEXT;',
+    'ALTER TABLE alliance_topflop_configs ADD COLUMN webhook_post_hour INTEGER DEFAULT 0;',
+    'ALTER TABLE alliance_topflop_configs ADD COLUMN last_webhook_sent_at INTEGER;',
+    'ALTER TABLE alliance_topflop_configs ADD COLUMN edit_token_hash TEXT;',
+    'ALTER TABLE alliance_topflop_configs ADD COLUMN last_manual_action_at INTEGER;',
+  ];
+  for (const sql of migrations) {
+    try {
+      await db.prepare(sql).run();
+    } catch {}
+  }
 }
 
 // ----------------------------------------------------------------------------

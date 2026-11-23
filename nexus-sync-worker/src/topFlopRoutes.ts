@@ -3,8 +3,11 @@
 // ============================================================================
 
 import { json } from 'itty-router';
-import { Env } from './index';
+import { Env, getPepper, getCandidatePeppers } from './index';
 import { getUniverseDb } from './dbRouter';
+import { timingSafeEqual } from './crypto';
+import { isValidMasterAdminRequest } from './migrationR2';
+import { authenticateMember } from './galaxySync';
 import {
   ensureTopFlopTables,
   calculateAllianceTopFlop,
@@ -17,6 +20,246 @@ import {
   fetchGameforgeUniverseData,
   AllianceTopFlopData,
 } from './allianceTopFlop';
+
+// Strict Discord webhook validation regex (blocks SSRF / arbitrary proxy abuse)
+const DISCORD_WEBHOOK_REGEX = /^https:\/\/(canary\.|ptb\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/;
+const MANUAL_ACTION_COOLDOWN_MS = 15_000; // 15 seconds between manual generate/test calls
+
+export function isValidDiscordWebhookUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  return DISCORD_WEBHOOK_REGEX.test(url.trim());
+}
+
+export function maskDiscordWebhookUrl(url?: string | null): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const clean = url.trim();
+  const match = clean.match(/^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([A-Za-z0-9_-]+)$/);
+  if (!match) return null;
+  const [, webhookId, token] = match;
+  const tail = token.length > 4 ? token.slice(-4) : '••••';
+  return `https://discord.com/api/webhooks/${webhookId}/••••••••${tail}`;
+}
+
+function sanitizePresetForResponse(row: any): any {
+  if (!row || typeof row !== 'object') return row;
+  const { discord_webhook_url, edit_token_hash, ...safeRest } = row;
+  const hasWebhook = Boolean(discord_webhook_url && String(discord_webhook_url).trim().length > 0);
+  return {
+    ...safeRest,
+    // Never leak raw webhook secret or edit token hash over GET endpoints
+    discord_webhook_url: null,
+    hasWebhook,
+    maskedWebhookUrl: hasWebhook ? maskDiscordWebhookUrl(discord_webhook_url) : null,
+    hasEditToken: Boolean(edit_token_hash),
+  };
+}
+
+function generateEditToken(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `tfk_${hex}`;
+}
+
+async function hashTopFlopToken(token: string, pepper: string): Promise<string> {
+  const data = new TextEncoder().encode(`topflop_edit:${token.trim()}:${pepper}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function validateImageBytes(bytes: Uint8Array, declaredContentType?: string): { valid: boolean; mime: string; error?: string } {
+  const allowedMimes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  const cleanDeclared = (declaredContentType || 'image/png').trim().toLowerCase().split(';')[0];
+  if (declaredContentType && !allowedMimes.has(cleanDeclared)) {
+    return { valid: false, mime: '', error: 'Invalid content type. Only PNG, JPEG, and WebP images are permitted.' };
+  }
+  if (!bytes || bytes.length < 12) {
+    return { valid: false, mime: '', error: 'Image buffer is empty or corrupted.' };
+  }
+
+  // PNG magic: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
+    bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A
+  ) {
+    return { valid: true, mime: 'image/png' };
+  }
+  // JPEG magic: FF D8 FF
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+    return { valid: true, mime: 'image/jpeg' };
+  }
+  // WebP magic: RIFF....WEBP
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return { valid: true, mime: 'image/webp' };
+  }
+
+  return { valid: false, mime: '', error: 'Unsupported or invalid image binary. Only valid PNG, JPEG, or WebP files are accepted.' };
+}
+
+interface TopFlopAuthResult {
+  authorized: boolean;
+  status?: number;
+  error?: string;
+  method?: 'master_admin' | 'overwatch_member' | 'edit_token' | 'bootstrap' | 'legacy_rollout';
+  existingRow?: any;
+  newlyIssuedToken?: string;
+  newTokenHash?: string;
+}
+
+async function authorizeTopFlopMutation(
+  req: Request,
+  env: Env,
+  db: D1Database,
+  universeId: string,
+  allianceId: string,
+  playerId: string,
+  supportsEditToken: boolean
+): Promise<TopFlopAuthResult> {
+  const configId = `${universeId}_${allianceId}_${playerId}`;
+  const existingRow: any = await db.prepare(`
+    SELECT config_id, ogame_alliance_id, alliance_tag, player_id, player_name,
+           scheduled_utc_hour, theme, custom_logo_url, custom_title, category,
+           discord_webhook_url, webhook_post_hour, edit_token_hash, last_manual_action_at
+    FROM alliance_topflop_configs
+    WHERE config_id = ?
+    LIMIT 1
+  `).bind(configId).first();
+
+  // 1. Master Admin override
+  if (isValidMasterAdminRequest(req, env)) {
+    return { authorized: true, method: 'master_admin', existingRow };
+  }
+
+  // 2. Overwatch Alliance Member / Admin token check
+  const authHeader = req.headers.get('Authorization') || req.headers.get('X-Nexus-Token');
+  if (authHeader && (authHeader.startsWith('Bearer ') || authHeader.length > 10)) {
+    try {
+      const member: any = await authenticateMember(req, env);
+      if (member && !member.error) {
+        const memberUni = cleanUni(member.universe_id || '');
+        const matchesUni = memberUni === universeId;
+        const matchesAlly =
+          (member.ogame_alliance_id && String(member.ogame_alliance_id).trim() === String(allianceId).trim()) ||
+          (member.alliance_tag && String(member.alliance_tag).trim().toUpperCase() === String(allianceId).trim().toUpperCase());
+        const role = String(member.role || '').toLowerCase();
+        const isAllianceAdmin = role === 'admin' || role === 'founder' || role === 'officer';
+        const isOwnMemberConfig = role === 'member' && String(member.player_id).trim() === String(playerId).trim();
+
+        if (matchesUni && matchesAlly && (isAllianceAdmin || isOwnMemberConfig)) {
+          return { authorized: true, method: 'overwatch_member', existingRow };
+        }
+      }
+    } catch {
+      // Fall through to Edit Token check if Overwatch token wasn't valid for this alliance
+    }
+  }
+
+  // 3. Per-config X-TopFlop-Token check
+  const reqToken = (req.headers.get('X-TopFlop-Token') || req.headers.get('x-topflop-token') || '').trim();
+  const strictMode = String(env?.STRICT_TOPFLOP_AUTH || '').toLowerCase() === 'true';
+
+  if (existingRow?.edit_token_hash) {
+    if (reqToken) {
+      const peppers = getCandidatePeppers(env);
+      for (const pepper of peppers) {
+        const candidateHash = await hashTopFlopToken(reqToken, pepper);
+        if (timingSafeEqual(candidateHash, String(existingRow.edit_token_hash))) {
+          return { authorized: true, method: 'edit_token', existingRow };
+        }
+      }
+      return {
+        authorized: false,
+        status: 403,
+        error: 'Invalid Top/Flop Edit Key for this configuration. Paste the Edit Key from your original browser or sign in via Overwatch Alliance.',
+      };
+    }
+
+    if (strictMode) {
+      return {
+        authorized: false,
+        status: 403,
+        error: 'Top/Flop Edit Key or Overwatch Alliance authorization required to modify this preset.',
+      };
+    }
+
+    // Even in rollout mode, once a preset has been locked with an edit_token_hash, protect it!
+    return {
+      authorized: false,
+      status: 403,
+      error: 'This Top/Flop preset is protected by an Edit Key. Paste your Edit Key or connect Overwatch Alliance to edit it.',
+    };
+  }
+
+  // 4. First-time creation or legacy preset without an edit_token_hash yet
+  // If an old extension calls during rollout transition without supporting edit tokens, allow without minting
+  if (!strictMode && !supportsEditToken && !reqToken) {
+    return { authorized: true, method: 'legacy_rollout', existingRow };
+  }
+
+  // Verify alliance membership via official Gameforge public API before issuing a new edit_token
+  try {
+    const gfData = await fetchGameforgeUniverseData(universeId, 1, 0);
+    let targetAlliance = gfData.alliancesMap.get(String(allianceId).trim());
+    if (!targetAlliance) {
+      const upper = String(allianceId).trim().toUpperCase();
+      for (const a of gfData.alliancesMap.values()) {
+        if (a.tag.toUpperCase() === upper) {
+          targetAlliance = a;
+          break;
+        }
+      }
+    }
+
+    const pInfo = gfData.playersMap.get(String(playerId).trim());
+    const isVerifiedMember = Boolean(
+      targetAlliance &&
+      (targetAlliance.memberIds.includes(String(playerId).trim()) ||
+        (pInfo?.allianceId && String(pInfo.allianceId) === String(targetAlliance.id)))
+    );
+
+    if (!isVerifiedMember) {
+      return {
+        authorized: false,
+        status: 403,
+        error: `Player #${playerId} could not be verified as a member of alliance ${allianceId} in ${universeId}.`,
+      };
+    }
+  } catch (verifyErr: any) {
+    // If Gameforge API is temporarily unavailable (e.g. hourly lobby redirect), refuse to issue an unverified lock
+    if (strictMode) {
+      return {
+        authorized: false,
+        status: 503,
+        error: 'Unable to verify alliance membership with OGame API right now. Please retry in a minute.',
+      };
+    }
+    // During soft rollout, fall back gracefully without locking the row
+    return { authorized: true, method: 'legacy_rollout', existingRow };
+  }
+
+  const newlyIssuedToken = generateEditToken();
+  const newTokenHash = await hashTopFlopToken(newlyIssuedToken, getPepper(env));
+  return {
+    authorized: true,
+    method: 'bootstrap',
+    existingRow,
+    newlyIssuedToken,
+    newTokenHash,
+  };
+}
+
+function checkManualActionCooldown(existingRow: any): { ok: boolean; retryAfterSeconds?: number } {
+  const lastAt = Number(existingRow?.last_manual_action_at || 0);
+  if (!lastAt) return { ok: true };
+  const elapsed = Date.now() - lastAt;
+  if (elapsed < MANUAL_ACTION_COOLDOWN_MS) {
+    return { ok: false, retryAfterSeconds: Math.ceil((MANUAL_ACTION_COOLDOWN_MS - elapsed) / 1000) };
+  }
+  return { ok: true };
+}
 
 // Helper to sanitize universe ID
 function cleanUni(raw: string): string {
@@ -36,9 +279,12 @@ function extractBgUrl(theme?: string | null): string | null {
 }
 
 // ----------------------------------------------------------------------------
-// 0. STATUS & INSPECTION ENDPOINT (Inspect D1 & R2 State)
+// 0. STATUS & INSPECTION ENDPOINT (Admin-Only: Inspect D1 & R2 State)
 // ----------------------------------------------------------------------------
 export async function handleTopFlopStatus(req: any, env: Env): Promise<Response> {
+  if (!isValidMasterAdminRequest(req, env)) {
+    return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
+  }
   try {
     const db = env.CORE_DB || env.DB;
     await ensureTopFlopTables(db);
@@ -63,7 +309,7 @@ export async function handleTopFlopStatus(req: any, env: Env): Promise<Response>
       worker: 'nexus-sync-worker',
       d1: {
         presetsCount: presets?.length || 0,
-        presets: presets || [],
+        presets: (presets || []).map(sanitizePresetForResponse),
         snapshotsCount: snapshots?.length || 0,
         snapshots: snapshots || [],
       },
@@ -237,7 +483,7 @@ export async function handleGetTopFlopPresets(req: any, env: Env): Promise<Respo
       success: true,
       universeId,
       allianceId,
-      presets: presets || [],
+      presets: (presets || []).map(sanitizePresetForResponse),
       defaultAllianceLogo: liveData?.customLogoUrl || null,
       liveData,
       currentUtcHour: new Date().getUTCHours(),
@@ -255,10 +501,10 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
     const body = await req.json();
     const {
       universeId: rawUni,
-      allianceId,
+      allianceId: rawAllianceId,
       allianceTag,
       configName,
-      playerId,
+      playerId: rawPlayerId,
       playerName,
       scheduledUtcHour = 0,
       theme = 'tactical',
@@ -267,16 +513,46 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       category = 0,
       isDefault = 0,
       discordWebhookUrl = null,
+      clearWebhook = false,
       webhookPostHour = 0,
+      supportsEditToken = false,
     } = body;
 
     const universeId = cleanUni(rawUni);
+    const allianceId = String(rawAllianceId || '').trim();
+    const playerId = String(rawPlayerId || '').trim();
     if (!universeId || !allianceId || !playerId) {
       return json({ error: 'Missing universeId, allianceId, or playerId' }, { status: 400 });
     }
 
     const db = getUniverseDb(env, universeId);
     await ensureTopFlopTables(db);
+
+    const auth = await authorizeTopFlopMutation(
+      req,
+      env,
+      db,
+      universeId,
+      allianceId,
+      playerId,
+      Boolean(supportsEditToken)
+    );
+    if (!auth.authorized) {
+      return json({ error: auth.error || 'Unauthorized' }, { status: auth.status || 403 });
+    }
+
+    const rawWebhook = typeof discordWebhookUrl === 'string' ? discordWebhookUrl.trim() : '';
+    if (rawWebhook && !isValidDiscordWebhookUrl(rawWebhook)) {
+      return json(
+        { error: 'Invalid Discord webhook URL. Expected https://discord.com/api/webhooks/<id>/<token>.' },
+        { status: 400 }
+      );
+    }
+
+    // Preserve existing stored webhook unless explicitly cleared or replaced with a valid new URL
+    const resolvedWebhookUrl = clearWebhook
+      ? null
+      : (rawWebhook ? rawWebhook : (auth.existingRow?.discord_webhook_url ?? null));
 
     const configId = `${universeId}_${allianceId}_${playerId}`;
     const now = Date.now();
@@ -285,9 +561,10 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       INSERT INTO alliance_topflop_configs (
         config_id, universe_id, ogame_alliance_id, alliance_tag, config_name,
         player_id, player_name, scheduled_utc_hour, theme, custom_logo_url,
-        custom_title, category, is_default, discord_webhook_url, webhook_post_hour, updated_at
+        custom_title, category, is_default, discord_webhook_url, webhook_post_hour,
+        edit_token_hash, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(config_id) DO UPDATE SET
         alliance_tag = excluded.alliance_tag,
         config_name = excluded.config_name,
@@ -300,6 +577,7 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
         is_default = excluded.is_default,
         discord_webhook_url = excluded.discord_webhook_url,
         webhook_post_hour = excluded.webhook_post_hour,
+        edit_token_hash = COALESCE(alliance_topflop_configs.edit_token_hash, excluded.edit_token_hash),
         updated_at = excluded.updated_at
     `).bind(
       configId,
@@ -307,7 +585,7 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       allianceId,
       allianceTag || '',
       configName || `${playerName}'s Preset`,
-      String(playerId),
+      playerId,
       playerName || `Player #${playerId}`,
       parseInt(String(scheduledUtcHour), 10) || 0,
       theme,
@@ -315,8 +593,9 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       customTitle,
       parseInt(String(category), 10) || 0,
       isDefault ? 1 : 0,
-      discordWebhookUrl ? String(discordWebhookUrl).trim() : null,
+      resolvedWebhookUrl,
       parseInt(String(webhookPostHour), 10) || 0,
+      auth.newTokenHash || null,
       now
     ).run();
 
@@ -326,6 +605,9 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
       success: true,
       configId,
       publicUrl,
+      hasWebhook: Boolean(resolvedWebhookUrl),
+      maskedWebhookUrl: maskDiscordWebhookUrl(resolvedWebhookUrl),
+      ...(auth.newlyIssuedToken ? { editToken: auth.newlyIssuedToken } : {}),
     });
   } catch (err: any) {
     return json({ error: err?.message || 'Failed to save preset' }, { status: 500 });
@@ -338,8 +620,20 @@ export async function handleSaveTopFlopPreset(req: any, env: Env): Promise<Respo
 export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Response> {
   try {
     const body = await req.json();
-    const { universeId: rawUni, allianceId, playerId, theme = 'tactical', customTitle, customLogoUrl, category = 0 } = body;
+    const {
+      universeId: rawUni,
+      allianceId: rawAllianceId,
+      playerId: rawPlayerId,
+      theme = 'tactical',
+      customTitle,
+      customLogoUrl,
+      category = 0,
+      clearWebhook = false,
+      supportsEditToken = false,
+    } = body;
     const universeId = cleanUni(rawUni);
+    const allianceId = String(rawAllianceId || '').trim();
+    const playerId = String(rawPlayerId || '').trim();
 
     if (!universeId || !allianceId || !playerId) {
       return json({ error: 'Missing universeId, allianceId, or playerId' }, { status: 400 });
@@ -348,12 +642,42 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
     const db = getUniverseDb(env, universeId);
     await ensureTopFlopTables(db);
 
-    const configRow: any = await db.prepare(`
-      SELECT scheduled_utc_hour FROM alliance_topflop_configs
-      WHERE config_id = ?
-    `).bind(`${universeId}_${allianceId}_${playerId}`).first();
+    const auth = await authorizeTopFlopMutation(
+      req,
+      env,
+      db,
+      universeId,
+      allianceId,
+      playerId,
+      Boolean(supportsEditToken)
+    );
+    if (!auth.authorized) {
+      return json({ error: auth.error || 'Unauthorized' }, { status: auth.status || 403 });
+    }
 
-    const oldTargetHour = configRow?.scheduled_utc_hour ?? 0;
+    if (auth.method !== 'master_admin') {
+      const cooldown = checkManualActionCooldown(auth.existingRow);
+      if (!cooldown.ok) {
+        return json(
+          { error: `Please wait ${cooldown.retryAfterSeconds}s before generating again.`, retryAfterSeconds: cooldown.retryAfterSeconds },
+          { status: 429 }
+        );
+      }
+    }
+
+    const rawWebhook = typeof body.discordWebhookUrl === 'string' ? body.discordWebhookUrl.trim() : '';
+    if (rawWebhook && !isValidDiscordWebhookUrl(rawWebhook)) {
+      return json(
+        { error: 'Invalid Discord webhook URL. Expected https://discord.com/api/webhooks/<id>/<token>.' },
+        { status: 400 }
+      );
+    }
+
+    const resolvedWebhookUrl = clearWebhook
+      ? null
+      : (rawWebhook ? rawWebhook : (auth.existingRow?.discord_webhook_url ?? null));
+
+    const oldTargetHour = auth.existingRow?.scheduled_utc_hour ?? 0;
     const targetHour = body.scheduledUtcHour !== undefined
       ? parseInt(String(body.scheduledUtcHour), 10)
       : oldTargetHour;
@@ -392,13 +716,15 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
 
     // Save/Update config in D1 so D1 stays permanently in sync with current customization
     const configId = `${universeId}_${allianceId}_${playerId}`;
+    const now = Date.now();
     await db.prepare(`
       INSERT INTO alliance_topflop_configs (
         config_id, universe_id, ogame_alliance_id, alliance_tag, config_name,
         player_id, player_name, scheduled_utc_hour, theme, custom_logo_url,
-        custom_title, category, is_default, discord_webhook_url, webhook_post_hour, last_generated_at, updated_at
+        custom_title, category, is_default, discord_webhook_url, webhook_post_hour,
+        edit_token_hash, last_manual_action_at, last_generated_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(config_id) DO UPDATE SET
         theme = excluded.theme,
         custom_title = excluded.custom_title,
@@ -406,8 +732,10 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
         category = excluded.category,
         scheduled_utc_hour = excluded.scheduled_utc_hour,
         config_name = COALESCE(excluded.config_name, alliance_topflop_configs.config_name),
-        discord_webhook_url = COALESCE(excluded.discord_webhook_url, alliance_topflop_configs.discord_webhook_url),
+        discord_webhook_url = excluded.discord_webhook_url,
         webhook_post_hour = COALESCE(excluded.webhook_post_hour, alliance_topflop_configs.webhook_post_hour),
+        edit_token_hash = COALESCE(alliance_topflop_configs.edit_token_hash, excluded.edit_token_hash),
+        last_manual_action_at = excluded.last_manual_action_at,
         last_generated_at = excluded.last_generated_at,
         updated_at = excluded.updated_at
     `).bind(
@@ -416,7 +744,7 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
       allianceId,
       body.allianceTag || '',
       body.configName || 'Daily Standings',
-      String(playerId),
+      playerId,
       body.playerName || `Player #${playerId}`,
       targetHour,
       theme,
@@ -424,10 +752,12 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
       customTitle || 'Top / Flop of the day',
       category,
       1,
-      body.discordWebhookUrl ? String(body.discordWebhookUrl).trim() : null,
-      body.webhookPostHour !== undefined ? parseInt(String(body.webhookPostHour), 10) : 0,
-      Date.now(),
-      Date.now()
+      resolvedWebhookUrl,
+      body.webhookPostHour !== undefined ? parseInt(String(body.webhookPostHour), 10) : (auth.existingRow?.webhook_post_hour ?? 0),
+      auth.newTokenHash || null,
+      now,
+      now,
+      now
     ).run();
 
     const publicUrl = `https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/${universeId}/${allianceId}/${playerId}/topflop.png`;
@@ -436,7 +766,10 @@ export async function handleGenerateTopFlopNow(req: any, env: Env): Promise<Resp
       success: true,
       publicUrl,
       tfData,
-      generatedAt: Date.now(),
+      generatedAt: now,
+      hasWebhook: Boolean(resolvedWebhookUrl),
+      maskedWebhookUrl: maskDiscordWebhookUrl(resolvedWebhookUrl),
+      ...(auth.newlyIssuedToken ? { editToken: auth.newlyIssuedToken } : {}),
     });
   } catch (err: any) {
     return json({ error: err?.message || 'Failed to generate TopFlop now' }, { status: 500 });
@@ -456,9 +789,9 @@ export async function dispatchDiscordWebhook(
   imageUrl?: string
 ): Promise<{ success: boolean; status?: number; error?: string }> {
   try {
-    const cleanUrl = webhookUrl.trim();
-    if (!cleanUrl.startsWith('https://discord.com/api/webhooks/') && !cleanUrl.startsWith('https://discordapp.com/api/webhooks/')) {
-      return { success: false, error: 'Invalid Discord webhook URL. It must begin with https://discord.com/api/webhooks/...' };
+    const cleanUrl = (webhookUrl || '').trim();
+    if (!isValidDiscordWebhookUrl(cleanUrl)) {
+      return { success: false, error: 'Invalid Discord webhook URL. Expected https://discord.com/api/webhooks/<id>/<token>.' };
     }
 
     const effectiveImageUrl = imageUrl || `https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/${universeId}/${allianceId}/${playerId}/topflop.png`;
@@ -534,72 +867,118 @@ export async function dispatchDiscordWebhook(
 export async function handleTestDiscordWebhook(req: any, env: Env): Promise<Response> {
   try {
     const body = await req.json();
-    const { webhookUrl, webhookPostHour = 0, universeId: rawUni, allianceId, playerId, category = 0 } = body;
-    const cleanWebhook = (webhookUrl || '').trim();
+    const {
+      webhookUrl,
+      webhookPostHour = 0,
+      universeId: rawUni,
+      allianceId: rawAllianceId,
+      playerId: rawPlayerId,
+      category = 0,
+      supportsEditToken = false,
+    } = body;
+    const universeId = cleanUni(rawUni);
+    const allianceId = String(rawAllianceId || '').trim();
+    const playerId = String(rawPlayerId || '').trim();
 
-    if (!cleanWebhook) {
-      return json({ error: 'Missing Discord webhook URL' }, { status: 400 });
+    if (!universeId || !allianceId || !playerId) {
+      return json({ error: 'Missing universeId, allianceId, or playerId' }, { status: 400 });
     }
 
-    const universeId = cleanUni(rawUni);
     const db = getUniverseDb(env, universeId);
     await ensureTopFlopTables(db);
 
-    const configRow: any = await db.prepare(`
-      SELECT ogame_alliance_id, alliance_tag, player_name, category, scheduled_utc_hour, theme, custom_logo_url, custom_title
-      FROM alliance_topflop_configs
-      WHERE universe_id = ? AND ogame_alliance_id = ? AND player_id = ?
-      LIMIT 1
-    `).bind(universeId, allianceId, playerId).first();
+    const auth = await authorizeTopFlopMutation(
+      req,
+      env,
+      db,
+      universeId,
+      allianceId,
+      playerId,
+      Boolean(supportsEditToken)
+    );
+    if (!auth.authorized) {
+      return json({ error: auth.error || 'Unauthorized' }, { status: auth.status || 403 });
+    }
 
+    if (auth.method !== 'master_admin') {
+      const cooldown = checkManualActionCooldown(auth.existingRow);
+      if (!cooldown.ok) {
+        return json(
+          { error: `Please wait ${cooldown.retryAfterSeconds}s before testing again.`, retryAfterSeconds: cooldown.retryAfterSeconds },
+          { status: 429 }
+        );
+      }
+    }
+
+    // Use newly submitted URL if provided; otherwise allow testing the already-saved webhook in D1
+    const rawWebhook = typeof webhookUrl === 'string' ? webhookUrl.trim() : '';
+    const targetWebhook = rawWebhook || String(auth.existingRow?.discord_webhook_url || '').trim();
+
+    if (!targetWebhook) {
+      return json({ error: 'Missing Discord webhook URL. Please paste a webhook URL first.' }, { status: 400 });
+    }
+    if (!isValidDiscordWebhookUrl(targetWebhook)) {
+      return json(
+        { error: 'Invalid Discord webhook URL. Expected https://discord.com/api/webhooks/<id>/<token>.' },
+        { status: 400 }
+      );
+    }
+
+    const configRow = auth.existingRow;
     const allyTag = configRow?.alliance_tag || 'ALLIANCE';
     const effectiveCategory = category ?? (configRow?.category || 0);
 
     const imageUrl = `https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/${universeId}/${allianceId}/${playerId}/topflop.png?t=${Date.now()}`;
-    const result = await dispatchDiscordWebhook(cleanWebhook, universeId, allianceId, playerId, effectiveCategory, env, imageUrl);
+    const result = await dispatchDiscordWebhook(targetWebhook, universeId, allianceId, playerId, effectiveCategory, env, imageUrl);
 
     if (!result.success) {
       return json({ error: result.error || 'Failed sending test message to Discord' }, { status: 400 });
     }
 
-    // Automatically persist the tested webhook settings into D1 so testing immediately saves it!
-    if (allianceId && playerId) {
-      const configId = `${universeId}_${allianceId}_${playerId}`;
-      await db.prepare(`
-        INSERT INTO alliance_topflop_configs (
-          config_id, universe_id, ogame_alliance_id, alliance_tag, config_name,
-          player_id, player_name, scheduled_utc_hour, theme, custom_logo_url,
-          custom_title, category, is_default, discord_webhook_url, webhook_post_hour, updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(config_id) DO UPDATE SET
-          discord_webhook_url = excluded.discord_webhook_url,
-          webhook_post_hour = excluded.webhook_post_hour,
-          updated_at = excluded.updated_at
-      `).bind(
-        configId,
-        universeId,
-        allianceId,
-        allyTag,
-        `${allyTag} Daily Top/Flop`,
-        String(playerId),
-        configRow?.player_name || `Player #${playerId}`,
-        configRow?.scheduled_utc_hour ?? 0,
-        configRow?.theme || 'tactical',
-        configRow?.custom_logo_url || null,
-        configRow?.custom_title || 'Top / Flop of the day',
-        effectiveCategory,
-        1,
-        cleanWebhook,
-        parseInt(String(webhookPostHour), 10) || 0,
-        Date.now()
-      ).run();
-    }
+    const configId = `${universeId}_${allianceId}_${playerId}`;
+    const now = Date.now();
+    await db.prepare(`
+      INSERT INTO alliance_topflop_configs (
+        config_id, universe_id, ogame_alliance_id, alliance_tag, config_name,
+        player_id, player_name, scheduled_utc_hour, theme, custom_logo_url,
+        custom_title, category, is_default, discord_webhook_url, webhook_post_hour,
+        edit_token_hash, last_manual_action_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(config_id) DO UPDATE SET
+        discord_webhook_url = excluded.discord_webhook_url,
+        webhook_post_hour = excluded.webhook_post_hour,
+        edit_token_hash = COALESCE(alliance_topflop_configs.edit_token_hash, excluded.edit_token_hash),
+        last_manual_action_at = excluded.last_manual_action_at,
+        updated_at = excluded.updated_at
+    `).bind(
+      configId,
+      universeId,
+      allianceId,
+      allyTag,
+      `${allyTag} Daily Top/Flop`,
+      playerId,
+      configRow?.player_name || `Player #${playerId}`,
+      configRow?.scheduled_utc_hour ?? 0,
+      configRow?.theme || 'tactical',
+      configRow?.custom_logo_url || null,
+      configRow?.custom_title || 'Top / Flop of the day',
+      effectiveCategory,
+      1,
+      targetWebhook,
+      parseInt(String(webhookPostHour), 10) || 0,
+      auth.newTokenHash || null,
+      now,
+      now
+    ).run();
 
     return json({
       success: true,
       message: 'Test message sent to Discord and settings saved!',
       saved: true,
+      hasWebhook: true,
+      maskedWebhookUrl: maskDiscordWebhookUrl(targetWebhook),
+      ...(auth.newlyIssuedToken ? { editToken: auth.newlyIssuedToken } : {}),
     });
   } catch (err: any) {
     return json({ error: err?.message || 'Failed to dispatch test message' }, { status: 500 });
@@ -826,6 +1205,9 @@ export async function handleScheduledTopFlopCron(env: Env): Promise<void> {
 // less points each hour going back into the past.
 // ----------------------------------------------------------------------------
 export async function handleBackfillHourlySnapshots(req: any, env: Env): Promise<Response> {
+  if (!isValidMasterAdminRequest(req, env)) {
+    return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
+  }
   try {
     const url = new URL(req.url);
     const universeId = cleanUni(url.searchParams.get('universe') || 's267-en');
@@ -883,19 +1265,42 @@ export async function handleUploadTopFlopLogo(req: any, env: Env): Promise<Respo
     }
 
     const body = await req.json();
-    const { universeId: rawUni, playerId, imageBase64, contentType = 'image/png' } = body;
+    const {
+      universeId: rawUni,
+      allianceId: rawAllianceId,
+      playerId,
+      imageBase64,
+      contentType = 'image/png',
+      supportsEditToken = false,
+    } = body;
     const universeId = cleanUni(rawUni);
+    const allianceId = String(rawAllianceId || '').trim();
     const cleanPlayerId = (playerId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
 
-    if (!cleanPlayerId) {
-      return json({ error: 'Missing or invalid playerId' }, { status: 400 });
+    if (!cleanPlayerId || !allianceId) {
+      return json({ error: 'Missing or invalid allianceId or playerId' }, { status: 400 });
     }
     if (!imageBase64 || typeof imageBase64 !== 'string') {
       return json({ error: 'Missing imageBase64 data' }, { status: 400 });
     }
 
+    const db = getUniverseDb(env, universeId);
+    await ensureTopFlopTables(db);
+    const auth = await authorizeTopFlopMutation(
+      req,
+      env,
+      db,
+      universeId,
+      allianceId,
+      cleanPlayerId,
+      Boolean(supportsEditToken)
+    );
+    if (!auth.authorized) {
+      return json({ error: auth.error || 'Unauthorized' }, { status: auth.status || 403 });
+    }
+
     // Strip data URI prefix if present
-    const base64Data = imageBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
+    const base64Data = imageBase64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
 
     // Convert base64 to binary buffer
     const binaryStr = atob(base64Data);
@@ -914,11 +1319,17 @@ export async function handleUploadTopFlopLogo(req: any, env: Env): Promise<Respo
       bytes[i] = binaryStr.charCodeAt(i);
     }
 
+    // Strict MIME whitelist + binary magic-byte validation (blocks HTML/SVG XSS uploads)
+    const imgValidation = validateImageBytes(bytes, contentType);
+    if (!imgValidation.valid) {
+      return json({ error: imgValidation.error || 'Invalid image file' }, { status: 400 });
+    }
+
     // Save to player's personal vault in R2, overwriting any previous upload
     const key = `topflop/vault/${cleanPlayerId}/custom_logo.png`;
     await env.VAULT_BUCKET.put(key, bytes, {
       httpMetadata: {
-        contentType: contentType || 'image/png',
+        contentType: imgValidation.mime,
         cacheControl: 'public, max-age=60, s-maxage=300, must-revalidate',
       },
       customMetadata: {
@@ -930,11 +1341,21 @@ export async function handleUploadTopFlopLogo(req: any, env: Env): Promise<Respo
 
     const logoUrl = `https://nexus-sync-worker.nexus-overwatch.workers.dev/topflop/vault/${cleanPlayerId}/custom_logo.png?t=${Date.now()}`;
 
+    if (auth.newTokenHash) {
+      const configId = `${universeId}_${allianceId}_${cleanPlayerId}`;
+      await db.prepare(`
+        UPDATE alliance_topflop_configs
+        SET edit_token_hash = COALESCE(edit_token_hash, ?), updated_at = ?
+        WHERE config_id = ?
+      `).bind(auth.newTokenHash, Date.now(), configId).run();
+    }
+
     return json({
       success: true,
       playerId: cleanPlayerId,
       logoUrl,
       sizeBytes: len,
+      ...(auth.newlyIssuedToken ? { editToken: auth.newlyIssuedToken } : {}),
     });
   } catch (err: any) {
     return json({ error: err?.message || 'Failed to upload logo' }, { status: 500 });
@@ -950,7 +1371,7 @@ export async function handleGetTopFlopAsset(req: any, env: Env): Promise<Respons
     if (!env.VAULT_BUCKET) return new Response('R2 not configured', { status: 500 });
     const url = new URL(req.url);
     const path = url.pathname.replace(/^\/topflop\/assets\//, '');
-    if (!path) return new Response('Not found', { status: 404 });
+    if (!path || path.includes('..') || path.includes('\\')) return new Response('Not found', { status: 404 });
 
     const key = `topflop/assets/${path}`;
     const obj = await env.VAULT_BUCKET.get(key);
@@ -958,11 +1379,12 @@ export async function handleGetTopFlopAsset(req: any, env: Env): Promise<Respons
 
     const mime = path.endsWith('.jpg') || path.endsWith('.jpeg')
       ? 'image/jpeg'
-      : (path.endsWith('.svg') ? 'image/svg+xml' : 'image/png');
+      : (path.endsWith('.webp') ? 'image/webp' : (path.endsWith('.svg') ? 'image/svg+xml' : 'image/png'));
 
     return new Response(obj.body, {
       headers: {
         'Content-Type': mime,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=86400, s-maxage=604800',
         'Access-Control-Allow-Origin': '*',
       },
@@ -981,16 +1403,20 @@ export async function handleGetTopFlopVaultImage(req: any, env: Env): Promise<Re
     if (!env.VAULT_BUCKET) return new Response('R2 not configured', { status: 500 });
     const url = new URL(req.url);
     const path = url.pathname.replace(/^\/topflop\/vault\//, '');
-    if (!path) return new Response('Not found', { status: 404 });
+    if (!path || path.includes('..') || path.includes('\\')) return new Response('Not found', { status: 404 });
 
     const key = `topflop/vault/${path}`;
     const obj = await env.VAULT_BUCKET.get(key);
     if (!obj) return new Response('Image not found', { status: 404 });
 
-    const mime = obj.httpMetadata?.contentType || 'image/png';
+    const rawMime = (obj.httpMetadata?.contentType || 'image/png').toLowerCase().split(';')[0];
+    const safeMime = (rawMime === 'image/png' || rawMime === 'image/jpeg' || rawMime === 'image/webp')
+      ? rawMime
+      : 'image/png';
     return new Response(obj.body, {
       headers: {
-        'Content-Type': mime,
+        'Content-Type': safeMime,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=120, s-maxage=600, must-revalidate',
         'Access-Control-Allow-Origin': '*',
       },

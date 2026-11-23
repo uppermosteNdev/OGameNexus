@@ -8,6 +8,7 @@
 // ============================================================================
 
 import { cleanUniverseId } from './universe';
+import { fetchPublicApi } from './networkGuard';
 
 export interface HighscoreRecord {
   rank: number;
@@ -60,7 +61,7 @@ export async function fetchUniverseHighscores(
 
   try {
     const url = `https://${uId}.ogame.gameforge.com/api/highscore.xml?category=1&type=${type}&toJson=1`;
-    const res = await fetch(url);
+    const res = await fetchPublicApi(url);
     if (res.ok) {
       const data: any = await res.json();
       const rawPlayers = data?.player || [];

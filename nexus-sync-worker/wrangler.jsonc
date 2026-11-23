@@ -19,9 +19,10 @@
   ],
   "vars": {
     "ENVIRONMENT": "production",
-    "SERVER_PEPPER": "nexus_overwatch_secret_pepper_2026",
-    "EXTENSION_SECRET": "nx_sec_9a7b4c2e8f103d5ae8b4f1a2c9d7e5b3",
-    "MASTER_ADMIN_SECRET": "CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS"
+    // Set to "true" once the updated extension (sending HMAC + X-TopFlop-Token) is live
+    "STRICT_TOPFLOP_AUTH": "false"
+    // Secrets (SERVER_PEPPER, LEGACY_SERVER_PEPPER, EXTENSION_SECRET, MASTER_ADMIN_SECRET)
+    // must be set via `npx wrangler secret put <NAME>` (or in local `.dev.vars`, never committed).
   },
   "triggers": {
     "crons": ["*/5 * * * *"]

@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const ru: LocaleTranslations = {
     "common": {
@@ -275,7 +275,7 @@ export const ru: LocaleTranslations = {
     },
     "changelog": {
         "title": "Ð¡Ð¸ÑÑ‚ÐµÐ¼Ð° Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð°",
-        "versionBadge": "v1.3.0",
+        "versionBadge": "v1.3.2",
         "telemetryReport": "ÐžÐ¢Ð§ÐÐ¢ Ð¢Ð•Ð›Ð•ÐœÐ•Ð¢Ð Ð˜Ð˜ ÐšÐžÐœÐÐÐ”ÐÐžÐ“Ðž ÐœÐžÐ¡Ð¢Ð˜ÐšÐ OGAME NEXUS",
         "dataPreservedNotice": "Ð’Ð°ÑˆÐ¸ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ Ð¿Ð»Ð°Ð½ÐµÑ‚, ÑÐ¾Ð±Ñ€Ð°Ð½Ð½Ð°Ñ Ñ‚ÐµÐ»ÐµÐ¼ÐµÑ‚Ñ€Ð¸Ñ Ð¸ Ð¸ÑÑ‚Ð¾Ñ€Ð¸Ñ Ð±Ñ‹Ð»Ð¸ Ð½Ð°Ð´Ñ‘Ð¶Ð½Ð¾ ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ñ‹ Ð²Ð¾ Ð²Ñ€ÐµÐ¼Ñ ÑÑ‚Ð¾Ð³Ð¾ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ.",
         "acknowledge": "ÐŸÐ¾Ð½ÑÑ‚Ð½Ð¾",

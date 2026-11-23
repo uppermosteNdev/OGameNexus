@@ -717,14 +717,49 @@ export default function Anomalies(): React.JSX.Element {
         const all = await db.anomalyMissions.toArray();
         const allPlanets = await db.planets.toArray();
         const allAccounts = await db.accounts.toArray();
+        const allScanned = await db.scannedAnomalies.toArray();
         for (const m of all) {
           let needsUpdate = false;
+          let name = m.name;
           let category = m.category;
           let environment = m.environment;
           let totalWaves = m.totalWaves;
           let currentWave = m.currentWave;
           let playerId = m.playerId;
           let universe = m.universe;
+
+          // Heal generic mission names ('Anomaly Mission', 'Collected Anomaly Mission', 'Unknown Mission')
+          // by correlating with historical scanned anomalies record by coordinates/universe
+          const isGenericName = !name ||
+            name.toLowerCase() === 'anomaly mission' ||
+            name.toLowerCase() === 'collected anomaly mission' ||
+            name.toLowerCase() === 'unknown mission';
+
+          if (isGenericName && m.coords) {
+            const cleanTarget = m.coords.replace(/[\[\]\s]/g, '');
+            const matchedScan = allScanned.find(s => {
+              if (m.universe && s.universe && !isSameUniverse(s.universe, m.universe)) return false;
+              const scanTarget = s.targetCoords?.replace(/[\[\]\s]/g, '');
+              if (scanTarget && scanTarget === cleanTarget) {
+                // If level is recorded and matches, or wave count matches, very strong correlation
+                if (m.level > 0 && s.level > 0 && m.level === s.level) return true;
+                if (m.totalWaves > 0 && s.waves > 0 && m.totalWaves === s.waves) return true;
+                return true;
+              }
+              return false;
+            });
+
+            if (matchedScan && matchedScan.name && matchedScan.name.toLowerCase() !== 'anomaly mission') {
+              name = matchedScan.name;
+              if (matchedScan.category && (!category || category === 'other')) {
+                category = matchedScan.category;
+              }
+              if (matchedScan.environment && !environment) {
+                environment = matchedScan.environment;
+              }
+              needsUpdate = true;
+            }
+          }
 
           // Heal missing or unknown playerId or universe using origin coords matched against user planets
           if (!playerId || playerId === 'unknown' || !universe) {
@@ -838,6 +873,7 @@ export default function Anomalies(): React.JSX.Element {
           if (needsUpdate) {
             await db.anomalyMissions.update(m.id, {
               status,
+              name,
               playerId,
               universe,
               category,

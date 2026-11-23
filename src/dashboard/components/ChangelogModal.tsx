@@ -29,34 +29,34 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
 
     const changes = [
         {
-            icon: <Orbit size={22} color="#00f2ff" />,
-            title: t('changelog.features.orionSuiteTitle', "Project Orion: Deep-Space Anomalies"),
-            desc: t('changelog.features.orionSuiteDesc', "Comprehensive command module for Project Orion: track deep-space anomalies, rank planetary scanners, calculate mission profitability, and plan Lithium building amortization.")
+            icon: <Ship size={22} color="#00f2ff" />,
+            title: t('changelog.features.v132OrionFleetTitle', "Orion Anomaly Fleet Dispatch"),
+            desc: t('changelog.features.v132OrionFleetDesc', "Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for your current planet or moon.")
         },
         {
-            icon: <Ship size={22} color="#f43f5e" />,
-            title: t('changelog.features.waveCombatSimTitle', "Multi-Wave Combat Simulator"),
-            desc: t('changelog.features.waveCombatSimDesc', "Simulate hostile wave encounters with step-by-step ship progression, casualty animations, 0-loss targets, and native General class combat bonus support.")
-        },
-        {
-            icon: <TrendingUp size={22} color="#10b981" />,
-            title: t('changelog.features.smartLithiumTitle', "Smart Lithium Planning & Yields"),
-            desc: t('changelog.features.smartLithiumDesc', "Planetary scanner now displays smart gather times to unlock mission rewards, backed by dedicated daily Lithium Yield tracking and remaining wave costs.")
+            icon: <Orbit size={22} color="#a855f7" />,
+            title: t('changelog.features.v132OrionUiTitle', "Project Orion UI & Bonus Fixes"),
+            desc: t('changelog.features.v132OrionUiDesc', "Refined Project Orion interface and functionality, plus fixed amortization calculation bonuses for Orion universes.")
         },
         {
             icon: <Calculator size={22} color="#fbbf24" />,
-            title: t('changelog.features.rewardValuationTitle', "Dynamic Reward Valuation"),
-            desc: t('changelog.features.rewardValuationDesc', "Accurately calculates average Metal Standard Unit (MSU) returns for random ship discoveries across all anomaly tiers, clearly separating prospective loot from claimed receipts.")
+            title: t('changelog.features.v132AmortizationTitle', "General T18 & Overseer Amortization"),
+            desc: t('changelog.features.v132AmortizationDesc', "Fixed General T18 amortization calculations and prevented Overseer from displaying Orion amortization on non-Orion universes.")
         },
         {
-            icon: <Eye size={22} color="#a855f7" />,
-            title: t('changelog.features.liveFeedFilterTitle', "Targeted Live Feed Filters"),
-            desc: t('changelog.features.liveFeedFilterDesc', "Filter live events in the Overwatch Universe Feed by player name for focused activity surveillance and alert tracking.")
+            icon: <TrendingUp size={22} color="#10b981" />,
+            title: t('changelog.features.v132TopFlopTitle', "Alliance Top/Flop Upgrades"),
+            desc: t('changelog.features.v132TopFlopDesc', "Refined Alliance Top/Flop customization, added safer masked Discord webhook management, and added multi-device preset Edit Key support.")
         },
         {
-            icon: <ShieldCheck size={22} color="#38bdf8" />,
-            title: t('changelog.features.logisticsIsolationTitle', "Logistics & Multi-Account Isolation"),
-            desc: t('changelog.features.logisticsIsolationDesc', "Factored espionage probe cargo capacity into anomaly delivery logistics, and hardened multi-account data separation so radar targets never spill between accounts.")
+            icon: <ShieldCheck size={22} color="#f43f5e" />,
+            title: t('changelog.features.v132CombatRadarTitle', "Combat Simulator & Raid Radar Fixes"),
+            desc: t('changelog.features.v132CombatRadarDesc', "Fixed the Warrior alliance class +1 combat tech bonus in NexuSim/CombatSim and resolved Raid Radar target spill-over.")
+        },
+        {
+            icon: <Database size={22} color="#38bdf8" />,
+            title: t('changelog.features.v132DataCenterTitle', "Nexus Data Center Polish"),
+            desc: t('changelog.features.v132DataCenterDesc', "Added player points and rank badges to Accounts Management cards and fixed live planet, expedition, combat, lifeform, and debris counters.")
         }
     ];
 
@@ -160,7 +160,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onAcknowledge, onDismis
                                     letterSpacing: '1px',
                                     display: 'inline-block'
                                 }}>
-                                    {t('changelog.versionBadge', 'v1.3.0')}
+                                    {t('changelog.versionBadge', 'v1.3.2')}
                                 </span>
                             </div>
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', letterSpacing: '0.5px', marginTop: '2px' }}>

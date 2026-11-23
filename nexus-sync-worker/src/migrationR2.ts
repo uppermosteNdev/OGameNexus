@@ -8,12 +8,22 @@ import { json } from 'itty-router';
 import { Env } from './index';
 import { getUniverseDb } from './dbRouter';
 import { cleanUniverseId } from './universeSeeder';
+import { timingSafeEqual } from './crypto';
 
-export function getMasterAdminSecret(env: any): string {
-  if (env?.MASTER_ADMIN_SECRET && env.MASTER_ADMIN_SECRET !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') {
-    return env.MASTER_ADMIN_SECRET;
+export function getMasterAdminSecret(env: any): string | null {
+  const secret = typeof env?.MASTER_ADMIN_SECRET === 'string' ? env.MASTER_ADMIN_SECRET.trim() : '';
+  if (secret && secret !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS') {
+    return secret;
   }
-  return 'nx_adm_9f82c4e1b0a7d5c3e6f9a2b4c8d1e3a5';
+  return null;
+}
+
+export function isValidMasterAdminRequest(req: Request, env: any): boolean {
+  const validSecret = getMasterAdminSecret(env);
+  if (!validSecret) return false;
+  const provided = (req.headers.get('X-Nexus-Master-Admin') || '').trim();
+  if (!provided) return false;
+  return timingSafeEqual(provided, validSecret);
 }
 
 /**
@@ -583,9 +593,7 @@ export async function migrateSinglePlayerToR2(
  */
 export async function handleMigrateVaultToR2(req: Request, env: Env): Promise<Response> {
   try {
-    const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
-    const validSecret = getMasterAdminSecret(env);
-    if (!adminSecretHeader || adminSecretHeader !== validSecret) {
+    if (!isValidMasterAdminRequest(req, env)) {
       return json({ error: 'Unauthorized: Master admin secret required for migration.' }, { status: 403 });
     }
 
@@ -644,9 +652,7 @@ export async function handleMigrateVaultToR2(req: Request, env: Env): Promise<Re
  */
 export async function handleVerifyVaultR2(req: Request, env: Env): Promise<Response> {
   try {
-    const adminSecretHeader = req.headers.get('X-Nexus-Master-Admin');
-    const validSecret = getMasterAdminSecret(env);
-    if (!adminSecretHeader || adminSecretHeader !== validSecret) {
+    if (!isValidMasterAdminRequest(req, env)) {
       return json({ error: 'Unauthorized: Master admin secret required.' }, { status: 403 });
     }
 

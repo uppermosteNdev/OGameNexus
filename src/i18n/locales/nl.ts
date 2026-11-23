@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const nl: LocaleTranslations = {
     "common": {
@@ -275,7 +275,7 @@ export const nl: LocaleTranslations = {
     },
     "changelog": {
         "title": "Systeem geÃ¼pdatet",
-        "versionBadge": "v1.3.0",
+        "versionBadge": "v1.3.2",
         "telemetryReport": "OGAME NEXUS COMMANDODEK TELEMETRIERAPPORT",
         "dataPreservedNotice": "Je planeetconfiguraties, verzamelde telemetrie en trackinggeschiedenis zijn veilig bewaard tijdens deze update.",
         "acknowledge": "Begrepen",

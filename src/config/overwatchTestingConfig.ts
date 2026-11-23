@@ -100,7 +100,7 @@ export async function syncOverwatchTesterStatusWithCloudflare(
       universeId: activeUni !== '*' ? activeUni : '',
     });
 
-    const res = await fetch(`${baseUrl}/api/v1/testing-gate/check?${queryParams.toString()}`, {
+    const res = await fetchOverwatch(`${baseUrl}/api/v1/testing-gate/check?${queryParams.toString()}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,

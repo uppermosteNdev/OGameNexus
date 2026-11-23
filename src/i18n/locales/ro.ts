@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const ro: LocaleTranslations = {
     common: {
@@ -120,7 +120,8 @@ export const ro: LocaleTranslations = {
     dataManagement: {
         title: "Centrul de date Nexus",
         subtitle: "SalveazÄƒ, restaureazÄƒ È™i migreazÄƒ datele de univers Ã®ntre dispozitive sau conturi.",
-        tabNexusData: "Date OGame Nexus",
+        tabAccountsManagement: "Gestionare conturi",
+        tabNexusData: "OGame Nexus Sync",
         tabTrackerSync: "Sincronizare OGame Tracker",
         tabBackup: "Salvare sistem",
         tabRestore: "Restaurare sistem",
@@ -275,7 +276,7 @@ export const ro: LocaleTranslations = {
     },
     changelog: {
         title: "Sistem Actualizat",
-        versionBadge: "v1.3.0",
+        versionBadge: "v1.3.2",
         telemetryReport: "RAPORT DE TELEMETRIE PUNTE DE COMANDÄ‚ OGAME NEXUS",
         dataPreservedNotice: "ConfigurÄƒrile planetare, datele de telemetrie È™i istoricul de monitorizare au fost pÄƒstrate Ã®n siguranÈ›Äƒ Ã®n timpul acestei actualizÄƒri.",
         acknowledge: "ConfirmÄƒ",

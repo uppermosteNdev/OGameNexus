@@ -5,6 +5,9 @@
 
 import { db } from '../db';
 import { UNITS } from '../utils/combatSim/constants';
+import { getPlanetTechMultiplier } from '../utils/amortizationCalc';
+import { getLfTech } from '../db/lifeformTechData';
+import { fetchGameOnLoad, isPageLoadValid } from '../utils/networkGuard';
 
 export interface AnomalyCombatWave {
   waveNumber: number;
@@ -61,6 +64,25 @@ export interface PlayerCombatProfile {
   baseArmour: number;
 }
 
+export interface ShipLifeformBonusDetails {
+  weapons: number; // % bonus, e.g. 15.2
+  shield: number;  // % bonus
+  armour: number;  // % bonus
+  speed: number;   // % bonus
+  cargo: number;   // % bonus
+  totalBonusCount: number;
+}
+
+export interface PlayerLifeformShipBonuses {
+  perShipWeapon: Record<number, number>;
+  perShipShield: Record<number, number>;
+  perShipArmour: Record<number, number>;
+  perShipSpeed: Record<number, number>;
+  perShipCargo: Record<number, number>;
+  byShipId: Record<number, ShipLifeformBonusDetails>;
+  hasAnyBonus: boolean;
+}
+
 /**
  * Normalizes numbers extracted from DOM strings.
  */
@@ -72,11 +94,12 @@ function cleanNumber(str: string | null | undefined): number {
 }
 
 /**
- * Maps a ship name or icon attribute to an OGame Unit ID.
+ * Maps a ship or defense name or icon attribute to an OGame Unit ID.
  */
 export function resolveShipId(identifier: string): number | null {
   const norm = identifier.toLowerCase().replace(/[\s\-_]/g, '');
 
+  // Ships
   if (norm.includes('fighterlight') || norm.includes('lightfighter') || norm.includes('chasseurleger') || norm.includes('cazadorligero') || norm.includes('leichterjaeger')) return 204;
   if (norm.includes('fighterheavy') || norm.includes('heavyfighter') || norm.includes('chasseurlourd') || norm.includes('cazadorpesado') || norm.includes('schwererjaeger')) return 205;
   if (norm.includes('cruiser') || norm.includes('croiseur') || norm.includes('crucero') || norm.includes('kreuzer')) return 206;
@@ -92,6 +115,17 @@ export function resolveShipId(identifier: string): number | null {
   if (norm.includes('colonyship') || norm.includes('vaisseaucolonisateur') || norm.includes('colonizador') || norm.includes('kolonieschiff')) return 208;
   if (norm.includes('recycler') || norm.includes('recycleur') || norm.includes('reciclador')) return 209;
   if (norm.includes('espionageprobe') || norm.includes('sonde') || norm.includes('sonda') || norm.includes('spionagesonde')) return 210;
+  if (norm.includes('crawler') || norm.includes('foreuse')) return 217;
+
+  // Defenses (Hostile wave defense structures)
+  if (norm.includes('rocketlauncher') || norm.includes('raketenwerfer') || norm.includes('lanceurdemissiles') || norm.includes('lansatorderachete') || norm.includes('wyrzutniarakiet') || norm.includes('lanzamisiles') || norm.includes('lanciamissili') || norm.includes('roketatar') || norm.includes('misil')) return 401;
+  if (norm.includes('lasercannonlight') || norm.includes('laserlight') || norm.includes('lightlaser') || norm.includes('leichteslaser') || norm.includes('laserleger') || norm.includes('laserusor') || norm.includes('laserpequeno') || norm.includes('laserleggero') || norm.includes('hafiflazer')) return 402;
+  if (norm.includes('lasercannonheavy') || norm.includes('laserheavy') || norm.includes('heavylaser') || norm.includes('schwereslaser') || norm.includes('laserlourd') || norm.includes('lasergreu') || norm.includes('laserpesado') || norm.includes('laserpesante') || norm.includes('agirlazer')) return 403;
+  if (norm.includes('gausscannon') || norm.includes('gauss') || norm.includes('gausskanone') || norm.includes('canondegauss') || norm.includes('tungauss') || norm.includes('cannonegauss') || norm.includes('gaustopu')) return 404;
+  if (norm.includes('ioncannon') || norm.includes('ion') || norm.includes('ionengeschuetz') || norm.includes('artillerieaions') || norm.includes('tunmagnetic') || norm.includes('dzialojonowe') || norm.includes('canoni') || norm.includes('iyontopu')) return 405;
+  if (norm.includes('plasmacannon') || norm.includes('plasmaturret') || norm.includes('plasma') || norm.includes('plasmawerfer') || norm.includes('lanceurdeplasma') || norm.includes('turelacuplasma') || norm.includes('wyrzutniaplazmy') || norm.includes('canondeplasma') || norm.includes('cannonealplasma') || norm.includes('plazmaatici')) return 406;
+  if (norm.includes('shielddomesmall') || norm.includes('smallshielddome') || norm.includes('kleineschildkuppel') || norm.includes('petitbouclier') || norm.includes('scutplanetarmic') || norm.includes('malaoslona') || norm.includes('cupolapiccola')) return 407;
+  if (norm.includes('shielddomelarge') || norm.includes('largeshielddome') || norm.includes('grosseschildkuppel') || norm.includes('grandbouclier') || norm.includes('scutplanetarmare') || norm.includes('duzaoslona') || norm.includes('cupolagrande')) return 408;
 
   // Numerical check
   const num = parseInt(norm, 10);
@@ -182,13 +216,19 @@ export function extractAnomalyCombatWaves(
         const ships: Record<number, number> = {};
         let totalShips = 0;
 
-        if (dataJson.ships && typeof dataJson.ships === 'object') {
-          for (const [idStr, sVal] of Object.entries(dataJson.ships)) {
-            const shipId = parseInt(idStr, 10);
-            const amount = typeof sVal === 'number' ? sVal : (typeof sVal === 'object' && sVal !== null ? (sVal as any).amount || 0 : 0);
-            if (shipId && amount > 0) {
-              ships[shipId] = amount;
-              totalShips += amount;
+        const unitContainers = [dataJson.ships, dataJson.defense, dataJson.defenses, dataJson.defence, dataJson.units];
+        for (const container of unitContainers) {
+          if (container && typeof container === 'object') {
+            for (const [idStr, sVal] of Object.entries(container)) {
+              let unitId = parseInt(idStr, 10);
+              if (isNaN(unitId) || unitId <= 0) {
+                unitId = resolveShipId(idStr) || 0;
+              }
+              const amount = typeof sVal === 'number' ? sVal : (typeof sVal === 'object' && sVal !== null ? (sVal as any).amount || 0 : 0);
+              if (unitId > 0 && amount > 0) {
+                ships[unitId] = (ships[unitId] || 0) + amount;
+                totalShips += amount;
+              }
             }
           }
         }
@@ -274,19 +314,31 @@ export function extractAnomalyCombatWaves(
 
     if (totalShips > 0) {
       const existing = wavesMap.get(waveNum);
-      const defaultTech = Math.max(10, Math.floor(missionLevel / 25));
-      if (!existing || totalShips > existing.totalShips) {
+      if (!existing) {
         wavesMap.set(waveNum, {
           waveNumber: waveNum,
           coords: defaultCoords,
-          arrivalFormatted: arrivalText || existing?.arrivalFormatted,
-          techs: existing?.techs || {
+          arrivalFormatted: arrivalText,
+          techs: {
             weapons: fallbackWep,
             shielding: fallbackShd,
             armour: fallbackArm
           },
           ships,
           totalShips
+        });
+      } else {
+        const mergedShips: Record<number, number> = { ...existing.ships };
+        for (const [idStr, count] of Object.entries(ships)) {
+          const uId = parseInt(idStr, 10);
+          mergedShips[uId] = Math.max(mergedShips[uId] || 0, count);
+        }
+        const mergedTotal = Object.values(mergedShips).reduce((sum, c) => sum + c, 0);
+        wavesMap.set(waveNum, {
+          ...existing,
+          arrivalFormatted: arrivalText || existing.arrivalFormatted,
+          ships: mergedShips,
+          totalShips: mergedTotal
         });
       }
     }
@@ -397,33 +449,50 @@ export function extractStationedWarships(missionId: string): Record<CanonicalWar
 }
 
 /**
- * Queries the extension background script to retrieve the active player's Account record
+ * Queries the extension background script to retrieve the active player's Account and Planets records
  * from the extension's IndexedDB database.
  */
-export async function fetchAccountFromBackground(playerId?: string): Promise<any> {
+export async function fetchAssistantDataFromBackground(playerId?: string): Promise<{ account: any; planets: any[] }> {
   return new Promise((resolve) => {
     try {
       if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
-        return resolve(null);
+        return resolve({ account: null, planets: [] });
       }
       chrome.runtime.sendMessage({ type: 'GET_ASSISTANT_DATA', playerId }, (res) => {
-        if (res && res.success && res.account) {
-          resolve(res.account);
+        if (chrome.runtime.lastError) {
+          return resolve({ account: null, planets: [] });
+        }
+        if (res && res.success) {
+          resolve({
+            account: res.account,
+            planets: res.planets || []
+          });
         } else {
           // Fallback to empire production query
           chrome.runtime.sendMessage({ type: 'GET_EMPIRE_PRODUCTION_DATA', playerId }, (res2) => {
-            if (res2 && res2.success && res2.account) {
-              resolve(res2.account);
+            if (res2 && res2.success) {
+              resolve({
+                account: res2.account,
+                planets: res2.planets || []
+              });
             } else {
-              resolve(null);
+              resolve({ account: null, planets: [] });
             }
           });
         }
       });
     } catch {
-      resolve(null);
+      resolve({ account: null, planets: [] });
     }
   });
+}
+
+/**
+ * Queries the extension background script to retrieve the active player's Account record.
+ */
+export async function fetchAccountFromBackground(playerId?: string): Promise<any> {
+  const data = await fetchAssistantDataFromBackground(playerId);
+  return data.account;
 }
 
 /**
@@ -629,6 +698,218 @@ export async function getPlayerCombatProfile(): Promise<PlayerCombatProfile> {
   };
 }
 
+/**
+ * Calculates empire-wide cumulative Lifeform ship bonuses (weapons, shield, armour, speed, cargo)
+ * across all player colonies, correctly factoring in planet tech multipliers and slot setups.
+ */
+export async function calculatePlayerLifeformShipBonuses(): Promise<PlayerLifeformShipBonuses> {
+  const metaPlayerId = document.querySelector('meta[name="ogame-player-id"]')?.getAttribute('content');
+  const metaUniverse = document.querySelector('meta[name="ogame-universe"]')?.getAttribute('content');
+
+  // 1. Fetch account and planets directly from background worker (which has authoritative access to Dexie)
+  const bgData = await fetchAssistantDataFromBackground(metaPlayerId || undefined);
+  let account: any = bgData.account;
+  let planets: any[] = bgData.planets || [];
+
+  // Fallback to local Dexie if background message didn't return account
+  if (!account) {
+    try {
+      if (metaPlayerId) {
+        account = await db.accounts.get(String(metaPlayerId));
+        if (!account && !isNaN(Number(metaPlayerId))) {
+          account = await db.accounts.get(Number(metaPlayerId) as any);
+        }
+      }
+      if (!account && metaUniverse) {
+        account = await db.accounts.where('universe').equalsIgnoreCase(metaUniverse).first();
+      }
+      if (!account) {
+        const allAccounts = await db.accounts.toArray();
+        account = allAccounts.find((a) => a.researches && a.researches.length > 0) || allAccounts[0];
+      }
+    } catch (err) {
+      console.warn('[OrionWaveParser] Failed to load account for LF bonuses:', err);
+    }
+  }
+
+  const targetPlayerId = account?.playerId || metaPlayerId;
+
+  // Fallback to local Dexie if background message didn't return planets
+  if (planets.length === 0) {
+    try {
+      if (targetPlayerId) {
+        planets = await db.planets.where('playerId').equals(String(targetPlayerId)).toArray();
+        if (planets.length === 0 && !isNaN(Number(targetPlayerId))) {
+          planets = await db.planets.where('playerId').equals(Number(targetPlayerId) as any).toArray();
+        }
+      }
+      if (planets.length === 0) {
+        const allPlanets = await db.planets.toArray();
+        if (targetPlayerId) {
+          const filtered = allPlanets.filter((p) => String(p.playerId) === String(targetPlayerId));
+          if (filtered.length > 0) planets = filtered;
+        }
+        if (planets.length === 0) planets = allPlanets;
+      }
+    } catch (err) {
+      console.warn('[OrionWaveParser] Failed to load planets for LF bonuses:', err);
+    }
+  }
+
+  // Also check if account has empire.planets attached
+  if (planets.length === 0 && account?.empire?.planets) {
+    const ep = account.empire.planets;
+    planets = Array.isArray(ep) ? ep : Object.values(ep);
+  }
+
+  // Filter to colonies only (moons cannot host species lifeforms)
+  const colonies = planets.filter((p) => p.type !== 'moon');
+
+  const perShipWeapon: Record<number, number> = {};
+  const perShipShield: Record<number, number> = {};
+  const perShipArmour: Record<number, number> = {};
+  const perShipSpeed: Record<number, number> = {};
+  const perShipCargo: Record<number, number> = {};
+
+  const allKnownShipIds = [202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 213, 214, 215, 218, 219];
+
+  colonies.forEach((p) => {
+    const totalMultiplier = Math.max(1, getPlanetTechMultiplier(p, account) || 1);
+
+    // Extract researched setup
+    const rawSetup = (Array.isArray(p.lifeformSetup) && p.lifeformSetup.length > 0)
+      ? p.lifeformSetup
+      : ((p as any).speciesResearches || p.sandboxSetup || p.lifeformSetup || []);
+
+    const entries: { techId: number; level: number }[] = [];
+    if (Array.isArray(rawSetup)) {
+      rawSetup.forEach((slot: any) => {
+        if (!slot) return;
+        if (typeof slot === 'object') {
+          const tid = Number(slot.selectedTechId || slot.techId || slot.id);
+          const lvl = Number(slot.level || slot.techLevel || 0);
+          if (tid && lvl) entries.push({ techId: tid, level: lvl });
+        }
+      });
+    } else if (rawSetup && typeof rawSetup === 'object') {
+      Object.entries(rawSetup).forEach(([k, v]) => {
+        const tid = Number(k);
+        const lvl = Number(v);
+        if (tid && lvl) entries.push({ techId: tid, level: lvl });
+      });
+    }
+
+    entries.forEach(({ techId, level }) => {
+      const tech = getLfTech(techId);
+      if (!tech || !tech.target) return;
+
+      const uniqueBonusIds: number[] = [];
+      const bonusToTargets: Record<number, any[]> = {};
+      tech.target.forEach((t: any) => {
+        if (!uniqueBonusIds.includes(t.bonusBreakdownId)) {
+          uniqueBonusIds.push(t.bonusBreakdownId);
+          bonusToTargets[t.bonusBreakdownId] = [];
+        }
+        bonusToTargets[t.bonusBreakdownId].push(t);
+      });
+
+      const hasOnlyBonus1 = tech.bonus1BaseValue !== null && tech.bonus1BaseValue !== undefined &&
+        (tech.bonus2BaseValue === null || tech.bonus2BaseValue === undefined) &&
+        (tech.bonus3BaseValue === null || tech.bonus3BaseValue === undefined);
+
+      uniqueBonusIds.forEach((bId, idx) => {
+        let baseVal = null;
+        if (idx === 0) baseVal = tech.bonus1BaseValue;
+        else if (idx === 1) baseVal = tech.bonus2BaseValue;
+        else if (idx === 2) baseVal = tech.bonus3BaseValue;
+
+        if (baseVal === null && hasOnlyBonus1) {
+          baseVal = tech.bonus1BaseValue;
+        }
+        if (baseVal === null || baseVal === undefined) {
+          baseVal = tech.bonus1BaseValue ?? 0;
+        }
+        if (!baseVal) return;
+
+        const finalVal = baseVal * level * totalMultiplier;
+        const targets = bonusToTargets[bId] || [];
+        const targetShipIds = targets
+          .map((t: any) => t.gameKnowledgeId)
+          .filter((id: any) => typeof id === 'number' && id >= 200 && id < 400);
+
+        const applyToShips = (shipIds: number[], applyFn: (sid: number) => void) => {
+          if (shipIds.length > 0) {
+            shipIds.forEach(applyFn);
+          } else {
+            allKnownShipIds.forEach(applyFn);
+          }
+        };
+
+        if (bId === 18) {
+          applyToShips(targetShipIds, (sid) => {
+            perShipWeapon[sid] = (perShipWeapon[sid] || 0) + finalVal;
+          });
+        } else if (bId === 17) {
+          applyToShips(targetShipIds, (sid) => {
+            perShipShield[sid] = (perShipShield[sid] || 0) + finalVal;
+          });
+        } else if (bId === 16) {
+          applyToShips(targetShipIds, (sid) => {
+            perShipArmour[sid] = (perShipArmour[sid] || 0) + finalVal;
+          });
+        } else if (bId === 7) {
+          applyToShips(targetShipIds, (sid) => {
+            perShipSpeed[sid] = (perShipSpeed[sid] || 0) + finalVal;
+          });
+        } else if (bId === 10) {
+          applyToShips(targetShipIds, (sid) => {
+            perShipCargo[sid] = (perShipCargo[sid] || 0) + finalVal;
+          });
+        }
+      });
+    });
+  });
+
+  const byShipId: Record<number, ShipLifeformBonusDetails> = {};
+  let hasAnyBonus = false;
+
+  allKnownShipIds.forEach((sid) => {
+    const w = perShipWeapon[sid] || 0;
+    const s = perShipShield[sid] || 0;
+    const a = perShipArmour[sid] || 0;
+    const sp = perShipSpeed[sid] || 0;
+    const c = perShipCargo[sid] || 0;
+
+    let nonZero = 0;
+    if (w > 0.001) nonZero++;
+    if (s > 0.001) nonZero++;
+    if (a > 0.001) nonZero++;
+    if (sp > 0.001) nonZero++;
+    if (c > 0.001) nonZero++;
+
+    if (nonZero > 0) hasAnyBonus = true;
+
+    byShipId[sid] = {
+      weapons: w,
+      shield: s,
+      armour: a,
+      speed: sp,
+      cargo: c,
+      totalBonusCount: nonZero
+    };
+  });
+
+  return {
+    perShipWeapon,
+    perShipShield,
+    perShipArmour,
+    perShipSpeed,
+    perShipCargo,
+    byShipId,
+    hasAnyBonus
+  };
+}
+
 
 export interface StationedPlanetFleet {
   id: string;
@@ -644,7 +925,7 @@ export interface StationedPlanetFleet {
  * Loads the player's full list of planets and moons with their stationed warships and OGame icons.
  * Proactively fetches live ship counts from OGame's accountInfo API to ensure 100% accurate fleet numbers.
  */
-export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<CanonicalWarshipId, number>): Promise<StationedPlanetFleet[]> {
+export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<CanonicalWarshipId, number>, forceRefresh = false): Promise<StationedPlanetFleet[]> {
   const metaPlayerId = document.querySelector<HTMLMetaElement>('meta[name="ogame-player-id"]')?.content;
   const metaPlanetType = document.querySelector<HTMLMetaElement>('meta[name="ogame-planet-type"]')?.content?.trim();
   const metaPlanetId = document.querySelector<HTMLMetaElement>('meta[name="ogame-planet-id"]')?.content?.trim() || '';
@@ -685,29 +966,55 @@ export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<Canoni
   const accountInfoEntities: { id: string; name: string; coords: string; type: 'planet' | 'moon'; ships: Record<number, number> }[] = [];
 
   // 2. Fast Cache: Check in-memory window and chrome.storage.local
+  let cacheTimestamp = 0;
   const applyFleetCache = (cache: any) => {
     if (!cache || typeof cache !== 'object') return;
-    if (cache.byPlanetId) Object.assign(liveShipsByPlanetId, cache.byPlanetId);
-    if (cache.byCoordsType) Object.assign(liveShipsByCoords, cache.byCoordsType);
+    if (cache.timestamp) cacheTimestamp = Math.max(cacheTimestamp, Number(cache.timestamp) || 0);
+    if (cache.byPlanetId) {
+      Object.keys(liveShipsByPlanetId).forEach((k) => delete liveShipsByPlanetId[k]);
+      Object.assign(liveShipsByPlanetId, cache.byPlanetId);
+    }
+    if (cache.byCoordsType) {
+      Object.keys(liveShipsByCoords).forEach((k) => delete liveShipsByCoords[k]);
+      Object.assign(liveShipsByCoords, cache.byCoordsType);
+    }
     if (cache.realIds) Object.assign(realIdsByCoordsType, cache.realIds);
+    if (Array.isArray(cache.entities) && cache.entities.length > 0) {
+      accountInfoEntities.length = 0;
+      accountInfoEntities.push(...cache.entities);
+    }
   };
 
   applyFleetCache((window as any)._ognexus_cached_fleet);
 
+  let lastSyncTime = cacheTimestamp;
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && metaPlayerId) {
     try {
-      const stored = await chrome.storage.local.get(`ognexus_fleet_${metaPlayerId}`);
+      const stored = await chrome.storage.local.get([`ognexus_fleet_${metaPlayerId}`, 'last_empire_sync_time']);
       if (stored && stored[`ognexus_fleet_${metaPlayerId}`]) {
         applyFleetCache(stored[`ognexus_fleet_${metaPlayerId}`]);
+      }
+      if (stored && stored.last_empire_sync_time) {
+        lastSyncTime = Math.max(lastSyncTime, Number(stored.last_empire_sync_time) || 0);
       }
     } catch {}
   }
 
-  // 3. Fetch externaldataexport accountInfo API directly (authoritative list of all 32 celestial objects & ships)
-  try {
-    const accRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
+  // 3. ZERO-CALL GUARANTEE: If cache is warm and not forceRefresh, DO NOT make any network request on modal open!
+  // If performBackgroundEmpireSync just ran (cacheTimestamp < 5s), reuse its freshly enriched data directly without redundant secondary fetch.
+  const isFreshlySynced = (Date.now() - cacheTimestamp) < 5000;
+  const hasWarmCache = !forceRefresh && (Object.keys(liveShipsByCoords).length > 0 || Object.keys(liveShipsByPlanetId).length > 0 || accountInfoEntities.length > 0);
+  const canFetch = !isFreshlySynced && isPageLoadValid() && (forceRefresh || (Date.now() - lastSyncTime) >= 30000);
+
+  if (!hasWarmCache && canFetch) {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ 'last_empire_sync_time': Date.now() });
+      }
+      const accRes = await fetchGameOnLoad('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        cache: 'no-store'
+      });
     if (accRes.ok) {
       const accText = await accRes.text();
       const trimmed = accText ? accText.trim() : '';
@@ -747,6 +1054,7 @@ export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<Canoni
           }
         });
 
+        accountInfoEntities.length = 0;
         entityMap.forEach((rawP) => {
           const idStr = String(rawP.id);
           const mappedType = typeMap.get(idStr);
@@ -772,8 +1080,8 @@ export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<Canoni
             }
           });
 
-          liveShipsByPlanetId[idStr] = { ...(liveShipsByPlanetId[idStr] || {}), ...ships };
-          liveShipsByCoords[key] = { ...(liveShipsByCoords[key] || {}), ...ships };
+          liveShipsByPlanetId[idStr] = { ...ships };
+          liveShipsByCoords[key] = { ...ships };
           realIdsByCoordsType[key] = idStr;
 
           accountInfoEntities.push({
@@ -789,7 +1097,8 @@ export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<Canoni
           timestamp: Date.now(),
           byPlanetId: liveShipsByPlanetId,
           byCoordsType: liveShipsByCoords,
-          realIds: realIdsByCoordsType
+          realIds: realIdsByCoordsType,
+          entities: accountInfoEntities
         };
 
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && metaPlayerId) {
@@ -798,15 +1107,21 @@ export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<Canoni
               timestamp: Date.now(),
               byPlanetId: liveShipsByPlanetId,
               byCoordsType: liveShipsByCoords,
-              realIds: realIdsByCoordsType
+              realIds: realIdsByCoordsType,
+              entities: accountInfoEntities
             }
           });
         }
       }
     }
-  } catch (err) {
-    console.warn('[OrionSim] accountInfo fleet query failed:', err);
+  } catch (err: any) {
+    if (err?.name === 'OGameRequestGuardError' || err?.message?.includes('OGameRequestGuard')) {
+      console.debug('[OrionSim] accountInfo fleet query skipped via guard:', err.message);
+    } else {
+      console.debug('[OrionSim] accountInfo fleet query failed:', err?.message || err);
+    }
   }
+}
 
   // 4. Scrape live DOM #planetList for images, custom names, and visual link attributes
   const domPlanets: any[] = [];
@@ -909,8 +1224,8 @@ export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<Canoni
     };
     for (const id of CANONICAL_WARSHIP_IDS) {
       const fallbackVal = (isCurrent && fallbackCurrentShips) ? (fallbackCurrentShips[id] || 0) : 0;
-      const parsed = Number(accEnt.ships[id] ?? liveShipsByCoords[key]?.[id] ?? liveShipsByPlanetId[String(accEnt.id)]?.[id] ?? fallbackVal);
-      ships[id] = parsed > 0 ? parsed : fallbackVal;
+      const val = accEnt.ships?.[id] ?? liveShipsByCoords[key]?.[id] ?? liveShipsByPlanetId[String(accEnt.id)]?.[id];
+      ships[id] = val !== undefined ? Math.max(0, Number(val) || 0) : fallbackVal;
     }
 
     resultMap.set(key, {
@@ -945,8 +1260,8 @@ export async function loadPlayerPlanetsList(fallbackCurrentShips?: Record<Canoni
       };
       for (const id of CANONICAL_WARSHIP_IDS) {
         const fallbackVal = (isCurrent && fallbackCurrentShips) ? (fallbackCurrentShips[id] || 0) : 0;
-        const parsed = Number(liveShips[id] ?? fallbackVal);
-        ships[id] = parsed > 0 ? parsed : fallbackVal;
+        const val = liveShips[id];
+        ships[id] = val !== undefined ? Math.max(0, Number(val) || 0) : fallbackVal;
       }
 
       resultMap.set(key, {

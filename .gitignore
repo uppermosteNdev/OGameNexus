@@ -104,13 +104,20 @@ vite.config.ts.timestamp-*
 # Project temporary analysis/split folders
 temp_acs_split/
 scratch/
+orion-guide-site/
 
 # Agents & Skills
-.agents/
-skills/
-SKILL.md
-skills.json
-AGENTS.md
+.agents/*
+!.agents/rules/
+!.agents/mcp_config.json
+!.agents/install-taste-skills.ps1
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/release-validation/
+.gemini/
+/skills/
+/SKILL.md
+/skills.json
 
 # Graphify Knowledge Graph & Cache
 graphify-out/

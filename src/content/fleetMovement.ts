@@ -1,4 +1,6 @@
 import { cleanUniverseId } from '../utils/universe';
+import { db, Planet } from '../db';
+import { fetchGameOnLoad, fetchGameOnUserAction, isPageLoadValid } from '../utils/networkGuard';
 
 export interface FleetCoordinates {
   coords: string;
@@ -812,7 +814,8 @@ export async function updateFleetMovementsFromHtml(
 export async function fetchAndSyncFleetMovements(
   force = false,
   explicitPlayerId?: string,
-  explicitUniverse?: string
+  explicitUniverse?: string,
+  trigger?: Event | OGameRequestGuard.Ticket
 ): Promise<FleetMovementsData | null> {
   const now = Date.now();
   if (!force && now - lastFetchTimestamp < FETCH_THROTTLE_MS && memoryCache) {
@@ -821,30 +824,20 @@ export async function fetchAndSyncFleetMovements(
   lastFetchTimestamp = now;
 
   let eventHtml = '';
-  try {
-    // 1. Silent fetch via pageContext (which runs in MAIN world with native $.ajax and window.eventlistLink)
-    const pageContextPromise = new Promise<string>((resolve) => {
-      const handler = (e: any) => {
-        window.removeEventListener('ogame-nexus-ajax-eventlist-loaded', handler);
-        resolve(e?.detail?.html || '');
-      };
-      window.addEventListener('ogame-nexus-ajax-eventlist-loaded', handler);
-      setTimeout(() => {
-        window.removeEventListener('ogame-nexus-ajax-eventlist-loaded', handler);
-        resolve('');
-      }, 1500);
-    });
-
-    window.dispatchEvent(new CustomEvent('ogame-nexus-request-eventlist'));
-    eventHtml = await pageContextPromise;
-
-    // 2. Fallback: Silent direct fetch from content script if pageContext didn't return HTML
-    if (!eventHtml || !eventHtml.includes('eventFleet')) {
+  // Only attempt network request if a user trigger was passed OR we are within the start-up PAGE_LOAD window
+  if (trigger || isPageLoadValid()) {
+    try {
+      // Silent fetch using OGame Request Guard
       const url = `${window.location.origin}/game/index.php?page=componentOnly&component=eventList`;
-      const res = await fetch(url, {
-        credentials: 'include',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
+      const res = trigger
+        ? await fetchGameOnUserAction(trigger, url, {
+            credentials: 'include',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          })
+        : await fetchGameOnLoad(url, {
+            credentials: 'include',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
       if (res.ok) {
         const text = await res.text();
         try {
@@ -856,9 +849,14 @@ export async function fetchAndSyncFleetMovements(
           }
         }
       }
+    } catch (err: any) {
+      if (err?.name === 'OGameRequestGuardError' || err?.message?.includes('OGameRequestGuard')) {
+        console.debug('OGame Nexus: Silent fleet event fetch skipped via guard:', err.message);
+      } else {
+        // Abort during page navigation or network disruption: silent debug log, never pollute console.warn
+        console.debug('OGame Nexus: Silent fleet event fetch unavailable:', err?.message || err);
+      }
     }
-  } catch (err) {
-    console.warn('OGame Nexus: Error during silent fleet event fetch', err);
   }
 
   // Parse from either AJAX HTML or current DOM if already present (never click or open UI)
@@ -1022,4 +1020,218 @@ export async function updateDispatchSlotsFromDom(doc: Document | HTMLElement = d
 
   await saveFleetMovements(currentData);
   return info;
+}
+
+/**
+ * Scrapes live stationed ship counts from the active planet/moon on fleetdispatch page
+ * and updates in-memory cache (_ognexus_cached_fleet), chrome.storage.local (ognexus_fleet_${playerId}), and Dexie db.planets.
+ *
+ * STRICT SAFETY:
+ * 1. ZERO network calls (100% passive DOM scraping).
+ * 2. Only updates the active celestial body (coordinates + planet/moon type); all other locations remain intact.
+ * 3. Sets explicit 0 for ships reduced to 0 or absent from the current fleet.
+ */
+export async function scrapeAndSyncFleetDispatch(doc: Document = document): Promise<boolean> {
+  const militaryEl = doc.querySelector('#military');
+  const civilEl = doc.querySelector('#civil');
+  if (!militaryEl && !civilEl) return false;
+
+  const metaPlayerId = doc.querySelector<HTMLMetaElement>('meta[name="ogame-player-id"]')?.content?.trim();
+  const profileLink = doc.querySelector<HTMLAnchorElement>('#playerName a[href*="profileId="]');
+  const profileMatch = profileLink?.href?.match(/profileId=(\d+)/);
+  const playerId = metaPlayerId || (profileMatch ? profileMatch[1] : '');
+  if (!playerId) return false;
+
+  // 1. Determine active celestial body (Moon vs Planet)
+  const metaPlanetType = doc.querySelector<HTMLMetaElement>('meta[name="ogame-planet-type"]')?.content?.trim();
+  const activeMoonEl = doc.querySelector<HTMLElement>('#planetList .smallplanet .moonlink.active, #planetList .moonlink.active');
+  let isMoon = metaPlanetType === '3' || metaPlanetType === 'moon' || !!activeMoonEl;
+  let celestialType: 'planet' | 'moon' = isMoon ? 'moon' : 'planet';
+
+  // 2. Active coordinates
+  let currentCoords = '';
+  if (activeMoonEl) {
+    const parentNode = activeMoonEl.closest('.smallplanet');
+    const coordsText = parentNode?.querySelector('.planet-koords')?.textContent?.trim() || '';
+    currentCoords = coordsText.replace(/[\[\]]/g, '').trim();
+  }
+  if (!currentCoords) {
+    const activePlanetNode = doc.querySelector<HTMLElement>('#planetList .smallplanet.active, #planetList .smallplanet.active_home');
+    const coordsText = activePlanetNode?.querySelector('.planet-koords')?.textContent?.trim() || '';
+    currentCoords = coordsText.replace(/[\[\]]/g, '').trim();
+  }
+  if (!currentCoords) {
+    const metaCoords = doc.querySelector<HTMLMetaElement>('meta[name="ogame-planet-coordinates"]')?.content || '';
+    currentCoords = metaCoords.replace(/[\[\]]/g, '').trim();
+  }
+
+  // Authoritative fallback: Check inline script "var currentPlanet = {"galaxy":3,"system":38,"position":6,"type":3,"name":"Blanco"};"
+  let scriptPlanetName = '';
+  const scriptNodes = doc.querySelectorAll('script');
+  for (let i = 0; i < scriptNodes.length; i++) {
+    const txt = scriptNodes[i].textContent || '';
+    if (txt.includes('currentPlanet')) {
+      const match = txt.match(/var\s+currentPlanet\s*=\s*({[^}]+});/);
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[1]);
+          if (parsed && parsed.galaxy && parsed.system && parsed.position) {
+            if (!currentCoords) currentCoords = `${parsed.galaxy}:${parsed.system}:${parsed.position}`;
+            if (parsed.name) scriptPlanetName = parsed.name;
+            if (parsed.type === 3) {
+              isMoon = true;
+              celestialType = 'moon';
+            } else if (parsed.type === 1 && !activeMoonEl && metaPlanetType !== '3') {
+              isMoon = false;
+              celestialType = 'planet';
+            }
+          }
+        } catch {}
+      }
+      break;
+    }
+  }
+
+  if (!currentCoords) return false;
+
+  // 3. Planet / Moon ID & Name
+  let targetId = '';
+  if (celestialType === 'moon' && activeMoonEl) {
+    const href = activeMoonEl.getAttribute('href') || activeMoonEl.getAttribute('data-link') || '';
+    const m = href.match(/cp=(\d+)/);
+    if (m) targetId = m[1];
+  }
+  if (!targetId && celestialType !== 'moon') {
+    const activePlanetNode = doc.querySelector<HTMLElement>('#planetList .smallplanet.active, #planetList .smallplanet.active_home');
+    if (activePlanetNode && activePlanetNode.id) {
+      targetId = activePlanetNode.id.replace('planet-', '');
+    }
+  }
+  if (!targetId) {
+    const urlCpMatch = window.location.href.match(/[?&]cp=(\d+)/);
+    if (urlCpMatch) targetId = urlCpMatch[1];
+  }
+  if (!targetId) {
+    targetId = doc.querySelector<HTMLMetaElement>('meta[name="ogame-planet-id"]')?.content?.trim() || '';
+  }
+
+  let name = scriptPlanetName;
+  if (!name) {
+    if (celestialType === 'moon' && activeMoonEl) {
+      const tip = activeMoonEl.getAttribute('data-tooltip-title') || '';
+      const nameMatch = tip.match(/<b>(.*?)[\\[]/);
+      if (nameMatch) name = nameMatch[1].trim();
+      if (!name) name = 'Moon';
+    } else {
+      const activePlanetNode = doc.querySelector<HTMLElement>('#planetList .smallplanet.active, #planetList .smallplanet.active_home');
+      name = activePlanetNode?.querySelector('.planet-name')?.textContent?.trim() || doc.querySelector<HTMLMetaElement>('meta[name="ogame-planet-name"]')?.content?.trim() || 'Planet';
+    }
+  }
+
+  // 4. Scrape Ships from DOM (#military and #civil)
+  const ships: Record<number, number> = {};
+  const shipNodes = doc.querySelectorAll('#military li.technology[data-technology], #civil li.technology[data-technology]');
+  shipNodes.forEach((node) => {
+    const techIdStr = node.getAttribute('data-technology');
+    if (!techIdStr) return;
+    const techId = parseInt(techIdStr, 10);
+    if (isNaN(techId)) return;
+
+    const amountEl = node.querySelector('.amount');
+    let count = 0;
+    const dataVal = amountEl?.getAttribute('data-value');
+    if (dataVal !== null && dataVal !== undefined && dataVal !== '') {
+      count = parseInt(dataVal, 10) || 0;
+    } else {
+      const stockEl = node.querySelector('.stockAmount') || amountEl;
+      const txt = stockEl?.textContent?.trim() || '0';
+      count = parseInt(txt.replace(/[^\d]/g, ''), 10) || 0;
+    }
+    ships[techId] = Math.max(0, count);
+  });
+
+  // Ensure all standard warship and civil IDs are explicitly defined (0 if not stationed)
+  const ALL_KNOWN_SHIPS = [202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 217, 218, 219];
+  ALL_KNOWN_SHIPS.forEach((id) => {
+    if (ships[id] === undefined) ships[id] = 0;
+  });
+
+  // 5. Update browser cache (window._ognexus_cached_fleet and chrome.storage.local)
+  const storageKey = `ognexus_fleet_${playerId}`;
+  let cached: any = (window as any)._ognexus_cached_fleet;
+  if (!cached || !cached.byCoordsType || Object.keys(cached.byCoordsType).length === 0) {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        const stored = await chrome.storage.local.get([storageKey]);
+        if (stored && stored[storageKey]) {
+          cached = stored[storageKey];
+        }
+      } catch {}
+    }
+  }
+
+  if (!cached || typeof cached !== 'object') {
+    cached = {
+      timestamp: Date.now(),
+      byPlanetId: {},
+      byCoordsType: {},
+      realIds: {},
+      entities: []
+    };
+  }
+
+  if (!cached.byCoordsType) cached.byCoordsType = {};
+  if (!cached.byPlanetId) cached.byPlanetId = {};
+  if (!cached.realIds) cached.realIds = {};
+  if (!Array.isArray(cached.entities)) cached.entities = [];
+
+  const key = `${currentCoords}_${celestialType}`;
+  cached.timestamp = Date.now();
+
+  // STRICT: ONLY update the active celestial body
+  cached.byCoordsType[key] = { ...ships };
+  if (targetId) {
+    cached.byPlanetId[targetId] = { ...ships };
+    cached.realIds[key] = targetId;
+  }
+
+  // Update or insert entity
+  const entIndex = cached.entities.findIndex((e: any) => e.coords === currentCoords && e.type === celestialType);
+  if (entIndex >= 0) {
+    cached.entities[entIndex].ships = { ...ships };
+    if (targetId) cached.entities[entIndex].id = targetId;
+    if (name) cached.entities[entIndex].name = name;
+  } else {
+    cached.entities.push({
+      id: targetId || key,
+      name: name || (celestialType === 'moon' ? 'Moon' : 'Planet'),
+      coords: currentCoords,
+      type: celestialType,
+      ships: { ...ships }
+    });
+  }
+
+  (window as any)._ognexus_cached_fleet = cached;
+
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    try {
+      await chrome.storage.local.set({ [storageKey]: cached });
+    } catch {}
+  }
+
+  // 6. Update Dexie DB (db.planets)
+  try {
+    const dbPlanets = await db.planets.where('playerId').equals(playerId).toArray();
+    const match = dbPlanets.find((p: Planet) => (targetId && String(p.id) === String(targetId)) || (p.coords === currentCoords && p.type === celestialType));
+    if (match) {
+      await db.planets.update(match.id, {
+        ships: { ...(match.ships || {}), ...ships },
+        lastUpdated: Date.now()
+      });
+    }
+  } catch (dbErr) {
+    console.warn('[OGame Nexus] Error updating db.planets from fleetdispatch:', dbErr);
+  }
+
+  return true;
 }

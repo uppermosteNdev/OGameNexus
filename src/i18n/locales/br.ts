@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const br: LocaleTranslations = {
     "common": {
@@ -275,7 +275,7 @@ export const br: LocaleTranslations = {
     },
     "changelog": {
         "title": "Sistema Atualizado",
-        "versionBadge": "v1.3.0",
+        "versionBadge": "v1.3.2",
         "telemetryReport": "RELATÃ“RIO DE TELEMETRIA DA PONTE DE COMANDO OGAME NEXUS",
         "dataPreservedNotice": "Suas configuraÃ§Ãµes planetÃ¡rias, telemetria coletada e histÃ³ricos foram preservados com total seguranÃ§a durante esta atualizaÃ§Ã£o.",
         "acknowledge": "Entendido",

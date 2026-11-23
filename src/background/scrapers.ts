@@ -350,12 +350,14 @@ export function parseSupplies(html: string): ScrapedSupplies {
     const data: ScrapedSupplies = {};
 
     const getLevelByTechId = (techId: number) => {
-        const regex = new RegExp(`(<li[^>]*data-technology=["']${techId}["'][^>]*>)[\\s\\S]*?class=["']level["'][^>]*data-value=["'](\\d+)["']`, "i");
+        const regex = new RegExp(`(<li[^>]*data-technology=["']${techId}["'][^>]*>)([\\s\\S]*?)class=["']level["'][^>]*data-value=["'](\\d+)["']`, "i");
         const match = html.match(regex);
         if (match) {
             const liTag = match[1];
-            let level = parseInt(match[2], 10);
-            if (liTag.includes('active') && level > 0) {
+            const innerContent = match[2];
+            let level = parseInt(match[3], 10);
+            const isUpgrading = liTag.includes('active') && (innerContent.includes('countdown') || innerContent.includes('data-end') || innerContent.includes('timer'));
+            if (isUpgrading && level > 0) {
                 level--;
             }
             return level;
@@ -389,7 +391,8 @@ export function parseResearches(html: string): { id: number, level: number }[] |
         if (levelMatch) {
             let level = parseInt(levelMatch[1]);
             const liTag = match[0].split('>')[0];
-            if (liTag.includes('active') && level > 0) {
+            const isResearching = liTag.includes('active') && (innerContent.includes('countdown') || innerContent.includes('data-end') || innerContent.includes('timer'));
+            if (isResearching && level > 0) {
                 level--;
             }
             researches.push({ id, level });
@@ -446,7 +449,8 @@ export function parseLifeformBuildings(html: string): { id: number, name: string
         if (levelMatch) {
             let level = parseInt(levelMatch[1], 10);
             const liTag = match[0].split('>')[0];
-            if (liTag.includes('active') && level > 0) {
+            const isUpgrading = liTag.includes('active') && (innerContent.includes('countdown') || innerContent.includes('data-end') || innerContent.includes('timer'));
+            if (isUpgrading && level > 0) {
                 level--;
             }
             buildings.push({

@@ -1,0 +1,3 @@
+# Preserve exact line endings for byte-identical verification
+public/ogame-request-guard.js -text
+*.tsv -text

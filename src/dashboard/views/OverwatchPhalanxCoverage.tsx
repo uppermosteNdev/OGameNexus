@@ -28,6 +28,8 @@ import {
   Compass,
 } from 'lucide-react';
 import { db } from '../../db';
+import { fetchPublicApi } from '../../utils/networkGuard';
+import { fetchOverwatch } from '../../utils/overwatchApi';
 import { ThemeIcon } from '../components/ThemeIcon';
 import { getLfTech } from '../../db/lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from '../../db/lifeformBonusData';
@@ -266,7 +268,7 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
         const domain = currentUniverseClean.includes('.')
           ? currentUniverseClean
           : `${currentUniverseClean}.ogame.gameforge.com`;
-        const res = await fetch(`https://${domain}/api/serverData.xml`);
+        const res = await fetchPublicApi(`https://${domain}/api/serverData.xml`);
         if (!res.ok) return;
         const xml = await res.text();
         const getVal = (tag: string) => {
@@ -478,7 +480,7 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
       // Strategy A: Try specialized phalanx coverage endpoint
       let succeeded = false;
       try {
-        const res = await fetch(`${apiUrl}/api/v1/overwatch/phalanx/coverage`, {
+        const res = await fetchOverwatch(`${apiUrl}/api/v1/overwatch/phalanx/coverage`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${config.authToken}`,
@@ -502,7 +504,7 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
 
       // Strategy B: Fallback to roster + member details
       if (!succeeded) {
-        const rosterRes = await fetch(`${apiUrl}/api/v1/overwatch/empire/roster`, {
+        const rosterRes = await fetchOverwatch(`${apiUrl}/api/v1/overwatch/empire/roster`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${config.authToken}`,
@@ -518,7 +520,7 @@ export const OverwatchPhalanxCoverage: React.FC<OverwatchPhalanxCoverageProps> =
             const details = await Promise.all(
               syncedMembers.map(async (m: any) => {
                 try {
-                  const mRes = await fetch(`${apiUrl}/api/v1/overwatch/empire/member?playerId=${m.playerId}`, {
+                  const mRes = await fetchOverwatch(`${apiUrl}/api/v1/overwatch/empire/member?playerId=${m.playerId}`, {
                     method: 'GET',
                     headers: {
                       Authorization: `Bearer ${config.authToken}`,

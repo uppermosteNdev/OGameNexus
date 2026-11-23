@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { cleanUniverseId } from './universe';
+import { fetchExternal } from './networkGuard';
 
 export const DEFAULT_OVERWATCH_API_URL = 'https://nexus-sync-worker.nexus-overwatch.workers.dev';
 
@@ -167,47 +168,10 @@ export async function fetchOverwatch(
   headers.set('X-Nexus-Timestamp', timestamp);
   headers.set('X-Nexus-Signature', signature);
 
-  return fetch(fullUrl, {
+  return fetchExternal(fullUrl, {
     ...init,
     headers,
   });
-}
-
-/**
- * Transparent fetch interceptor: ensures all fetch calls targeting the Overwatch Edge API
- * automatically carry HMAC signatures, timestamps, and client keys without manual header wiring.
- */
-if (typeof globalThis !== 'undefined' && !(globalThis as any).__nexusOverwatchFetchPatched) {
-  (globalThis as any).__nexusOverwatchFetchPatched = true;
-  const originalFetch = globalThis.fetch;
-
-  globalThis.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const rawUrl = typeof input === 'string'
-      ? input
-      : (input instanceof URL ? input.toString() : (input && 'url' in input ? (input as Request).url : ''));
-
-    if (rawUrl && (rawUrl.includes('.workers.dev') || rawUrl.includes(':8787'))) {
-      try {
-        const urlObj = new URL(rawUrl);
-        const method = (init?.method || (input instanceof Request ? input.method : 'GET') || 'GET').toUpperCase();
-        const { timestamp, signature, clientKey } = await signOverwatchRequest(method, urlObj.pathname);
-
-        const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : {}));
-        headers.set('X-Nexus-Client-Key', clientKey);
-        headers.set('X-Nexus-Timestamp', timestamp);
-        headers.set('X-Nexus-Signature', signature);
-
-        return originalFetch(input, {
-          ...init,
-          headers,
-        });
-      } catch (err) {
-        console.warn('Overwatch fetch signing error, falling back to standard fetch:', err);
-      }
-    }
-
-    return originalFetch(input, init);
-  };
 }
 
 export interface OverwatchHealthResult {
@@ -229,7 +193,7 @@ export async function checkOverwatchHealth(customUrl?: string): Promise<Overwatc
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-    const res = await fetch(`${baseUrl}/api/health`, {
+    const res = await fetchExternal(`${baseUrl}/api/health`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,

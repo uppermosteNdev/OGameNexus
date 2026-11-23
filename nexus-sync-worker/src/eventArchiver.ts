@@ -174,8 +174,9 @@ export async function archiveHistoricalEventsBatch(
               }
             }
           }
-        } catch (readErr) {
-          console.warn(`[EventArchiver] Could not parse existing R2 archive for ${r2Key}, merging on top:`, readErr);
+        } catch (readErr: any) {
+          console.error(`[EventArchiver] CRITICAL: Failed to read/decompress existing R2 archive for ${r2Key}. Aborting archival to prevent historical data loss:`, readErr);
+          throw new Error(`Archive integrity error for ${r2Key}: Failed to parse existing R2 archive (${readErr?.message || String(readErr)}). Aborting to prevent data loss.`);
         }
       }
 

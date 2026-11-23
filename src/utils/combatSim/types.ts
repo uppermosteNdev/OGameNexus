@@ -39,6 +39,8 @@ export interface LifeformBonusOverrides {
     perShipWeapon: Record<number, number>;
     perShipShield: Record<number, number>;
     perShipArmour: Record<number, number>;
+    perShipCargo?: Record<number, number>;
+    perShipSpeed?: Record<number, number>;
 }
 
 export interface Coordinates {

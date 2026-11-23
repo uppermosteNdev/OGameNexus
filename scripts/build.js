@@ -26,6 +26,12 @@ try {
     fs.rmSync(outDir, { recursive: true, force: true });
   }
 
+  // 0. Run fast compliance gate (compact mode) before building
+  execSync('node scripts/validate-compliance.js --compact', {
+    cwd: rootDir,
+    stdio: 'inherit',
+  });
+
   // 1. Run tsc and vite build
   console.log('Running TypeScript compilation and Vite build...');
   execSync('npx tsc && npx vite build', {
@@ -34,7 +40,17 @@ try {
     stdio: 'inherit',
   });
 
-  // 2. Prepare archiving
+  // 2. Post-process Chrome background module service worker to statically import the guard
+  const bgDistPath = path.join(outDir, 'src', 'background', 'index.js');
+  if (target === 'chrome' && fs.existsSync(bgDistPath)) {
+    const bgContent = fs.readFileSync(bgDistPath, 'utf8');
+    if (!bgContent.startsWith("import '../../ogame-request-guard.js';")) {
+      fs.writeFileSync(bgDistPath, `import '../../ogame-request-guard.js';\n${bgContent}`, 'utf8');
+      console.log('Injected static guard import into Chrome background service worker.');
+    }
+  }
+
+  // 3. Prepare archiving
   if (!fs.existsSync(outDir)) {
     throw new Error(`Output directory not found: ${outDir}`);
   }

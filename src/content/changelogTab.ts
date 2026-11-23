@@ -17,6 +17,20 @@ export interface ChangelogVersion {
 export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]> = {
   en: [
     {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
+    {
       version: 'v1.3.0',
       items: [
         { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
@@ -233,6 +247,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   de: [
     {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
+    {
       version: 'v1.3.0',
       items: [
         { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
@@ -317,6 +345,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   fr: [
+    {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
     {
       version: 'v1.3.0',
       items: [
@@ -403,6 +445,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ]
 ,
   pl: [
+    {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
     {
       version: 'v1.3.0',
       items: [
@@ -518,6 +574,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   nl: [
     {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
+    {
       version: 'v1.3.0',
       items: [
         { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
@@ -631,6 +701,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   es: [
+    {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
     {
       version: 'v1.3.0',
       items: [
@@ -746,6 +830,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   it: [
     {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
+    {
       version: 'v1.3.0',
       items: [
         { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
@@ -859,6 +957,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   ru: [
+    {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
     {
       version: 'v1.3.0',
       items: [
@@ -974,6 +1086,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   tr: [
     {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
+    {
       version: 'v1.3.0',
       items: [
         { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
@@ -1088,6 +1214,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
   ],
   br: [
     {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
+    {
       version: 'v1.3.0',
       items: [
         { type: 'Feature', text: 'Project Orion Command Deck: Comprehensive command center for Project Orion with deep-space anomaly tracking, planetary scanner ranking, mission ROI optimization, and Lithium amortization.' },
@@ -1201,6 +1341,20 @@ export const NEXUS_CHANGELOGS_I18N: Record<SupportedLanguage, ChangelogVersion[]
     }
   ],
   pt: [
+    {
+      version: 'v1.3.2',
+      items: [
+        { type: 'Feature', text: 'Orion Anomaly Fleet Dispatch: Send your simulated fleet directly on anomaly missions, with live available fleet counts displayed for the active planet or moon.' },
+        { type: 'Polishing', text: 'Project Orion UI & Workflow: Refined Project Orion interface and feature usability across anomaly views.' },
+        { type: 'Polishing', text: 'Alliance Top/Flop Adjustments: Improved Top/Flop customization, safer masked Discord webhook management, and multi-device preset Edit Key support.' },
+        { type: 'Polishing', text: 'Nexus Data Center Polish: Added player points and rank badges to Accounts Management cards and fixed live empire & sync metric counters.' },
+        { type: 'Bugfix', text: 'Orion Amortization Bonuses: Fixed amortization calculation bonuses for Project Orion universes.' },
+        { type: 'Bugfix', text: 'Overseer Non-Orion Guard: Fixed Overseer displaying Orion amortization recommendations on non-Orion universes.' },
+        { type: 'Bugfix', text: 'General T18 Amortization: Resolved calculation issues for General T18 lifeform amortization.' },
+        { type: 'Bugfix', text: 'Combat Simulator Warrior Bonus: Fixed Warrior alliance class +1 combat tech level bonus in NexuSim and CombatSim.' },
+        { type: 'Bugfix', text: 'Raid Radar Spill-Over Fix: Prevented Raid Radar entries from spilling across accounts.' }
+      ]
+    },
     {
       version: 'v1.3.0',
       items: [

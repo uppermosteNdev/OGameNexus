@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const pl: LocaleTranslations = {
     "common": {
@@ -275,7 +275,7 @@ export const pl: LocaleTranslations = {
     },
     "changelog": {
         "title": "Aktualizacja systemu",
-        "versionBadge": "v1.3.0",
+        "versionBadge": "v1.3.2",
         "telemetryReport": "RAPORT TELEMETRII PANELU DOWODZENIA OGAME NEXUS",
         "dataPreservedNotice": "Twoje konfiguracje planet, zebrana telemetria i historia zostaÅ‚y bezpiecznie zachowane podczas tej aktualizacji.",
         "acknowledge": "ZrozumiaÅ‚em",

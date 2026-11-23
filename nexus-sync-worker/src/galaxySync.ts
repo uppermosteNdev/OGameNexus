@@ -4,7 +4,7 @@
 
 import { json } from 'itty-router';
 import { z } from 'zod';
-import { Env } from './index';
+import { Env, getCandidatePeppers } from './index';
 import { hashGlyph } from './crypto';
 import { cleanUniverseId, normalizePlayerStatus } from './universeSeeder';
 import {
@@ -76,11 +76,7 @@ export async function authenticateMember(req: Request, env: Env) {
   if (!authHeader) return null;
 
   const rawToken = authHeader.replace(/^Bearer\s+/i, '').trim();
-  const candidatePeppers = Array.from(new Set([
-    'nexus_overwatch_secret_pepper_2026',
-    env.SERVER_PEPPER,
-    'nexus_pepper_default',
-  ])).filter(p => p && p !== 'CHANGE_ME_IN_CLOUDFLARE_SECRETS_OR_DEV_VARS');
+  const candidatePeppers = getCandidatePeppers(env);
 
   const coreDb = getCoreDb(env);
 
@@ -88,7 +84,7 @@ export async function authenticateMember(req: Request, env: Env) {
     const tokenHash = await hashGlyph(rawToken, pepper);
     const member: any = await coreDb.prepare(
       `SELECT m.alliance_id, m.player_id, m.player_name, m.role, m.permissions_json,
-              a.alliance_name, a.alliance_tag, a.universe_id, a.subscription_status, a.subscription_expires_at
+              a.alliance_name, a.alliance_tag, a.ogame_alliance_id, a.universe_id, a.subscription_status, a.subscription_expires_at
        FROM alliance_members m
        JOIN alliances a ON m.alliance_id = a.alliance_id
        WHERE m.auth_token_hash = ?`

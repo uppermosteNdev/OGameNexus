@@ -1,4 +1,4 @@
-﻿import { LocaleTranslations } from './en';
+import { LocaleTranslations } from './en';
 
 export const tr: LocaleTranslations = {
     "common": {
@@ -275,7 +275,7 @@ export const tr: LocaleTranslations = {
     },
     "changelog": {
         "title": "Sistem GÃ¼ncellendi",
-        "versionBadge": "v1.3.0",
+        "versionBadge": "v1.3.2",
         "telemetryReport": "OGAME NEXUS KOMUTA MERKEZÄ° TELEMETRÄ° RAPORU",
         "dataPreservedNotice": "Gezegen yapÄ±landÄ±rmalarÄ±nÄ±z, toplanan telemetri ve geÃ§miÅŸiniz bu gÃ¼ncelleme sÄ±rasÄ±nda gÃ¼venle korunmuÅŸtur.",
         "acknowledge": "AnlaÅŸÄ±ldÄ±",

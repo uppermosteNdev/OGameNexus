@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db';
+import { db, Planet } from '../../db';
 import { LIFEFORM_TECH_DATA, getLfTech } from '../../db/lifeformTechData';
 import { LIFEFORM_BONUS_BREAKDOWN_DATA } from '../../db/lifeformBonusData';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,6 +13,20 @@ const THEME_CYAN = '#00f2ff';
 const Empire: React.FC = () => {
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
     const [activeTab, setActiveTab] = useState<'lifeform' | 'infrastructure' | 'amortization'>('lifeform');
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    // Listen for background empire data update broadcast
+    useEffect(() => {
+        const handleMsg = (msg: any) => {
+            if (msg && msg.type === 'EMPIRE_DATA_UPDATED') {
+                setRefreshTrigger(n => n + 1);
+            }
+        };
+        chrome.runtime?.onMessage?.addListener(handleMsg);
+        return () => {
+            chrome.runtime?.onMessage?.removeListener(handleMsg);
+        };
+    }, []);
 
     // Support deep-linking from Hotbar
     useEffect(() => {
@@ -44,10 +58,67 @@ const Empire: React.FC = () => {
         };
     }, []);
 
-    const planets = useLiveQuery(
-        () => activeAccount ? db.planets.where('playerId').equals(activeAccount.playerId).filter(p => p.type === 'planet').toArray() : [],
-        [activeAccount]
+    const rawPlanets = useLiveQuery(
+        () => {
+            if (!activeAccount) return [];
+            const pidVariants = [activeAccount.playerId, String(activeAccount.playerId), Number(activeAccount.playerId)].filter(v => v !== undefined && v !== null && !isNaN(v as any));
+            return db.planets.where('playerId').anyOf(pidVariants).filter(p => p.type === 'planet').toArray();
+        },
+        [activeAccount, refreshTrigger]
     ) || [];
+
+    const planets: Planet[] = useMemo(() => {
+        const map = new Map<string, Planet>();
+        const isValidCoord = (c?: string) => Boolean(c && c !== "0:0:0" && !c.includes("0:0:0") && /^\d+:\d+:\d+$/.test(String(c).trim()));
+
+        for (const p of rawPlanets) {
+            const key = String(p.id);
+            const prev = map.get(key);
+            if (!prev) {
+                map.set(key, p);
+            } else {
+                const prevUpdated = prev.lastUpdated || 0;
+                const currUpdated = p.lastUpdated || 0;
+                const base = currUpdated >= prevUpdated ? p : prev;
+                const older = currUpdated >= prevUpdated ? prev : p;
+
+                // Pick the most up-to-date valid coordinates (handles relocations immediately)
+                const resolvedCoords = isValidCoord(base.coords)
+                    ? String(base.coords).trim()
+                    : (isValidCoord(older.coords) ? String(older.coords).trim() : (base.coords || older.coords || "0:0:0"));
+
+                map.set(key, {
+                    ...older,
+                    ...base,
+                    id: key,
+                    coords: resolvedCoords,
+                    name: (base.name && base.name !== 'Planet' && base.name !== 'Moon') ? base.name : (older.name || base.name),
+                    metalMine: Math.max(prev.metalMine || 0, p.metalMine || 0),
+                    crystalMine: Math.max(prev.crystalMine || 0, p.crystalMine || 0),
+                    deuteriumMine: Math.max(prev.deuteriumMine || 0, p.deuteriumMine || 0),
+                    solarPlant: Math.max(prev.solarPlant || 0, p.solarPlant || 0),
+                    fusionReactor: Math.max(prev.fusionReactor || 0, p.fusionReactor || 0),
+                    solarSatellites: Math.max(prev.solarSatellites || 0, p.solarSatellites || 0),
+                    metalStorage: Math.max(prev.metalStorage || 0, p.metalStorage || 0),
+                    crystalStorage: Math.max(prev.crystalStorage || 0, p.crystalStorage || 0),
+                    deuteriumStorage: Math.max(prev.deuteriumStorage || 0, p.deuteriumStorage || 0),
+                    roboticsFactory: Math.max(prev.roboticsFactory || 0, p.roboticsFactory || 0),
+                    shipyard: Math.max(prev.shipyard || 0, p.shipyard || 0),
+                    researchLab: Math.max(prev.researchLab || 0, p.researchLab || 0),
+                    allianceDepot: Math.max(prev.allianceDepot || 0, p.allianceDepot || 0),
+                    missileSilo: Math.max(prev.missileSilo || 0, p.missileSilo || 0),
+                    naniteFactory: Math.max(prev.naniteFactory || 0, p.naniteFactory || 0),
+                    terraformer: Math.max(prev.terraformer || 0, p.terraformer || 0),
+                    spaceDock: Math.max(prev.spaceDock || 0, p.spaceDock || 0),
+                    lunarBase: Math.max(prev.lunarBase || 0, p.lunarBase || 0),
+                    sensorPhalanx: Math.max(prev.sensorPhalanx || 0, p.sensorPhalanx || 0),
+                    jumpGate: Math.max(prev.jumpGate || 0, p.jumpGate || 0),
+                    iaScanner: Math.max(prev.iaScanner || 0, p.iaScanner || 0),
+                });
+            }
+        }
+        return Array.from(map.values());
+    }, [rawPlanets]);
 
     const [hoveredTech, setHoveredTech] = useState<{
         techId: number,
@@ -245,7 +316,7 @@ const Empire: React.FC = () => {
                                                         const baseId = 10000 + (p.lifeformId * 1000) + 100;
                                                         return Array.from({ length: 12 }, (_, i) => {
                                                             const bid = baseId + i + 1;
-                                                            const b = p.lifeformBuildings?.find(eb => eb.id === bid);
+                                                            const b = p.lifeformBuildings?.find((eb: any) => eb.id === bid);
                                                             const level = b?.level || 0;
                                                             return (
                                                                 <div key={bid} style={{ position: 'relative', flexShrink: 0 }}>
@@ -308,11 +379,11 @@ const Empire: React.FC = () => {
                                                             border: `1.5px solid ${tier === 1 ? 'rgba(34,197,94,0.15)' : tier === 2 ? 'rgba(59,130,246,0.15)' : 'rgba(168,85,247,0.15)'}`,
                                                             flexShrink: 0
                                                         }}>
-                                                            {p.lifeformSetup?.filter(s => {
+                                                            {p.lifeformSetup?.filter((s: any) => {
                                                                 if (tier === 1) return s.slotNumber <= 6;
                                                                 if (tier === 2) return s.slotNumber > 6 && s.slotNumber <= 12;
                                                                 return s.slotNumber > 12;
-                                                            }).sort((a, b) => a.slotNumber - b.slotNumber).map((s) => {
+                                                            }).sort((a: any, b: any) => a.slotNumber - b.slotNumber).map((s: any) => {
                                                                 const lfId = s.selectedTechId ? (getLfTech(s.selectedTechId)?.lifeformId) : undefined;
                                                                 const techColor = getLfColor(lfId);
 

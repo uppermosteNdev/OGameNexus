@@ -1,5 +1,6 @@
 
-import { Planet, ActiveResearchInfo } from '../db';
+import { db, Planet, ActiveResearchInfo } from '../db';
+import { fetchGameOnLoad, fetchGameOnUserAction, createTicket, isPageLoadValid } from '../utils/networkGuard';
 import { initContentSettings } from './settings';
 import { trackExpeditions, trackRawExpeditions, injectTodaySummaryCard, updateExpeditionViewDisplay } from './expeditions';
 
@@ -7,7 +8,7 @@ import { detectLanguageFromServerLink } from '../i18n';
 import { IS_EXTENSION_DISABLED } from '../config/killSwitch';
 
 if (IS_EXTENSION_DISABLED) {
-  console.warn('[OGame Nexus] Extension is deactivated pursuant to Gameforge directives. In-game features and background syncs are suspended.');
+  console.info('[OGame Nexus] Extension is deactivated pursuant to Gameforge directives. In-game features and background syncs are suspended.');
 } else {
   initContentSettings();
 }
@@ -71,7 +72,7 @@ import { scrapeImportExportDom, initImportExportListener, saveImportExportInfo }
 import { fetchPlayerInventory, parseInventoryHtml, savePlayerInventory } from './inventory';
 import { fetchEmpireProductionQueue, getStoredProductionQueue } from './productionQueue';
 import { initProductionBoxSpeedups, updateProductionBoxSpeedups } from './productionBoxSpeedups';
-import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom, fetchAndSyncFleetMovements } from './fleetMovement';
+import { initFleetMovementListener, parseEventListDom, saveFleetMovements, updateDispatchSlotsFromDom, scrapeAndSyncFleetDispatch, fetchAndSyncFleetMovements } from './fleetMovement';
 import { injectChangelogTab } from './changelogTab';
 import { initAllianceOverwatchBanner } from './allianceBanner';
 import { initOrionMissionEnhancer, initOrionScannerEnhancer, handleOrionAutoFleetDispatch, enhanceCollectRewardsOverlay } from './orion';
@@ -287,57 +288,80 @@ function scrapeAllianceClass(): number | undefined {
 
 function scrapePlanetList() {
   const planets: any[] = [];
-  const planetNodes = document.querySelectorAll("#planetList .smallplanet");
+  const planetNodes = document.querySelectorAll(
+    "#planetList .smallplanet, .smallplanet, #myPlanets .smallplanet, #myWorlds .smallplanet, [id^='planet-']"
+  );
+
+  const seenIds = new Set<string>();
 
   planetNodes.forEach(node => {
-    const planetId = node.id.replace("planet-", "");
-    const planetName = node.querySelector(".planet-name")?.textContent || "Unknown";
-    const planetCoordsRaw = node.querySelector(".planet-koords")?.textContent || "";
-    // Clean coords from brackets: [1:2:3] -> 1:2:3
-    const planetCoords = planetCoordsRaw.replace(/[\[\]]/g, "");
-
-    // Ignore placeholder slots (Free Slot) which have coords [0:0:0] or lack a proper planet id
-    if (!node.id || !node.id.startsWith("planet-") || !planetCoords || planetCoords === "0:0:0") {
+    // Extract planet ID from data attributes, classes, or node ID
+    const rawId = node.getAttribute("data-planet-id") || node.id.replace(/^planet[-_]?/i, "").trim();
+    if (!rawId || seenIds.has(rawId) || isNaN(Number(rawId))) {
       return;
     }
 
-    const planetImgEl = node.querySelector(".planetPic") as HTMLImageElement | null;
+    const nameEl = node.querySelector(".planet-name, .planetName, [class*='planet-name']");
+    const planetName = nameEl?.textContent?.trim() || "Planet";
+
+    // Extract coords from standard classes, custom skins, or tooltips
+    const coordsEl = node.querySelector(".planet-koords, .planet-coords, .planetCoords, [class*='koord'], [class*='coord']");
+    let planetCoordsRaw = (coordsEl?.textContent || "").replace(/[\[\]]/g, "").trim();
+
+    if (!planetCoordsRaw || planetCoordsRaw === "0:0:0") {
+      const linkEl = node.querySelector("a");
+      const tooltip = linkEl?.getAttribute("title") || linkEl?.getAttribute("data-tooltip-title") || "";
+      const match = tooltip.match(/\[(\d+:\d+:\d+)\]/);
+      if (match) planetCoordsRaw = match[1].trim();
+    }
+
+    // Ignore placeholder slots (Free Slot) which have coords 0:0:0
+    if (!planetCoordsRaw || planetCoordsRaw === "0:0:0") {
+      return;
+    }
+
+    seenIds.add(rawId);
+
+    const planetImgEl = node.querySelector(".planetPic, img[src*='planeten']") as HTMLImageElement | null;
     const planetImg = planetImgEl?.src || planetImgEl?.getAttribute("src") || "";
 
     planets.push({
-      id: planetId,
+      id: rawId,
       name: planetName,
-      coords: planetCoords,
+      coords: planetCoordsRaw,
       type: "planet",
       imgUrl: planetImg,
       lastUpdated: Date.now()
     });
 
-    const moonLink = node.querySelector(".moonlink");
+    const moonLink = node.querySelector(".moonlink, a[href*='cp='][class*='moon'], .icon-moon");
     if (moonLink) {
       const href = moonLink.getAttribute("href") || "";
       const cpMatch = href.match(/cp=(\d+)/);
       if (cpMatch) {
         const moonId = cpMatch[1];
-        let moonName = "Moon";
-        const tooltip = moonLink.getAttribute("data-tooltip-title");
-        if (tooltip) {
-          const nameMatch = tooltip.match(/<b>(.*?)\[/);
-          if (nameMatch) moonName = nameMatch[1].trim();
+        if (!seenIds.has(moonId)) {
+          seenIds.add(moonId);
+          let moonName = "Moon";
+          const tooltip = moonLink.getAttribute("data-tooltip-title") || moonLink.getAttribute("title");
+          if (tooltip) {
+            const nameMatch = tooltip.match(/<b>(.*?)\[/);
+            if (nameMatch) moonName = nameMatch[1].trim();
+          }
+
+          const moonImgEl = moonLink.querySelector(".icon-moon, img") as HTMLImageElement | null;
+          const moonImg = moonImgEl?.src || moonImgEl?.getAttribute("src") || "";
+
+          planets.push({
+            id: moonId,
+            name: moonName,
+            coords: planetCoordsRaw,
+            type: "moon",
+            imgUrl: moonImg,
+            parentPlanetId: rawId,
+            lastUpdated: Date.now()
+          });
         }
-
-        const moonImgEl = moonLink.querySelector(".icon-moon") as HTMLImageElement | null;
-        const moonImg = moonImgEl?.src || moonImgEl?.getAttribute("src") || "";
-
-        planets.push({
-          id: moonId,
-          name: moonName,
-          coords: planetCoords,
-          type: "moon",
-          imgUrl: moonImg,
-          parentPlanetId: planetId,
-          lastUpdated: Date.now()
-        });
       }
     }
   });
@@ -867,8 +891,9 @@ function scrapeSuppliesData() {
     const levelNode = node.querySelector(".level");
     if (techId > 0 && levelNode) {
       let level = parseInt(levelNode.getAttribute("data-value") || "0");
-      // If currently upgrading, data-value is target level. Subtract 1 to get current.
-      if (node.classList.contains("active") && level > 0) {
+      // Only subtract 1 if a construction countdown/timer is genuinely active on this node
+      const isUpgrading = node.classList.contains("active") && !!node.querySelector('.countdown, time, [data-end], .timer');
+      if (isUpgrading && level > 0) {
         level--;
       }
 
@@ -901,8 +926,9 @@ function scrapeResearchLevels() {
     const levelNode = node.querySelector(".level");
     if (techId > 0 && levelNode) {
       let level = parseInt(levelNode.getAttribute("data-value") || "0");
-      // If currently researching, data-value is target level. Subtract 1 to get current.
-      if (node.classList.contains("active") && level > 0) {
+      // Only subtract 1 if a research countdown/timer is genuinely active on this node
+      const isResearching = node.classList.contains("active") && !!node.querySelector('.countdown, time, [data-end], .timer');
+      if (isResearching && level > 0) {
         level--;
       }
       researches.push({ id: techId, level });
@@ -987,8 +1013,9 @@ function scrapeLifeformSetup() {
     const levelNode = node.querySelector(".level");
     if (levelNode) {
       let level = parseInt(levelNode.getAttribute("data-value") || "0");
-      // If currently researching, data-value is target level. Subtract 1 to get current.
-      if (node.classList.contains("active") && level > 0) {
+      // Only subtract 1 if a research countdown/timer is genuinely active on this node
+      const isResearching = node.classList.contains("active") && !!node.querySelector('.countdown, time, [data-end], .timer');
+      if (isResearching && level > 0) {
         level--;
       }
       techSetup.push({ slotNumber, selectedTechId: internalTechId, level });
@@ -1155,8 +1182,9 @@ function scrapeLifeformBuildings() {
 
     if (techId > 0 && levelNode) {
       let level = parseInt(levelNode.getAttribute("data-value") || "0");
-      // If currently upgrading, data-value is target level. Subtract 1 to get current.
-      if (node.classList.contains("active") && level > 0) {
+      // Only subtract 1 if a construction countdown/timer is genuinely active on this node
+      const isUpgrading = node.classList.contains("active") && !!node.querySelector('.countdown, time, [data-end], .timer');
+      if (isUpgrading && level > 0) {
         level--;
       }
       buildings.push({ id: techId, name, level });
@@ -1180,8 +1208,9 @@ function scrapeFacilitiesData() {
 
     if (techId > 0 && levelNode) {
       let level = parseInt(levelNode.getAttribute("data-value") || "0");
-      // If currently upgrading, data-value is target level. Subtract 1 to get current.
-      if (node.classList.contains("active") && level > 0) {
+      // Only subtract 1 if a construction countdown/timer is genuinely active on this node
+      const isUpgrading = node.classList.contains("active") && !!node.querySelector('.countdown, time, [data-end], .timer');
+      if (isUpgrading && level > 0) {
         level--;
       }
       buildings.push({ id: techId, name, level });
@@ -1207,7 +1236,8 @@ function scrapeControlCenterBuildings(): { id: number, name: string, level: numb
 
     if (techId >= 4001 && techId <= 4007 && levelNode) {
       let level = parseInt(levelNode.getAttribute("data-value") || "0", 10);
-      if (node.classList.contains("active") && level > 0) {
+      const isUpgrading = node.classList.contains("active") && !!node.querySelector('.countdown, time, [data-end], .timer');
+      if (isUpgrading && level > 0) {
         level--;
       }
       buildings.push({ id: techId, name, level });
@@ -1282,7 +1312,8 @@ function scrapeAndSync() {
   });
 
   const data = {
-    isFullPlanetList: hasPlanetList,
+    isFullPlanetList: false, // Ordinary page scrapes should never claim to be the full authoritative planet list
+    isAuthoritativeServerSync: false,
     account: {
       playerId,
       playerName,
@@ -1471,7 +1502,7 @@ async function toggleNexusModal() {
     `;
     tab.addEventListener('mouseenter', () => { if (!tab.classList.contains('active')) tab.style.color = '#cbd5e1'; });
     tab.addEventListener('mouseleave', () => { if (!tab.classList.contains('active')) tab.style.color = '#64748b'; });
-    tab.addEventListener('click', () => {
+    tab.addEventListener('click', (ev) => {
       modal.querySelectorAll('.nexus-modal-tab').forEach(el => {
         const e = el as HTMLElement;
         e.classList.remove('active');
@@ -1487,7 +1518,11 @@ async function toggleNexusModal() {
       tab.style.border = '1px solid rgba(56, 189, 248, 0.2)';
       tab.style.boxShadow = '0 0 12px rgba(56, 189, 248, 0.15)';
       tab.style.textShadow = '0 0 8px rgba(56, 189, 248, 0.4)';
-      renderTabContent(t.id, contentArea);
+      let tabTicket: OGameRequestGuard.Ticket | undefined;
+      try {
+        tabTicket = createTicket(ev);
+      } catch {}
+      renderTabContent(t.id, contentArea, tabTicket);
     });
     tabs.appendChild(tab);
   });
@@ -1536,6 +1571,13 @@ async function toggleNexusModal() {
     e.preventDefault();
     if (syncBadge.classList.contains('syncing')) return;
 
+    let ticket: OGameRequestGuard.Ticket | undefined;
+    try {
+      ticket = createTicket(e);
+    } catch (ticketErr) {
+      console.warn('[OGame Nexus] Could not create ticket for sync:', ticketErr);
+    }
+
     syncBadge.classList.add('syncing');
     syncBadge.style.color = '#94a3b8';
     syncBadge.style.background = 'rgba(148, 163, 184, 0.08)';
@@ -1546,7 +1588,7 @@ async function toggleNexusModal() {
     syncBadge.textContent = 'Game Synced: Syncing...';
 
     try {
-      await performBackgroundEmpireSync(true);
+      await performBackgroundEmpireSync(true, ticket);
       const now = Date.now();
       await chrome.storage.local.set({ 'last_empire_sync_time': now });
 
@@ -1733,7 +1775,7 @@ const renderItemColumnCell = (activeItems: any[] | undefined, resourceType: 'met
 
 let todoLiveTimer: number | null = null;
 
-async function renderTabContent(tabId: string, container: HTMLElement) {
+async function renderTabContent(tabId: string, container: HTMLElement, ticket?: OGameRequestGuard.Ticket) {
   if (todoLiveTimer) {
     window.clearInterval(todoLiveTimer);
     todoLiveTimer = null;
@@ -1787,7 +1829,7 @@ async function renderTabContent(tabId: string, container: HTMLElement) {
       } else {
         let queueData = await getStoredProductionQueue(playerId || undefined);
         if (!queueData || !queueData.lastUpdated || (Date.now() - queueData.lastUpdated > 20000)) {
-          const fresh = await fetchEmpireProductionQueue(playerId || undefined, true);
+          const fresh = await fetchEmpireProductionQueue(playerId || undefined, true, ticket);
           if (fresh) queueData = fresh;
         }
 
@@ -2720,7 +2762,7 @@ const throttledObserverLogic = throttle(() => {
   const syncUrlChanged = (window as any)._lastSyncUrl !== currentUrl;
   if (syncUrlChanged) {
     (window as any)._lastSyncUrl = currentUrl;
-    checkAutoSync();
+    // SPA navigation: do not fire network sync without a user trigger; passive DOM scrape handles this below.
   }
 
   if (isObservablePage) {
@@ -2779,9 +2821,12 @@ const throttledObserverLogic = throttle(() => {
     scrapeImportExportDom(document, playerId);
   }
 
-  // Live Fleet Dispatch Slots parser (#slots) on fleetdispatch page
+  // Live Fleet Dispatch Slots & Stationed Fleet parser on fleetdispatch page
   if (document.querySelector("#slots")) {
     updateDispatchSlotsFromDom(document);
+  }
+  if (document.querySelector("#military, #civil, #technologies") && window.location.href.includes("component=fleetdispatch")) {
+    scrapeAndSyncFleetDispatch(document);
   }
 
   // Project Orion Anomaly & Mission Enhancer
@@ -3140,28 +3185,30 @@ if (!IS_EXTENSION_DISABLED) {
   injectButton();
   processActiveMessages();
   injectChangelogTab();
-
-  window.addEventListener('ogame-nexus-trigger-empire-sync', async () => {
-    try {
-      await performBackgroundEmpireSync(true);
-      const now = Date.now();
-      await chrome.storage.local.set({ 'last_empire_sync_time': now });
-      window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: true } }));
-    } catch (err) {
-      console.warn('OGame Nexus: Empire sync via event failed', err);
-      window.dispatchEvent(new CustomEvent('ogame-nexus-empire-sync-completed', { detail: { success: false, error: err } }));
-    }
-  });
 }
 
 
-async function performBackgroundEmpireSync(ignoreDelay = false) {
+async function performBackgroundEmpireSync(ignoreDelay = false, trigger?: Event | OGameRequestGuard.Ticket) {
   const playerId = getMetaContent("ogame-player-id");
   const playerName = getMetaContent("ogame-player-name");
 
   if (!playerId || !playerName) {
     throw new Error("Player context not found");
   }
+
+  // If no user trigger is available and start-up PAGE_LOAD window has lapsed, quietly exit
+  if (!trigger && !isPageLoadValid()) {
+    console.debug('[OGame Nexus Sync] Skipping network sync: PAGE_LOAD window lapsed and no user trigger provided.');
+    refreshAssistantBar(playerId);
+    return;
+  }
+
+  const doFetch = (url: string, init?: RequestInit) => {
+    if (trigger) {
+      return fetchGameOnUserAction(trigger, url, init);
+    }
+    return fetchGameOnLoad(url, init);
+  };
 
   let planetsData: { planets: Partial<Planet>[], research: Record<number, number> } = { planets: [], research: {} };
   let moonsData: { planets: Partial<Planet>[], research: Record<number, number> } = { planets: [], research: {} };
@@ -3171,24 +3218,44 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   let syncedViaAccountInfo = false;
   let hasAnomaliesDetected: boolean | undefined = undefined;
 
+  // Concurrently launch independent startup endpoints within the PAGE_LOAD window
+  const accPromise = doFetch('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    cache: 'no-store'
+  }).catch((err) => {
+    console.debug('[OGame Nexus Sync] accountInfo fetch skipped/error:', err?.message || err);
+    return null;
+  });
+
+  const sbPromise = doFetch('/game/index.php?page=componentOnly&component=externaldataexport&action=speciesBonuses&asJson=1', {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  }).catch((err) => {
+    console.debug('[OGame Nexus Sync] speciesBonuses fetch skipped/error:', err?.message || err);
+    return null;
+  });
+
+  const iePromise = doFetch('/game/index.php?page=componentOnly&component=externaldataexport&action=importExportInfo&asJson=1', {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  }).catch((err) => {
+    console.debug('[OGame Nexus Sync] importExportInfo fetch skipped/error:', err?.message || err);
+    return null;
+  });
+
+  const invPromise = fetchPlayerInventory(playerId, trigger).catch(() => []);
+  const pqPromise = fetchEmpireProductionQueue(playerId, ignoreDelay, trigger).catch(() => null);
+  const fleetPromise = fetchAndSyncFleetMovements(true, playerId, undefined, trigger).catch(() => null);
+
   const fetchEmpireJson = async (planetType: number) => {
-    let res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
-      method: 'POST',
+    let res = await doFetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      cache: 'no-store',
       redirect: 'manual'
     });
 
     if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
-      res = await fetch(`/game/index.php?page=ajax&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
-        method: 'POST',
+      res = await doFetch(`/game/index.php?page=ajax&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        redirect: 'manual'
-      });
-    }
-
-    if (res.status === 405 || !res.ok || res.type === 'opaqueredirect') {
-      res = await fetch(`/game/index.php?page=ingame&component=empire&ajax=1&planetType=${planetType}&asJson=1`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        cache: 'no-store',
         redirect: 'manual'
       });
     }
@@ -3206,13 +3273,10 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
     return JSON.parse(trimmed);
   };
 
-  // 1. Primary: Try OGame v13+ externaldataexport accountInfo GET endpoint
+  // 1. Primary: Parse OGame v13+ externaldataexport accountInfo GET endpoint
   try {
-    const accRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=accountInfo&asJson=1', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      redirect: 'manual'
-    });
-    if (accRes.ok && accRes.type !== 'opaqueredirect') {
+    const accRes = await accPromise;
+    if (accRes && accRes.ok && accRes.type !== 'opaqueredirect') {
       const accText = await accRes.text();
       const trimmed = accText ? accText.trim() : '';
       if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
@@ -3255,21 +3319,33 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
           const allFleet = [...parsedExt.planets, ...parsedExt.moons];
           const byPId: Record<string, Record<number, number>> = {};
           const byCoord: Record<string, Record<number, number>> = {};
+          const entitiesList: any[] = [];
           allFleet.forEach((ent) => {
             if (ent.id && ent.ships) byPId[String(ent.id)] = ent.ships;
             if (ent.coords && ent.type && ent.ships) byCoord[`${ent.coords}_${ent.type}`] = ent.ships;
+            if (ent.id && ent.coords) {
+              entitiesList.push({
+                id: String(ent.id),
+                name: ent.name,
+                coords: ent.coords,
+                type: ent.type,
+                ships: ent.ships || {}
+              });
+            }
           });
           (window as any)._ognexus_cached_fleet = {
             timestamp: Date.now(),
             byPlanetId: byPId,
-            byCoordsType: byCoord
+            byCoordsType: byCoord,
+            entities: entitiesList
           };
           if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && playerId) {
             chrome.storage.local.set({
               [`ognexus_fleet_${playerId}`]: {
                 timestamp: Date.now(),
                 byPlanetId: byPId,
-                byCoordsType: byCoord
+                byCoordsType: byCoord,
+                entities: entitiesList
               }
             });
           }
@@ -3280,22 +3356,22 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
     // Quiet fallback to legacy empire AJAX
   }
 
-  // If Commander is active, enrich planets and moons with fleet and defenses from Empire AJAX
+  // If Commander is active and not on page load (or externaldataexport failed), enrich planets and moons with fleet and defenses from Empire AJAX
   // (OGame externaldataexport intentionally excludes ships/defenses for anti-bot privacy)
   const officers = scrapeOfficers();
-  if (officers.hasCommander) {
+  if (officers.hasCommander && (trigger || !syncedViaAccountInfo)) {
     try {
       const [planetsJson, moonsJson] = await Promise.all([
         fetchEmpireJson(0).catch(() => null),
-        fetchEmpireJson(1).catch(() => null)
+        trigger ? fetchEmpireJson(1).catch(() => null) : Promise.resolve(null)
       ]);
       if (planetsJson) {
         const parsedPlanets = parseAjaxEmpireJson(planetsJson, false);
         parsedPlanets.planets.forEach((ep) => {
           const target = planetsData.planets.find((p) => String(p.id) === String(ep.id) || (p.coords === ep.coords && p.type === 'planet'));
           if (target) {
-            if (ep.ships && Object.keys(ep.ships).length > 0) target.ships = ep.ships;
-            if (ep.defenses && Object.keys(ep.defenses).length > 0) target.defenses = ep.defenses;
+            if (ep.ships) target.ships = { ...ep.ships };
+            if (ep.defenses) target.defenses = { ...ep.defenses };
           }
         });
       }
@@ -3307,12 +3383,49 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
           parsedMoons.planets.forEach((em) => {
             const target = moonsData.planets.find((m) => String(m.id) === String(em.id) || (m.coords === em.coords && m.type === 'moon'));
             if (target) {
-              if (em.ships && Object.keys(em.ships).length > 0) target.ships = em.ships;
-              if (em.defenses && Object.keys(em.defenses).length > 0) target.defenses = em.defenses;
+              if (em.ships) target.ships = { ...em.ships };
+              if (em.defenses) target.defenses = { ...em.defenses };
             }
           });
         }
       }
+
+      // Refresh cached fleet with Commander-enriched ships
+      try {
+        const enrichedFleet = [...planetsData.planets, ...moonsData.planets];
+        const byPId: Record<string, Record<number, number>> = {};
+        const byCoord: Record<string, Record<number, number>> = {};
+        const entitiesList: any[] = [];
+        enrichedFleet.forEach((ent) => {
+          if (ent.id && ent.ships) byPId[String(ent.id)] = ent.ships;
+          if (ent.coords && ent.type && ent.ships) byCoord[`${ent.coords}_${ent.type}`] = ent.ships;
+          if (ent.id && ent.coords) {
+            entitiesList.push({
+              id: String(ent.id),
+              name: ent.name,
+              coords: ent.coords,
+              type: ent.type,
+              ships: ent.ships || {}
+            });
+          }
+        });
+        (window as any)._ognexus_cached_fleet = {
+          timestamp: Date.now(),
+          byPlanetId: byPId,
+          byCoordsType: byCoord,
+          entities: entitiesList
+        };
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && playerId) {
+          chrome.storage.local.set({
+            [`ognexus_fleet_${playerId}`]: {
+              timestamp: Date.now(),
+              byPlanetId: byPId,
+              byCoordsType: byCoord,
+              entities: entitiesList
+            }
+          });
+        }
+      } catch (e) {}
     } catch (err) {
       // Quiet fallback if empire AJAX failed
     }
@@ -3321,24 +3434,27 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   // Fallback to legacy empire AJAX endpoints if externaldataexport is unavailable
   if (!syncedViaAccountInfo) {
     const officers = scrapeOfficers();
-    if (!officers.hasCommander) {
-      throw new Error("Background sync requires Commander active");
+    if (officers.hasCommander) {
+      try {
+        const planetsJson = await fetchEmpireJson(0);
+        const moonsJson = trigger ? await fetchEmpireJson(1) : null;
+
+        planetsData = parseAjaxEmpireJson(planetsJson, false);
+        if (moonsJson) {
+          moonsData = parseAjaxEmpireJson(moonsJson, true);
+        }
+      } catch (e) {
+        console.debug('[OGame Nexus Sync] Legacy empire JSON fetch error:', e);
+      }
+    } else {
+      console.debug('[OGame Nexus Sync] Commander not active and accountInfo unavailable; using sidebar planet scraping.');
     }
-
-    const planetsJson = await fetchEmpireJson(0);
-    const moonsJson = await fetchEmpireJson(1);
-
-    planetsData = parseAjaxEmpireJson(planetsJson, false);
-    moonsData = parseAjaxEmpireJson(moonsJson, true);
   }
 
-  // 2. Fetch Lifeform Bonuses (Experience & species data)
+  // 2. Await Lifeform Bonuses (Experience & species data)
   try {
-    const sbRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=speciesBonuses&asJson=1', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      redirect: 'manual'
-    });
-    if (sbRes.ok && sbRes.type !== 'opaqueredirect') {
+    const sbRes = await sbPromise;
+    if (sbRes && sbRes.ok && sbRes.type !== 'opaqueredirect') {
       const sbText = await sbRes.text();
       const trimmed = sbText ? sbText.trim() : '';
       if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
@@ -3365,11 +3481,11 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   // HTML fallback for lifeform bonuses if needed
   if (!lifeformExperienceData || Object.keys(lifeformExperienceData).length === 0) {
     try {
-      let lfBonusesRes = await fetch('/game/index.php?page=ajax&component=lfbonuses&ajax=1', {
+      let lfBonusesRes = await doFetch('/game/index.php?page=ajax&component=lfbonuses&ajax=1', {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
       if (lfBonusesRes.status === 405 || !lfBonusesRes.ok) {
-        lfBonusesRes = await fetch('/game/index.php?page=ingame&component=lfbonuses&ajax=1', {
+        lfBonusesRes = await doFetch('/game/index.php?page=ingame&component=lfbonuses&ajax=1', {
           method: 'POST',
           headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
@@ -3383,13 +3499,10 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
     } catch (e) {}
   }
 
-  // 3. Fetch Import/Export Info (tracks daily & 6x/day event mystery container status)
+  // 3. Await Import/Export Info (tracks daily & 6x/day event mystery container status)
   try {
-    const ieRes = await fetch('/game/index.php?page=componentOnly&component=externaldataexport&action=importExportInfo&asJson=1', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      redirect: 'manual'
-    });
-    if (ieRes.ok && ieRes.type !== 'opaqueredirect') {
+    const ieRes = await iePromise;
+    if (ieRes && ieRes.ok && ieRes.type !== 'opaqueredirect') {
       const ieText = await ieRes.text();
       const trimmed = ieText ? ieText.trim() : '';
       if (trimmed && !trimmed.startsWith('<') && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
@@ -3412,19 +3525,9 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
     }
   } catch (e) {}
 
-  // 4. Fetch Player Inventory (stored boosters, speed-ups, tokens, etc.)
-  try {
-    await fetchPlayerInventory(playerId);
-  } catch (e) {
-    console.warn('OGame Nexus: Failed to fetch inventory during empire sync', e);
-  }
-
-  // 5. Fetch Empire Production Queue (in-progress mines, facilities, LF tech/buildings, shipyards)
-  try {
-    await fetchEmpireProductionQueue(playerId, ignoreDelay);
-  } catch (e) {
-    console.warn('OGame Nexus: Failed to fetch production queue during empire sync', e);
-  }
+  // 4. Await Player Inventory & Production Queue (started concurrently at start-up)
+  await invPromise;
+  await pqPromise;
 
   // Count standard buildings, ships, defenses, and lifeform tech for logging
   let totalPlanets = [...planetsData.planets, ...moonsData.planets];
@@ -3480,8 +3583,174 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   const researchCount = Object.keys(planetsData.research).length;
 
 
-  // Scrape the active sidebar planet list to verify existence/order
+  // Scrape the active sidebar planet list to capture user-assigned planet names and images
   const planetsList = scrapePlanetList();
+  const sidebarNameMap = new Map<string, string>();
+  const sidebarImgMap = new Map<string, string>();
+  const sidebarCoordsMap = new Map<string, string>();
+  planetsList.forEach(sp => {
+    if (sp.id) {
+      const sId = String(sp.id);
+      if (sp.name && sp.name !== 'Planet' && sp.name !== 'Moon') {
+        sidebarNameMap.set(sId, sp.name);
+      }
+      if (sp.imgUrl) {
+        sidebarImgMap.set(sId, sp.imgUrl);
+      }
+      if (sp.coords && sp.coords !== '0:0:0' && !sp.coords.includes('0:0:0')) {
+        sidebarCoordsMap.set(sId, sp.coords);
+      }
+    }
+  });
+
+  // Fallback to planetsList from sidebar if API returned 0 entities
+  if (totalPlanets.length === 0 && planetsList.length > 0) {
+    totalPlanets = planetsList.map(sp => ({
+      id: String(sp.id),
+      name: sp.name,
+      coords: sp.coords,
+      type: sp.type || 'planet',
+      imgUrl: sp.imgUrl,
+      ships: {},
+      defenses: {},
+      lastUpdated: Date.now()
+    }));
+  }
+
+  // Enrich any missing/invalid coordinates on totalPlanets from sidebar
+  totalPlanets.forEach(p => {
+    if (!p.coords || p.coords === '0:0:0' || p.coords.includes('0:0:0') || !/^\d+:\d+:\d+$/.test(String(p.coords).trim())) {
+      const sbCoords = sidebarCoordsMap.get(String(p.id));
+      if (sbCoords) p.coords = sbCoords;
+    }
+  });
+
+  // Coordinate integrity validator
+  const isValidCoord = (c?: string) => Boolean(c && c !== "0:0:0" && !c.includes("0:0:0") && /^\d+:\d+:\d+$/.test(String(c).trim()));
+
+  // FAILSAFE 1: Verify incoming sync data validity before touching IndexedDB
+  let isSyncDataValid = (totalPlanets.length >= 1 || planetsList.length >= 1);
+
+  if (isSyncDataValid && !totalPlanets.some(p => p.id && isValidCoord(p.coords)) && planetsList.length > 0) {
+    totalPlanets = planetsList.map(sp => ({
+      id: String(sp.id),
+      name: sp.name,
+      coords: sp.coords,
+      type: sp.type || 'planet',
+      imgUrl: sp.imgUrl,
+      ships: {},
+      defenses: {},
+      lastUpdated: Date.now()
+    }));
+  }
+
+  isSyncDataValid = isSyncDataValid && totalPlanets.length >= 1;
+
+  let authoritativePlanets: any[] = [];
+
+  if (isSyncDataValid) {
+    // Read existing planets from db.planets to ensure non-destructive monotonic merge
+    let existingMap = new Map<string, any>();
+    try {
+      const pidVariants = [playerId, String(playerId), Number(playerId)].filter(v => v !== undefined && v !== null && !isNaN(v as any));
+      const existingPlanets = await db.planets.where('playerId').anyOf(pidVariants).toArray();
+      existingMap = new Map<string, any>(existingPlanets.map(ep => [String(ep.id), ep]));
+    } catch (e) {
+      console.debug('OGame Nexus: Could not read existing planets from IndexedDB:', e);
+    }
+
+    // FAILSAFE 2: Mass Drop Protection (more than 50% entities dropped unexpectedly)
+    const isDropSuspicious = existingMap.size > 2 && totalPlanets.length < Math.floor(existingMap.size * 0.5);
+
+    if (isDropSuspicious) {
+      console.warn(`[OGame Nexus Sync] Mass drop protection triggered: incoming entities (${totalPlanets.length}) dropped >50% compared to existing (${existingMap.size}). Aborting database overwrite to protect empire data.`);
+    } else {
+      // Source of Truth: totalPlanets from background sync (externaldataexport & empire AJAX)
+      // Contains the full 32 entities (all planets & moons) with true, real-time server coordinates,
+      // storage levels, mine levels, tech setups, ships, defenses, and resources.
+      authoritativePlanets = totalPlanets.map(p => {
+        const sId = String(p.id);
+        const existing = existingMap.get(sId);
+        const customName = sidebarNameMap.get(sId);
+
+        // Monotonic level merge: NEVER DOWNGRADE verified levels
+        const resolvedMetalMine = Math.max(existing?.metalMine || 0, p.metalMine || 0);
+        const resolvedCrystalMine = Math.max(existing?.crystalMine || 0, p.crystalMine || 0);
+        const resolvedDeutMine = Math.max(existing?.deuteriumMine || 0, p.deuteriumMine || 0);
+        const resolvedSolarPlant = Math.max(existing?.solarPlant || 0, p.solarPlant || 0);
+        const resolvedFusionReactor = Math.max(existing?.fusionReactor || 0, p.fusionReactor || 0);
+        const resolvedSolarSatellites = Math.max(existing?.solarSatellites || 0, p.solarSatellites || 0);
+
+        const resolvedMetalStorage = Math.max(existing?.metalStorage || 0, p.metalStorage || 0);
+        const resolvedCrystalStorage = Math.max(existing?.crystalStorage || 0, p.crystalStorage || 0);
+        const resolvedDeuteriumStorage = Math.max(existing?.deuteriumStorage || 0, p.deuteriumStorage || 0);
+
+        // Storage capacity calculation
+        const isTraderAlliance = allianceClassFromApi === 2 || allianceClassFromApi === 1;
+        const calcCap = (lvl: number) => {
+          const l = Math.max(0, lvl || 0);
+          const base = 5000 * Math.floor(2.5 * Math.exp((20 / 33) * l));
+          return isTraderAlliance && l > 0 ? Math.floor(base * 1.10) : base;
+        };
+
+        // Coordinate integrity: Server API is authoritative! If p.coords is valid, prioritize it (reflects relocations)
+        const isValidCoord = (c?: string) => Boolean(c && c !== "0:0:0" && !c.includes("0:0:0") && /^\d+:\d+:\d+$/.test(String(c).trim()));
+        const validCoords = isValidCoord(p.coords)
+          ? String(p.coords).trim()
+          : (isValidCoord(existing?.coords) ? String(existing!.coords).trim() : "0:0:0");
+
+        return {
+          ...(existing || {}),
+          ...p,
+          id: sId,
+          playerId: String(playerId),
+          coords: validCoords,
+          name: (customName && customName !== 'Planet' && customName !== 'Moon')
+            ? customName
+            : (existing?.name && existing.name !== 'Planet' && existing.name !== 'Moon'
+                ? existing.name
+                : (p.name || (p.type === 'moon' ? 'Moon' : 'Planet'))),
+          imgUrl: sidebarImgMap.get(sId) || p.imgUrl || existing?.imgUrl,
+          metalMine: resolvedMetalMine,
+          crystalMine: resolvedCrystalMine,
+          deuteriumMine: resolvedDeutMine,
+          solarPlant: resolvedSolarPlant,
+          fusionReactor: resolvedFusionReactor,
+          solarSatellites: resolvedSolarSatellites,
+          metalStorage: resolvedMetalStorage,
+          crystalStorage: resolvedCrystalStorage,
+          deuteriumStorage: resolvedDeuteriumStorage,
+          metalCapacity: calcCap(resolvedMetalStorage),
+          crystalCapacity: calcCap(resolvedCrystalStorage),
+          deuteriumCapacity: calcCap(resolvedDeuteriumStorage),
+          roboticsFactory: Math.max(existing?.roboticsFactory || 0, p.roboticsFactory || 0),
+          shipyard: Math.max(existing?.shipyard || 0, p.shipyard || 0),
+          researchLab: Math.max(existing?.researchLab || 0, p.researchLab || 0),
+          allianceDepot: Math.max(existing?.allianceDepot || 0, p.allianceDepot || 0),
+          missileSilo: Math.max(existing?.missileSilo || 0, p.missileSilo || 0),
+          naniteFactory: Math.max(existing?.naniteFactory || 0, p.naniteFactory || 0),
+          terraformer: Math.max(existing?.terraformer || 0, p.terraformer || 0),
+          spaceDock: Math.max(existing?.spaceDock || 0, p.spaceDock || 0),
+          lunarBase: Math.max(existing?.lunarBase || 0, p.lunarBase || 0),
+          sensorPhalanx: Math.max(existing?.sensorPhalanx || 0, p.sensorPhalanx || 0),
+          jumpGate: Math.max(existing?.jumpGate || 0, p.jumpGate || 0),
+          iaScanner: Math.max(existing?.iaScanner || 0, p.iaScanner || 0),
+          lastUpdated: Date.now()
+        };
+      });
+
+      // Directly update Dexie IndexedDB with authoritative server data as source of truth
+      try {
+        if (authoritativePlanets.length > 0) {
+          await db.planets.bulkPut(authoritativePlanets as any);
+        }
+      } catch (directDbErr) {
+        console.debug('OGame Nexus: Direct db.planets bulkPut error:', directDbErr);
+      }
+    }
+  } else {
+    console.warn('[OGame Nexus Sync] Background sync returned invalid or empty entity list. Aborting database update to protect existing empire data.');
+  }
 
   // Get active planet ID
   const activePlanetId = getActivePlanetId();
@@ -3503,7 +3772,8 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   safeSendMessage({
     type: "SYNC_SESSION",
     data: {
-      isFullPlanetList: true,
+      isFullPlanetList: isSyncDataValid && authoritativePlanets.length > 0,
+      isAuthoritativeServerSync: true,
       account: {
         playerId,
         playerName,
@@ -3518,19 +3788,13 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
         hasAnomalies: hasAnomaliesDetected,
         ...scrapeOfficers()
       },
-      planets: planetsList.length > 0 ? planetsList : [...planetsData.planets, ...moonsData.planets].map(p => ({
-        id: p.id,
-        name: p.name || "Unknown",
-        coords: p.coords || "",
-        type: p.type || "planet",
-        lastUpdated: Date.now()
-      })),
+      planets: authoritativePlanets.length > 0 ? authoritativePlanets : totalPlanets,
       activePlanetId,
       lifeformId: scrapeLifeformId(),
       researches: Object.entries(planetsData.research).map(([id, level]) => ({ id: parseInt(id), level })),
       lifeformExperience: lifeformExperienceData || undefined,
       empire: {
-        planets: [...planetsData.planets, ...moonsData.planets],
+        planets: authoritativePlanets.length > 0 ? authoritativePlanets : totalPlanets,
         research: planetsData.research
       }
     }
@@ -3539,11 +3803,11 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
   // Refresh Nexus Overseer with latest synced data
   refreshAssistantBar(playerId);
 
-  // Proactively sync flying fleet movements and ships
+  // Await proactive flying fleet movements sync (started concurrently at start-up)
   try {
-    await fetchAndSyncFleetMovements(true);
+    await fleetPromise;
   } catch (fleetErr) {
-    console.warn('OGame Nexus: Error syncing flying fleets during empire sync', fleetErr);
+    console.debug('OGame Nexus: Error syncing flying fleets during empire sync', fleetErr);
   }
 
   console.log(
@@ -3568,6 +3832,17 @@ async function performBackgroundEmpireSync(ignoreDelay = false) {
         type: p.type || 'planet',
         coords: p.coords,
         lifeformId: p.lifeformId,
+        mines: {
+          metal: p.metalMine,
+          crystal: p.crystalMine,
+          deuterium: p.deuteriumMine
+        },
+        storage: {
+          metal: p.metalStorage,
+          crystal: p.crystalStorage,
+          deuterium: p.deuteriumStorage,
+          deuteriumCap: p.deuteriumCapacity
+        },
         activeItems: p.activeItems || [],
         lifeformSetup: p.lifeformSetup,
         lifeformBuildings: p.lifeformBuildings,
@@ -3695,8 +3970,8 @@ async function checkAutoSync() {
 }
 
 if (!IS_EXTENSION_DISABLED) {
-  // Run sync check ONLY ONCE shortly after the player actively loads/navigates to an OGame page
-  setTimeout(checkAutoSync, 3000);
+  // Run sync check ONCE immediately on page load, safely inside the 3.0s PAGE_LOAD window
+  setTimeout(checkAutoSync, 50);
 
   // NOTE: BANNED BY GAMEFORGE - NEVER ADD A REPETITIVE TIMER / INTERVAL HERE!
   // Standing periodic polling on a timer (e.g. setInterval) is strictly forbidden under

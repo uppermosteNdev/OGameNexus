@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
@@ -22,12 +22,19 @@ import {
     Download,
     Search,
     ArrowRightLeft,
-    ArrowRight
+    ArrowRight,
+    Users,
+    Sparkles,
+    X,
+    CheckCircle,
+    ExternalLink,
+    Globe,
+    Trophy
 } from 'lucide-react';
-import { db } from '../../db';
+import { db, Account as DbAccount } from '../../db';
 import { isSameUniverse, cleanUniverseId } from '../../utils/universe';
 import { ThemeIcon } from '../components/ThemeIcon';
-import { useTranslation } from '../../i18n';
+import { useTranslation, FlagIcon, SupportedLanguage, detectLanguageFromServerLink } from '../../i18n';
 
 interface Account {
     playerName: string;
@@ -58,33 +65,288 @@ const DataManagement: React.FC = () => {
     // Global & Active Account Queries
     // ----------------------------------------------------
     const activeAccount = useLiveQuery(() => db.accounts.orderBy('lastSeen').reverse().first());
+    const allAccounts = useLiveQuery(() => db.accounts.toArray()) || [];
+    const allPlanets = useLiveQuery(() => db.planets.toArray()) || [];
 
-    const nexusStatsSummary = useLiveQuery(async () => {
-        if (!activeAccount) return null;
-        try {
-            const p = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
-            const pIds = p.map(x => x.id);
-            const tCount = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).count();
-            const spiedCount = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(x => x.userPlayerId === activeAccount.playerId).count();
-            return {
-                planets: p.length,
-                expeditions: await db.expeditions.where('playerId').equals(activeAccount.playerId).count(),
-                lifeforms: await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).count(),
-                debris: (await db.debrisHarvests.where('playerId').anyOf([String(activeAccount.playerId), Number(activeAccount.playerId) as any]).toArray()).filter(d => isSameUniverse(d.universe, activeAccount.universe)).length,
-                combats: await db.combatReports.where('playerId').equals(activeAccount.playerId).count(),
-                todos: tCount,
-                spiedPlanets: spiedCount
-            };
-        } catch (e) {
-            console.error("Failed to query metrics", e);
-            return null;
-        }
-    }, [activeAccount]);
+    const otherAccounts = allAccounts.filter(a => 
+        String(a.playerId) !== String(activeAccount?.playerId) || a.universe !== activeAccount?.universe
+    );
+
+    const sortedAccounts = useMemo(() => {
+        return [...allAccounts].sort((a, b) => {
+            const isCurrentA = activeAccount?.playerId === a.playerId && isSameUniverse(activeAccount?.universe, a.universe);
+            const isCurrentB = activeAccount?.playerId === b.playerId && isSameUniverse(activeAccount?.universe, b.universe);
+            if (isCurrentA && !isCurrentB) return -1;
+            if (!isCurrentA && isCurrentB) return 1;
+            return (b.lastSeen || 0) - (a.lastSeen || 0);
+        });
+    }, [allAccounts, activeAccount]);
+
+    // Live Metrics for all accounts on this browser
+    const [accountsStats, setAccountsStats] = useState<Record<string, {
+        planets: number;
+        moons: number;
+        expeditions: number;
+        combats: number;
+        debris: number;
+        lifeforms: number;
+        setups: number;
+    }>>({});
+
+    const [nexusStatsSummary, setNexusStatsSummary] = useState<{
+        planets: number;
+        expeditions: number;
+        combats: number;
+        debris: number;
+        lifeforms: number;
+        todos: number;
+        spiedPlanets: number;
+    }>({
+        planets: 0,
+        expeditions: 0,
+        combats: 0,
+        debris: 0,
+        lifeforms: 0,
+        todos: 0,
+        spiedPlanets: 0
+    });
 
     // ----------------------------------------------------
     // Tab and Step Navigation States
     // ----------------------------------------------------
-    const [activeTab, setActiveTab] = useState<'nexus' | 'tracker'>('nexus');
+    const [activeTab, setActiveTab] = useState<'accounts' | 'nexus' | 'tracker'>('accounts');
+
+    // Accounts Management States
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCommunity, setSelectedCommunity] = useState<string>('all');
+    const [modalSourceAccount, setModalSourceAccount] = useState<any | null>(null);
+    const [modalStep, setModalStep] = useState<'confirm' | 'progress' | 'success'>('confirm');
+    const [modalLogs, setModalLogs] = useState<string[]>([]);
+    const [modalProgress, setModalProgress] = useState(0);
+    const [modalStats, setModalStats] = useState<any | null>(null);
+    const [exportingAccountIds, setExportingAccountIds] = useState<Set<string>>(new Set());
+
+    // Single unified loader for both accountsStats and nexusStatsSummary
+    const accountsHash = allAccounts.map(a => `${a.playerId}_${a.universe}_${a.lastSeen}`).join('|');
+    const activeAccountKey = activeAccount ? `${activeAccount.universe}_${activeAccount.playerId}_${activeAccount.lastSeen}` : '';
+
+    useEffect(() => {
+        let isCancelled = false;
+
+        const loadStats = async () => {
+            if (!allAccounts || allAccounts.length === 0) return;
+
+            try {
+                // 1. Parallel fetch across all Dexie tables
+                const [
+                    planetsInDb,
+                    allExps,
+                    allCombats,
+                    allDebris,
+                    allLf,
+                    allTodos,
+                    allSpied
+                ] = await Promise.all([
+                    db.planets.toArray().catch(() => []),
+                    db.expeditions.toArray().catch(() => []),
+                    db.combatReports.toArray().catch(() => []),
+                    db.debrisHarvests.toArray().catch(() => []),
+                    db.lifeformDiscoveries.toArray().catch(() => []),
+                    db.todoProjects.toArray().catch(() => []),
+                    db.spiedPlanets.toArray().catch(() => [])
+                ]);
+
+                // 2. Fetch fleet caches from chrome.storage.local as fallback for planets
+                const fleetKeys = allAccounts.map(a => `ognexus_fleet_${a.playerId}`);
+                let localFleetStore: Record<string, any> = {};
+                try {
+                    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                        localFleetStore = await chrome.storage.local.get(fleetKeys);
+                    }
+                } catch {}
+
+                const map: Record<string, any> = {};
+                let activeSummary: any = null;
+
+                for (const acc of allAccounts) {
+                    const isCurrent = (activeAccount && activeAccount.playerId === acc.playerId && isSameUniverse(activeAccount.universe, acc.universe))
+                        || (allAccounts.length === 1);
+
+                    const pidVariants = [acc.playerId, String(acc.playerId), Number(acc.playerId)].filter(
+                        v => v !== undefined && v !== null && !isNaN(v as any)
+                    );
+                    const pidStrings = new Set(pidVariants.map(v => String(v).trim()));
+
+                    // 1. Planets matching
+                    let accountPlanets = planetsInDb.filter(p => {
+                        const pPid = String(p.playerId || '').trim();
+                        if (pPid && pidStrings.has(pPid)) return true;
+                        if (!pPid && isCurrent) return true;
+                        return false;
+                    });
+
+                    // Fallback 1: acc.planets or acc.empire.planets
+                    if (accountPlanets.length === 0 && Array.isArray((acc as any).planets) && (acc as any).planets.length > 0) {
+                        accountPlanets = (acc as any).planets;
+                    } else if (accountPlanets.length === 0 && Array.isArray((acc as any).empire?.planets) && (acc as any).empire.planets.length > 0) {
+                        accountPlanets = (acc as any).empire.planets;
+                    }
+
+                    // Fallback 2: chrome.storage.local (ognexus_fleet_${playerId})
+                    if (accountPlanets.length === 0) {
+                        const cachedFleet = localFleetStore[`ognexus_fleet_${acc.playerId}`];
+                        if (cachedFleet && Array.isArray(cachedFleet.entities) && cachedFleet.entities.length > 0) {
+                            accountPlanets = cachedFleet.entities.map((e: any) => ({
+                                id: String(e.id),
+                                name: e.name || (e.type === 'moon' ? 'Moon' : 'Planet'),
+                                coords: e.coords || '0:0:0',
+                                type: e.type || 'planet',
+                                playerId: String(acc.playerId),
+                                lastUpdated: Date.now()
+                            }));
+                            // Auto-heal IndexedDB so other views benefit immediately
+                            db.planets.bulkPut(accountPlanets as any).catch(() => {});
+                        }
+                    }
+
+                    // Fallback 3: if single account in DB and DB has planets
+                    if (accountPlanets.length === 0 && allAccounts.length === 1 && planetsInDb.length > 0) {
+                        accountPlanets = planetsInDb;
+                    }
+
+                    const moonCount = accountPlanets.filter(p => p.type === 'moon').length;
+                    const planetCount = accountPlanets.filter(p => p.type !== 'moon').length;
+
+                    // 2. Expeditions matching
+                    let expCount = allExps.filter(e => {
+                        const ePid = String(e.playerId || '').trim();
+                        if (ePid && pidStrings.has(ePid)) return true;
+                        if (!ePid && isCurrent) return true;
+                        return false;
+                    }).length;
+                    if (expCount === 0 && (acc as any).expeditionsCount) {
+                        expCount = Number((acc as any).expeditionsCount) || 0;
+                    }
+                    if (expCount === 0 && allAccounts.length === 1 && allExps.length > 0) {
+                        expCount = allExps.length;
+                    }
+
+                    // 3. Combats matching
+                    let combatCount = allCombats.filter(c => {
+                        const cPid = String(c.playerId || '').trim();
+                        if (cPid && pidStrings.has(cPid)) return true;
+                        if (!cPid && isCurrent) return true;
+                        return false;
+                    }).length;
+                    if (combatCount === 0 && (acc as any).combatsCount) {
+                        combatCount = Number((acc as any).combatsCount) || 0;
+                    }
+                    if (combatCount === 0 && allAccounts.length === 1 && allCombats.length > 0) {
+                        combatCount = allCombats.length;
+                    }
+
+                    // 4. Lifeforms matching
+                    let lfCount = allLf.filter(l => {
+                        const lPid = String(l.playerId || '').trim();
+                        if (lPid && pidStrings.has(lPid)) return true;
+                        if (!lPid && isCurrent) return true;
+                        return false;
+                    }).length;
+                    if (lfCount === 0 && (acc as any).lifeformDiscoveriesCount) {
+                        lfCount = Number((acc as any).lifeformDiscoveriesCount) || 0;
+                    }
+                    if (lfCount === 0 && allAccounts.length === 1 && allLf.length > 0) {
+                        lfCount = allLf.length;
+                    }
+
+                    // 5. Debris matching
+                    let debrisCount = allDebris.filter(d => {
+                        const dPid = String(d.playerId || '').trim();
+                        const matchesUni = !d.universe || isSameUniverse(d.universe, acc.universe);
+                        if (dPid && pidStrings.has(dPid) && matchesUni) return true;
+                        if (!dPid && isCurrent && matchesUni) return true;
+                        return false;
+                    }).length;
+                    if (debrisCount === 0 && (acc as any).debrisCount) {
+                        debrisCount = Number((acc as any).debrisCount) || 0;
+                    }
+                    if (debrisCount === 0 && allAccounts.length === 1 && allDebris.length > 0) {
+                        debrisCount = allDebris.length;
+                    }
+
+                    const statsEntry = {
+                        planets: planetCount,
+                        moons: moonCount,
+                        expeditions: expCount,
+                        combats: combatCount,
+                        debris: debrisCount,
+                        lifeforms: lfCount,
+                        setups: 0
+                    };
+
+                    const cleanUni = cleanUniverseId(acc.universe);
+                    map[`${acc.universe}_${acc.playerId}`] = statsEntry;
+                    map[`${cleanUni}_${acc.playerId}`] = statsEntry;
+                    map[`${cleanUni}_${String(acc.playerId)}`] = statsEntry;
+                    map[String(acc.playerId)] = statsEntry;
+                    map[`${acc.universe}_${String(acc.playerId)}`] = statsEntry;
+                    map[acc.playerName] = statsEntry;
+
+                    if (isCurrent) {
+                        map['active'] = statsEntry;
+
+                        const pIds = new Set(accountPlanets.map(p => String(p.id)));
+                        const todoCount = allTodos.filter(t => t.planetId && pIds.has(String(t.planetId))).length;
+                        const spiedCount = allSpied.filter(s => {
+                            const matchesUni = isSameUniverse(s.universe, acc.universe);
+                            const sPid = String(s.userPlayerId || '').trim();
+                            return matchesUni && (sPid === String(acc.playerId).trim() || (!sPid && isCurrent));
+                        }).length;
+
+                        activeSummary = {
+                            planets: accountPlanets.length,
+                            expeditions: expCount,
+                            combats: combatCount,
+                            debris: debrisCount,
+                            lifeforms: lfCount,
+                            todos: todoCount,
+                            spiedPlanets: spiedCount
+                        };
+                    }
+                }
+
+                if (!isCancelled) {
+                    setAccountsStats(map);
+                    if (activeSummary) {
+                        setNexusStatsSummary(activeSummary);
+                    } else if (allAccounts.length > 0) {
+                        const first = allAccounts[0];
+                        const cleanUni = cleanUniverseId(first.universe);
+                        const firstStats = map[`${first.universe}_${first.playerId}`] || map[`${cleanUni}_${first.playerId}`] || map[String(first.playerId)];
+                        if (firstStats) {
+                            setNexusStatsSummary({
+                                planets: firstStats.planets + firstStats.moons,
+                                expeditions: firstStats.expeditions,
+                                combats: firstStats.combats,
+                                debris: firstStats.debris,
+                                lifeforms: firstStats.lifeforms,
+                                todos: 0,
+                                spiedPlanets: 0
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('OGame Nexus DataCenter: Error loading stats:', err);
+            }
+        };
+
+        loadStats();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [accountsHash, activeAccountKey, activeTab]);
     
     // Tracker Import States
     const [step, setStep] = useState<Step>('upload');
@@ -111,10 +373,6 @@ const DataManagement: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [isMergerExporting, setIsMergerExporting] = useState(false);
     const [selectedLocalAccount, setSelectedLocalAccount] = useState<string>('');
-    const allAccounts = useLiveQuery(() => db.accounts.toArray()) || [];
-    const otherAccounts = allAccounts.filter(a => 
-        String(a.playerId) !== String(activeAccount?.playerId) || a.universe !== activeAccount?.universe
-    );
 
     // ----------------------------------------------------
     // Database Healing Migration (Resolves 1970 Date Warp)
@@ -164,36 +422,79 @@ const DataManagement: React.FC = () => {
     }, []);
 
     // ----------------------------------------------------
-    // Nexus Export Engine
+    // Nexus Dedicated & Universal Account Export Engine
     // ----------------------------------------------------
-    const handleExport = async () => {
-        if (!activeAccount) return;
+    const handleExportAccount = async (targetAccount: any) => {
+        if (!targetAccount) return;
+        const key = `${targetAccount.universe}_${targetAccount.playerId}`;
         try {
-            setIsExporting(true);
+            setExportingAccountIds(prev => new Set(prev).add(key));
             setError(null);
 
-            // Query player-specific tables
-            const account = activeAccount;
-            const planets = await db.planets.where('playerId').equals(activeAccount.playerId).toArray();
-            const expeditions = await db.expeditions.where('playerId').equals(activeAccount.playerId).toArray();
-            const lifeformDiscoveries = await db.lifeformDiscoveries.where('playerId').equals(activeAccount.playerId).toArray();
-            const debrisHarvests = (await db.debrisHarvests.where('playerId').anyOf([String(activeAccount.playerId), Number(activeAccount.playerId) as any]).toArray()).filter(d => isSameUniverse(d.universe, activeAccount.universe));
-            const combatReports = await db.combatReports.where('playerId').equals(activeAccount.playerId).toArray();
+            const account = targetAccount;
+            const pidVariants = [targetAccount.playerId, String(targetAccount.playerId), Number(targetAccount.playerId)].filter(
+                v => v !== undefined && v !== null && !isNaN(v as any)
+            );
+            const pidStrings = new Set(pidVariants.map(v => String(v)));
+            const allPlanets = await db.planets.toArray();
+            let planets = allPlanets.filter(p => pidStrings.has(String(p.playerId)));
+            if (planets.length === 0 && Array.isArray((targetAccount as any).planets) && (targetAccount as any).planets.length > 0) {
+                planets = (targetAccount as any).planets;
+            } else if (planets.length === 0 && Array.isArray((targetAccount as any).empire?.planets) && (targetAccount as any).empire.planets.length > 0) {
+                planets = (targetAccount as any).empire.planets;
+            }
+            if (planets.length === 0 && targetAccount?.playerId) {
+                try {
+                    const fleetKey = `ognexus_fleet_${targetAccount.playerId}`;
+                    const fleetStore = await chrome.storage.local.get([fleetKey]);
+                    const cachedFleet = fleetStore?.[fleetKey];
+                    if (cachedFleet && Array.isArray(cachedFleet.entities) && cachedFleet.entities.length > 0) {
+                        planets = cachedFleet.entities.map((e: any) => ({
+                            id: String(e.id),
+                            name: e.name || (e.type === 'moon' ? 'Moon' : 'Planet'),
+                            coords: e.coords || '0:0:0',
+                            type: e.type || 'planet',
+                            playerId: String(targetAccount.playerId),
+                            lastUpdated: Date.now()
+                        }));
+                    }
+                } catch {}
+            }
+            if (planets.length === 0 && allAccounts.length === 1 && allPlanets.length > 0) {
+                planets = allPlanets;
+            }
+            let expeditions = await db.expeditions.where('playerId').anyOf(pidVariants).toArray();
+            if (expeditions.length === 0) {
+                const allExp = await db.expeditions.toArray().catch(() => []);
+                expeditions = allExp.filter(e => pidStrings.has(String(e.playerId)));
+            }
+            let lifeformDiscoveries = await db.lifeformDiscoveries.where('playerId').anyOf(pidVariants).toArray();
+            if (lifeformDiscoveries.length === 0) {
+                const allLF = await db.lifeformDiscoveries.toArray().catch(() => []);
+                lifeformDiscoveries = allLF.filter(l => pidStrings.has(String(l.playerId)));
+            }
+            const debrisHarvests = (await db.debrisHarvests.where('playerId').anyOf(pidVariants).toArray()).filter(d => !d.universe || isSameUniverse(d.universe, targetAccount.universe));
+            let combatReports = await db.combatReports.where('playerId').anyOf(pidVariants).toArray();
+            if (combatReports.length === 0) {
+                const allCR = await db.combatReports.toArray().catch(() => []);
+                combatReports = allCR.filter(c => pidStrings.has(String(c.playerId)));
+            }
 
             const pIds = planets.map(p => p.id);
             const todoProjects = await db.todoProjects.filter(t => pIds.includes(t.planetId || '')).toArray();
-            const spiedPlanets = await db.spiedPlanets.where('universe').equals(activeAccount.universe).filter(p => p.userPlayerId === activeAccount.playerId).toArray();
-            const lifeformSavedSetups = await db.lifeformSavedSetups.where('playerId').equals(activeAccount.playerId).toArray();
+            const allSpied = await db.spiedPlanets.toArray().catch(() => []);
+            const spiedPlanets = allSpied.filter(p => isSameUniverse(p.universe, targetAccount.universe) && pidStrings.has(String(p.userPlayerId)));
+            const lifeformSavedSetups = await db.lifeformSavedSetups.where('playerId').anyOf(pidVariants).toArray();
 
             // Construct secure backup JSON payload
             const backupPayload = {
                 type: 'ogame-nexus-backup',
                 version: 1,
                 exportedAt: Date.now(),
-                playerId: activeAccount.playerId,
-                universe: activeAccount.universe,
-                universeName: activeAccount.universeName,
-                playerName: activeAccount.playerName,
+                playerId: targetAccount.playerId,
+                universe: targetAccount.universe,
+                universeName: targetAccount.universeName || targetAccount.universe,
+                playerName: targetAccount.playerName,
                 data: {
                     account,
                     planets,
@@ -213,16 +514,186 @@ const DataManagement: React.FC = () => {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `ogame-nexus-backup_${activeAccount.universe}_${activeAccount.playerName.replace(/\s+/g, '_')}.json`;
+            link.download = `ogame-nexus-backup_${targetAccount.universe}_${(targetAccount.playerName || 'Commander').replace(/\s+/g, '_')}.json`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
         } catch (err: any) {
-            console.error("Local backup export failed", err);
-            setError("Failed to compile database backup payload.");
+            console.error("Account backup export failed", err);
+            setError("Failed to compile account database backup payload.");
+        } finally {
+            setExportingAccountIds(prev => {
+                const next = new Set(prev);
+                next.delete(key);
+                return next;
+            });
+        }
+    };
+
+    const handleExport = async () => {
+        if (!activeAccount) return;
+        setIsExporting(true);
+        try {
+            await handleExportAccount(activeAccount);
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    // ----------------------------------------------------
+    // Account Switching & Import Handlers
+    // ----------------------------------------------------
+    const handleSwitchAccount = (targetAccount: any) => {
+        if (!targetAccount) return;
+        window.dispatchEvent(new CustomEvent('ognexus_switch_account', {
+            detail: {
+                playerId: targetAccount.playerId,
+                universe: targetAccount.universe
+            }
+        }));
+    };
+
+    const handleOpenImportModal = async (sourceAcc: any) => {
+        if (!sourceAcc || !activeAccount) return;
+        try {
+            const key = `${sourceAcc.universe}_${sourceAcc.playerId}`;
+            const cleanUni = cleanUniverseId(sourceAcc.universe);
+            const existing = accountsStats?.[key] || accountsStats?.[`${cleanUni}_${sourceAcc.playerId}`] || accountsStats?.[String(sourceAcc.playerId)];
+            let stats = existing;
+            if (!stats) {
+                const pidVariants = [sourceAcc.playerId, String(sourceAcc.playerId), Number(sourceAcc.playerId)].filter(
+                    v => v !== undefined && v !== null && !isNaN(v as any)
+                );
+                const exps = await db.expeditions.where('playerId').anyOf(pidVariants).count();
+                const combats = await db.combatReports.where('playerId').anyOf(pidVariants).count();
+                const debrisArr = await db.debrisHarvests.where('playerId').anyOf(pidVariants).toArray();
+                const debris = debrisArr.filter(d => !d.universe || isSameUniverse(d.universe, sourceAcc.universe)).length;
+                const lifeforms = await db.lifeformDiscoveries.where('playerId').anyOf(pidVariants).count();
+                const setups = await db.lifeformSavedSetups.where('playerId').anyOf(pidVariants).count();
+                stats = { planets: 0, moons: 0, expeditions: exps, combats, debris, lifeforms, setups };
+            }
+
+            setModalSourceAccount(sourceAcc);
+            setModalStats(stats);
+            setModalStep('confirm');
+            setModalLogs([]);
+            setModalProgress(0);
+        } catch (e) {
+            console.error("Failed to prepare import modal", e);
+        }
+    };
+
+    const executeImportModal = async () => {
+        if (!modalSourceAccount || !activeAccount) return;
+        setModalStep('progress');
+        setModalLogs([
+            'Initializing Career History Transfer...',
+            `Source Profile: ${modalSourceAccount.playerName} (${modalSourceAccount.universeName || modalSourceAccount.universe})`,
+            `Target Profile: ${activeAccount.playerName} (${activeAccount.universeName || activeAccount.universe})`
+        ]);
+        setModalProgress(10);
+
+        try {
+            const targetPlayerId = String(activeAccount.playerId);
+            const targetUniverse = String(activeAccount.universe);
+            const targetPlayerName = activeAccount.playerName;
+            const sourcePlayerName = modalSourceAccount.playerName;
+            const sourcePidVariants = [modalSourceAccount.playerId, String(modalSourceAccount.playerId), Number(modalSourceAccount.playerId)].filter(
+                v => v !== undefined && v !== null && !isNaN(v as any)
+            );
+
+            // 1. Expeditions
+            const exps = await db.expeditions.where('playerId').anyOf(sourcePidVariants).toArray();
+            if (exps.length > 0) {
+                setModalLogs(prev => [...prev, `Transferring ${exps.length.toLocaleString()} expedition logs to Commander ID ${targetPlayerId}...`]);
+                const remappedExps = exps.map((e: any) => ({
+                    ...e,
+                    playerId: targetPlayerId
+                }));
+                await db.expeditions.bulkPut(remappedExps);
+            }
+            setModalProgress(35);
+
+            // 2. Combat Reports
+            const combats = await db.combatReports.where('playerId').anyOf(sourcePidVariants).toArray();
+            if (combats.length > 0) {
+                setModalLogs(prev => [...prev, `Transferring ${combats.length.toLocaleString()} battle reports & updating commander alias...`]);
+                const remappedCombats = combats.map((c: any) => {
+                    const updated = { ...c, playerId: targetPlayerId };
+                    if (sourcePlayerName && targetPlayerName && sourcePlayerName !== targetPlayerName) {
+                        if (updated.attackerName === sourcePlayerName) {
+                            updated.attackerName = targetPlayerName;
+                        }
+                        if (updated.defenderName === sourcePlayerName) {
+                            updated.defenderName = targetPlayerName;
+                        }
+                    }
+                    return updated;
+                });
+                await db.combatReports.bulkPut(remappedCombats);
+            }
+            setModalProgress(60);
+
+            // 3. Debris Field Harvests
+            const debrisArr = await db.debrisHarvests.where('playerId').anyOf(sourcePidVariants).toArray();
+            const debris = debrisArr.filter(d => !d.universe || isSameUniverse(d.universe, modalSourceAccount.universe));
+            if (debris.length > 0) {
+                setModalLogs(prev => [...prev, `Transferring ${debris.length.toLocaleString()} debris field harvests to universe ${targetUniverse}...`]);
+                const remappedDebris = debris.map((d: any) => ({
+                    ...d,
+                    playerId: targetPlayerId,
+                    universe: targetUniverse,
+                    harvestKey: `${targetUniverse}_${d.messageId}`
+                }));
+                await db.debrisHarvests.bulkPut(remappedDebris);
+            }
+            setModalProgress(80);
+
+            // 4. Lifeform Discoveries
+            const lifeforms = await db.lifeformDiscoveries.where('playerId').anyOf(sourcePidVariants).toArray();
+            if (lifeforms.length > 0) {
+                setModalLogs(prev => [...prev, `Transferring ${lifeforms.length.toLocaleString()} lifeform discoveries...`]);
+                const remappedLf = lifeforms.map((l: any) => ({
+                    ...l,
+                    playerId: targetPlayerId
+                }));
+                await db.lifeformDiscoveries.bulkPut(remappedLf);
+            }
+            setModalProgress(90);
+
+            // 5. Lifeform Saved Setups
+            const setups = await db.lifeformSavedSetups.where('playerId').anyOf(sourcePidVariants).toArray();
+            if (setups.length > 0) {
+                setModalLogs(prev => [...prev, `Transferring ${setups.length.toLocaleString()} lifeform tech presets...`]);
+                const remappedSetups = setups.map((s: any) => {
+                    const { id, ...rest } = s;
+                    return {
+                        ...rest,
+                        playerId: targetPlayerId
+                    };
+                });
+                await db.lifeformSavedSetups.bulkAdd(remappedSetups);
+            }
+            setModalProgress(100);
+
+            // 6. Reset Costs Planner Shopping Cart
+            try {
+                localStorage.removeItem(`costs_planner_cart_${targetPlayerId}`);
+            } catch (e) {
+                console.warn('Could not reset cart', e);
+            }
+
+            const totalTransferred = exps.length + combats.length + debris.length + lifeforms.length + setups.length;
+            setModalLogs(prev => [
+                ...prev,
+                '✓ Career History Transfer Completed Successfully!',
+                `Transferred ${totalTransferred.toLocaleString()} total historical records into active empire ${targetPlayerName}.`
+            ]);
+            setModalStep('success');
+        } catch (err: any) {
+            console.error("Modal import transfer failed", err);
+            setModalLogs(prev => [...prev, `✖ CRITICAL FAULT: ${err.message || 'Unknown database exception'}`]);
         }
     };
 
@@ -627,6 +1098,926 @@ const DataManagement: React.FC = () => {
     };
 
     // ----------------------------------------------------
+    // Accounts Management & Import Modal Sub-Views
+    // ----------------------------------------------------
+    const renderImportModal = () => {
+        if (!modalSourceAccount || !activeAccount) return null;
+
+        const cleanSourceUni = cleanUniverseId(modalSourceAccount.universe);
+        const sourceComm: SupportedLanguage = detectLanguageFromServerLink(modalSourceAccount.universe || modalSourceAccount.serverUrl) || 'en';
+        const sourceUniName = modalSourceAccount.universeName && modalSourceAccount.universeName !== 'unknown' ? modalSourceAccount.universeName : cleanSourceUni;
+
+        const cleanTargetUni = cleanUniverseId(activeAccount.universe);
+        const targetComm: SupportedLanguage = detectLanguageFromServerLink(activeAccount.universe || activeAccount.serverUrl) || 'en';
+        const targetUniName = activeAccount.universeName && activeAccount.universeName !== 'unknown' ? activeAccount.universeName : cleanTargetUni;
+
+        const stats = modalStats || { expeditions: 0, combats: 0, debris: 0, lifeforms: 0, setups: 0 };
+        const totalItems = stats.expeditions + stats.combats + stats.debris + stats.lifeforms + stats.setups;
+
+        return (
+            <AnimatePresence>
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0, 0, 0, 0.82)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '24px',
+                    zIndex: 9999
+                }}>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        style={{
+                            width: '100%',
+                            maxWidth: '720px',
+                            borderRadius: '28px',
+                            background: 'linear-gradient(145deg, rgba(16, 25, 42, 0.98) 0%, rgba(8, 14, 26, 0.99) 100%)',
+                            border: '1px solid rgba(245, 158, 11, 0.35)',
+                            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(245, 158, 11, 0.12)',
+                            padding: '36px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '24px',
+                            maxHeight: '90vh',
+                            overflowY: 'auto'
+                        }}
+                    >
+                        {/* Modal Header */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{
+                                    width: '52px',
+                                    height: '52px',
+                                    borderRadius: '16px',
+                                    background: 'rgba(245, 158, 11, 0.15)',
+                                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                                    color: '#f59e0b',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    boxShadow: '0 0 20px rgba(245, 158, 11, 0.25)',
+                                    flexShrink: 0
+                                }}>
+                                    <ArrowRightLeft size={26} />
+                                </div>
+                                <div>
+                                    <h2 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#fff', margin: 0 }}>
+                                        {t('dataManagement.importHistoryModalTitle', 'Merge Career History to Active Empire')}
+                                    </h2>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
+                                        {t('dataManagement.importHistoryModalSubtitle', 'Transfer expeditions, combat logs, debris harvests, and lifeform tech into your active commander.')}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {modalStep !== 'progress' && (
+                                <button
+                                    onClick={() => setModalSourceAccount(null)}
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        color: 'var(--text-muted)',
+                                        borderRadius: '10px',
+                                        padding: '6px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+
+                        {modalStep === 'confirm' && (
+                            <>
+                                {/* Source to Target Visual Pathway */}
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1fr auto 1fr',
+                                    gap: '16px',
+                                    alignItems: 'center',
+                                    padding: '18px',
+                                    borderRadius: '20px',
+                                    background: 'rgba(0, 0, 0, 0.3)',
+                                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                                }}>
+                                    {/* Source Box */}
+                                    <div style={{
+                                        padding: '16px',
+                                        borderRadius: '16px',
+                                        background: 'rgba(245, 158, 11, 0.05)',
+                                        border: '1px solid rgba(245, 158, 11, 0.25)'
+                                    }}>
+                                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', marginBottom: '8px' }}>
+                                            {t('dataManagement.sourceAccountHeader', 'SOURCE EMPIRE')}
+                                        </div>
+                                        <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#fff' }}>
+                                            {modalSourceAccount.playerName}
+                                        </div>
+                                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                            <FlagIcon code={sourceComm} size={14} />
+                                            {sourceUniName} ({cleanSourceUni})
+                                        </div>
+                                    </div>
+
+                                    {/* Arrow */}
+                                    <div style={{
+                                        width: '40px',
+                                        height: '40px',
+                                        borderRadius: '50%',
+                                        background: 'rgba(245, 158, 11, 0.15)',
+                                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                                        color: '#f59e0b',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        <ArrowRight size={20} />
+                                    </div>
+
+                                    {/* Target Box */}
+                                    <div style={{
+                                        padding: '16px',
+                                        borderRadius: '16px',
+                                        background: 'rgba(0, 242, 255, 0.05)',
+                                        border: '1px solid rgba(0, 242, 255, 0.35)',
+                                        boxShadow: '0 0 16px rgba(0, 242, 255, 0.08)'
+                                    }}>
+                                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#00f2ff', textTransform: 'uppercase', marginBottom: '8px' }}>
+                                            {t('dataManagement.targetAccountHeader', 'ACTIVE EMPIRE (TARGET)')}
+                                        </div>
+                                        <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#fff' }}>
+                                            {activeAccount.playerName}
+                                        </div>
+                                        <div style={{ fontSize: '0.8rem', color: '#00f2ff', opacity: 0.85, display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                            <FlagIcon code={targetComm} size={14} />
+                                            {targetUniName} ({cleanTargetUni})
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Breakdown of records being transferred */}
+                                <div>
+                                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                                        {t('dataManagement.recordsToMergeHeader', 'RECORDS TO BE MERGED')} ({totalItems.toLocaleString()} total)
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '10px' }}>
+                                        <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Expeditions</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#00f2ff', marginTop: '2px' }}>{stats.expeditions.toLocaleString()}</div>
+                                        </div>
+                                        <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Battle Reports</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#ef4444', marginTop: '2px' }}>{stats.combats.toLocaleString()}</div>
+                                        </div>
+                                        <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Debris Harvests</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f59e0b', marginTop: '2px' }}>{stats.debris.toLocaleString()}</div>
+                                        </div>
+                                        <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Lifeforms</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10b981', marginTop: '2px' }}>{stats.lifeforms.toLocaleString()}</div>
+                                        </div>
+                                        <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Tech Setups</div>
+                                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#a855f7', marginTop: '2px' }}>{stats.setups.toLocaleString()}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Plain-English Safety Reassurance Callout (No AI Jargon) */}
+                                <div style={{
+                                    display: 'flex',
+                                    gap: '14px',
+                                    padding: '16px 20px',
+                                    borderRadius: '16px',
+                                    background: 'rgba(16, 185, 129, 0.08)',
+                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                    boxShadow: '0 0 20px rgba(16, 185, 129, 0.05)'
+                                }}>
+                                    <ShieldCheck size={26} style={{ color: '#10b981', flexShrink: 0, marginTop: '2px' }} />
+                                    <div>
+                                        <div style={{ fontWeight: 800, color: '#10b981', fontSize: '0.9rem', marginBottom: '4px' }}>
+                                            {t('dataManagement.safetyGuaranteeTitle', 'Colonies, Fleets & Resources Are 100% Safe')}
+                                        </div>
+                                        <div style={{ fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.85)', lineHeight: 1.5 }}>
+                                            {t('dataManagement.safetyGuaranteeDesc', 'This transfer will NEVER overwrite, remove, or modify your active planets, moons, mines, facilities, ships in orbit/flight, defense structures, or resource storage vaults. Only historical career records are transferred into your active commander profile.')}
+                                        </div>
+                                        <div style={{ fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.65)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <Check size={14} style={{ color: '#10b981' }} />
+                                            {t('dataManagement.duplicateDeduplicationNote', 'Duplicate combat reports and expedition logs are automatically merged so your career statistics stay accurate.')}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Modal Actions */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                                    <button
+                                        onClick={() => setModalSourceAccount(null)}
+                                        style={{
+                                            padding: '12px 24px',
+                                            borderRadius: '14px',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            color: '#fff',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 700,
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {t('common.cancel', 'Cancel')}
+                                    </button>
+
+                                    <button
+                                        onClick={executeImportModal}
+                                        disabled={totalItems === 0}
+                                        style={{
+                                            padding: '12px 32px',
+                                            borderRadius: '14px',
+                                            background: totalItems > 0 ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(255,255,255,0.05)',
+                                            color: totalItems > 0 ? '#000' : 'var(--text-muted)',
+                                            border: 'none',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 900,
+                                            cursor: totalItems > 0 ? 'pointer' : 'not-allowed',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            boxShadow: totalItems > 0 ? '0 0 25px rgba(245, 158, 11, 0.35)' : 'none'
+                                        }}
+                                    >
+                                        <ArrowRightLeft size={16} />
+                                        {t('dataManagement.confirmMergeBtn', 'Confirm & Merge Career History')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {modalStep === 'progress' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '16px 0' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <Loader2 size={40} className="animate-spin" style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
+                                    <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fff', margin: 0 }}>
+                                        {t('dataManagement.mergingInProgress', 'Merging Career History...')}
+                                    </h3>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
+                                        Consolidating database records into Commander {activeAccount.playerName}...
+                                    </p>
+                                </div>
+
+                                {/* Progress Bar */}
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>TRANSFER PROGRESS</span>
+                                        <span style={{ color: '#f59e0b' }}>{modalProgress}%</span>
+                                    </div>
+                                    <div style={{ height: '8px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${modalProgress}%` }}
+                                            style={{ height: '100%', background: 'linear-gradient(90deg, #f59e0b, #fbbf24)', boxShadow: '0 0 10px rgba(245, 158, 11, 0.5)' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Terminal Console Log */}
+                                <div style={{
+                                    height: '160px',
+                                    borderRadius: '14px',
+                                    background: 'rgba(0, 0, 0, 0.45)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    padding: '14px',
+                                    overflowY: 'auto',
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.78rem',
+                                    color: '#cbd5e1',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '6px'
+                                }}>
+                                    {modalLogs.map((log, index) => (
+                                        <div key={index} style={{
+                                            color: log.startsWith('✓') ? '#10b981' : log.startsWith('✖') ? '#ef4444' : '#cbd5e1'
+                                        }}>
+                                            {log}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {modalStep === 'success' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', alignItems: 'center', textAlign: 'center', padding: '20px 0' }}>
+                                <div style={{
+                                    width: '64px',
+                                    height: '64px',
+                                    borderRadius: '50%',
+                                    background: 'rgba(16, 185, 129, 0.15)',
+                                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                                    color: '#10b981',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    boxShadow: '0 0 30px rgba(16, 185, 129, 0.3)'
+                                }}>
+                                    <CheckCircle size={36} />
+                                </div>
+
+                                <div>
+                                    <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#fff', margin: '0 0 8px' }}>
+                                        {t('dataManagement.mergingSuccessTitle', 'Career History Successfully Merged!')}
+                                    </h3>
+                                    <p style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.9rem', maxWidth: '480px', margin: '0 auto', lineHeight: 1.5 }}>
+                                        Lifetime expeditions, battle records, and debris logs from <strong>{modalSourceAccount.playerName}</strong> have been merged into Commander <strong>{activeAccount.playerName}</strong>.
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={() => setModalSourceAccount(null)}
+                                    style={{
+                                        padding: '14px 40px',
+                                        borderRadius: '16px',
+                                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                        color: '#fff',
+                                        border: 'none',
+                                        fontSize: '0.95rem',
+                                        fontWeight: 900,
+                                        cursor: 'pointer',
+                                        boxShadow: '0 0 25px rgba(16, 185, 129, 0.4)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                >
+                                    <Check size={18} />
+                                    {t('dataManagement.dismissModalBtn', 'Done & View Empire')}
+                                </button>
+                            </div>
+                        )}
+                    </motion.div>
+                </div>
+            </AnimatePresence>
+        );
+    };
+
+    const renderAccountsManagement = () => {
+        // Community detection & filtering
+        const rawCommunities = allAccounts.map(a => detectLanguageFromServerLink(a.universe || a.serverUrl) || 'en');
+        const communities = Array.from(new Set(rawCommunities)).sort();
+
+        const filtered = sortedAccounts.filter(acc => {
+            const comm = detectLanguageFromServerLink(acc.universe || acc.serverUrl) || 'en';
+            if (selectedCommunity !== 'all' && comm !== selectedCommunity) return false;
+            if (!searchQuery.trim()) return true;
+            const q = searchQuery.toLowerCase();
+            const nameMatch = (acc.playerName || '').toLowerCase().includes(q);
+            const uniMatch = (acc.universeName || acc.universe || '').toLowerCase().includes(q);
+            const commMatch = comm.toLowerCase().includes(q);
+            const allyMatch = (acc.allianceTag || '').toLowerCase().includes(q);
+            return nameMatch || uniMatch || commMatch || allyMatch;
+        });
+
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                {/* Search & Community Filter Toolbar */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '16px',
+                    padding: '20px 24px',
+                    borderRadius: '24px',
+                    background: 'rgba(13, 22, 38, 0.45)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(16px)'
+                }}>
+                    {/* Search Input */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '14px',
+                        padding: '10px 16px',
+                        minWidth: '280px',
+                        maxWidth: '420px',
+                        flex: 1
+                    }}>
+                        <Search size={16} style={{ color: 'var(--text-muted)' }} />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder={t('dataManagement.searchAccountsPlaceholder', 'Search by player, universe, or community...')}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                outline: 'none',
+                                color: '#fff',
+                                fontSize: '0.85rem',
+                                width: '100%'
+                            }}
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Community Filter Pills */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                            onClick={() => setSelectedCommunity('all')}
+                            style={{
+                                padding: '8px 14px',
+                                borderRadius: '10px',
+                                background: selectedCommunity === 'all' ? 'rgba(0, 242, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                                border: selectedCommunity === 'all' ? '1px solid rgba(0, 242, 255, 0.35)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                color: selectedCommunity === 'all' ? 'var(--primary)' : 'var(--text-muted)',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            {t('dataManagement.allCommunities', 'All Communities')} ({allAccounts.length})
+                        </button>
+                        {communities.map(comm => (
+                            <button
+                                key={comm}
+                                onClick={() => setSelectedCommunity(comm)}
+                                style={{
+                                    padding: '8px 14px',
+                                    borderRadius: '10px',
+                                    background: selectedCommunity === comm ? 'rgba(0, 242, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                                    border: selectedCommunity === comm ? '1px solid rgba(0, 242, 255, 0.35)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                    color: selectedCommunity === comm ? 'var(--primary)' : 'var(--text-muted)',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >
+                                <FlagIcon code={comm as SupportedLanguage} size={15} />
+                                {comm.toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Account Cards Grid */}
+                {filtered.length === 0 ? (
+                    <div style={{
+                        padding: '60px 20px',
+                        textAlign: 'center',
+                        borderRadius: '24px',
+                        background: 'rgba(13, 22, 38, 0.3)',
+                        border: '1px solid rgba(255, 255, 255, 0.06)'
+                    }}>
+                        <Users size={48} style={{ color: 'var(--text-muted)', opacity: 0.5, marginBottom: '16px' }} />
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', margin: '0 0 8px' }}>
+                            No Accounts Found
+                        </h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '460px', margin: '0 auto' }}>
+                            {searchQuery ? 'No commander profile matched your search query.' : 'No accounts detected in the local browser database yet.'}
+                        </p>
+                    </div>
+                ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: '24px' }}>
+                        {filtered.map(acc => {
+                            const isCurrent = activeAccount?.playerId === acc.playerId && isSameUniverse(activeAccount?.universe, acc.universe);
+                            const cleanUni = cleanUniverseId(acc.universe);
+                            const commLang: SupportedLanguage = detectLanguageFromServerLink(acc.universe || acc.serverUrl) || 'en';
+                            const rawUniName = acc.universeName && acc.universeName !== 'unknown' ? acc.universeName : '';
+                            const displayUniName = rawUniName || cleanUni.replace(/^s\d+-?/i, '').toUpperCase() || cleanUni;
+                            const classId = Number(acc.playerClass ?? (acc as any)?.characterClass);
+                            const classBadge = classId === 3 ? { icon: '🧭', label: 'Discoverer' } : classId === 1 ? { icon: '⛏️', label: 'Collector' } : classId === 2 ? { icon: '⚔️', label: 'General' } : null;
+
+                            const key = `${acc.universe}_${acc.playerId}`;
+                            const stats = accountsStats?.[key]
+                                || accountsStats?.[`${cleanUni}_${acc.playerId}`]
+                                || accountsStats?.[`${cleanUni}_${String(acc.playerId)}`]
+                                || accountsStats?.[String(acc.playerId)]
+                                || accountsStats?.[`${acc.universe}_${String(acc.playerId)}`]
+                                || {
+                                    planets: 0,
+                                    moons: 0,
+                                    expeditions: 0,
+                                    combats: 0,
+                                    debris: 0,
+                                    lifeforms: 0,
+                                    setups: 0
+                                };
+
+                            // Score & Points resolution
+                            const rawScore = acc.score ?? (acc as any).totalScore ?? (acc as any).points;
+                            const calculatedScore = (rawScore !== undefined && rawScore !== null && !isNaN(Number(rawScore)))
+                                ? Number(rawScore)
+                                : ((acc.economyScore || 0) + (acc.researchScore || 0) + (acc.militaryScore || 0)) > 0
+                                    ? (acc.economyScore || 0) + (acc.researchScore || 0) + (acc.militaryScore || 0)
+                                    : null;
+                            const pointsDisplay = calculatedScore !== null ? `${calculatedScore.toLocaleString()} pts` : '— pts';
+
+                            const isDownloadingThis = exportingAccountIds.has(key);
+
+                            return (
+                                <motion.div
+                                    key={key}
+                                    initial={{ opacity: 0, y: 15 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    style={{
+                                        borderRadius: '24px',
+                                        background: isCurrent
+                                            ? 'linear-gradient(135deg, rgba(8, 24, 40, 0.85) 0%, rgba(4, 12, 22, 0.95) 100%)'
+                                            : 'linear-gradient(135deg, rgba(13, 22, 38, 0.6) 0%, rgba(7, 12, 24, 0.75) 100%)',
+                                        border: isCurrent
+                                            ? '1px solid rgba(0, 242, 255, 0.45)'
+                                            : '1px solid rgba(255, 255, 255, 0.08)',
+                                        boxShadow: isCurrent
+                                            ? '0 10px 30px rgba(0, 242, 255, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.15)'
+                                            : '0 8px 24px rgba(0, 0, 0, 0.35)',
+                                        padding: '24px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '20px',
+                                        position: 'relative',
+                                        overflow: 'hidden'
+                                    }}
+                                >
+                                    {/* Ambient Glow for Active Account */}
+                                    {isCurrent && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '-40px',
+                                            right: '-40px',
+                                            width: '140px',
+                                            height: '140px',
+                                            borderRadius: '50%',
+                                            background: 'rgba(0, 242, 255, 0.12)',
+                                            filter: 'blur(45px)',
+                                            pointerEvents: 'none'
+                                        }} />
+                                    )}
+
+                                    {/* Top Metadata Row: Community / Universe / Points Badge / Active Badge */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {/* Community Flag Badge */}
+                                            <div style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                padding: '3px 8px',
+                                                borderRadius: '8px',
+                                                background: 'rgba(255, 255, 255, 0.05)',
+                                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                fontSize: '0.72rem',
+                                                fontWeight: 800,
+                                                color: '#cbd5e1'
+                                            }}>
+                                                <FlagIcon code={commLang} size={14} />
+                                                {commLang.toUpperCase()}
+                                            </div>
+
+                                            {/* Universe Badge */}
+                                            <div style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                padding: '3px 9px',
+                                                borderRadius: '8px',
+                                                background: isCurrent ? 'rgba(0, 242, 255, 0.1)' : 'rgba(255, 255, 255, 0.04)',
+                                                border: isCurrent ? '1px solid rgba(0, 242, 255, 0.25)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 800,
+                                                color: isCurrent ? '#00f2ff' : '#94a3b8'
+                                            }}>
+                                                <Server size={11} />
+                                                {displayUniName} <span style={{ opacity: 0.5, fontSize: '0.7rem' }}>({cleanUni})</span>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {/* Points Pill (Trophy Badge) */}
+                                            <div style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                padding: '3px 9px',
+                                                borderRadius: '8px',
+                                                background: 'rgba(245, 158, 11, 0.1)',
+                                                border: '1px solid rgba(245, 158, 11, 0.25)',
+                                                fontSize: '0.72rem',
+                                                fontWeight: 800,
+                                                color: '#f59e0b',
+                                                letterSpacing: '0.02em',
+                                                boxShadow: '0 0 10px rgba(245, 158, 11, 0.08)'
+                                            }}>
+                                                <Trophy size={11} style={{ color: '#f59e0b' }} />
+                                                <span>{pointsDisplay}</span>
+                                                {acc.rank ? (
+                                                    <span style={{ opacity: 0.7, fontSize: '0.68rem', fontWeight: 600 }}>
+                                                        (#{acc.rank})
+                                                    </span>
+                                                ) : null}
+                                            </div>
+
+                                            {/* Active Status Badge or ID */}
+                                            {isCurrent ? (
+                                                <div style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '5px',
+                                                    padding: '3px 10px',
+                                                    borderRadius: '8px',
+                                                    background: 'rgba(16, 185, 129, 0.15)',
+                                                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                    color: '#10b981',
+                                                    fontSize: '0.72rem',
+                                                    fontWeight: 900,
+                                                    letterSpacing: '0.05em',
+                                                    boxShadow: '0 0 12px rgba(16, 185, 129, 0.2)'
+                                                }}>
+                                                    <ShieldCheck size={12} />
+                                                    {t('dataManagement.activeEmpireBadge', 'ACTIVE EMPIRE')}
+                                                </div>
+                                            ) : (
+                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                                                    ID: #{acc.playerId}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Middle Profile Row: Avatar + Name + Alliance + Class */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                        {/* Avatar / Monogram */}
+                                        <div style={{
+                                            width: '46px',
+                                            height: '46px',
+                                            minWidth: '46px',
+                                            borderRadius: '14px',
+                                            background: isCurrent
+                                                ? 'linear-gradient(135deg, rgba(0, 242, 255, 0.25) 0%, rgba(14, 165, 233, 0.1) 100%)'
+                                                : 'rgba(255, 255, 255, 0.05)',
+                                            border: isCurrent ? '1px solid rgba(0, 242, 255, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: isCurrent ? '#00f2ff' : '#cbd5e1',
+                                            fontWeight: 900,
+                                            fontSize: '1.1rem',
+                                            boxShadow: isCurrent ? '0 0 16px rgba(0, 242, 255, 0.2)' : 'none'
+                                        }}>
+                                            {acc.avatarUrl ? (
+                                                <img src={acc.avatarUrl} alt={acc.playerName} style={{ width: '46px', height: '46px', borderRadius: '14px', objectFit: 'cover' }} />
+                                            ) : (
+                                                acc.playerName?.[0]?.toUpperCase() || <User size={22} />
+                                            )}
+                                        </div>
+
+                                        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <span style={{
+                                                    fontSize: '1.25rem',
+                                                    fontWeight: 900,
+                                                    color: '#fff',
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis'
+                                                }}>
+                                                    {acc.playerName}
+                                                </span>
+                                                {acc.allianceTag && (
+                                                    <span style={{
+                                                        padding: '2px 7px',
+                                                        borderRadius: '6px',
+                                                        background: 'rgba(0, 242, 255, 0.12)',
+                                                        border: '1px solid rgba(0, 242, 255, 0.25)',
+                                                        color: '#00f2ff',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: 800
+                                                    }}>
+                                                        [{acc.allianceTag}]
+                                                    </span>
+                                                )}
+                                                {classBadge && (
+                                                    <span style={{
+                                                        padding: '2px 8px',
+                                                        borderRadius: '6px',
+                                                        background: 'rgba(255, 255, 255, 0.04)',
+                                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                        color: '#cbd5e1',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: 700,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
+                                                    }}>
+                                                        <span>{classBadge.icon}</span> {classBadge.label}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span>
+                                                    {acc.lastSeen ? `Last active ${new Date(acc.lastSeen).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Stored profile'}
+                                                </span>
+                                                {calculatedScore !== null && (
+                                                    <>
+                                                        <span style={{ opacity: 0.35 }}>•</span>
+                                                        <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+                                                            {calculatedScore.toLocaleString()} pts
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Stats Strip (5 high-contrast metric pills) */}
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(5, 1fr)',
+                                        gap: '8px',
+                                        padding: '12px 14px',
+                                        borderRadius: '16px',
+                                        background: 'rgba(0, 0, 0, 0.25)',
+                                        border: '1px solid rgba(255, 255, 255, 0.04)'
+                                    }}>
+                                        <div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Planets</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
+                                                {stats.planets} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>({stats.moons}M)</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Expeditions</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#00f2ff', marginTop: '2px' }}>
+                                                {stats.expeditions.toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Combats</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#ef4444', marginTop: '2px' }}>
+                                                {stats.combats.toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Lifeforms</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#10b981', marginTop: '2px' }}>
+                                                {stats.lifeforms.toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Debris</div>
+                                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f59e0b', marginTop: '2px' }}>
+                                                {stats.debris.toLocaleString()}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Bar - Balanced 2-Button Grid */}
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                                        gap: '10px',
+                                        paddingTop: '12px',
+                                        borderTop: '1px solid rgba(255, 255, 255, 0.06)'
+                                    }}>
+                                        {/* Button 1: Download Backup */}
+                                        <button
+                                            onClick={() => handleExportAccount(acc)}
+                                            disabled={isDownloadingThis}
+                                            style={{
+                                                padding: '10px 16px',
+                                                borderRadius: '12px',
+                                                background: 'rgba(255, 255, 255, 0.04)',
+                                                border: '1px solid rgba(255, 255, 255, 0.09)',
+                                                color: '#cbd5e1',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 700,
+                                                cursor: isDownloadingThis ? 'wait' : 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                minHeight: '40px',
+                                                boxSizing: 'border-box'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.color = '#fff';
+                                                e.currentTarget.style.borderColor = 'rgba(0, 242, 255, 0.35)';
+                                                e.currentTarget.style.background = 'rgba(0, 242, 255, 0.08)';
+                                                e.currentTarget.style.boxShadow = '0 0 14px rgba(0, 242, 255, 0.12)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.color = '#cbd5e1';
+                                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.09)';
+                                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                                                e.currentTarget.style.boxShadow = 'none';
+                                            }}
+                                        >
+                                            {isDownloadingThis ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <Download size={14} />
+                                            )}
+                                            <span>{t('dataManagement.downloadBackupBtn', 'Download Backup (.json)')}</span>
+                                        </button>
+
+                                        {/* Button 2: Import to Active Empire OR Currently Active Indicator */}
+                                        {isCurrent ? (
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '7px',
+                                                color: '#10b981',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 800,
+                                                padding: '10px 16px',
+                                                borderRadius: '12px',
+                                                background: 'rgba(16, 185, 129, 0.09)',
+                                                border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                boxShadow: '0 0 12px rgba(16, 185, 129, 0.12)',
+                                                minHeight: '40px',
+                                                boxSizing: 'border-box'
+                                            }}>
+                                                <CheckCircle size={15} />
+                                                <span>Currently Active</span>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleOpenImportModal(acc)}
+                                                style={{
+                                                    padding: '10px 16px',
+                                                    borderRadius: '12px',
+                                                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.16) 100%)',
+                                                    border: '1px solid rgba(245, 158, 11, 0.38)',
+                                                    color: '#f59e0b',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 800,
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '8px',
+                                                    boxShadow: '0 0 14px rgba(245, 158, 11, 0.12)',
+                                                    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                    minHeight: '40px',
+                                                    boxSizing: 'border-box'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.28) 0%, rgba(217, 119, 6, 0.28) 100%)';
+                                                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.65)';
+                                                    e.currentTarget.style.boxShadow = '0 0 18px rgba(245, 158, 11, 0.22)';
+                                                    e.currentTarget.style.color = '#fbbf24';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.16) 100%)';
+                                                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.38)';
+                                                    e.currentTarget.style.boxShadow = '0 0 14px rgba(245, 158, 11, 0.12)';
+                                                    e.currentTarget.style.color = '#f59e0b';
+                                                }}
+                                            >
+                                                <ArrowRightLeft size={14} />
+                                                <span>{t('dataManagement.importToActiveBtn', 'Import to Active Empire')}</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Import Confirmation / Progress / Success Modal */}
+                {renderImportModal()}
+            </div>
+        );
+    };
+
+    // ----------------------------------------------------
     // Nexus Backup & Restore Sub-Views
     // ----------------------------------------------------
     const renderNexusUpload = () => (
@@ -878,30 +2269,53 @@ const DataManagement: React.FC = () => {
                             </div>
 
                             {/* Database numbers summary */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                {[
-                                    { label: t('dataManagement.planetsMoons'), count: nexusStatsSummary?.planets || 0, icon: <ThemeIcon name="geography-globe" size={16} /> },
-                                    { label: t('dataManagement.expeditionsRecorded'), count: nexusStatsSummary?.expeditions || 0, icon: <ThemeIcon name="navigation" size={16} /> },
-                                    { label: t('dataManagement.combatsRecorded'), count: nexusStatsSummary?.combats || 0, icon: <ThemeIcon name="sword" size={16} /> },
-                                    { label: t('dataManagement.debrisHarvests'), count: nexusStatsSummary?.debris || 0, icon: <ThemeIcon name="debris-field" size={16} /> },
-                                    { label: 'Lifeform Discoveries', count: nexusStatsSummary?.lifeforms || 0, icon: <ThemeIcon name="leaf" size={16} /> },
-                                    { label: 'Saved Build Orders', count: nexusStatsSummary?.todos || 0, icon: <ThemeIcon name="goal" size={16} /> },
-                                    { label: 'Raid Radar Targets', count: nexusStatsSummary?.spiedPlanets || 0, icon: <ThemeIcon name="radar" size={16} /> },
-                                ].map((item, index) => (
-                                    <div key={index} style={{
-                                        padding: '12px 16px', borderRadius: '14px',
-                                        background: 'rgba(255,255,255,0.01)',
-                                        border: '1px solid rgba(255,255,255,0.03)',
-                                        display: 'flex', alignItems: 'center', gap: '12px'
-                                    }}>
-                                        <span style={{ display: 'flex', alignItems: 'center' }}>{item.icon}</span>
-                                        <div>
-                                            <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fff' }}>{item.count.toLocaleString()}</div>
-                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{item.label}</div>
-                                        </div>
+                            {(() => {
+                                const activeKey = activeAccount ? `${activeAccount.universe}_${activeAccount.playerId}` : '';
+                                const activeCleanKey = activeAccount ? `${cleanUniverseId(activeAccount.universe)}_${activeAccount.playerId}` : '';
+                                const activeCardStats = activeAccount ? (
+                                    accountsStats[activeKey] ||
+                                    accountsStats[activeCleanKey] ||
+                                    accountsStats[String(activeAccount.playerId)] ||
+                                    accountsStats['active']
+                                ) : null;
+
+                                const displayPlanets = nexusStatsSummary.planets > 0
+                                    ? nexusStatsSummary.planets
+                                    : ((activeCardStats?.planets || 0) + (activeCardStats?.moons || 0));
+                                const displayExpeditions = nexusStatsSummary.expeditions > 0 ? nexusStatsSummary.expeditions : (activeCardStats?.expeditions || 0);
+                                const displayCombats = nexusStatsSummary.combats > 0 ? nexusStatsSummary.combats : (activeCardStats?.combats || 0);
+                                const displayDebris = nexusStatsSummary.debris > 0 ? nexusStatsSummary.debris : (activeCardStats?.debris || 0);
+                                const displayLifeforms = nexusStatsSummary.lifeforms > 0 ? nexusStatsSummary.lifeforms : (activeCardStats?.lifeforms || 0);
+                                const displayTodos = nexusStatsSummary.todos || 0;
+                                const displaySpied = nexusStatsSummary.spiedPlanets || 0;
+
+                                return (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                        {[
+                                            { label: t('dataManagement.planetsMoons'), count: displayPlanets, icon: <ThemeIcon name="geography-globe" size={16} /> },
+                                            { label: t('dataManagement.expeditionsRecorded'), count: displayExpeditions, icon: <ThemeIcon name="navigation" size={16} /> },
+                                            { label: t('dataManagement.combatsRecorded'), count: displayCombats, icon: <ThemeIcon name="sword" size={16} /> },
+                                            { label: t('dataManagement.debrisHarvests'), count: displayDebris, icon: <ThemeIcon name="debris-field" size={16} /> },
+                                            { label: 'Lifeform Discoveries', count: displayLifeforms, icon: <ThemeIcon name="leaf" size={16} /> },
+                                            { label: 'Saved Build Orders', count: displayTodos, icon: <ThemeIcon name="goal" size={16} /> },
+                                            { label: 'Raid Radar Targets', count: displaySpied, icon: <ThemeIcon name="radar" size={16} /> },
+                                        ].map((item, index) => (
+                                            <div key={index} style={{
+                                                padding: '12px 16px', borderRadius: '14px',
+                                                background: 'rgba(255,255,255,0.01)',
+                                                border: '1px solid rgba(255,255,255,0.03)',
+                                                display: 'flex', alignItems: 'center', gap: '12px'
+                                            }}>
+                                                <span style={{ display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                                                <div>
+                                                    <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fff' }}>{item.count.toLocaleString()}</div>
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{item.label}</div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            })()}
                         </div>
                     ) : (
                         <div style={{
@@ -2319,6 +3733,29 @@ const DataManagement: React.FC = () => {
             }}>
                 <button
                     onClick={() => {
+                        setActiveTab('accounts');
+                        setError(null);
+                    }}
+                    style={{
+                        padding: '10px 24px',
+                        borderRadius: '12px',
+                        background: activeTab === 'accounts' ? 'linear-gradient(90deg, rgba(0, 242, 255, 0.15) 0%, rgba(189, 0, 255, 0.05) 100%)' : 'transparent',
+                        color: activeTab === 'accounts' ? 'var(--primary)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.3s ease',
+                        boxShadow: activeTab === 'accounts' ? '0 0 15px rgba(0, 242, 255, 0.1)' : 'none',
+                        border: activeTab === 'accounts' ? '1px solid rgba(0, 242, 255, 0.2)' : '1px solid transparent'
+                    }}
+                >
+                    <Users size={16} /> {t('dataManagement.tabAccountsManagement', 'Accounts Management')}
+                </button>
+                <button
+                    onClick={() => {
                         setActiveTab('nexus');
                         setError(null);
                     }}
@@ -2338,7 +3775,7 @@ const DataManagement: React.FC = () => {
                         border: activeTab === 'nexus' ? '1px solid rgba(0, 242, 255, 0.2)' : '1px solid transparent'
                     }}
                 >
-                    <img src="icons/nexus.png" alt="OGame Nexus Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> {t('dataManagement.tabNexusData')}
+                    <img src="icons/nexus.png" alt="OGame Nexus Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> {t('dataManagement.tabNexusData', 'OGame Nexus Sync')}
                 </button>
                 <button
                     onClick={() => {
@@ -2361,19 +3798,21 @@ const DataManagement: React.FC = () => {
                         border: activeTab === 'tracker' ? '1px solid rgba(0, 242, 255, 0.2)' : '1px solid transparent'
                     }}
                 >
-                    <img src="icons/misc/ogame-tracker.png" alt="OGame Tracker Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> {t('dataManagement.tabTrackerSync')}
+                    <img src="icons/misc/ogame-tracker.png" alt="OGame Tracker Logo" style={{ width: '16px', height: '16px', objectFit: 'contain' }} /> {t('dataManagement.tabTrackerSync', 'OGame Tracker Sync')}
                 </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '48px' }}>
-                {activeTab === 'tracker' ? (
+                {activeTab === 'accounts' && renderAccountsManagement()}
+                {activeTab === 'tracker' && (
                     <>
                         {step === 'upload' && renderUpload()}
                         {step === 'account-select' && renderAccountSelect()}
                         {step === 'data-select' && renderDataSelect()}
                         {step === 'import-progress' && renderImportProgress()}
                     </>
-                ) : (
+                )}
+                {activeTab === 'nexus' && (
                     <>
                         {nexusTabStep === 'upload' && renderNexusUpload()}
                         {nexusTabStep === 'mismatch' && renderNexusMismatch()}

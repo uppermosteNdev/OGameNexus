@@ -8262,6 +8262,22 @@ body.low-animation .og-nexus-epic-pulse {
   color: #a7f3d0 !important;
 }
 
+.badge-anomaly-bonus {
+  background: rgba(245, 158, 11, 0.16) !important;
+  border: 1px solid rgba(251, 191, 36, 0.45) !important;
+  color: #fbbf24 !important;
+  text-shadow: 0 0 6px rgba(245, 158, 11, 0.35) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+}
+
+.badge-anomaly-bonus:hover {
+  background: rgba(245, 158, 11, 0.28) !important;
+  border-color: #fde047 !important;
+  color: #fef08a !important;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.35) !important;
+}
+
 .nexus-extras-count {
   font-size: 11px !important;
   font-weight: 800 !important;
@@ -8327,7 +8343,7 @@ body.low-animation .og-nexus-epic-pulse {
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  padding: 4px 6px !important;
+  padding: 3px 6px !important;
   background: rgba(11, 18, 30, 0.6) !important;
   border: 1px solid rgba(255, 255, 255, 0.05) !important;
   border-radius: 4px !important;
@@ -8336,6 +8352,7 @@ body.low-animation .og-nexus-epic-pulse {
   transition: all 0.15s ease !important;
   user-select: none !important;
   cursor: help !important;
+  overflow: visible !important;
 }
 
 .nexus-stat-capsule:hover {
@@ -8358,7 +8375,7 @@ body.low-animation .og-nexus-epic-pulse {
   text-transform: uppercase !important;
   letter-spacing: 0.05em !important;
   line-height: 1 !important;
-  margin-bottom: 3px !important;
+  margin-bottom: 2px !important;
   white-space: nowrap !important;
   text-align: center !important;
   transition: color 0.15s ease !important;
@@ -8392,20 +8409,108 @@ body.low-animation .og-nexus-epic-pulse {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 5px !important;
-  min-height: 16px !important;
+  gap: 0 !important;
+  min-height: 20px !important;
+  max-height: 22px !important;
+  max-width: 100% !important;
+  overflow: visible !important;
 }
 
 .nexus-stat-extras .nexus-extra-item {
+  position: relative !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+  border-radius: 3px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
   cursor: help !important;
-  transition: transform 0.15s ease !important;
+  line-height: 1 !important;
+  box-shadow: 0 0 0 1.5px #0b121e, 0 2px 6px rgba(0, 0, 0, 0.7) !important;
+  transition: transform 0.15s ease, z-index 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+/* Overlapping stacked icons cascade with drop-shadow */
+.nexus-stat-extras .nexus-extra-item + .nexus-extra-item {
+  margin-left: -6px !important;
+}
+
+.nexus-stat-extras .nexus-extra-item:nth-child(1) {
+  z-index: 3 !important;
+}
+.nexus-stat-extras .nexus-extra-item:nth-child(2) {
+  z-index: 2 !important;
+}
+.nexus-stat-extras .nexus-extra-item:nth-child(3) {
+  z-index: 1 !important;
 }
 
 .nexus-stat-extras .nexus-extra-item:hover {
-  transform: scale(1.18) !important;
+  z-index: 10 !important;
+  transform: scale(1.22) translateY(-1px) !important;
+  box-shadow: 0 0 0 1.5px #38bdf8, 0 4px 10px rgba(0, 0, 0, 0.85) !important;
+}
+
+/* Constrain standalone resource icons (Species Experience & Artifacts) to 20px x 20px */
+.nexus-stat-extras resource-icon,
+.nexus-stat-capsule resource-icon,
+.nexus-extra-item resource-icon,
+.nexus-grid-extras resource-icon {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  border-radius: 3px !important;
+  box-sizing: border-box !important;
+  pointer-events: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Technology icons (ships): scale 28px sprite sheet to exact 20px (28 * 0.714 = 20px) */
+.nexus-stat-extras technology-icon,
+.nexus-stat-capsule technology-icon,
+.nexus-extra-item technology-icon,
+.nexus-grid-extras technology-icon {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  pointer-events: none !important;
+  transform: scale(0.714) !important;
+  transform-origin: center center !important;
+  flex-shrink: 0 !important;
+}
+
+.nexus-stat-extras resource-icon.artifact,
+.nexus-stat-extras resource-icon[class*="artifact"],
+.nexus-stat-extras resource-icon[class*="artefact"],
+.nexus-stat-extras resource-icon.speciesExperience,
+.nexus-stat-extras resource-icon[class*="speciesExperience"],
+.nexus-stat-extras resource-icon[class*="experience"],
+.nexus-stat-capsule resource-icon.artifact,
+.nexus-stat-capsule resource-icon[class*="artifact"],
+.nexus-stat-capsule resource-icon[class*="artefact"],
+.nexus-stat-capsule resource-icon.speciesExperience,
+.nexus-stat-capsule resource-icon[class*="speciesExperience"],
+.nexus-stat-capsule resource-icon[class*="experience"] {
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
 }
 
 /* Backward compatibility legacy styles */
@@ -8498,21 +8603,27 @@ body.low-animation .og-nexus-epic-pulse {
 }
 
 .nexus-grid-extras technology-icon,
-.nexus-grid-extras resource-icon {
+.nexus-extra-item technology-icon {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  pointer-events: none !important;
+  transform: scale(0.714) !important;
+  transform-origin: center center !important;
+  flex-shrink: 0 !important;
+}
+
+.nexus-grid-extras resource-icon,
+.nexus-extra-item resource-icon {
   width: 20px !important;
   height: 20px !important;
   min-width: 20px !important;
   min-height: 20px !important;
   max-width: 20px !important;
   max-height: 20px !important;
-  border-radius: 4px !important;
-  box-shadow: 0 0 0 1.5px #0d141e, 0 2px 6px rgba(0, 0, 0, 0.8) !important;
+  border-radius: 3px !important;
   display: inline-block !important;
   vertical-align: middle !important;
   pointer-events: none !important;
-}
-
-.nexus-grid-extras resource-icon {
   background-size: contain !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
@@ -8520,10 +8631,22 @@ body.low-animation .og-nexus-epic-pulse {
 
 .nexus-grid-extras resource-icon.artifact,
 .nexus-grid-extras resource-icon[class*="artifact"],
-.nexus-grid-extras resource-icon[class*="artefact"] {
+.nexus-grid-extras resource-icon[class*="artefact"],
+.nexus-grid-extras resource-icon.speciesExperience,
+.nexus-grid-extras resource-icon[class*="speciesExperience"],
+.nexus-grid-extras resource-icon[class*="experience"],
+.nexus-extra-item resource-icon.artifact,
+.nexus-extra-item resource-icon[class*="artifact"],
+.nexus-extra-item resource-icon[class*="artefact"],
+.nexus-extra-item resource-icon.speciesExperience,
+.nexus-extra-item resource-icon[class*="speciesExperience"],
+.nexus-extra-item resource-icon[class*="experience"] {
   box-shadow: none !important;
   border: none !important;
   border-radius: 0 !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
 }
 
 /* 4. Tier 0 - Tier 9 Ranking Badges */
@@ -9316,6 +9439,13 @@ body.low-animation .og-nexus-epic-pulse {
   padding: 8px 10px !important;
 }
 
+.nexus-native-tooltip-popup:has(.nexus-fleet-finds-card),
+.nexus-native-tooltip-popup.nexus-tooltip-rich:has(.nexus-fleet-finds-card) {
+  min-width: 270px !important;
+  max-width: 320px !important;
+  padding: 10px 12px !important;
+}
+
 .nexus-native-tooltip-popup:has(.nexus-extra-tooltip.cyan) {
   border-color: rgba(6, 182, 212, 0.45) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 14px rgba(6, 182, 212, 0.2) !important;
@@ -9366,6 +9496,10 @@ body.low-animation .og-nexus-epic-pulse {
 
 .nexus-extra-grid.dual {
   grid-template-columns: minmax(90px, 1fr) minmax(115px, 1.2fr) !important;
+}
+
+.nexus-extra-grid.triple {
+  grid-template-columns: repeat(3, 1fr) !important;
 }
 
 .nexus-extra-grid.single {
@@ -9422,6 +9556,390 @@ body.low-animation .og-nexus-epic-pulse {
 .nexus-extra-val.text-purple {
   color: #c084fc !important;
   text-shadow: 0 0 8px rgba(168, 85, 247, 0.5) !important;
+}
+
+/* Fleet Finds Card - Ship-by-Ship Tactical Intel */
+.nexus-fleet-finds-card {
+  gap: 8px !important;
+}
+
+.nexus-fleet-ships-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  box-sizing: border-box !important;
+}
+
+.nexus-fleet-ship-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  box-sizing: border-box !important;
+  transition: all 0.15s ease !important;
+}
+
+.nexus-fleet-ship-row:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(6, 182, 212, 0.3) !important;
+}
+
+.nexus-fleet-ship-info {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.nexus-fleet-ship-info technology-icon {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  pointer-events: auto !important;
+  flex-shrink: 0 !important;
+}
+
+.nexus-ship-name {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #cbd5e1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.nexus-fleet-ship-stats {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.nexus-ship-count {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums !important;
+  color: #f8fafc !important;
+}
+
+.nexus-ship-pct {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums !important;
+  color: #22d3ee !important;
+  min-width: 28px !important;
+  text-align: right !important;
+}
+
+.nexus-fleet-disclaimer {
+  margin-top: 5px !important;
+  padding-top: 6px !important;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08) !important;
+  font-size: 9px !important;
+  line-height: 1.35 !important;
+  color: #64748b !important;
+  text-align: center !important;
+  font-style: italic !important;
+}
+
+/* Empire Anomaly Bonuses Tooltip Card */
+.nexus-native-tooltip-popup:has(.nexus-bonus-tooltip-card),
+.nexus-native-tooltip-popup.nexus-tooltip-rich:has(.nexus-bonus-tooltip-card) {
+  min-width: 290px !important;
+  max-width: 360px !important;
+  padding: 10px 12px !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.9), 0 0 16px rgba(245, 158, 11, 0.18) !important;
+  background: rgba(11, 17, 27, 0.98) !important;
+}
+
+.nexus-native-tooltip-popup:has(.nexus-bonus-tooltip-card) .nexus-native-tooltip-title {
+  color: #fbbf24 !important;
+  border-bottom-color: rgba(245, 158, 11, 0.25) !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em !important;
+}
+
+.nexus-native-tooltip-popup:has(.nexus-bonus-tooltip-card) .nexus-native-tooltip-arrow {
+  border-top-color: rgba(245, 158, 11, 0.45) !important;
+}
+
+.nexus-native-tooltip-popup.placement-down:has(.nexus-bonus-tooltip-card) .nexus-native-tooltip-arrow {
+  border-bottom-color: rgba(245, 158, 11, 0.45) !important;
+}
+
+.nexus-bonus-tooltip-card {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 7px !important;
+  box-sizing: border-box !important;
+}
+
+.nexus-bonus-topbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin-bottom: 2px !important;
+}
+
+.nexus-bonus-colonies-chip {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  color: #94a3b8 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  padding: 2px 7px !important;
+  letter-spacing: 0.02em !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.nexus-bonus-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+
+.nexus-bonus-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 6px !important;
+  padding: 6px 9px !important;
+  transition: all 0.15s ease !important;
+  box-sizing: border-box !important;
+}
+
+.nexus-bonus-row:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.nexus-bonus-thumb {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 5px !important;
+  object-fit: cover !important;
+  flex-shrink: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+}
+
+.nexus-bonus-info {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+}
+
+.nexus-bonus-name {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #f1f5f9 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  letter-spacing: 0.01em !important;
+}
+
+.nexus-bonus-sub {
+  font-size: 9.5px !important;
+  color: #94a3b8 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.nexus-bonus-category {
+  color: #94a3b8 !important;
+}
+
+.nexus-bonus-lvl {
+  color: #e2e8f0 !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.nexus-bonus-value {
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  font-variant-numeric: tabular-nums !important;
+  text-align: right !important;
+  flex-shrink: 0 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.nexus-bonus-callout {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: rgba(245, 158, 11, 0.08) !important;
+  border: 1px solid rgba(251, 191, 36, 0.22) !important;
+  border-radius: 4px !important;
+  padding: 5px 8px !important;
+  margin-top: 2px !important;
+  box-sizing: border-box !important;
+}
+
+.nexus-bonus-callout-icon {
+  font-size: 11px !important;
+  flex-shrink: 0 !important;
+}
+
+.nexus-bonus-callout-text {
+  font-size: 9.5px !important;
+  color: #fef08a !important;
+  line-height: 1.35 !important;
+}
+
+/* Lifeform Ship Bonuses Floating Tooltip */
+.nexus-native-tooltip-popup:has(.nexus-lf-ship-tooltip),
+.nexus-native-tooltip-popup.nexus-tooltip-rich:has(.nexus-lf-ship-tooltip) {
+  min-width: 250px !important;
+  max-width: 320px !important;
+  padding: 10px 12px !important;
+  border-color: rgba(20, 184, 166, 0.45) !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.9), 0 0 16px rgba(20, 184, 166, 0.18) !important;
+  background: rgba(11, 17, 27, 0.98) !important;
+}
+
+.nexus-native-tooltip-popup:has(.nexus-lf-ship-tooltip) .nexus-native-tooltip-title {
+  color: #2dd4bf !important;
+  border-bottom-color: rgba(20, 184, 166, 0.25) !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em !important;
+}
+
+.nexus-native-tooltip-popup:has(.nexus-lf-ship-tooltip) .nexus-native-tooltip-arrow {
+  border-top-color: rgba(20, 184, 166, 0.45) !important;
+}
+
+.nexus-native-tooltip-popup.placement-down:has(.nexus-lf-ship-tooltip) .nexus-native-tooltip-arrow {
+  border-bottom-color: rgba(20, 184, 166, 0.45) !important;
+}
+
+.nexus-lf-ship-tooltip {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+}
+
+.nexus-lf-tooltip-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.nexus-lf-ship-badge {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  color: #94a3b8 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.nexus-lf-tech-count {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  border-radius: 3px !important;
+  padding: 1px 5px !important;
+}
+
+.nexus-lf-tech-count.active {
+  color: #2dd4bf !important;
+  background: rgba(20, 184, 166, 0.15) !important;
+  border: 1px solid rgba(20, 184, 166, 0.35) !important;
+}
+
+.nexus-lf-tech-count.dim {
+  color: #64748b !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.nexus-lf-stat-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
+.nexus-lf-stat-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 3px 7px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+}
+
+.nexus-lf-stat-label {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  color: #cbd5e1 !important;
+  font-weight: 600 !important;
+}
+
+.nexus-lf-icon {
+  font-size: 11px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 14px !important;
+}
+
+.nexus-lf-icon.wep { color: #f97316 !important; }
+.nexus-lf-icon.shd { color: #38bdf8 !important; }
+.nexus-lf-icon.arm { color: #34d399 !important; }
+.nexus-lf-icon.spd { color: #60a5fa !important; }
+.nexus-lf-icon.crg { color: #fbbf24 !important; }
+
+.nexus-lf-stat-val {
+  font-family: "Courier New", Courier, monospace, sans-serif !important;
+  font-weight: 800 !important;
+  font-size: 11.5px !important;
+}
+
+.nexus-lf-stat-val.boosted {
+  color: #2dd4bf !important;
+  text-shadow: 0 0 6px rgba(45, 212, 191, 0.4) !important;
+}
+
+.nexus-lf-stat-val.zero {
+  color: #64748b !important;
+  font-weight: 500 !important;
+  opacity: 0.65 !important;
+}
+
+.nexus-lf-tooltip-footnote {
+  font-size: 9px !important;
+  color: #64748b !important;
+  font-style: italic !important;
+  text-align: center !important;
+  padding-top: 3px !important;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06) !important;
 }
 
 /* ==========================================================================
@@ -9973,6 +10491,14 @@ body.low-animation .og-nexus-epic-pulse {
   background: rgba(56, 189, 248, 0.22) !important;
   color: #38bdf8 !important;
   border: 1px solid rgba(56, 189, 248, 0.5) !important;
+}
+
+/* Stationed Fleet Wrap: Mini Grid */
+.nexus-stationed-fleet-wrap {
+  display: flex !important;
+  align-items: center !important;
+  flex: 1 !important;
+  min-width: 0 !important;
 }
 
 /* Compact 2x5 Stationed Fleet Grid (Enlarged icons & cells) */
@@ -10858,6 +11384,14 @@ body.low-animation .og-nexus-epic-pulse {
   flex: 1 !important;
 }
 
+.nexus-sim-ship-name-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
 .nexus-sim-ship-name {
   font-size: 11px !important;
   font-weight: 700 !important;
@@ -10866,6 +11400,34 @@ body.low-animation .og-nexus-epic-pulse {
   text-overflow: ellipsis !important;
   overflow: hidden !important;
   transition: color 0.15s ease !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.nexus-sim-card-top.nexus-sim-ship-bonus-trigger,
+.nexus-sim-card-top.nexus-tooltip-trigger {
+  cursor: help !important;
+}
+
+.nexus-floating-rewards-tooltip.nexus-ship-bonus-floating-tooltip {
+  min-width: 220px !important;
+  max-width: 280px !important;
+  padding: 9px 12px !important;
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.85), 0 0 18px rgba(14, 165, 233, 0.3) !important;
+}
+
+.nexus-sim-lf-pill {
+  font-size: 8.5px !important;
+  font-weight: 800 !important;
+  color: #2dd4bf !important;
+  background: rgba(20, 184, 166, 0.15) !important;
+  border: 1px solid rgba(20, 184, 166, 0.4) !important;
+  border-radius: 3px !important;
+  padding: 0 4px !important;
+  line-height: 13px !important;
+  letter-spacing: 0.03em !important;
+  flex-shrink: 0 !important;
 }
 
 .nexus-sim-warship-card.active .nexus-sim-ship-name {
