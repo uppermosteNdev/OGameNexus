@@ -3673,17 +3673,24 @@ async function performBackgroundEmpireSync(ignoreDelay = false, trigger?: Event 
         const existing = existingMap.get(sId);
         const customName = sidebarNameMap.get(sId);
 
-        // Monotonic level merge: NEVER DOWNGRADE verified levels
-        const resolvedMetalMine = Math.max(existing?.metalMine || 0, p.metalMine || 0);
-        const resolvedCrystalMine = Math.max(existing?.crystalMine || 0, p.crystalMine || 0);
-        const resolvedDeutMine = Math.max(existing?.deuteriumMine || 0, p.deuteriumMine || 0);
-        const resolvedSolarPlant = Math.max(existing?.solarPlant || 0, p.solarPlant || 0);
-        const resolvedFusionReactor = Math.max(existing?.fusionReactor || 0, p.fusionReactor || 0);
-        const resolvedSolarSatellites = Math.max(existing?.solarSatellites || 0, p.solarSatellites || 0);
+        // Authoritative server data (accountInfo / empire AJAX) provides exact per-planet building levels.
+        // Trust server values directly when present so demolished or previously smeared levels self-heal cleanly.
+        const hasAuthBuildings = syncedViaAccountInfo || planetsData.planets.length > 0;
+        const pickLvl = (serverVal: number | undefined, existingVal: number | undefined) => {
+          if (hasAuthBuildings && serverVal !== undefined) return Math.max(0, Number(serverVal) || 0);
+          return Math.max(existingVal || 0, serverVal || 0);
+        };
 
-        const resolvedMetalStorage = Math.max(existing?.metalStorage || 0, p.metalStorage || 0);
-        const resolvedCrystalStorage = Math.max(existing?.crystalStorage || 0, p.crystalStorage || 0);
-        const resolvedDeuteriumStorage = Math.max(existing?.deuteriumStorage || 0, p.deuteriumStorage || 0);
+        const resolvedMetalMine = pickLvl(p.metalMine, existing?.metalMine);
+        const resolvedCrystalMine = pickLvl(p.crystalMine, existing?.crystalMine);
+        const resolvedDeutMine = pickLvl(p.deuteriumMine, existing?.deuteriumMine);
+        const resolvedSolarPlant = pickLvl(p.solarPlant, existing?.solarPlant);
+        const resolvedFusionReactor = pickLvl(p.fusionReactor, existing?.fusionReactor);
+        const resolvedSolarSatellites = pickLvl(p.solarSatellites, existing?.solarSatellites);
+
+        const resolvedMetalStorage = pickLvl(p.metalStorage, existing?.metalStorage);
+        const resolvedCrystalStorage = pickLvl(p.crystalStorage, existing?.crystalStorage);
+        const resolvedDeuteriumStorage = pickLvl(p.deuteriumStorage, existing?.deuteriumStorage);
 
         // Storage capacity calculation
         const isTraderAlliance = allianceClassFromApi === 2 || allianceClassFromApi === 1;
@@ -3723,18 +3730,18 @@ async function performBackgroundEmpireSync(ignoreDelay = false, trigger?: Event 
           metalCapacity: calcCap(resolvedMetalStorage),
           crystalCapacity: calcCap(resolvedCrystalStorage),
           deuteriumCapacity: calcCap(resolvedDeuteriumStorage),
-          roboticsFactory: Math.max(existing?.roboticsFactory || 0, p.roboticsFactory || 0),
-          shipyard: Math.max(existing?.shipyard || 0, p.shipyard || 0),
-          researchLab: Math.max(existing?.researchLab || 0, p.researchLab || 0),
-          allianceDepot: Math.max(existing?.allianceDepot || 0, p.allianceDepot || 0),
-          missileSilo: Math.max(existing?.missileSilo || 0, p.missileSilo || 0),
-          naniteFactory: Math.max(existing?.naniteFactory || 0, p.naniteFactory || 0),
-          terraformer: Math.max(existing?.terraformer || 0, p.terraformer || 0),
-          spaceDock: Math.max(existing?.spaceDock || 0, p.spaceDock || 0),
-          lunarBase: Math.max(existing?.lunarBase || 0, p.lunarBase || 0),
-          sensorPhalanx: Math.max(existing?.sensorPhalanx || 0, p.sensorPhalanx || 0),
-          jumpGate: Math.max(existing?.jumpGate || 0, p.jumpGate || 0),
-          iaScanner: Math.max(existing?.iaScanner || 0, p.iaScanner || 0),
+          roboticsFactory: pickLvl(p.roboticsFactory, existing?.roboticsFactory),
+          shipyard: pickLvl(p.shipyard, existing?.shipyard),
+          researchLab: pickLvl(p.researchLab, existing?.researchLab),
+          allianceDepot: pickLvl(p.allianceDepot, existing?.allianceDepot),
+          missileSilo: pickLvl(p.missileSilo, existing?.missileSilo),
+          naniteFactory: pickLvl(p.naniteFactory, existing?.naniteFactory),
+          terraformer: pickLvl(p.terraformer, existing?.terraformer),
+          spaceDock: pickLvl(p.spaceDock, existing?.spaceDock),
+          lunarBase: pickLvl(p.lunarBase, existing?.lunarBase),
+          sensorPhalanx: pickLvl(p.sensorPhalanx, existing?.sensorPhalanx),
+          jumpGate: pickLvl(p.jumpGate, existing?.jumpGate),
+          iaScanner: pickLvl(p.iaScanner, existing?.iaScanner),
           lastUpdated: Date.now()
         };
       });
@@ -3773,7 +3780,7 @@ async function performBackgroundEmpireSync(ignoreDelay = false, trigger?: Event 
     type: "SYNC_SESSION",
     data: {
       isFullPlanetList: isSyncDataValid && authoritativePlanets.length > 0,
-      isAuthoritativeServerSync: true,
+      isAuthoritativeServerSync: syncedViaAccountInfo || planetsData.planets.length > 0,
       account: {
         playerId,
         playerName,

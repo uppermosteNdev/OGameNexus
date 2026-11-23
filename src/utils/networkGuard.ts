@@ -214,12 +214,37 @@ export function isPageLoadValid(): boolean {
 }
 
 /**
+ * Per-page-load request deduplication cache for `fetchGameOnLoad`.
+ * OGame Request Guard allows at most 1 PAGE_LOAD request per endpoint per page load.
+ * Caching the in-flight/completed Promise and returning `res.clone()` lets multiple
+ * modules (e.g., index.ts, orion.ts, orionWaveParser.ts) share a single network call.
+ */
+const pageLoadRequestCache = new Map<string, Promise<Response>>();
+
+/**
  * Fetches an in-game (/game/) endpoint within the 3.0s PAGE_LOAD window.
+ * Deduplicates identical URL requests within the same page load so only 1 real
+ * network request is sent to OGame and every caller receives an independent clone.
  */
 export async function fetchGameOnLoad(url: string | URL, init?: RequestInit): Promise<Response> {
-  const guard = await getGuard();
-  const trigger = pageLoadSymbol || (globalThis as any).OGameRequestGuard?.PAGE_LOAD;
-  return guard.fetch(trigger, url, init);
+  const method = (init?.method || 'GET').toUpperCase();
+  const normalizedUrl = typeof url === 'string'
+    ? new URL(url, typeof window !== 'undefined' ? window.location.origin : 'https://ogame.gameforge.com').href
+    : url.href;
+  const cacheKey = `${method}:${normalizedUrl}`;
+
+  let sharedPromise = pageLoadRequestCache.get(cacheKey);
+  if (!sharedPromise) {
+    sharedPromise = (async () => {
+      const guard = await getGuard();
+      const trigger = pageLoadSymbol || (globalThis as any).OGameRequestGuard?.PAGE_LOAD;
+      return guard.fetch(trigger, url, init);
+    })();
+    pageLoadRequestCache.set(cacheKey, sharedPromise);
+  }
+
+  const res = await sharedPromise;
+  return res.clone();
 }
 
 /**

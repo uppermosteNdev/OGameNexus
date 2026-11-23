@@ -945,9 +945,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             }
                         }
 
+                        const isAuthServer = Boolean(message.data.isAuthoritativeServerSync);
                         for (const p of incomingPlanets) {
                             const existing = existingPlanets.find(ep => String(ep.id) === String(p.id));
-                            const isMainPlanet = activePlanetId === p.id;
+                            const isMainPlanet = Boolean(activePlanetId) && String(activePlanetId) === String(p.id);
                             
                             let empirePlanet: any = undefined;
                             if (empire && empire.planets) {
@@ -1037,30 +1038,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                 ? String(p.coords).trim()
                                 : (isValidCoord(existing?.coords) ? String(existing!.coords).trim() : "0:0:0");
 
-                            // Building Levels: NEVER DOWNGRADE (take highest known verified level across existing, empire, supplies, and p)
-                            const resolvedMetalMine = Math.max(existing?.metalMine || 0, empirePlanet?.metalMine || 0, supplies?.metalMine || 0, p?.metalMine || 0, (p as any)?.mines?.metal || 0);
-                            const resolvedCrystalMine = Math.max(existing?.crystalMine || 0, empirePlanet?.crystalMine || 0, supplies?.crystalMine || 0, p?.crystalMine || 0, (p as any)?.mines?.crystal || 0);
-                            const resolvedDeutMine = Math.max(existing?.deuteriumMine || 0, empirePlanet?.deuteriumMine || 0, supplies?.deuteriumMine || 0, p?.deuteriumMine || 0, (p as any)?.mines?.deuterium || 0);
-                            const resolvedSolarPlant = Math.max(existing?.solarPlant || 0, empirePlanet?.solarPlant || 0, supplies?.solarPlant || 0, p?.solarPlant || 0);
-                            const resolvedFusionReactor = Math.max(existing?.fusionReactor || 0, empirePlanet?.fusionReactor || 0, supplies?.fusionReactor || 0, p?.fusionReactor || 0);
-                            const resolvedSolarSatellites = Math.max(existing?.solarSatellites || 0, empirePlanet?.solarSatellites || 0, supplies?.solarSatellites || 0, p?.solarSatellites || 0);
+                            // Strictly scope DOM-scraped supplies & facilities to the active planet only!
+                            // Applying active planet DOM data across all planets would smear one planet's levels onto every planet.
+                            const mainSupplies = isMainPlanet ? supplies : undefined;
+                            const mainFacilities = isMainPlanet ? safeFacilities : undefined;
 
-                            const resolvedMetalStorage = Math.max(existing?.metalStorage || 0, empirePlanet?.metalStorage || 0, supplies?.metalStorage || 0, p?.metalStorage || 0, (p as any)?.storage?.metal || 0);
-                            const resolvedCrystalStorage = Math.max(existing?.crystalStorage || 0, empirePlanet?.crystalStorage || 0, supplies?.crystalStorage || 0, p?.crystalStorage || 0, (p as any)?.storage?.crystal || 0);
-                            const resolvedDeuteriumStorage = Math.max(existing?.deuteriumStorage || 0, empirePlanet?.deuteriumStorage || 0, supplies?.deuteriumStorage || 0, p?.deuteriumStorage || 0, (p as any)?.storage?.deuterium || 0);
+                            // Building Levels:
+                            // - On authoritative server sync (accountInfo / empire view), trust exact server levels so poisoned or demolished levels heal cleanly.
+                            // - On partial DOM scrapes, merge non-destructively (never downgrade) using ONLY this planet's own data.
+                            const resolveBuildingLevel = (serverVal: number | undefined, existingVal: number | undefined, ...otherVals: (number | undefined)[]) => {
+                                if (isAuthServer && serverVal !== undefined) {
+                                    return Math.max(0, Number(serverVal) || 0);
+                                }
+                                return Math.max(existingVal || 0, serverVal || 0, ...otherVals.map(v => v || 0));
+                            };
 
-                            const resolvedRobotics = Math.max(existing?.roboticsFactory || 0, empirePlanet?.roboticsFactory || 0, p?.roboticsFactory || 0, (safeFacilities?.find((f: any) => f.id === 14)?.level) || 0);
-                            const resolvedShipyard = Math.max(existing?.shipyard || 0, empirePlanet?.shipyard || 0, p?.shipyard || 0, (safeFacilities?.find((f: any) => f.id === 21)?.level) || 0);
-                            const resolvedLab = Math.max(existing?.researchLab || 0, empirePlanet?.researchLab || 0, p?.researchLab || 0, (safeFacilities?.find((f: any) => f.id === 31)?.level) || 0);
-                            const resolvedAllianceDepot = Math.max(existing?.allianceDepot || 0, empirePlanet?.allianceDepot || 0, p?.allianceDepot || 0, (safeFacilities?.find((f: any) => f.id === 34)?.level) || 0);
-                            const resolvedMissileSilo = Math.max(existing?.missileSilo || 0, empirePlanet?.missileSilo || 0, p?.missileSilo || 0, (safeFacilities?.find((f: any) => f.id === 44)?.level) || 0);
-                            const resolvedNanite = Math.max(existing?.naniteFactory || 0, empirePlanet?.naniteFactory || 0, p?.naniteFactory || 0, (safeFacilities?.find((f: any) => f.id === 15)?.level) || 0);
-                            const resolvedTerraformer = Math.max(existing?.terraformer || 0, empirePlanet?.terraformer || 0, p?.terraformer || 0, (safeFacilities?.find((f: any) => f.id === 33)?.level) || 0);
-                            const resolvedSpaceDock = Math.max(existing?.spaceDock || 0, empirePlanet?.spaceDock || 0, p?.spaceDock || 0, (safeFacilities?.find((f: any) => f.id === 36)?.level) || 0);
-                            const resolvedLunarBase = Math.max(existing?.lunarBase || 0, empirePlanet?.lunarBase || 0, p?.lunarBase || 0, (safeFacilities?.find((f: any) => f.id === 41)?.level) || 0);
-                            const resolvedSensorPhalanx = Math.max(existing?.sensorPhalanx || 0, empirePlanet?.sensorPhalanx || 0, p?.sensorPhalanx || 0, (safeFacilities?.find((f: any) => f.id === 42)?.level) || 0);
-                            const resolvedJumpGate = Math.max(existing?.jumpGate || 0, empirePlanet?.jumpGate || 0, p?.jumpGate || 0, (safeFacilities?.find((f: any) => f.id === 43)?.level) || 0);
-                            const resolvedIaScanner = Math.max(existing?.iaScanner || 0, empirePlanet?.iaScanner || 0, p?.iaScanner || 0, (safeFacilities?.find((f: any) => f.id === 45)?.level) || 0);
+                            const authSrc = empirePlanet || p;
+                            const resolvedMetalMine = resolveBuildingLevel(authSrc?.metalMine, existing?.metalMine, mainSupplies?.metalMine, p?.metalMine, (p as any)?.mines?.metal);
+                            const resolvedCrystalMine = resolveBuildingLevel(authSrc?.crystalMine, existing?.crystalMine, mainSupplies?.crystalMine, p?.crystalMine, (p as any)?.mines?.crystal);
+                            const resolvedDeutMine = resolveBuildingLevel(authSrc?.deuteriumMine, existing?.deuteriumMine, mainSupplies?.deuteriumMine, p?.deuteriumMine, (p as any)?.mines?.deuterium);
+                            const resolvedSolarPlant = resolveBuildingLevel(authSrc?.solarPlant, existing?.solarPlant, mainSupplies?.solarPlant, p?.solarPlant);
+                            const resolvedFusionReactor = resolveBuildingLevel(authSrc?.fusionReactor, existing?.fusionReactor, mainSupplies?.fusionReactor, p?.fusionReactor);
+                            const resolvedSolarSatellites = resolveBuildingLevel(authSrc?.solarSatellites, existing?.solarSatellites, mainSupplies?.solarSatellites, p?.solarSatellites);
+
+                            const resolvedMetalStorage = resolveBuildingLevel(authSrc?.metalStorage, existing?.metalStorage, mainSupplies?.metalStorage, p?.metalStorage, (p as any)?.storage?.metal);
+                            const resolvedCrystalStorage = resolveBuildingLevel(authSrc?.crystalStorage, existing?.crystalStorage, mainSupplies?.crystalStorage, p?.crystalStorage, (p as any)?.storage?.crystal);
+                            const resolvedDeuteriumStorage = resolveBuildingLevel(authSrc?.deuteriumStorage, existing?.deuteriumStorage, mainSupplies?.deuteriumStorage, p?.deuteriumStorage, (p as any)?.storage?.deuterium);
+
+                            const resolvedRobotics = resolveBuildingLevel(authSrc?.roboticsFactory, existing?.roboticsFactory, p?.roboticsFactory, mainFacilities?.find((f: any) => f.id === 14)?.level);
+                            const resolvedShipyard = resolveBuildingLevel(authSrc?.shipyard, existing?.shipyard, p?.shipyard, mainFacilities?.find((f: any) => f.id === 21)?.level);
+                            const resolvedLab = resolveBuildingLevel(authSrc?.researchLab, existing?.researchLab, p?.researchLab, mainFacilities?.find((f: any) => f.id === 31)?.level);
+                            const resolvedAllianceDepot = resolveBuildingLevel(authSrc?.allianceDepot, existing?.allianceDepot, p?.allianceDepot, mainFacilities?.find((f: any) => f.id === 34)?.level);
+                            const resolvedMissileSilo = resolveBuildingLevel(authSrc?.missileSilo, existing?.missileSilo, p?.missileSilo, mainFacilities?.find((f: any) => f.id === 44)?.level);
+                            const resolvedNanite = resolveBuildingLevel(authSrc?.naniteFactory, existing?.naniteFactory, p?.naniteFactory, mainFacilities?.find((f: any) => f.id === 15)?.level);
+                            const resolvedTerraformer = resolveBuildingLevel(authSrc?.terraformer, existing?.terraformer, p?.terraformer, mainFacilities?.find((f: any) => f.id === 33)?.level);
+                            const resolvedSpaceDock = resolveBuildingLevel(authSrc?.spaceDock, existing?.spaceDock, p?.spaceDock, mainFacilities?.find((f: any) => f.id === 36)?.level);
+                            const resolvedLunarBase = resolveBuildingLevel(authSrc?.lunarBase, existing?.lunarBase, p?.lunarBase, mainFacilities?.find((f: any) => f.id === 41)?.level);
+                            const resolvedSensorPhalanx = resolveBuildingLevel(authSrc?.sensorPhalanx, existing?.sensorPhalanx, p?.sensorPhalanx, mainFacilities?.find((f: any) => f.id === 42)?.level);
+                            const resolvedJumpGate = resolveBuildingLevel(authSrc?.jumpGate, existing?.jumpGate, p?.jumpGate, mainFacilities?.find((f: any) => f.id === 43)?.level);
+                            const resolvedIaScanner = resolveBuildingLevel(authSrc?.iaScanner, existing?.iaScanner, p?.iaScanner, mainFacilities?.find((f: any) => f.id === 45)?.level);
 
                             const updateData: any = cleanObject({
                                 ...p,
@@ -1117,28 +1133,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                     lifeformBuildings: mergeLifeformBuildings(existing?.lifeformBuildings || [], empirePlanet?.lifeformBuildings || [], resolvedLifeformId),
                                     lifeformSetup: mergeLifeformSetup(existing?.lifeformSetup || [], empirePlanet?.lifeformSetup || [], true),
                                 }),
-                                // Re-apply resolved buildings so supplies spread never downgrades verified levels
-                                ...(resolvedMetalMine > 0 ? { metalMine: resolvedMetalMine } : {}),
-                                ...(resolvedCrystalMine > 0 ? { crystalMine: resolvedCrystalMine } : {}),
-                                ...(resolvedDeutMine > 0 ? { deuteriumMine: resolvedDeutMine } : {}),
-                                ...(resolvedSolarPlant > 0 ? { solarPlant: resolvedSolarPlant } : {}),
-                                ...(resolvedFusionReactor > 0 ? { fusionReactor: resolvedFusionReactor } : {}),
-                                ...(resolvedSolarSatellites > 0 ? { solarSatellites: resolvedSolarSatellites } : {}),
-                                ...(resolvedMetalStorage > 0 ? { metalStorage: resolvedMetalStorage, metalCapacity: calcCap(resolvedMetalStorage) } : {}),
-                                ...(resolvedCrystalStorage > 0 ? { crystalStorage: resolvedCrystalStorage, crystalCapacity: calcCap(resolvedCrystalStorage) } : {}),
-                                ...(resolvedDeuteriumStorage > 0 ? { deuteriumStorage: resolvedDeuteriumStorage, deuteriumCapacity: calcCap(resolvedDeuteriumStorage) } : {}),
-                                ...(resolvedRobotics > 0 ? { roboticsFactory: resolvedRobotics } : {}),
-                                ...(resolvedShipyard > 0 ? { shipyard: resolvedShipyard } : {}),
-                                ...(resolvedLab > 0 ? { researchLab: resolvedLab } : {}),
-                                ...(resolvedAllianceDepot > 0 ? { allianceDepot: resolvedAllianceDepot } : {}),
-                                ...(resolvedMissileSilo > 0 ? { missileSilo: resolvedMissileSilo } : {}),
-                                ...(resolvedNanite > 0 ? { naniteFactory: resolvedNanite } : {}),
-                                ...(resolvedTerraformer > 0 ? { terraformer: resolvedTerraformer } : {}),
-                                ...(resolvedSpaceDock > 0 ? { spaceDock: resolvedSpaceDock } : {}),
-                                ...(resolvedLunarBase > 0 ? { lunarBase: resolvedLunarBase } : {}),
-                                ...(resolvedSensorPhalanx > 0 ? { sensorPhalanx: resolvedSensorPhalanx } : {}),
-                                ...(resolvedJumpGate > 0 ? { jumpGate: resolvedJumpGate } : {}),
-                                ...(resolvedIaScanner > 0 ? { iaScanner: resolvedIaScanner } : {})
+                                // Apply resolved building levels (on authoritative server sync, also apply 0 to heal demolished/poisoned values)
+                                ...((isAuthServer && authSrc?.metalMine !== undefined) || resolvedMetalMine > 0 ? { metalMine: resolvedMetalMine } : {}),
+                                ...((isAuthServer && authSrc?.crystalMine !== undefined) || resolvedCrystalMine > 0 ? { crystalMine: resolvedCrystalMine } : {}),
+                                ...((isAuthServer && authSrc?.deuteriumMine !== undefined) || resolvedDeutMine > 0 ? { deuteriumMine: resolvedDeutMine } : {}),
+                                ...((isAuthServer && authSrc?.solarPlant !== undefined) || resolvedSolarPlant > 0 ? { solarPlant: resolvedSolarPlant } : {}),
+                                ...((isAuthServer && authSrc?.fusionReactor !== undefined) || resolvedFusionReactor > 0 ? { fusionReactor: resolvedFusionReactor } : {}),
+                                ...((isAuthServer && authSrc?.solarSatellites !== undefined) || resolvedSolarSatellites > 0 ? { solarSatellites: resolvedSolarSatellites } : {}),
+                                ...((isAuthServer && authSrc?.metalStorage !== undefined) || resolvedMetalStorage > 0 ? { metalStorage: resolvedMetalStorage, metalCapacity: calcCap(resolvedMetalStorage) } : {}),
+                                ...((isAuthServer && authSrc?.crystalStorage !== undefined) || resolvedCrystalStorage > 0 ? { crystalStorage: resolvedCrystalStorage, crystalCapacity: calcCap(resolvedCrystalStorage) } : {}),
+                                ...((isAuthServer && authSrc?.deuteriumStorage !== undefined) || resolvedDeuteriumStorage > 0 ? { deuteriumStorage: resolvedDeuteriumStorage, deuteriumCapacity: calcCap(resolvedDeuteriumStorage) } : {}),
+                                ...((isAuthServer && authSrc?.roboticsFactory !== undefined) || resolvedRobotics > 0 ? { roboticsFactory: resolvedRobotics } : {}),
+                                ...((isAuthServer && authSrc?.shipyard !== undefined) || resolvedShipyard > 0 ? { shipyard: resolvedShipyard } : {}),
+                                ...((isAuthServer && authSrc?.researchLab !== undefined) || resolvedLab > 0 ? { researchLab: resolvedLab } : {}),
+                                ...((isAuthServer && authSrc?.allianceDepot !== undefined) || resolvedAllianceDepot > 0 ? { allianceDepot: resolvedAllianceDepot } : {}),
+                                ...((isAuthServer && authSrc?.missileSilo !== undefined) || resolvedMissileSilo > 0 ? { missileSilo: resolvedMissileSilo } : {}),
+                                ...((isAuthServer && authSrc?.naniteFactory !== undefined) || resolvedNanite > 0 ? { naniteFactory: resolvedNanite } : {}),
+                                ...((isAuthServer && authSrc?.terraformer !== undefined) || resolvedTerraformer > 0 ? { terraformer: resolvedTerraformer } : {}),
+                                ...((isAuthServer && authSrc?.spaceDock !== undefined) || resolvedSpaceDock > 0 ? { spaceDock: resolvedSpaceDock } : {}),
+                                ...((isAuthServer && authSrc?.lunarBase !== undefined) || resolvedLunarBase > 0 ? { lunarBase: resolvedLunarBase } : {}),
+                                ...((isAuthServer && authSrc?.sensorPhalanx !== undefined) || resolvedSensorPhalanx > 0 ? { sensorPhalanx: resolvedSensorPhalanx } : {}),
+                                ...((isAuthServer && authSrc?.jumpGate !== undefined) || resolvedJumpGate > 0 ? { jumpGate: resolvedJumpGate } : {}),
+                                ...((isAuthServer && authSrc?.iaScanner !== undefined) || resolvedIaScanner > 0 ? { iaScanner: resolvedIaScanner } : {})
                             });
 
                             if (existing && existing.id !== String(p.id)) {
